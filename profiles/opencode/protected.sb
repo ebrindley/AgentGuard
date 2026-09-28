@@ -1,0 +1,3 @@
+  (regex #"/\.opencode(/|$)")
+  (regex #"/(opencode|tui)\.jsonc?$")
+  (require-all (regex #"/\.cc-safety-net(/|$)") (require-not (subpath (h "/.cc-safety-net/logs"))))

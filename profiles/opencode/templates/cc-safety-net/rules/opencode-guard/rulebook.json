@@ -1,0 +1,20 @@
+{
+  "rulebook_version": 1,
+  "name": "opencode-guard",
+  "version": "1.0.0",
+  "allowed_commands": ["rm"],
+  "rules": [
+    {
+      "name": "recursive-rm",
+      "command": "rm",
+      "block_args": ["-r", "-R", "--recursive"],
+      "reason": "Recursive rm is reserved for a manual terminal.",
+      "intent": "manual_only"
+    }
+  ],
+  "tests": [
+    { "command": "rm -r sample", "expect": "blocked", "rule": "recursive-rm" },
+    { "command": "rm -Rf sample", "expect": "blocked", "rule": "recursive-rm" },
+    { "command": "rm sample.txt", "expect": "allowed" }
+  ]
+}
