@@ -1,0 +1,4 @@
+id: general
+version: 1
+policy:
+  executionIntent: edit
