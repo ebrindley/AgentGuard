@@ -1,0 +1,54 @@
+(version 1)
+(allow default)
+(define (h s) (string-append (param "HOME") s))
+
+(deny file-write*)
+(allow file-write*
+;;@WRITABLE@
+  (subpath "/private/tmp")
+  (subpath (param "DARWIN_TEMP"))
+  (subpath (param "DARWIN_CACHE"))
+  (literal "/dev/null")
+  (literal "/dev/tty")
+  (literal "/dev/ptmx")
+  (literal "/dev/dtracehelper")
+  (regex #"^/dev/ttys[0-9]+$")
+  (subpath "/dev/fd"))
+
+(if (string=? (param "GUI") "1")
+  (allow file-write*
+;;@WRITABLE_GUI@))
+
+;;@USER_RULES@
+
+(deny file-write*
+  (subpath (h "/Library/Application Support/AgentGuard"))
+  (subpath (h "/Agent Guard"))
+;;@PROTECTED@
+  (subpath (h "/Library/LaunchAgents"))
+  (subpath (h "/Applications/Agent Guard.app"))
+  (literal (h "/.zshenv"))
+  (literal (h "/.zprofile"))
+  (literal (h "/.zshrc"))
+  (literal (h "/.zlogin"))
+  (literal (h "/.profile"))
+  (literal (h "/.bash_profile"))
+  (literal (h "/.bash_login"))
+  (literal (h "/.bashrc"))
+  (literal (param "HOME"))
+  (literal (h "/Library"))
+  (literal (h "/Library/Application Support"))
+  (literal (h "/.config"))
+  (literal (h "/Applications"))
+;;@PROTECTED_NAMES@)
+
+(deny lsopen)
+(deny job-creation)
+(deny process-exec
+  (literal "/usr/bin/open")
+  (literal "/usr/bin/osascript")
+  (literal "/usr/bin/osacompile")
+  (literal "/usr/bin/codesign")
+  (literal "/usr/sbin/diskutil")
+  (literal "/bin/launchctl")
+  (literal "/usr/bin/sudo"))
