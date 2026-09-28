@@ -1,0 +1,237 @@
+#!/bin/zsh
+# usage: launch cli|gui|profile|check [args...]
+emulate -L zsh
+setopt err_exit no_unset pipe_fail extended_glob
+
+mode=${1:-}
+(( $# )) && shift
+
+# Resolve the account before reading any executable profile. No ambient override.
+account_home() {
+  local login record
+  login=$(/usr/bin/id -un) || return 1
+  [[ -n $login ]] || return 1
+  record=$(/usr/bin/dscl /Search -read "/Users/$login" NFSHomeDirectory) || return 1
+  case $record in
+    ('NFSHomeDirectory: /'*) REPLY=${record#NFSHomeDirectory: } ;;
+    ($'NFSHomeDirectory:\n /'*) REPLY=${record#$'NFSHomeDirectory:\n '} ;;
+    (*) return 1 ;;
+  esac
+  [[ $REPLY == /* && $REPLY != / && $REPLY != *$'\n'* && -d $REPLY ]]
+}
+# END ACCOUNT LOOKUP
+account_home || { print -ru2 'agent-guard: cannot resolve account home'; exit 1 }
+home=${REPLY:A}
+engine="$home/Library/Application Support/AgentGuard"
+bin="$engine/bin"
+list_dir="$home/Agent Guard"
+list="$list_dir/Guard List.txt"
+log="$list_dir/last-launch-opencode.log"
+here=$engine
+profile_dir="$engine/profiles/opencode"
+source "$profile_dir/harness.zsh"
+source "$profile_dir/hooks.zsh"
+
+fail() {
+  print -ru2 -- "opencode-guard: $*"
+  if [[ $mode == gui ]]; then
+    /usr/bin/osascript -e 'on run argv' -e 'display alert "Agent Guard" message (item 1 of argv) as critical' -e 'end run' "$*" >/dev/null 2>&1 || true
+  fi
+  exit 1
+}
+
+note() {
+  print -r -- "$*" >> "$log"
+  [[ $mode == (gui|check) ]] || print -ru2 -- "opencode-guard: $*"
+}
+
+next_cli() {
+  local d f cli
+  for d in $path; do
+    for cli in $cli_names; do
+      f="$d/$cli"
+      [[ -x $f && ! -d $f && ${f:A} != "${bin:A}/$cli" ]] || continue
+      REPLY=$f
+      return 0
+    done
+  done
+  for f in $cli_search; do
+    [[ -x $f ]] && { REPLY=$f; return 0 }
+  done
+  return 1
+}
+
+find_app() {
+  local a
+  for a in $app_paths \
+           ${(f)"$(/usr/bin/mdfind "kMDItemCFBundleIdentifier == '$app_bundle_id'" 2>/dev/null)"}; do
+    [[ -d $a/Contents/MacOS ]] && { REPLY=$a; return 0 }
+  done
+  return 1
+}
+[[ $mode == find-app ]] && { find_app && print -r -- "$REPLY"; exit }
+
+if [[ ${OPENCODE_SANDBOXED:-} == 1 ]] && ! /usr/bin/sandbox-exec -p '(version 1)(allow default)' /usr/bin/true 2>/dev/null; then
+  [[ $mode == cli ]] || fail "already inside the guard"
+  next_cli || fail "opencode not found"
+  exec "$REPLY" "$@"
+fi
+export HOME=$home
+[[ -r $list ]] || fail "cannot read $list"
+
+normalize() {
+  local p=$1
+  [[ $p == (\"*\"|\'*\') ]] && p=${p[2,-2]}
+  [[ -e $p || $p != *\\* ]] || p=${(Q)p}
+  [[ $p == '~' || $p == '~/'* ]] && p=$home${p#\~}
+  [[ $p == /* ]] || return 1
+  REPLY=${p:A}
+}
+
+within() { [[ $2 == / || $1 == "$2" || $1 == "$2"/* ]] }
+
+print -r -- "Agent Guard $mode $(/bin/date '+%Y-%m-%d %H:%M:%S')" > "$log"
+
+essential=(/ $home $home/Library $home/.config $home/.local $home/.cache
+           /usr /bin /sbin /System /Library /private /dev /opt /Applications)
+sensitive=($home/Library/Application\ Support $home/.config $home/.local)
+typeset -a allow readonly deny scoped
+section=
+while IFS= read -r line || [[ -n $line ]]; do
+  line=${${line%$'\r'}##[[:space:]]##}
+  line=${line%%[[:space:]]##}
+  [[ -z $line || $line == \#* ]] && continue
+  case ${(U)line} in
+    (ALLOW(|[[:space:]]#[-:]*)) section=allow; continue ;;
+    (READ([[:space:]]##|-)ONLY(|[[:space:]]#[-:]*)) section=readonly; continue ;;
+    (DENY(|[[:space:]]#[-:]*)) section=deny; continue ;;
+  esac
+  [[ -n $section ]] || continue
+  normalize "$line" || { note "skipped, not a full path: $line"; continue }
+  p=$REPLY
+  if [[ $section != allow ]]; then
+    for e in $essential; do
+      within "$e" "$p" && { note "refused ${${section:u}/READONLY/READ ONLY}, OpenCode needs $e: $p"; continue 2 }
+    done
+  fi
+  if [[ $section == deny ]]; then
+    [[ -e $p ]] || note "warning: DENY entry does not exist, check the spelling: $p"
+    deny+=("$p")
+    continue
+  fi
+  [[ -e $p ]] || { note "skipped, does not exist: $p"; continue }
+  if [[ $section == allow ]]; then
+    for e in $sensitive; do
+      within "$e" "$p" && { note "refused ALLOW, too broad: $p"; continue 2 }
+    done
+    allow+=("$p")
+  else
+    readonly+=("$p")
+  fi
+  scoped+=("${(l:3::0:)${#${p//[^\/]/}}}"$'\t'"$section"$'\t'"$p")
+done < "$list"
+
+sbpl() { local s=${1//\\/\\\\}; REPLY="\"${s//\"/\\\"}\"" }
+typeset -a rules
+typeset -U pinned
+for entry in ${(o)scoped}; do
+  kind=${${entry#*$'\t'}%%$'\t'*}
+  p=${entry##*$'\t'}
+  sbpl "$p"
+  if [[ $kind == allow ]]; then
+    rules+=("(allow file-write* (subpath $REPLY))")
+    [[ -d $p ]] && pinned+=("$p")
+  else
+    rules+=("(deny file-write* (subpath $REPLY))")
+  fi
+done
+for p in $deny; do
+  sbpl "$p"
+  rules+=("(deny file-read* file-write* (subpath $REPLY))")
+  for s in $allow $readonly; do
+    within "$s" "$p" && note "overridden by DENY $p: $s"
+  done
+done
+
+protected=("$engine" "$list_dir" $protected
+           $home/Library/LaunchAgents $home/.{zshenv,zprofile,zshrc,zlogin,profile,bash_profile,bash_login,bashrc}
+           "${(@)protected_names/#/$PWD/}")
+for p in $protected; do
+  [[ -e $p && ${p:A} != "$p" ]] || continue
+  sbpl "${p:A}"
+  rules+=("(deny file-write* (subpath $REPLY))")
+  readonly+=("${p:A}")
+done
+for p in $deny $readonly; do
+  a=${p:h}
+  while [[ $a != / ]]; do pinned+=("$a"); a=${a:h}; done
+done
+for p in $pinned; do sbpl "$p"; rules+=("(deny file-write* (literal $REPLY))"); done
+
+note "allow: ${(j:, :)allow:-none}"
+note "read only: ${(j:, :)readonly:-none}"
+note "deny: ${(j:, :)deny:-none}"
+note "always writable for OpenCode itself: ~/.local/share/opencode, ~/.local/state/opencode, ~/.cache, ~/Library/Caches, ~/.npm, ~/.bun/install/cache, /private/tmp, per-user temp and cache"
+
+profile=$(<"$here/profile.sb")
+profile=${profile/';;@USER_RULES@'/${(F)rules}}
+# Keep 1.0.3 rule order and SBPL spelling while moving harness paths to data.
+path_rules() {
+  local p indent=$1
+  shift
+  for p in "$@"; do
+    sbpl "${p#$home}"
+    print -r -- "$indent(subpath (h $REPLY))"
+  done
+}
+profile=${profile/';;@WRITABLE@'/$(path_rules '  ' $writable)}
+profile=${profile/';;@WRITABLE_GUI@'/$(path_rules '    ' $writable_gui)}
+profile=${profile/';;@PROTECTED@'/$(path_rules '  ' $protected_paths)}
+profile=${profile/';;@PROTECTED_NAMES@'/$(<"$profile_dir/$protected_fragment")}
+darwin_temp=${$(/usr/bin/getconf DARWIN_USER_TEMP_DIR):A}
+darwin_cache=${$(/usr/bin/getconf DARWIN_USER_CACHE_DIR):A}
+
+/bin/mkdir -p $writable
+[[ $mode == gui ]] && /bin/mkdir -p "$writable_gui[1]"
+$prepare_hook
+
+jarr() { /usr/bin/jq -cn '$ARGS.positional' --args "$@" }
+/bin/mkdir -p "$engine/state"
+print -r -- "{\"allow\":$(jarr $allow),\"readonly\":$(jarr $readonly),\"deny\":$(jarr $deny)}" > "$engine/state/rules.json.$$"
+/bin/mv -f "$engine/state/rules.json.$$" "$engine/state/rules.json"
+
+sandbox=(/usr/bin/sandbox-exec -D "HOME=$home" -D "DARWIN_TEMP=$darwin_temp" -D "DARWIN_CACHE=$darwin_cache" -p "$profile")
+
+case $mode in
+  (cli)
+    next_cli || fail "opencode not found"
+    set -- -D GUI=0 "$REPLY" "$@"
+    ;;
+  (gui)
+    find_app || fail "OpenCode.app not found"
+    app=$REPLY
+    main=$(/usr/bin/plutil -extract CFBundleExecutable raw "$app/Contents/Info.plist")
+    /usr/bin/pgrep -x "$main" >/dev/null && fail "OpenCode is already running. Quit it, then open Agent Guard."
+    set -- -D GUI=1 "$app/Contents/MacOS/$main" $gui_args "$@"
+    ;;
+  (profile)
+    print -r -- "$profile"
+    exit 0
+    ;;
+  (check)
+    probe="$engine/state/.check" tmp="$darwin_temp/.opencode-guard-check" ok=1 rc=0
+    $sandbox -D GUI=0 /usr/bin/touch "$probe" 2>/dev/null && { print "FAIL protected write allowed"; ok=0 } || print "ok   protected write denied"
+    $sandbox -D GUI=0 /usr/bin/touch "$tmp" && print "ok   temp write allowed" || { print "FAIL temp write denied"; ok=0 }
+    $sandbox -D GUI=0 /usr/bin/open -h >/dev/null 2>&1 || rc=$?
+    (( rc == 71 )) && print "ok   open denied" || { print "FAIL open allowed"; ok=0 }
+    /bin/rm -f "$probe" "$tmp"
+    $check_hook
+    (( ok ))
+    exit
+    ;;
+  (*) fail "usage: launch cli|gui|profile|check" ;;
+esac
+
+unset $env_unset
+export $env_set
+exec $sandbox "$@"
