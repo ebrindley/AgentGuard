@@ -9,5 +9,3 @@ export function fixtureHome(file, home) {
   const quoted = "'" + home.replaceAll("'", "'\\''") + "'";
   writeFileSync(file, source.replace(marker, `REPLY=${quoted}`));
 }
-
-if (process.argv[2]) fixtureHome(process.argv[2], process.argv[3]);

@@ -5,18 +5,30 @@ setopt no_unset pipe_fail
 command -v node >/dev/null || { print -ru2 'Node is required for fixture isolation'; exit 1 }
 
 source_root=${0:A:h:h}
+engine_name=zsh
+while (( $# )); do
+  case $1 in
+    --engine) (( $# >= 2 )) || { print -ru2 'usage: test.sh [--engine NAME]'; exit 2 }; engine_name=$2; shift 2 ;;
+    *) print -ru2 'usage: test.sh [--engine NAME]'; exit 2 ;;
+  esac
+done
+engines=( "$source_root"/test/engines/*.mjs(N:t:r) )
+(( ${engines[(Ie)$engine_name]} )) || { print -ru2 "unknown engine: $engine_name (known: ${(j:, :)engines})"; exit 1 }
+adapter="$source_root/test/engines/$engine_name.mjs"
+print -r -- "engine: $(node "$adapter" name)"
+
 run=$(/usr/bin/mktemp -d "$source_root/test/.run-XXXXXX")
 root="$run/source"
-/bin/mkdir -p "$root"
-/bin/cp -R "$source_root/engine" "$source_root/profiles" "$source_root/install.sh" "$root/" || exit 1
 /bin/mkdir -p "$root/test"
 /bin/cp "$source_root/test/plugin.mjs" "$root/test/"
 export HOME="$run/home"
-# Patch only this disposable copy, never production code or the account database.
-node "$source_root/test/fixture-home.mjs" "$root/engine/launch" "$HOME" || { print -ru2 'Cannot patch fixture launcher'; exit 1 }
+# The adapter applies the test home to this disposable copy only, never to production code or the account database.
+node "$adapter" stage "$source_root" "$root" "$HOME" || { print -ru2 'Cannot stage engine'; exit 1 }
 /bin/mkdir -p "$HOME"/{Projects/app/secret,Projects/archive/live,Projects/dotfiles,Documents/private,.config/opencode,bin}
 home=${HOME:A}
 engine="$home/Library/Application Support/AgentGuard"
+launcher_argv=$(node "$adapter" launcher "$engine") || { print -ru2 'Cannot get engine launcher'; exit 1 }
+launcher=( "${(@f)launcher_argv}" )
 list="$home/Agent Guard/Guard List.txt"
 log="$home/Agent Guard/last-launch-opencode.log"
 cfg="$home/.config/opencode/opencode.json"
@@ -50,7 +62,7 @@ check "permission merge" /usr/bin/jq -e '.permission == {"bash":{"*":"allow","gi
   /^DENY -/ { print; print h "/Projects/app/secret"; print "Allow me to note:"; print "~/Documents/private"; print "~/Documents/typo"; print h "/Library"; print "not a path"; next }
   { print }' "$list" > "$list.tmp" && /bin/mv "$list.tmp" "$list"
 
-profile=$(cd "$home/Projects/app" && "$engine/launch" profile 2>/dev/null) || fail "profile"
+profile=$(cd "$home/Projects/app" && "${launcher[@]}" profile 2>/dev/null) || fail "profile"
 check "essential DENY refused" /usr/bin/grep -q "refused DENY, OpenCode needs" "$log"
 check "broad ALLOW refused" /usr/bin/grep -q "refused ALLOW, too broad: $home/Library" "$log"
 check "ALLOW / refused" /usr/bin/grep -qx "refused ALLOW, too broad: /" "$log"
@@ -105,7 +117,7 @@ child_home="$home/Projects/nested-home"
 /bin/mkdir -p "$child_home"
 print -r -- $'#!/bin/sh\nprintf "%s\\n" "$HOME" > "$NESTED_HOME_RESULT"' > "$home/fakebin/opencode"
 HOME="$child_home" OPENCODE_SANDBOXED=1 NESTED_HOME_RESULT="$home/Projects/app/nested-home" \
-  PATH="$home/fakebin:$PATH" sb /bin/zsh "$engine/launch" cli >/dev/null 2>&1
+  PATH="$home/fakebin:$PATH" sb "${launcher[@]}" cli >/dev/null 2>&1
 check "nested launch preserves child HOME" /usr/bin/grep -Fxq "$child_home" "$home/Projects/app/nested-home"
 
 {
