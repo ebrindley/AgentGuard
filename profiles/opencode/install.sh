@@ -63,7 +63,7 @@ done
 [[ -e $conf/config.json || -e $conf/opencode.json || -e $conf/opencode.jsonc ]] || configs=("$conf/opencode.json")
 
 /bin/mkdir -p "$engine/bin" "$state"
-/bin/cp "$src/engine/launch" "$src/engine/profile.sb" "$profile_src/uninstall.sh" "$engine/"
+/bin/cp "$src/engine/launch" "$src/engine/profile.sb" "$profile_src/uninstall.sh" "$src/LICENSE" "$engine/"
 /bin/cp "$profile_src/opencode" "$profile_src/opencode-gui" "$engine/bin/"
 /bin/rm -rf "$engine/vendor"
 /bin/cp -R "$src/engine/vendor" "$engine/vendor"
@@ -149,7 +149,7 @@ say "PATH: new terminal windows run opencode inside the guard"
 /bin/mkdir -p "${launcher:h}"
 /usr/bin/osacompile -o "$launcher" -e "do shell script quoted form of \"$engine/bin/opencode-gui\" & \" >/dev/null 2>&1 &\""
 /usr/bin/plutil -replace CFBundleIdentifier -string io.github.ebrindley.agentguard "$launcher/Contents/Info.plist"
-/bin/cp "$profile_src/assets/OpenCodeGuard.icns" "$launcher/Contents/Resources/applet.icns"
+/bin/cp "$profile_src/assets/AgentGuard.icns" "$launcher/Contents/Resources/applet.icns"
 /bin/rm -f "$launcher/Contents/Resources/Assets.car"
 /usr/bin/plutil -remove CFBundleIconName "$launcher/Contents/Info.plist"
 /usr/bin/codesign --force --sign - "$launcher" 2>/dev/null

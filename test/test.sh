@@ -6,16 +6,22 @@ command -v node >/dev/null || { print -ru2 'Node is required for fixture isolati
 
 source_root=${0:A:h:h}
 engine_name=zsh
+# --source DIR tests engine/, profiles/, install.sh and LICENSE from DIR, such as an
+# unpacked release, instead of this checkout. The test files still come from here.
+tested=$source_root
+usage='usage: test.sh [--engine NAME] [--source DIR]'
 while (( $# )); do
   case $1 in
-    --engine) (( $# >= 2 )) || { print -ru2 'usage: test.sh [--engine NAME]'; exit 2 }; engine_name=$2; shift 2 ;;
-    *) print -ru2 'usage: test.sh [--engine NAME]'; exit 2 ;;
+    --engine) (( $# >= 2 )) || { print -ru2 $usage; exit 2 }; engine_name=$2; shift 2 ;;
+    --source) (( $# >= 2 )) && [[ -d $2 ]] || { print -ru2 $usage; exit 2 }; tested=${2:A}; shift 2 ;;
+    *) print -ru2 $usage; exit 2 ;;
   esac
 done
 engines=( "$source_root"/test/engines/*.mjs(N:t:r) )
 (( ${engines[(Ie)$engine_name]} )) || { print -ru2 "unknown engine: $engine_name (known: ${(j:, :)engines})"; exit 1 }
 adapter="$source_root/test/engines/$engine_name.mjs"
 print -r -- "engine: $(node "$adapter" name)"
+print -r -- "source: $tested"
 
 run=$(/usr/bin/mktemp -d "$source_root/test/.run-XXXXXX")
 root="$run/source"
@@ -23,7 +29,7 @@ root="$run/source"
 /bin/cp "$source_root/test/plugin.mjs" "$root/test/"
 export HOME="$run/home"
 # The adapter applies the test home to this disposable copy only, never to production code or the account database.
-node "$adapter" stage "$source_root" "$root" "$HOME" || { print -ru2 'Cannot stage engine'; exit 1 }
+node "$adapter" stage "$tested" "$root" "$HOME" || { print -ru2 'Cannot stage engine'; exit 1 }
 /bin/mkdir -p "$HOME"/{Projects/app/secret,Projects/archive/live,Projects/dotfiles,Documents/private,.config/opencode,bin}
 home=${HOME:A}
 engine="$home/Library/Application Support/AgentGuard"
@@ -76,6 +82,7 @@ old_untouched() {
 check "install self-test incl. plugin load" /usr/bin/grep -q "ok   plugins loaded in OpenCode" "$home/install.log"
 check "projects added to ALLOW" /usr/bin/grep -Fxq "$home/Projects" "$list"
 check "zprofile without final newline kept intact" /usr/bin/grep -Fxq 'alias x=y' "$home/.zprofile"
+check "engine folder has LICENSE and notices" test -f "$engine/LICENSE" -a -f "$engine/vendor/THIRD-PARTY-NOTICES"
 check "permission merge" /usr/bin/jq -e '.permission == {"bash":{"*":"allow","git *":"allow","rm *":"deny"},"task":"ask","edit":"allow","external_directory":"allow"} and (.permission.bash | keys_unsorted[0]) == "*"' "$cfg"
 check "plugin installed as agent-guard.js" test -f "$home/.config/opencode/plugins/agent-guard.js"
 check "rulebook agent-guard" /usr/bin/jq -e '.name == "agent-guard"' "$cc/agent-guard/rulebook.json"
