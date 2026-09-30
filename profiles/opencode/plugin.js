@@ -8,7 +8,7 @@ const HOME = realpathSync(homedir())
 const ENGINE = join(HOME, "Library/Application Support/AgentGuard")
 const STATE = join(ENGINE, "state")
 const LIST = "~/Agent Guard/Guard List.txt"
-const SAFE_UNGUARDED = new Set(["invalid", "question", "todowrite", "webfetch", "websearch", "plan_exit", "opencode_guard_status"])
+const SAFE_UNGUARDED = new Set(["invalid", "question", "todowrite", "webfetch", "websearch", "plan_exit", "agent_guard_status"])
 const READS = new Set(["read", "glob", "grep", "list", "lsp"])
 const CONFIG = /\/\.opencode(\/|$)|\/(opencode|tui)\.jsonc?$|\/\.cc-safety-net(\/|$)/
 const UNSAFE_NET_ENV = ["CC_SAFETY_NET_HOME", "CC_SAFETY_NET_WORKTREE", "SAFETY_NET_WORKTREE"]
@@ -74,7 +74,7 @@ export const AgentGuard = async input => {
     for (const name of UNSAFE_NET_ENV) delete process.env[name]
     process.env.CC_SAFETY_NET_PARANOID_RM = "1"
   }
-  const bypass = process.env.OPENCODE_GUARD_BYPASS === "1"
+  const bypass = process.env.AGENT_GUARD_BYPASS === "1"
   const rules = loadRules()
   const net = await loadSafetyNet(input)
   const temps = [...new Set([canonical(tmpdir()), "/private/tmp"])]
@@ -138,7 +138,7 @@ export const AgentGuard = async input => {
 
   return {
     ...(net ?? {}),
-    ...(net ? { tool: { ...(net.tool ?? {}), opencode_guard_status: status } } : {}),
+    ...(net ? { tool: { ...(net.tool ?? {}), agent_guard_status: status } } : {}),
     "tool.execute.before": before,
   }
 }

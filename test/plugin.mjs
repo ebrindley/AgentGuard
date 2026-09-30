@@ -6,7 +6,8 @@ const { AgentGuard } = await import(plugin)
 const home = realpathSync(homedir())
 const directory = `${home}/Projects/app`
 if (mode === "guarded") process.env.CC_SAFETY_NET_HOME = `${home}/Projects/net`
-const hook = (await AgentGuard({ directory }))["tool.execute.before"]
+const hooks = await AgentGuard({ directory })
+const hook = hooks["tool.execute.before"]
 let failures = 0
 
 async function expect(want, name, tool, args) {
@@ -17,7 +18,7 @@ async function expect(want, name, tool, args) {
   if (!ok) failures++
 }
 
-if (mode === "unguarded" || mode === "symlinked") {
+if (mode === "unguarded" || mode === "old-bypass" || mode === "symlinked") {
   await expect("blocked", "bash refused", "bash", { command: "ls" })
   await expect("blocked", "MCP tool refused", "github_create_issue", {})
   await expect("blocked", "read refused", "read", { filePath: "README.md" })
@@ -25,6 +26,9 @@ if (mode === "unguarded" || mode === "symlinked") {
 } else if (mode === "bypass") {
   await expect("allowed", "bash allowed", "bash", { command: "ls" })
 } else {
+  const registered = typeof hooks.tool?.agent_guard_status?.execute === "function"
+  console.log(`${registered ? "ok  " : "FAIL"} plugin ${mode}: agent_guard_status registered`)
+  if (!registered) failures++
   await expect("allowed", "bash allowed", "bash", { command: "ls" })
   await expect("blocked", "absolute-path env wrapper", "bash", { command: "/usr/bin/env git reset --hard" })
   await expect("blocked", "recursive rm despite agent-set CC_SAFETY_NET_HOME", "bash", { command: "rm -r sample" })

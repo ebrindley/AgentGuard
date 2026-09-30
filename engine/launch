@@ -33,7 +33,7 @@ source "$profile_dir/harness.zsh"
 source "$profile_dir/hooks.zsh"
 
 fail() {
-  print -ru2 -- "opencode-guard: $*"
+  print -ru2 -- "agent-guard: $*"
   if [[ $mode == gui ]]; then
     /usr/bin/osascript -e 'on run argv' -e 'display alert "Agent Guard" message (item 1 of argv) as critical' -e 'end run' "$*" >/dev/null 2>&1 || true
   fi
@@ -42,7 +42,19 @@ fail() {
 
 note() {
   print -r -- "$*" >> "$log"
-  [[ $mode == (gui|check) ]] || print -ru2 -- "opencode-guard: $*"
+  [[ $mode == (gui|check) ]] || print -ru2 -- "agent-guard: $*"
+}
+
+# Guard shim folders: Agent Guard's and OpenCode Guard's. A command that resolves
+# into one of them starts a guard, not the harness; following it can loop.
+shim_dirs=("$bin" "$home/Library/Application Support/OpenCodeGuard/bin")
+
+guard_shim() {
+  local s
+  for s in $shim_dirs; do
+    [[ ${1:A} == "${s:A}"/* ]] && return 0
+  done
+  return 1
 }
 
 next_cli() {
@@ -50,13 +62,13 @@ next_cli() {
   for d in $path; do
     for cli in $cli_names; do
       f="$d/$cli"
-      [[ -x $f && ! -d $f && ${f:A} != "${bin:A}/$cli" ]] || continue
+      [[ -x $f && ! -d $f ]] && ! guard_shim "$f" || continue
       REPLY=$f
       return 0
     done
   done
   for f in $cli_search; do
-    [[ -x $f ]] && { REPLY=$f; return 0 }
+    [[ -x $f ]] && ! guard_shim "$f" && { REPLY=$f; return 0 }
   done
   return 1
 }
@@ -71,12 +83,14 @@ find_app() {
 }
 [[ $mode == find-app ]] && { find_app && print -r -- "$REPLY"; exit }
 
-# Apply in every mode, including nested launches and check. The nesting marker
-# waits until exec, since exporting it here would trip the nested-launch check.
+# Apply in every mode, including nested launches and check. With no names,
+# export would print the environment.
 unset $env_unset
-export ${env_set:#OPENCODE_SANDBOXED=*}
+(( $#env_set )) && export $env_set
 
-if [[ ${OPENCODE_SANDBOXED:-} == 1 ]] && ! /usr/bin/sandbox-exec -p '(version 1)(allow default)' /usr/bin/true 2>/dev/null; then
+# The engine's nesting marker is exported just before exec. OpenCode Guard's
+# marker also counts as already guarded until step 11.
+if [[ ${AGENT_GUARD_SANDBOXED:-} == 1 || ${OPENCODE_SANDBOXED:-} == 1 ]] && ! /usr/bin/sandbox-exec -p '(version 1)(allow default)' /usr/bin/true 2>/dev/null; then
   [[ $mode == cli ]] || fail "already inside the guard"
   next_cli || fail "opencode not found"
   exec "$REPLY" "$@"
@@ -224,7 +238,7 @@ case $mode in
     exit 0
     ;;
   (check)
-    probe="$engine/state/.check" tmp="$darwin_temp/.opencode-guard-check" ok=1 rc=0
+    probe="$engine/state/.check" tmp="$darwin_temp/.agent-guard-check" ok=1 rc=0
     $sandbox -D GUI=0 /usr/bin/touch "$probe" 2>/dev/null && { print "FAIL protected write allowed"; ok=0 } || print "ok   protected write denied"
     $sandbox -D GUI=0 /usr/bin/touch "$tmp" && print "ok   temp write allowed" || { print "FAIL temp write denied"; ok=0 }
     $sandbox -D GUI=0 /usr/bin/open -h >/dev/null 2>&1 || rc=$?
@@ -237,5 +251,5 @@ case $mode in
   (*) fail "usage: launch cli|gui|profile|check" ;;
 esac
 
-export $env_set
+export AGENT_GUARD_SANDBOXED=1
 exec $sandbox "$@"

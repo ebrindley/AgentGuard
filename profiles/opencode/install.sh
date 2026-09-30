@@ -13,8 +13,8 @@ list="$list_dir/Guard List.txt"
 conf="$home/.config/opencode"
 launcher="$home/Applications/Agent Guard.app"
 cc="$home/.cc-safety-net/rules"
-marker_start='# >>> opencode-guard >>>'
-marker_end='# <<< opencode-guard <<<'
+marker_start='# >>> agent-guard >>>'
+marker_end='# <<< agent-guard <<<'
 gui=0 projects=
 typeset -a warnings
 
@@ -99,17 +99,17 @@ fi
 say "list: $list"
 
 /bin/mkdir -p "$conf/plugins"
-/bin/cp "$profile_src/plugin.js" "$conf/plugins/opencode-guard.js"
+/bin/cp "$profile_src/plugin.js" "$conf/plugins/agent-guard.js"
 
-/bin/mkdir -p "$cc/opencode-guard"
-/bin/cp "$profile_src/templates/cc-safety-net/rules/opencode-guard/rulebook.json" "$cc/opencode-guard/rulebook.json"
+/bin/mkdir -p "$cc/agent-guard"
+/bin/cp "$profile_src/templates/cc-safety-net/rules/agent-guard/rulebook.json" "$cc/agent-guard/rulebook.json"
 if [[ ! -e $cc/rule.json ]]; then
   /bin/cp "$profile_src/templates/cc-safety-net/rules/rule.json" "$cc/rule.json"
-elif /usr/bin/jq --slurpfile t "$profile_src/templates/cc-safety-net/rules/rule.json" '.rules = ((.rules // []) + ["opencode-guard"] | unique) | .transparent_wrappers = ((.transparent_wrappers // []) + $t[0].transparent_wrappers | unique)' "$cc/rule.json" > "$cc/rule.json.tmp" 2>/dev/null; then
+elif /usr/bin/jq --slurpfile t "$profile_src/templates/cc-safety-net/rules/rule.json" '.rules = ((.rules // []) + ["agent-guard"] | unique) | .transparent_wrappers = ((.transparent_wrappers // []) + $t[0].transparent_wrappers | unique)' "$cc/rule.json" > "$cc/rule.json.tmp" 2>/dev/null; then
   /bin/mv -f "$cc/rule.json.tmp" "$cc/rule.json"
 else
   /bin/rm -f "$cc/rule.json.tmp"
-  warnings+=("$cc/rule.json not changed (invalid JSON): add opencode-guard to its rules and env, exec, nice, nohup, setsid, stdbuf, time and timeout to its transparent_wrappers")
+  warnings+=("$cc/rule.json not changed (invalid JSON): add agent-guard to its rules and env, exec, nice, nohup, setsid, stdbuf, time and timeout to its transparent_wrappers")
 fi
 
 record="$state/permissions.json"
@@ -132,7 +132,7 @@ done
 for rc in "$home/.zprofile" "$home/.zshrc" "$home/.bash_profile"; do
   [[ $rc == *bash_profile && ! -e $rc ]] && continue
   if [[ -e $rc ]] && /usr/bin/grep -Fxq -- "$marker_start" "$rc"; then
-    /usr/bin/grep -Fxq -- "$marker_end" "$rc" || { warnings+=("${rc:t} has an unfinished opencode-guard block; fix it by hand"); continue }
+    /usr/bin/grep -Fxq -- "$marker_end" "$rc" || { warnings+=("${rc:t} has an unfinished agent-guard block; fix it by hand"); continue }
     /usr/bin/sed -i '' "/^$marker_start\$/,/^$marker_end\$/d" "${rc:A}"
   fi
   [[ -s $rc && -n $(/usr/bin/tail -c1 "$rc") ]] && print >> "$rc"
@@ -148,7 +148,7 @@ say "PATH: new terminal windows run opencode inside the guard"
 /bin/rm -rf "$launcher"
 /bin/mkdir -p "${launcher:h}"
 /usr/bin/osacompile -o "$launcher" -e "do shell script quoted form of \"$engine/bin/opencode-gui\" & \" >/dev/null 2>&1 &\""
-/usr/bin/plutil -replace CFBundleIdentifier -string ai.opencodeguard.launcher "$launcher/Contents/Info.plist"
+/usr/bin/plutil -replace CFBundleIdentifier -string io.github.ebrindley.agentguard "$launcher/Contents/Info.plist"
 /bin/cp "$profile_src/assets/OpenCodeGuard.icns" "$launcher/Contents/Resources/applet.icns"
 /bin/rm -f "$launcher/Contents/Resources/Assets.car"
 /usr/bin/plutil -remove CFBundleIconName "$launcher/Contents/Info.plist"
