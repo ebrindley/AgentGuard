@@ -1,119 +1,198 @@
 # Agent Guard design
 
-Status: draft, 2026-09-28. Not built yet.
+Status: accepted plan, 2026-09-30. Stage 1 (the OpenCode Guard v1.0.3 port on the zsh engine) is built; steps 2–11 are not.
 
-Agent Guard is one macOS guard for terminal coding agents. It merges what OpenCode Guard (v1.0.3) and pi-sandbox-guard do today into one engine with a small profile and plugin per harness.
+Agent Guard is one macOS guard for terminal coding agents. It replaces OpenCode Guard (v1.0.4) and pi-sandbox-guard with one engine and a small profile, hook set and plugin adapter per harness.
 
 ## 1. Goal and non-goals
 
-Goal: an agent keeps full tool permissions and broad read access, but can only change or delete files in folders you allow, plus the data, cache and temp folders its harness needs. It can never read or change folders you deny. It cannot edit the guard, the list, or its harness's config and plugins, so it cannot switch its own guardrails off. Both layers are on by default. Few tools do that; most vendors sandbox only shell commands, and third-party wrappers do only the outer layer.
+Goal: an agent keeps full tool permissions and broad read access, but can only change or delete files in folders you allow, plus the data, cache and temp folders its harness needs. It can never read or change folders you deny. It cannot edit the guard, the list or its harness's config and plugins, so it cannot switch its own guardrails off. Both layers are on by default. Install is a one-line terminal command (section 6). The end states are in section 12.
 
 Non-goals:
 
 - Protecting files inside ALLOW folders. The agent edits code there; keep backups and review diffs.
 - Keeping provider tokens secret from the harness that uses them.
-- Linux or Windows.
+- Linux and Windows. On Linux, Landlock and bubblewrap cannot deny creation of a protected name anywhere in a writable tree. Windows, Cosmopolitan single binaries, Anthropic's sandbox-runtime (srt) and nono were also researched and rejected for now.
 - A VM or container.
+- A DMG or a Homebrew cask. OpenCode Guard's DMG is not carried over (section 6).
 - Harnesses that ship their own Seatbelt sandbox (Codex, Claude Code, Gemini CLI) in the first release. Seatbelt sandboxes cannot nest, so a profile would have to switch theirs off.
 
 ## 2. Architecture
 
 Two layers, as in both guards today.
 
-- **Outer layer (the boundary).** The launcher runs the whole harness process, and every child, under a Seatbelt profile built at each launch. Every harness component must run inside it. The 2026 escapes (Beltdown, Pillar) used harness parts that ran outside the sandbox.
-- **Inner layer (advisory).** A plugin inside the harness refuses forbidden tool calls with a clear message and blocks destructive shell commands. Hook failure behavior differs by vendor (Kiro fails open), so nothing depends on the plugin for safety.
+- **Outer layer (the boundary).** The launcher runs the whole harness process, and every child, under `/usr/bin/sandbox-exec` with an SBPL profile generated at each launch. Every harness component must run inside it. [Beltdown](https://www.accomplish.ai/blog/beltdown-escaping-the-claude-code-sandbox/) (2026) escaped Claude Code's Seatbelt sandbox: the harness ran git outside the sandbox, and git ran a planted `core.fsmonitor` command.
+- **Inner layer (advisory).** A JS plugin inside the harness refuses forbidden tool calls with a clear message, and cc-safety-net blocks destructive shell commands (section 5). Hook failure behavior differs by harness (section 14), so nothing depends on the plugin for safety.
 
-Shared engine, written in zsh with only macOS tools (`sandbox-exec`, `jq`, `plutil`):
+The engine as built (stage 1) is zsh and uses only macOS tools (`sandbox-exec`, `dscl`, `jq`, `plutil`, `mdfind`, `getconf`):
 
-| Part | Does |
+| Part | Built as |
 |---|---|
-| List parser | Reads the one Guard List, applies the refusal rules (too broad to allow, needed by the harness), resolves `@project`. Lifted from OpenCode Guard `engine/launch`. |
-| Profile builder | Base SBPL, then harness writable paths, an optional harness SBPL fragment, list rules, and protected paths and names last (section 3). |
-| Launcher | Takes home and the engine folder from the account database, not `$HOME`, before it reads any profile. Pi does this today; it lands with the profile loader in stage 1. Finds the binary or app, refuses to run nested or unguarded, cleans the environment, execs under `sandbox-exec`. Pi's other pre-sandbox checks (fixed PATH, TMPDIR checks, executable and interpreter checks) come in stage 3. |
-| Log | `~/Agent Guard/last-launch-<harness>.log`: what applied, what was skipped or refused, what the harness can always write. |
-| State | Resolved rules written per launch to `state/<harness>-<launch-id>.json` in the engine folder, so two launches with different start folders do not overwrite each other. The launcher passes the file's path in `AGENT_GUARD_STATE`. The plugin accepts only a path inside the state folder, and refuses edits if the file is missing or malformed, as OpenCode Guard does today. Files whose launch has ended are removed at the next launch. |
-| Plugin core | One JS module: sandbox probe, path checks against the state file, "started without the guard" refusal, status tool, loading cc-safety-net. |
-| Installer and check | Copies files, sets up shims and the launcher app, runs the self-test. |
+| Launcher | `engine/launch`. Takes the login name from `id -un` and home from `dscl /Search -read /Users/<login> NFSHomeDirectory`, and stops if that is missing, `/` or not a folder. Only then does it source `profiles/opencode/harness.zsh` and `hooks.zsh` from `~/Library/Application Support/AgentGuard/` under that home, and set `HOME` to it. `HOME` and `USER` from the environment cannot choose the profile. Finds the real CLI on PATH, skipping only its own shim (section 10, rule 8), then in `cli_search`; finds the app in `app_paths`, then by bundle ID through Spotlight. Unsets `env_unset`, exports `env_set` and execs under `sandbox-exec`. |
+| Nested launch | If `OPENCODE_SANDBOXED=1` and a trivial `sandbox-exec` call fails (the caller is already sandboxed), `cli` runs the harness directly and every other mode refuses. |
+| List parser | In `engine/launch`. Rules in section 4. |
+| Profile builder | Fills the slots of `engine/profile.sb` (`@WRITABLE@`, `@WRITABLE_GUI@`, `@USER_RULES@`, `@PROTECTED@`, `@PROTECTED_NAMES@`) from the profile and the list, and passes `HOME`, `DARWIN_TEMP`, `DARWIN_CACHE` and `GUI` as `-D` parameters. Rule order in section 3. |
+| Log | `~/Agent Guard/last-launch-opencode.log`, rewritten at each launch: skipped, refused and overridden entries; the resolved ALLOW, READ ONLY and DENY sets; what OpenCode can always write. |
+| State | `state/rules.json` in the engine folder: the resolved allow, read only and deny paths. Every launch, in every mode including `profile` and `check`, writes it to a temp file and renames it over the old one. The plugin reads it once at start, so launch B can replace it before launch A's plugin reads it; A's plugin then refuses and reports against B's rules while Seatbelt still enforces A's own profile. Step 9 replaces it with a state file per launch whose path the launcher passes to the plugin. |
+| Plugin | `profiles/opencode/plugin.js`: guard probe, path checks, unguarded refusal, status tool, cc-safety-net loading (section 5). One file for now; it splits into a shared core and a per-harness adapter when Pi arrives (step 10). |
+| cc-safety-net | Version 2.4.6, unmodified, in `engine/vendor/cc-safety-net`. |
+| Installer and uninstaller | `install.sh` forwards to `profiles/opencode/install.sh`; `profiles/opencode/uninstall.sh` is copied into the engine folder. Section 6. |
 
-Per harness: a profile file, an optional SBPL fragment, a thin plugin adapter for that harness's hook API, and optional install steps (for example OpenCode's permission merge).
+Launcher modes: `cli` (the `opencode` shim), `gui` (the `opencode-gui` shim, used by the app; refuses if OpenCode is already running and shows failures as an alert), `profile` (prints the generated SBPL) and `check` (the installer's self-test: a protected write is denied, a temp write is allowed, `open` is denied, then the profile's `check_hook`). The installer also calls an internal `find-app` mode. The built launcher loads only the OpenCode profile, and its nested-launch check, log name and message prefix are OpenCode's.
 
-Install layout: engine in `~/Library/Application Support/AgentGuard/`, profiles in `profiles/<harness>/` inside it, shims in `bin/` inside it (put first on PATH by the installer, as OpenCode Guard does). The whole folder is write-protected from inside the guard.
+At step 8 the launcher becomes one Rust binary with the same parts: account lookup, list parser, profile builder, log and state. Profiles become TOML embedded in the binary (section 3), hooks become Rust functions and one module builds the Seatbelt profile. The plugin stays JavaScript and cc-safety-net stays vendored. It reaches the two existing installs through `update`, after both switched on the zsh engine, so migration failures and rewrite failures stay separate (section 7).
 
-## 3. Per-harness profile contract
+Install layout as built:
 
-Recommendation: a zsh file of assignments, read with `source`. Zsh arrays keep paths with spaces intact and need no parser. Where a harness needs logic, the profile names a hook function in `hooks.zsh` next to it.
+| Path | Holds |
+|---|---|
+| `~/Library/Application Support/AgentGuard/` | `launch`, `profile.sb`, `uninstall.sh`; shims `bin/opencode` and `bin/opencode-gui`; `profiles/opencode/`; `vendor/cc-safety-net/`; `state/rules.json` and the permission record `state/permissions.json` |
+| `~/Agent Guard/` | `Guard List.txt` and the launch log |
+| `~/Applications/Agent Guard.app` | An AppleScript applet that runs `bin/opencode-gui`, ad-hoc signed |
+| `~/.config/opencode/plugins/opencode-guard.js` | The plugin |
+| `~/.cc-safety-net/rules/opencode-guard/` | The rulebook, plus an entry in `~/.cc-safety-net/rules/rule.json` |
+| `.zprofile`, `.zshrc`, `.bash_profile` if present | A PATH block between `# >>> opencode-guard >>>` markers that puts `bin/` first |
+
+The plugin file name, PATH markers, rulebook, status tool, bypass variable, message prefix, nesting marker and app bundle ID are still OpenCode Guard's; step 3 replaces them (section 12). Until the migration (step 5), this installer is for development and disposable-home tests and must not run over an OpenCode Guard install (section 10).
+
+## 3. Harness profiles
+
+A harness profile is data plus named hook functions and SBPL fragments. On the zsh engine, `harness.zsh` is a file of assignments read with `source`; zsh arrays keep paths with spaces intact and need no parser. Hooks are functions in `hooks.zsh`, and `protected.sb` is the OpenCode fragment.
 
 Profiles and hook files are trusted code, like the engine: `source` runs anything in them, including `$(...)` inside an assignment. They are safe only because they live in the write-protected engine folder and the launcher finds that folder from the account database, not from `$HOME` or any other environment the agent could set. A conformance test that allows only plain assignments catches mistakes. It is not a boundary.
 
-`profiles/opencode/harness.zsh`:
+From step 8 profiles are TOML files embedded in the Rust binary, with the same fields. Hook fields name Rust functions and fragments are embedded too. `~` in a path means the account home. Changing a profile then means replacing the binary, which the engine folder protection covers.
+
+The contract. "Planned" fields do not exist in the built engine.
+
+| Field | Meaning | OpenCode (built) | Pi (planned) |
+|---|---|---|---|
+| `name` | Profile ID | `opencode`; not yet read by the launcher | `pi` |
+| `title` | Name shown to the user | `OpenCode`; not yet read by the launcher | `Pi` |
+| `cli_names` | Commands the shims stand in for; the launcher looks for the real one on PATH | `opencode` | `pi`, `omp`; the shim's own name picks the runtime |
+| `cli_search` | Fallback executable paths | Both Homebrew prefixes, `~/.opencode/bin/opencode` | npm installs under both Homebrew prefixes, after `binding_file` |
+| `app_paths`, `app_bundle_id` | App locations, then a Spotlight lookup by bundle ID | `OpenCode.app` in `/Applications` and `~/Applications`; `ai.opencode.desktop` | None |
+| `writable` | Always writable; created at launch | Seven paths, below | `~/.npm`, `~/.cache`, `~/Library/Caches` |
+| `writable_gui` | Also writable in `gui` mode | App support and saved state folders | None |
+| `gui_args` | Arguments added in `gui` mode | `--no-sandbox` (Electron; Chromium's sandbox cannot nest) | None |
+| `protected_paths` | Harness paths write-denied in the final deny block | `~/.config/opencode`, `~/.opencode` | `~/.pi/agent/extensions`, `settings.json`, `auth.json`, `trust.json` |
+| `protected` | Paths whose symlink targets are resolved and protected at launch | `protected_paths` plus `~/.cc-safety-net` | Same as `protected_paths` |
+| `protected_names` | Names whose symlinks directly in the launch folder are resolved at launch | `.opencode`, `opencode.json`, `opencode.jsonc`, `tui.json`, `tui.jsonc` | `.pi`, `.omp` and the cross-harness folders below |
+| `protected_fragment` | SBPL added at the end of the final deny block | `protected.sb`: the name regexes and `.cc-safety-net` | `pi-protected.sb`, below |
+| `env_unset`, `env_set` | Environment changes before exec | Unset `ELECTRON_RUN_AS_NODE`, `OPENCODE_SIDECAR_V2`, `CC_SAFETY_NET_HOME`; set `OPENCODE_SANDBOXED=1`, `CC_SAFETY_NET_PARANOID_RM=1` | Set `NPM_CONFIG_USERCONFIG=/dev/null` |
+| `prepare_hook` | Runs after the profile is built, before the state write and exec | `opencode_prepare`: creates `~/.config/opencode`, its `.gitignore` and a minimal `opencode.json` if none exists | `pi_prepare`: resolves the active git hooks folder; refuses symlinked `.pi` and `.omp` layouts |
+| `check_hook` | Extra step in `check` | `opencode_check`: runs `opencode serve` under the guard and looks for the status tool | `pi_check` |
+| `allow_fragment` | Planned. SBPL added after `writable`, before the list rules | None | `pi-allow.sb`, below |
+| `state_hook` | Planned. Resolves harness state roots, passed as SBPL parameters | None | Pi and OMP roots from `PI_CODING_AGENT_DIR`, `PI_CONFIG_DIR`, OMP's `--profile` and `OMP_PROFILE` or `PI_PROFILE` |
+| `launch_hook` | Planned. Adjusts the harness arguments | None | Adds `--extension <plugin>` for agent sessions, not for administrative subcommands |
+| `binding_file` | Planned. Recorded executable and interpreter paths | None | Imported from `~/.config/pi-sandbox-guard/executables.conf` (section 11) |
+| `start_folder` | Planned for step 10. What `@project` means (section 4) | Defined at step 10 from `opencode [project]` | `PI_PROJECT`, else git top level, else the launch folder |
+| `plugin_dir`, `plugin_files` | Planned. Where the installer puts the plugin | Hard-coded in the installer as `~/.config/opencode/plugins/opencode-guard.js` | `~/.pi/agent/extensions` |
+| `install_hook` | Planned. Harness-specific install steps | The permission merge, now inline in `install.sh` | None |
+| `inner_sandbox` | Planned. How to switch off a harness's own Seatbelt, or that the harness is unsupported | None | None |
+
+`profiles/opencode/harness.zsh` as built:
 
 ```zsh
+# Trusted profile data, loaded only from the account-derived engine folder.
 name=opencode
-title="OpenCode"
+title=OpenCode
 cli_names=(opencode)
-cli_search=(/opt/homebrew/bin/opencode /usr/local/bin/opencode "$HOME/.opencode/bin/opencode")
-app_paths=(/Applications/OpenCode.app "$HOME/Applications/OpenCode.app")
+cli_search=(/opt/homebrew/bin/opencode /usr/local/bin/opencode "$home/.opencode/bin/opencode")
+app_paths=(/Applications/OpenCode.app "$home/Applications/OpenCode.app")
 app_bundle_id=ai.opencode.desktop
-writable=("$HOME/.local/share/opencode" "$HOME/.local/state/opencode" "$HOME/.cache"
-          "$HOME/Library/Caches" "$HOME/.npm" "$HOME/.bun/install/cache" "$HOME/.cc-safety-net/logs")
-writable_gui=("$HOME/Library/Application Support/ai.opencode.desktop"
-              "$HOME/Library/Saved Application State/ai.opencode.desktop.savedState")
-protected=("$HOME/.config/opencode" "$HOME/.opencode" "$HOME/.cc-safety-net")
-protected_names=(.opencode opencode.json opencode.jsonc tui.json tui.jsonc .cc-safety-net)
-writable_exceptions=("$HOME/.cc-safety-net/logs")   # stays writable inside a protected tree
-gui_args=(--no-sandbox)              # Electron; Chromium's sandbox cannot nest
+writable=("$home/.local/share/opencode" "$home/.local/state/opencode" "$home/.cache"
+          "$home/Library/Caches" "$home/.npm" "$home/.bun/install/cache" "$home/.cc-safety-net/logs")
+writable_gui=("$home/Library/Application Support/ai.opencode.desktop"
+              "$home/Library/Saved Application State/ai.opencode.desktop.savedState")
+protected_paths=("$home/.config/opencode" "$home/.opencode")
+protected=($protected_paths "$home/.cc-safety-net")
+protected_names=(.opencode opencode.json opencode.jsonc tui.json tui.jsonc)
+protected_fragment=protected.sb
+gui_args=(--no-sandbox)
 env_unset=(ELECTRON_RUN_AS_NODE OPENCODE_SIDECAR_V2 CC_SAFETY_NET_HOME)
 env_set=(OPENCODE_SANDBOXED=1 CC_SAFETY_NET_PARANOID_RM=1)
-inner_sandbox=none                   # none | off-flag:<args> | unsupported
-start_folder=cwd                     # what @project means: cwd | git-toplevel
-plugin_dir="$HOME/.config/opencode/plugins"
-plugin_files=(agent-guard-opencode.js)
-install_hook=opencode_install        # permission merge, config .gitignore
-check_hook=opencode_check            # serve, then look for the status tool
+prepare_hook=opencode_prepare
+check_hook=opencode_check
 ```
 
-`profiles/pi/harness.zsh`:
+`profiles/opencode/protected.sb`:
 
-```zsh
-name=pi
-title="Pi"
-cli_names=(pi omp)                   # runtime chosen from the shim's own name
-binding_file=executables.conf        # in the engine folder, recorded by `agent-guard bind`
-cli_search=(/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js
-            /usr/local/lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js)
-app_paths=()
-writable=("$HOME/.npm" "$HOME/.cache" "$HOME/Library/Caches")
-state_hook=pi_state_paths            # active Pi/OMP state roots, OMP --profile selector
-sb_fragment=pi.sb                    # OMP positive state allowlist, prompt*.md re-deny, active git hooks
-protected=("$HOME/.pi/agent/extensions" "$HOME/.pi/agent/settings.json"
-           "$HOME/.pi/agent/auth.json" "$HOME/.pi/agent/trust.json")
-protected_names=(.pi .omp .claude/{extensions,hooks,tools} .codex/{extensions,hooks,tools}
-                 .gemini/extensions .opencode/plugins)   # Pi and OMP load these at start
-launch_hook=pi_launch_args           # inject the plugin even under --no-extensions
-inner_sandbox=none
-start_folder=git-toplevel
-plugin_dir="$HOME/.pi/agent/extensions"
-plugin_files=(agent-guard-pi)
-check_hook=pi_check
+```
+  (regex #"/\.opencode(/|$)")
+  (regex #"/(opencode|tui)\.jsonc?$")
+  (require-all (regex #"/\.cc-safety-net(/|$)") (require-not (subpath (h "/.cc-safety-net/logs"))))
 ```
 
-The Pi `protected_names` set matches the project-config fix in pi-sandbox-guard (`protect-project-pi-config`), with evidence from Pi 0.87.1 and upstream Oh My Pi. The OMP folder names come from OMP's upstream source and need rechecking against the OMP version users run.
+`writable` includes all of `~/.cache`, which holds OpenCode's npm plugin store. Step 7 protects the store (section 9).
 
-Protected paths and names are write-denied, including creation. A missing config file created by the agent and run at the next start was CVE-2026-25725 in Claude Code. Names match as path parts anywhere except inside the harness's own writable state folders, so Pi's `.omp` name does not cover OMP's state in `~/.omp`. A name must still be narrow enough not to cover other state the harness writes. Narrow exceptions are listed in `writable_exceptions`. Matching names everywhere, including temp, also closes a route that pi-sandbox-guard's project-only rule leaves open: building a `.pi` folder in `/private/tmp` and moving its parent into a project.
+Planned Pi profile, written as TOML because Pi arrives after the Rust launcher:
 
-Symlinks: the target of a protected path is resolved and protected at launch. The target of a protected name is resolved only inside the start folder, as OpenCode Guard does today. Elsewhere only the name is protected, and the plugin refuses edits through it. Stage 1 keeps this limit, and the README keeps saying so.
+```toml
+name = "pi"
+title = "Pi"
+cli_names = ["pi", "omp"]                 # the shim's own name picks the runtime
+binding_file = "executables.conf"
+cli_search = ["/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js",
+              "/usr/local/lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"]
+app_paths = []
+writable = ["~/.npm", "~/.cache", "~/Library/Caches"]
+state_hook = "pi_state_paths"
+allow_fragment = "pi-allow.sb"
+protected_paths = ["~/.pi/agent/extensions", "~/.pi/agent/settings.json",
+                   "~/.pi/agent/auth.json", "~/.pi/agent/trust.json"]
+protected_names = [".pi", ".omp", ".claude/extensions", ".claude/hooks", ".claude/tools",
+                   ".codex/extensions", ".codex/hooks", ".codex/tools",
+                   ".gemini/extensions", ".opencode/plugins"]   # Pi and OMP load these at start
+protected_fragment = "pi-protected.sb"
+env_set = ["NPM_CONFIG_USERCONFIG=/dev/null"]
+prepare_hook = "pi_prepare"
+launch_hook = "pi_launch_args"
+start_folder = "git-toplevel"
+plugin_dir = "~/.pi/agent/extensions"
+check_hook = "pi_check"
+```
 
-Every launch protects the guard's files for every installed harness, not only the one being launched. That covers the engine folder (profiles, bindings, state), the list folder, the launcher app, the `protected` entries of every installed profile, shell startup files and `~/Library/LaunchAgents`. Otherwise an ALLOW entry could expose another harness's plugin or a binding file.
+The fragments carry pi-sandbox-guard's `sandbox/pi-sandbox.sb` as of PR #10:
 
-Rule order: base profile, harness writable paths, harness fragment, list rules, then protected paths and names last. Seatbelt applies the last matching rule, so neither a fragment nor the list can reopen a DENY entry or a protected path. Fragments are reviewed like engine code.
+- `pi-allow.sb`: the active Pi state root (`~/.pi/agent`, or a relocated root under `~/.pi`); for OMP, a positive allowlist of the runtime paths observed in OMP 17.2.10 under the active OMP root; `~/.pi/agent/security-events.log`.
+- `pi-protected.sb`: in the active Pi state root and at `~/.pi/agent`, `extensions/`, `npm/`, `git/`, `skills/`, `settings.json`, `auth.json`, `trust.json`, `SYSTEM.md`, `APPEND_SYSTEM.md`, `models.json` and any `*prompt*.md` (the user package folders are protected since PR #9); OMP's extensions, hooks, tools, commands, skills, agents, prompts, rules, instructions, plugins and its config, model, MCP, SSH, token and `.env` files; the project's `.git/hooks`, the active hooks folder and submodule hooks, re-allowing only the hooks folder nodes and `*.sample` files; write denies on credential folders such as `~/.ssh` and `~/.aws`; read denies on credential files and on `.env` files anywhere.
+- Sessions and theme JSON stay writable. OMP's `agent.db` holds both operational data and credentials and stays writable.
 
-`inner_sandbox` tells the launcher how to switch a harness's own Seatbelt off, or that the harness is not supported.
+pi-sandbox-guard's pre-sandbox launch checks and executable bindings carry over with the Pi profile at step 10 (section 11). Whether the engine then applies them to every profile is decided in that step.
 
-## 4. The list
+**Protected paths and names** are write-denied, including creation, rename and removal. A missing config file created by the agent and run at the next start was [CVE-2026-25725](https://nvd.nist.gov/vuln/detail/CVE-2026-25725) in Claude Code. OpenCode's names match anywhere on disk, including temp and OpenCode's own writable folders; the only exception is `~/.cc-safety-net/logs`. Planned for Pi: the same match-anywhere rule, except inside the harness's own state folders, so `.omp` does not cover OMP's state in `~/.omp`. pi-sandbox-guard matches these names only inside the project (PR #8). Matching everywhere also closes a route the project-only rule leaves open: building a `.pi` folder in `/private/tmp` and moving its parent into a project. A name must still be narrow enough not to cover other state the harness writes. Narrow exceptions go in the protected fragment, as `~/.cc-safety-net/logs` does.
 
-One list for all harnesses: `~/Agent Guard/Guard List.txt`. Same headings and rules as OpenCode Guard: ALLOW, READ ONLY, DENY; DENY always wins; otherwise the more specific entry wins; folders above a DENY or READ ONLY entry cannot be renamed or removed; `/`, home, `~/Library`, `~/.config` and `~/.local` cannot be allowed whole; folders the harness needs cannot be made READ ONLY or DENY.
+**Symlinks.** Seatbelt checks the resolved path, so a link can carry a write past a name rule. At launch the engine resolves the engine folder, the list folder, the profile's `protected` entries, `~/Library/LaunchAgents`, the shell startup files and each of `protected_names` directly inside the launch folder (`$PWD`). Where one is a link, its target is write-denied and added to READ ONLY for the plugin. Elsewhere only the name is protected: the agent cannot create, replace or remove a link with that name, but writes through an existing link reach its target. The plugin refuses file edits through such a link; shell commands are not checked. `.cc-safety-net` is not in `protected_names`, so a `.cc-safety-net` link in the launch folder is not resolved. `opencode <project>` run from another folder gets no resolution for the project's names; `@project` (step 10) must resolve the same folder the harness opens. Stage 1 keeps these limits and the README says so. pi-sandbox-guard instead refuses to launch when `.pi` or `.omp` in the project or launch folder is a link, or holds a link to a writable place outside it (PR #8); the Pi profile keeps that.
 
-Pi's project model fits as one new entry, valid only under ALLOW:
+**Every installed harness.** The base profile write-protects the engine folder (launcher, profiles, shims, vendored code, state), the list folder, `~/Applications/Agent Guard.app`, `~/Library/LaunchAgents` and eight shell startup files. It also stops home, `~/Library`, `~/Library/Application Support`, `~/.config` and `~/Applications` from being renamed or removed. The profile adds its own paths and names. Once a second profile exists (step 10), every launch also protects the `protected_paths` and `protected_names` of every installed profile, not only the one being launched, and the binding file. Otherwise an ALLOW entry could expose another harness's plugin or config.
+
+**Executables and launch links.** Planned: the harness executable, its interpreter and every launch link on the way to them (shim, symlink) are protected against replacement and against renames of their parent folders. Homebrew's prefixes (`/opt/homebrew`, `/usr/local`) are owned by the installing user, so Seatbelt policy, not ownership, stops the agent writing there. Today the OpenCode executable is protected only by the base write deny: an ALLOW entry such as `/opt/homebrew` passes the list checks and makes it writable.
+
+**Rule order** in the generated profile:
+
+1. `(allow default)`, then deny all writes.
+2. Allow writes to `writable`, `/private/tmp`, the per-user temp and cache folders and a few device files; `writable_gui` in `gui` mode. The planned `allow_fragment` goes here.
+3. List rules: ALLOW and READ ONLY entries from least to most specific, then DENY entries (read and write), then symlink targets of protected paths, then pinned folders (section 4).
+4. The final deny block: engine folder, list folder, `protected_paths`, `~/Library/LaunchAgents`, the app, shell startup files, the pinned home folders, then `protected_fragment`.
+5. Deny `lsopen` and `job-creation`, and deny running `open`, `osascript`, `osacompile`, `codesign`, `diskutil`, `launchctl` and `sudo`.
+
+Seatbelt applies the last matching rule, so the list cannot reopen a protected path, and a harness's allow fragment cannot reopen a DENY entry. A harness's denies go in `protected_fragment`, after the list, because an ALLOW entry covering the project would override Pi's hook and state denies if they came before it. A re-allow inside the protected fragment (Pi's `*.sample` hook files) also comes after the list, so it must stay narrow. Fragments are reviewed like engine code.
+
+## 4. The Guard List
+
+One list for all harnesses: `~/Agent Guard/Guard List.txt`. The launcher reads it at each launch; edits apply at the next launch. Same headings and rules as OpenCode Guard:
+
+- Headings are ALLOW, READ ONLY (or READ-ONLY) and DENY, in any case, optionally followed by `-` or `:` and text. Lines before the first heading and lines starting with `#` are ignored.
+- An entry is a path starting with `/` or `~`, optionally quoted. Backslash escapes from a Finder drag are removed and symlinks in the path are resolved. Other lines are skipped.
+- An ALLOW or READ ONLY entry that does not exist is skipped. A DENY entry that does not exist is kept, with a spelling warning.
+- DENY always wins, for reads and writes. Otherwise the more specific entry wins.
+- Folders above a DENY or READ ONLY entry, and each ALLOW folder itself, cannot be renamed or removed.
+- `/`, home, `~/Library`, `~/.config` and `~/.local` cannot be allowed whole: ALLOW refuses `/` and any entry that is or contains `~/Library/Application Support`, `~/.config` or `~/.local`.
+- Folders the harness needs cannot be made READ ONLY or DENY: those refuse any entry that is or contains `/`, home, `~/Library`, `~/.config`, `~/.local`, `~/.cache`, `/usr`, `/bin`, `/sbin`, `/System`, `/Library`, `/private`, `/dev`, `/opt` or `/Applications`. This is OpenCode's set, hard-coded in the launcher. It does not include the harness's own `writable` folders: a DENY on `~/.local/share/opencode` is applied, and OpenCode then cannot use its data folder.
+- The log records every skipped, refused and overridden entry.
+
+`@project` arrives at step 10, as one new entry valid only under ALLOW:
 
 ```
 ALLOW - agents may create, change and delete things inside these:
@@ -121,94 +200,515 @@ ALLOW - agents may create, change and delete things inside these:
 ~/Projects
 ```
 
-`@project` means the folder the agent starts in, or its git top level when the profile says `start_folder=git-toplevel`. `PI_PROJECT` overrides it, as in Pi today. It uses Pi's refusal rules unchanged. The launch is refused rather than widened if `@project` is `/`, home, a system or credential folder, `~/Library`, `~/Desktop`, `~/Documents` or `~/Downloads`, anything inside one of them, or a folder that contains the guard. The launcher also refuses to start if the harness executable or its interpreter sits inside any writable folder, not just `@project`. The log shows what `@project` resolved to. New lists get `@project` commented out.
+Step 10 first defines it for OpenCode: the positional project argument (`opencode [project]`), and what it means for the app launcher, whose working directory is unverified. For Pi it keeps pi-sandbox-guard's resolution: `PI_PROJECT` if set, else the git top level, else the launch folder. It also keeps Pi's refusal rules (`sandbox/pi-sandbox-preamble.zsh`). The launch is refused rather than widened if `@project`:
 
-One list changes scope. An OpenCode ALLOW of `~/Projects` would let Pi write to every project there, not just the one it started in. Pi's credential DENY entries would start applying to OpenCode. So importing is a policy change, not a copy. The installer shows the merged list and what each harness gains or loses, and writes nothing until the user confirms. It never replaces an existing `~/Agent Guard/Guard List.txt`.
+- is `/`, home, `/Users`, `/Volumes`, `/tmp`, `/private/tmp`, `/private` or `/var`;
+- is or is inside `/etc`, `/usr`, `/bin`, `/sbin`, `/opt`, `/System`, `/Library` or `/Applications`;
+- is or is inside `~/.ssh`, `~/.aws`, `~/.config`, `~/.docker`, `~/.gnupg`, `~/.kube`, `~/Library`, `~/Desktop`, `~/Documents` or `~/Downloads`;
+- contains the guard;
+- is inside a protected agent config folder (section 3).
+
+The log shows what `@project` resolved to. New lists get `@project` commented out.
+
+Every entry applies to every harness, so a list import is a policy change, not a copy. The installer shows the proposed list and what each harness gains or loses once, writes nothing until the user confirms, and never overwrites an existing `~/Agent Guard/Guard List.txt`. The OpenCode Guard import is in section 10, the Pi import and its effect on each harness in section 11.
 
 ## 5. Inner layer
 
-Recommendation: cc-safety-net for shell commands in every harness, plus Agent Guard's own plugin core for file paths. cc-safety-net 2.4.6 already ships entry points for OpenCode and Pi, and a hook mode for Claude Code, Codex, Copilot CLI, Cursor, Gemini CLI, Grok Build, Kimi Code, Antigravity CLI, Amp, OpenClaw and Hermes Agent. One upstream blocker is less to maintain than a second 4,417-line analyzer, and the inner layer is advisory anyway.
+Recommendation: cc-safety-net for shell commands in every harness, plus Agent Guard's plugin core for file paths. The inner layer is advisory; Seatbelt is the boundary.
 
-Migration cost, all on the Pi side:
+The OpenCode plugin as built (`profiles/opencode/plugin.js`):
+
+- **Guard probe.** It creates a file in the engine's `state/` folder. EPERM means guarded. Success, any other error, a missing folder or a symlinked folder means unguarded.
+- **Unguarded refusal.** Unguarded, it refuses every tool except `invalid`, `question`, `todowrite`, `webfetch`, `websearch`, `plan_exit` and the status tool, with a message to quit and open Agent Guard or run `opencode` from a new terminal. `OPENCODE_GUARD_BYPASS=1` lifts the refusal. This also covers any launcher that bypasses the guard, including custom wrappers.
+- **Path checks.** Guarded, it refuses every tool if cc-safety-net fails to load. `read`, `glob`, `grep`, `list` and `lsp` are refused under DENY. `edit`, `write` and each path in `apply_patch` are refused when the path is protected (the engine folder, the list folder, `~/.config/opencode`, `~/.cc-safety-net` or a protected name on the path as typed or as resolved), under DENY or outside ALLOW and temp. Writes are refused when `state/rules.json` could not be read.
+- **Shell commands** go to cc-safety-net 2.4.6, loaded from the engine's `vendor/`. The profile sets `CC_SAFETY_NET_PARANOID_RM=1` and unsets `CC_SAFETY_NET_HOME`, and the installer adds an Agent Guard rulebook.
+- **Status tool** `opencode_guard_status` reports whether the guard is active. `check` looks for it.
+
+cc-safety-net 2.4.6 ships entry points for OpenCode and Pi, and a hook mode for Claude Code, Codex, Copilot CLI, Cursor, Gemini CLI, Grok Build, Kimi Code, Antigravity CLI, Amp, OpenClaw and Hermes Agent. One upstream blocker is less to maintain than a second analyzer (pi-sandbox-guard's `src/validate-bash-command.sh`, 4,417 lines).
+
+Pi keeps its analyzer as the Pi plugin through step 10; the Pi adapter adds the plugin core around it. Pi's unguarded behavior changes: today it only prints a FILTER-ONLY warning when `PI_SANDBOX_PROFILE_DIGEST` is absent, and Agent Guard refuses tools instead (section 11). Replacing the analyzer with cc-safety-net is a separate decision after the corpus run (section 15). Its cost, all on the Pi side:
 
 - Pi's analyzer has an ask tier (confirm prompts). cc-safety-net only blocks or allows. Pi users lose the prompts.
-- Pi's corpus has 383 cases with allow, ask and block verdicts. Every ask and block case goes through cc-safety-net, checked both interactively and headless (Pi turns ask into block when no one can confirm). Each case where cc-safety-net is weaker needs a written decision: a rule in an Agent Guard rulebook (cc-safety-net takes custom rules), an upstream report, or an accepted change.
-- Pi's fail-closed adapter behavior (timeout kills the process group, missing helpers block all bash) must be kept in the Pi adapter around cc-safety-net.
+- Pi's corpus has 383 cases with allow, ask and block verdicts. Every ask and block case goes through cc-safety-net, checked both interactively and headless (Pi turns ask into block when no one can confirm). Each case where cc-safety-net is weaker needs a written decision: a rule in an Agent Guard rulebook (cc-safety-net takes custom rules), an upstream report or an accepted change.
+- Pi's fail-closed adapter behavior (its timeout kills the process group; a missing analyzer or helper blocks all bash) must be kept in the Pi adapter around cc-safety-net.
 - Whether cc-safety-net's Pi extension loads in OMP is not verified.
 
-Until the corpus run is done, the Pi profile keeps Pi's analyzer as its plugin. The retirement decision rests on that run.
+## 6. Install, update and uninstall
 
-## 6. Install, update, uninstall, signing
+### Today
 
-- **Install.** One zsh installer: `install.sh --harness opencode|pi [--projects DIR]`. A DMG with the AppleScript installer for people who do not use a terminal, as today. Pi drops npm as an install requirement. npm only ran scripts, and the deploy scripts' own `npm test` calls get replaced. Node stays, because Pi and its plugin run on it.
-- **Update.** Run the installer again. It writes a version stamp (git SHA plus profile hash, as Pi does) and reruns the self-test. `agent-guard status` compares installed files with the stamp.
-- **Uninstall.** Per harness, or everything. It restores what it changed (OpenCode permission values, PATH lines, Pi shim backups) and leaves the list and logs.
-- **Signing.** Unsigned and not notarized, as both guards are today. The launcher app gets an ad-hoc signature. After each download the user clicks Open Anyway in System Settings, Privacy & Security. The installer removes the quarantine flag from the files it copies.
+Stage 1 installs from a checkout: `zsh install.sh [--projects DIR] [--gui]`, which forwards to `profiles/opencode/install.sh`. The README limits it to development and disposable-home tests. Observed in the installer:
 
-## 7. Testing
+- It copies the new files over the live install and runs `rm -rf "$engine/vendor"` before copying the replacement. Nothing is staged or validated first, so an interrupted run leaves a mix of old and new files.
+- It runs the self-test (`launch check`) last. A failure adds a warning and the installer still exits 0.
+- It writes the plugin straight into `~/.config/opencode/plugins` (section 10, rule 2).
+- It records a config file's permission values once, on its first run, so reruns keep the first `orig`. It does not read OpenCode Guard's record (section 10, rule 3).
+- It writes no version stamp. Updating means running it again from a newer checkout.
+- Unlike the launcher, the installer and the uninstaller take home from `$HOME`.
 
-- OpenCode Guard's `test/test.sh` (throwaway home, list parsing, sandbox, plugin, OpenCode self-test, uninstall) splits into an engine test and the OpenCode profile test, with the same checks.
-- A golden test: for fixed lists, the profile Agent Guard builds for OpenCode matches what OpenCode Guard 1.0.3 builds, apart from renamed paths. This is what "no behavior change" means in stage 1.
-- Pi's suites carry over:
-  - `smoke.mjs`, `corpus.mjs`, `adapter.mjs` and `degraded.mjs` become Pi plugin tests.
-  - `shim.mjs` (executable resolution, TMPDIR, config pinning, nested launch) and `test-sandbox-profile.sh` become engine and Pi conformance cases.
-  - `test-ops.sh` (deploy and status) and `check-launchers.mjs` feed the installer and migration tests.
-  - Each case gets a new home or a written reason to retire it.
-- One conformance suite runs against every profile under the real `sandbox-exec`: the profile file is assignments only; each writable path is writable; home and the guard are not; each protected path and name is denied for write and for creation, directly and through a symlink; DENY entries are denied for reads; `open` and `osascript` are denied; the plugin loads inside the guard; tools are refused when the harness runs unguarded; a nested launch passes through or refuses as designed.
-- The installer runs the conformance suite as its self-test. Rerun it after each harness update, because harnesses move config paths.
+Step 4 replaces this with the behavior below. Until step 5 adds the migration, the step 4 installer refuses to run over an OpenCode Guard install.
 
-## 8. Migration
+### Install
 
-**Stage 1: OpenCode, no behavior change.** Copy OpenCode Guard 1.0.3 into this repo, split into engine plus `profiles/opencode`. Pass the ported `test.sh` and the golden test. OpenCode Guard stays as it is and remains the released product.
+One command in Terminal installs the latest release from `github.com/ebrindley/AgentGuard`. Proposed form; asset names are fixed at step 4:
 
-**How every migration runs (stages 2 and 3).** Four steps:
+```sh
+/bin/zsh -c "$(/usr/bin/curl -fsSL https://github.com/ebrindley/AgentGuard/releases/latest/download/install.sh)"
+```
 
-1. Prepare: install Agent Guard beside the old guard, and keep copies of everything it will change.
-2. Validate: run the conformance self-test through the new launcher.
-3. Switch: point the `opencode`, `pi` and `omp` commands and the launcher app at Agent Guard.
-4. Retire: remove the old engine, plugin, PATH lines and launcher app.
+The `-c` form keeps the terminal on standard input, so the installer can still ask for the projects folder. The bootstrap script downloads the complete release archive and its checksum file, verifies the SHA-256 sum and unpacks the archive into a staging folder. It changes nothing in the install before the checksum matches.
 
-If a step fails, the installer stops with either the old guard still working or a launcher that refuses to start. It never leaves a harness that starts unguarded. Old command names are replaced, not deleted, so a shell opened earlier still finds a wrapper that runs the new launcher. Running the installer twice is safe.
+The checksum comes from the same release as the archive. It detects a corrupted download and assets that do not belong together. It does not prove who published them: anyone able to replace the archive in the release can replace the checksum too. The bootstrap script is trusted code fetched over HTTPS.
 
-**Stage 2: move OpenCode users.** The Agent Guard installer finds an OpenCode Guard install and imports `~/OpenCode Guard/Guard List.txt` as described in section 4. It carries over the saved permission record, so a later uninstall still restores the user's original values. It leaves a short note in `~/OpenCode Guard` pointing to the new list. The OpenCodeGuard repo gets a last release that says where to go, then is archived.
+Staged install:
 
-**Stage 3: Pi.** Port Pi's launcher hardening into the shared engine, the Pi SBPL fragment and state hook into `profiles/pi`, and keep Pi's analyzer as the Pi plugin. The installer imports `~/.config/pi-sandbox-guard/executables.conf` into the engine folder. It replaces the `~/.local/bin/{pi,omp}` shims with Agent Guard's, keeping backups. It proposes `@project` and Pi's credential DENY entries as a list change (section 4), and removes the old extension. Pi's active git hooks protection stays on throughout. Then run the corpus against cc-safety-net and decide on section 5. The pi-sandbox-guard repo is public; it gets a last release note and is archived.
+1. The previous version stays in place and keeps working.
+2. The self-test runs against the staged version.
+3. If it passes, the staged version replaces the previous one and the version stamp is written.
+4. If it fails, the install fails: the installer exits non-zero, names the failed checks, removes the staged copy and leaves the previous version working.
 
-**Later, a separate release:** extend Pi's active git hooks protection to every profile. Hooks planted in an ALLOW folder run outside the guard at the next plain `git` command. OpenCode Guard lists this as a limit today; this is a behavior change for OpenCode users, so it does not ship in stage 1.
+The launcher finds its engine from the account home, and production has no path override (section 8). How the staged copy is tested before it takes the fixed engine path and the plugin folder is settled in step 4.
 
-## 9. Candidate next harnesses
+Lists, user edits and permission records survive failed runs and reruns. An existing `~/Agent Guard/Guard List.txt` is never overwritten; the installer already copies the template only when the list is missing.
 
-Ranked. Each has no OS sandbox of its own.
+The version stamp records the release version, the source commit and a hash of each installed file, so drift can be reported. pi-sandbox-guard's stamp works this way today (`scripts/status.sh` reports a stamped hash that no longer matches the file).
 
-1. **Kiro CLI.** Claude-style PreToolUse hooks. It fails open, which is acceptable because the outer layer is the boundary.
-2. **Crush.** No OS sandbox, and a terminal CLI like OpenCode, so the launch model carries over. Hook API not yet verified.
-3. **Mistral Vibe.** No OS sandbox. Hook API not yet verified.
+### Commands
+
+Step 4 adds one command, proposed `agent-guard`, with three subcommands:
+
+- `update` fetches the latest release and runs the same sequence: download, checksum, stage, self-test, switch. A failed update leaves the installed version working. After both Macs switch at step 6, steps 7 and 8 reach them this way.
+- `doctor` is today's `launch check` under its permanent name (section 8). The installer's self-test and `update` run it.
+- `uninstall`, below.
+
+### Uninstall
+
+`uninstall` removes Agent Guard. Today's `profiles/opencode/uninstall.sh`, whose rules step 4 keeps:
+
+| Action | What |
+|---|---|
+| Removes | PATH blocks between the markers in `.zprofile`, `.zshrc` and `.bash_profile` (an unfinished block is reported, not touched); the plugin; the launcher app; the rulebook folder and its entry in `~/.cc-safety-net/rules/rule.json`; the engine folder |
+| Restores | Each recorded permission value, only where the current value still equals the recorded `wrote` value, so later user edits survive. An `orig` of null deletes the key. |
+| Keeps on failure | If any restore fails, it copies the permission record to `~/Agent Guard/permissions-backup.json` before removing the engine. If that copy fails, it keeps the engine and exits 1. |
+| Leaves | `~/Agent Guard` (list, logs, any permission backup); `env` in `rule.json`'s `transparent_wrappers`; the `~/.config/opencode/.gitignore` and default `opencode.json` the launcher creates when missing; the writable folders the launcher creates |
+
+What uninstall does with OpenCode Guard's retired files and the forwarders at old command paths is in section 10.
+
+### Gatekeeper and quarantine
+
+Apple ("Resolving Trusted Execution Problems", https://developer.apple.com/forums/thread/706442):
+
+- Browsers and other user-level apps set the `com.apple.quarantine` attribute on downloads, and Archive Utility passes it to unpacked files.
+- `curl` and `scp` do not set it; `tar` and `unzip` do not pass it on.
+- Launching a quarantined app always invokes Gatekeeper. The system may run Gatekeeper at other times; when is not documented.
+
+So the one-liner's files are not quarantined and should not need Open Anyway in System Settings. This is unverified on the two Macs; step 6 checks it. The launcher app is built on the Mac with `osacompile`, not downloaded. The installer keeps removing quarantine from the engine it installs (`xattr -dr com.apple.quarantine`), which matters only when someone unpacks a browser-downloaded archive.
+
+### Signing
+
+- Release files are unsigned and not notarized.
+- The launcher app gets an ad-hoc signature (`codesign --force --sign -`), as today.
+- The Rust binary from step 8 is ad-hoc signed (section 7).
+- A Developer ID costs $99 a year and is not planned now. A notarization ticket cannot be stapled to a bare command-line binary (https://developer.apple.com/forums/thread/689337), and a `curl` download is not quarantined. "Notarize or stay unsigned" stays open (section 15).
+
+### Binary allowlisting (Santa)
+
+A managed work Mac may run Santa or another binary allowlisting tool. Santa (https://northpole.dev/features/binary-authorization/) decides at each execution from rules keyed by CDHash, the file's SHA-256, signing ID, leaf certificate or Team ID. Signing ID and Team ID rules apply only to binaries signed with a production certificate; CDHash rules apply only to processes under the Hardened Runtime. A Developer ID signature is neither required nor sufficient: a signed binary with no matching rule can still be blocked in lockdown.
+
+Inference, unverified: an ad-hoc signed binary has no Team ID or certificate, so admitting one would take a hash rule, and every release changes the hash.
+
+The zsh engine runs through Apple-signed `/bin/zsh`, so it needs no new binary admission. The launcher app does: the installer builds it with `osacompile` and re-signs it ad hoc, so Santa sees a new binary whose hash differs from OpenCode Guard's app. Before step 6, collect whether the work Mac runs Santa or another allowlisting tool (`santactl status`), how it admits new binaries and whether it admits an app built this way. The Rust update reaches the work Mac only after that route is known (section 7).
+
+### Not planned: DMG and Homebrew cask
+
+- **No DMG.** A browser download is quarantined, so OpenCode Guard's unsigned DMG installer needs Open Anyway after every download (OpenCode Guard README). The one-liner avoids that.
+- **No Homebrew cask.** Homebrew requires casks to pass its Gatekeeper checks, which means signed and notarized (https://docs.brew.sh/Acceptable-Casks), and is disabling casks that do not.
+
+## 7. Rust launcher
+
+The Rust launcher replaces `engine/launch` at step 8, as an ordinary `update` after both Macs have switched at step 6. Migration failures and rewrite failures stay separate.
+
+Why Rust: one self-contained binary in place of a zsh script, and memory safety for a security tool. Profiles become embedded data instead of zsh files the launcher runs with `source` (section 3).
+
+Constraints:
+
+- Profiles are TOML embedded in the binary, with the same fields as the zsh profiles (section 3).
+- Hooks are written in Rust.
+- One module builds and applies the Seatbelt profile.
+- Few crates, and a committed `Cargo.lock`.
+- One dependency advisory check, `cargo deny`, not several equivalent ones.
+- `unsafe` is forbidden except in one small FFI module.
+- Universal binary, arm64 and x86_64.
+- An ad-hoc signature, verified on each slice of the final universal binary after packaging. `ld(1)` ad-hoc signs Apple Silicon output by default and says nothing of the same for x86_64, so the linker's default is not evidence for the finished file.
+- Test-only home injection is absent from release builds (section 8).
+- The minimum macOS version is stated and checked. Today the README and the installer's missing-tool message say macOS 15 or later; the installer does not check the version.
+- The binary and every launch link to it (shim, symlink) are protected against replacement and ancestor renames. Ownership does not protect them: Homebrew's prefix (`/opt/homebrew`, `/usr/local`) belongs to the installing user, so only Seatbelt policy stops the agent writing there.
+
+Parity evidence required before the update ships:
+
+- The golden test passes against the Rust engine (section 8).
+- The integration checks and the conformance suite pass through the engine adapter against both engines.
+- Behavior the golden test does not cover matches the zsh engine: executable selection that skips every guard shim, old and new (section 10, rule 8); argument forwarding; environment unset and set; nested launch; exit status; app launch; log and state contents.
+
+Admission: the work Mac's route for admitting a new binary is settled before this update reaches it (section 6).
+
+The Rust update refuses to switch a Mac where the new binary cannot run. It runs the staged binary's self-test on that Mac first. If the binary is blocked, needs a newer macOS or fails its checks, the update fails, says why and leaves the zsh version working.
+
+The zsh engine stays in the repository until both existing Macs run the Rust version. After it is removed, rollback artifacts are kept: the last zsh release stays installable. How a Mac is rolled back to it is settled in step 8.
+
+## 8. Testing
+
+Both current tests run outside any agent sandbox on macOS 15 or later, because Seatbelt profiles cannot nest:
+
+```sh
+node test/golden.mjs
+zsh test/test.sh
+```
+
+**Golden fixtures.** `test/fixtures/opencode-guard-1.0.3` holds unmodified `engine/launch` and `engine/profile.sb` from OpenCode Guard v1.0.3, commit `9242c1ad45c895efd63e903e1b27d7bab53620ad`. `test/golden.mjs` first checks that the launcher's account lookup returns the real account home when `HOME` and `USER` are spoofed. It then generates the complete SBPL for an empty and a nested list with both launchers and compares them byte for byte, replacing only `OpenCodeGuard` and `OpenCode Guard` with the Agent Guard names. It proves profile bytes only. The fixtures stay unchanged. When a later step changes the profile on purpose (step 7's package-store protection, for example), the golden test compares against the fixture plus that step's recorded, reviewed difference, not an edited fixture.
+
+**Engine adapter.** `test/test.sh` runs 72 checks in a disposable home: 44 shell checks (install, permission merge, list refusals and log, real Seatbelt enforcement, CLI launch, nested launch, uninstall) and 28 plugin checks from `test/plugin.mjs` in four modes (unguarded, bypass, guarded, symlinked state folder). It needs Node and the OpenCode CLI. Step 2 moves engine specifics behind an adapter (install into the disposable home, run `profile`, `cli`, `gui` and `check`, inject the test home), so the same checks run against the zsh engine now and the Rust engine at step 8.
+
+**Test-only home injection.** Today `test/fixture-home.mjs` rewrites the account lookup in a copied launcher to a fixed home and fails unless that line occurs exactly once. The installed launcher has no environment variable or flag that chooses home. Rewriting source cannot work on a Rust binary, so the Rust launcher gets a home injection compiled only into test builds, and the release build is checked for its absence.
+
+**Conformance suite.** One suite runs against every profile under the real `sandbox-exec`:
+
+- the profile holds only the declared fields: plain assignments for a zsh profile, known keys for a TOML profile;
+- each writable path is writable; home and the guard are not;
+- each protected path and name is denied for write and for creation, directly and through a symlink;
+- DENY entries are denied for reads;
+- `open` and `osascript` are denied;
+- the plugin loads inside the guard;
+- tools are refused when the harness runs unguarded;
+- a nested launch passes through or refuses as designed.
+
+**`doctor` versus conformance tests.** `doctor` is the small check that runs on an installed Mac: the installer's self-test, `update` and step 6's per-Mac check. Step 4 adds it as `agent-guard doctor`. Today that check is `launch check`: a protected write is denied, a temp write is allowed, `open` is denied, then the OpenCode hook starts `opencode serve` under the guard and looks for the guard's status tool. It skips the plugin check, and still passes, when the OpenCode CLI is not found. Step 7 extends it to check that the configured plugins loaded (section 9). The conformance suite and the integration checks are development tests. They run from the repository in a disposable home and are not installed. This replaces the draft's plan to run the conformance suite as the installer's self-test.
+
+**Pi suites, carried over at step 10.** From pi-sandbox-guard:
+
+- `test/smoke.mjs`, `test/corpus.mjs`, `test/adapter.mjs` and `test/degraded.mjs` become Pi plugin tests.
+- `test/shim.mjs` (executable resolution, TMPDIR policy, config pinning, nested launch) and `scripts/test-sandbox-profile.sh` become engine and Pi conformance cases.
+- `scripts/test-ops.sh` (deploy and status) feeds the installer and migration tests.
+- `scripts/check-launchers.mjs` runs once in `--sources` mode for the custom Pi wrapper scripts. Its `--deployed` mode expects zsh shims and would reject Rust ones, so launch behavior is verified by the conformance suite instead (section 11).
+- Each case, including the manual `test/e2e-demo.mjs`, gets a new home or a written reason to retire it.
+
+## 9. OpenCode package store
+
+OpenCode Guard v1.0.3 lets an agent change cached npm plugin code that OpenCode imports at its next start. Its profile allows writes beneath `~/.cache`, which holds OpenCode's npm package store. Stage 1 kept this unchanged. A spike on 2026-09-28 measured the write access under the v1.0.3 profile; that OpenCode then imports the changed code comes from its source, not from running a payload. Protection is step 7.
+
+### Evidence
+
+OpenCode 1.18.33, installed by Homebrew; its tag is commit `51ef4be1d3c122f18fefb510dca8d778571f4f18`. `XDG_CACHE_HOME` was unset, so the default cache root applied.
+
+- [core/global.ts:10–25](https://github.com/anomalyco/opencode/blob/51ef4be1d3c122f18fefb510dca8d778571f4f18/packages/core/src/global.ts#L10) derives OpenCode's cache folder from the XDG cache root. Data, state, logs and the cache's `bin` folder are separate.
+- [plugin/shared.ts:207–213](https://github.com/anomalyco/opencode/blob/51ef4be1d3c122f18fefb510dca8d778571f4f18/packages/opencode/src/plugin/shared.ts#L207) resolves configured npm plugins through `Npm.add`; an unversioned name means `@latest`. OpenCode does not run arbitrary files from the cache.
+- [core/npm.ts:87 and 124–145](https://github.com/anomalyco/opencode/blob/51ef4be1d3c122f18fefb510dca8d778571f4f18/packages/core/src/npm.ts#L87) uses `<cache>/packages/<specifier>/node_modules/<package>`. If that folder exists, it resolves the existing entry point without restoring the package; otherwise it installs into the store. The file read had Git blob hash `94e573d12da938336fc5922b69fc342e401105e9`, matching GitHub's metadata for that commit.
+- [plugin/loader.ts:94–101 and 136–145](https://github.com/anomalyco/opencode/blob/51ef4be1d3c122f18fefb510dca8d778571f4f18/packages/opencode/src/plugin/loader.ts#L136) resolves the configured plugin and imports its entry point.
+- The [plugin documentation](https://opencode.ai/docs/plugins/#how-plugins-are-installed) still names the older `~/.cache/opencode/node_modules/`. The probe covers both layouts.
+- [OpenCode Guard v1.0.3 profile:6–22](https://github.com/ebrindley/OpenCodeGuard/blob/9242c1ad45c895efd63e903e1b27d7bab53620ad/engine/profile.sb#L6) allows writes beneath `~/.cache`. Its protected paths and names do not cover package entries.
+
+### Probe
+
+The profile came from the unchanged v1.0.3 launcher (commit `9242c1ad45c895efd63e903e1b27d7bab53620ad`), with a disposable home and one ALLOW entry for a test project. The home sat outside `/private/tmp`, because the profile allows all of `/private/tmp` and would have hidden the result. The probes ran outside any agent sandbox. Each `sandbox-exec` child appended a newline with `/bin/sh`. Code fixtures held only an inert comment and package metadata held `{}`. Each check compared the exit status and the file content.
+
+| Probe beneath the disposable home | Operation | Result |
+|---|---|---|
+| `.cache/opencode/packages/guard-cache-probe@1.0.0/node_modules/guard-cache-probe/index.js` | Append | Allowed, changed |
+| That package's `package.json` | Append | Allowed, changed |
+| New entry in `packages/guard-new-probe@1.0.0/node_modules/guard-new-probe/` | Create | Allowed, created |
+| `.cache/opencode/node_modules/guard-cache-probe/index.js` | Append | Allowed, changed |
+| New entry in legacy `node_modules/guard-new-probe/` | Create | Allowed, created |
+| `.config/opencode/plugins/guard-cache-probe.js` | Append | Denied, unchanged |
+| `Documents/marker.txt`, outside ALLOW | Create | Denied, absent |
+| `Projects/probe/marker.txt`, inside ALLOW | Create | Allowed, created |
+
+Nothing in the real home or the OpenCode Guard install was read or changed.
+
+### Recommendation
+
+Write-protect the effective package store and nothing more:
+
+- the current store, `<cache>/packages/` with its metadata and dependencies (`~/.cache/opencode/packages` by default);
+- the legacy store, `~/.cache/opencode/node_modules`, and its install metadata;
+- both of these under a relocated `XDG_CACHE_HOME`. A hard-coded default path does not cover a relocated store.
+
+Keep the general `~/.cache` grant and place the narrower deny after it. Data, state, logs, temp and the rest of the cache stay writable. Freezing all of `~/.cache`, or all of OpenCode's cache, is not needed to protect plugin packages. Step 7 confirms the store paths for the supported OpenCode versions.
+
+### Cost
+
+- Missing plugin packages and their dependencies cannot be installed from inside the guard. Package maintenance runs in an operator session outside it; step 7 documents how.
+- A fully populated store resolves without writing, so installed packages should keep working. This is expected from the source, not tested.
+- The same store holds npm language servers. [lsp/server.ts:125](https://github.com/anomalyco/opencode/blob/51ef4be1d3c122f18fefb510dca8d778571f4f18/packages/opencode/src/lsp/server.ts#L125) finds TypeScript's through `Npm.which`, and [core/npm.ts:200–245](https://github.com/anomalyco/opencode/blob/51ef4be1d3c122f18fefb510dca8d778571f4f18/packages/core/src/npm.ts#L200) installs a missing binary. First-use downloads and repairs also need operator maintenance.
+- OpenCode can report and skip a plugin that failed to install, so "OpenCode started" does not prove the configured plugins loaded. Today's plugin check (`opencode_check` in `profiles/opencode/hooks.zsh`) looks only for the guard's own status tool.
+
+Step 7 is done when configured plugins load, a representative npm language server works, the message for a missing package is clear, replacing or renaming the store is denied and `doctor` checks the configured plugins, not only the status tool.
+
+### Scope and limits
+
+This is a persistence and plugin-integrity gap, not a Seatbelt escape. A guarded restart runs the changed code under Seatbelt. A later start without the guard, made on purpose, imports it with that process's full authority. Disabling the inner layer this way was not attempted. The path deny does not give integrity of all loaded code, or credential isolation. Pi had the same class of gap in `~/.pi/agent/npm`, closed by pi-sandbox-guard #9.
+
+## 10. Moving from OpenCode Guard
+
+Step 5 builds the migration and step 6 runs it on the two existing installs, a home Mac and a work Mac, home Mac first. The rules below bind the step 5 installer. Section 6 covers the staged install and update it builds on.
+
+OpenCode Guard v1.0.4 (tag `1ac39a2`, 2026-09-30) is v1.0.3 plus five commits (`2e93cf3`, `13a5aa1`, `14e0e85`, `3fd2703`, `85dc43f`): cc-safety-net 2.4.14, more cc-safety-net wrappers, clearing agent-set cc-safety-net home and worktree variables, and two `check` fixes. Step 3 ports them first, so a Mac on v1.0.4 loses no fix at the switch. They do not change the generated profile, so the v1.0.3 golden fixtures still apply.
+
+### What an OpenCode Guard install contains
+
+Every release from v1.0.0 to v1.0.4 installs to the same places (`install.sh` at each tag). None writes a version stamp, so the installer detects OpenCode Guard by its layout, not its version.
+
+| Part | Location |
+|---|---|
+| Engine | `~/Library/Application Support/OpenCodeGuard/`: `launch`, `profile.sb`, `uninstall.sh`, `vendor/`, shims `bin/opencode` and `bin/opencode-gui`, `state/rules.json` |
+| Permission record | `state/permissions.json` in the engine |
+| Launcher app | `~/Applications/OpenCode Guard.app`, bundle ID `ai.opencodeguard.launcher`; it runs `bin/opencode-gui` |
+| Plugin | `~/.config/opencode/plugins/opencode-guard.js` |
+| cc-safety-net | `~/.cc-safety-net/rules/opencode-guard/`, plus `opencode-guard` in the `rules` of `~/.cc-safety-net/rules/rule.json` (v1.0.1 and later also add `env` to `transparent_wrappers`; v1.0.4 adds `exec`, `nice`, `nohup`, `setsid`, `stdbuf`, `time` and `timeout`) |
+| PATH | A block between `# >>> opencode-guard >>>` and `# <<< opencode-guard <<<` in `~/.zprofile`, `~/.zshrc` and, if it exists, `~/.bash_profile`, putting the engine's `bin/` first |
+| OpenCode permissions | `edit`, `bash` and `external_directory` set to allow in `~/.config/opencode/config.json`, `opencode.json` and `opencode.jsonc`, where each is a JSON object |
+| List | `~/OpenCode Guard/Guard List.txt` and `last-launch.log`; after a failed uninstall restore (v1.0.1 and later), also `permissions-backup.json` |
+
+The permission record maps each config file to `{"orig": …, "wrote": …}` for each of the three keys; `orig` is null when the key was absent. The old uninstaller restores a key only where its current value still equals `wrote`. v1.0.0's uninstaller deletes the engine, and the record with it, even when a restore fails; v1.0.1 (commit `78c0b85`) keeps a copy in `~/OpenCode Guard/permissions-backup.json` instead.
+
+### Rules for the installer
+
+1. **Run outside the guard.** OpenCode Guard write-protects the files the migration changes (shell startup files, `~/.config/opencode`), so a run from inside a guarded session would fail part way. The installer checks with a write probe and refuses before changing anything.
+2. **Stage first.** The full release is staged and self-tested inside Agent Guard's engine folder before the switch (section 6). The new plugin stays out of `~/.config/opencode/plugins` until the switch: OpenCode loads every file in that folder, whatever its name. Each plugin probes and reads its own engine's state folder, which the other guard's profile denies, so under either guard the other plugin would enforce stale or missing rules. Agent Guard's PATH block is not written before the switch either, so OpenCode Guard's launcher never sees Agent Guard's shims.
+3. **Import the permission record before any permission write.** The current installer records the value it finds as `orig`, then writes allow. Run over OpenCode Guard, it would record OpenCode Guard's allow values as the originals. So:
+   - OpenCode Guard's record is copied into Agent Guard's record first, keeping `orig` and `wrote` for each file and key.
+   - A key whose current value no longer equals `wrote` was changed by the user after OpenCode Guard's install. The installer leaves that value as it is and reports it. The current installer would reset it to allow.
+   - Keys still equal to `wrote` need no write, because Agent Guard writes the same allow values.
+   - Agent Guard's uninstall keeps OpenCode Guard's rule: restore only values still equal to `wrote`, and keep the record as recovery data if a restore fails.
+   - A `permissions-backup.json` in `~/OpenCode Guard` means an earlier uninstall failed to restore. The installer reports it and does not merge it.
+   - Without a record (for example after v1.0.0's failed uninstall and a reinstall), the originals are lost. The installer says so and does not claim to restore them.
+4. **Import the list once.** If `~/Agent Guard/Guard List.txt` does not exist, the installer shows the entries it will copy from `~/OpenCode Guard/Guard List.txt` and writes the new list only after the user confirms. It never overwrites an existing Agent Guard list. The rules are in section 4. After the switch the old list is no longer read.
+5. **Validate before switching.** The staged release passes its self-test through Agent Guard's launcher before anything outside the engine folder changes. Whether OpenCode can load the staged plugin for this check without it sitting in the global plugin folder is unverified. If it cannot, the plugin-load check runs right after the switch, and a failure there is handled as a failure after the switch (below).
+6. **Switch.** The installer keeps a copy of every file the switch replaces, then:
+   - replaces OpenCode Guard's `bin/opencode` and `bin/opencode-gui` with forwarders (rule 7);
+   - removes each old PATH block and writes Agent Guard's block, one startup file at a time, editing a symlinked startup file at its target as the old installer does;
+   - puts Agent Guard's plugin in `~/.config/opencode/plugins` and removes `opencode-guard.js`;
+   - installs `~/Applications/Agent Guard.app` with Agent Guard's own bundle ID (proposed `io.github.ebrindley.agentguard`, step 3) and removes `OpenCode Guard.app`. A Dock item for the old app then fails to open; it cannot start OpenCode unguarded. The installer says to add the new app to the Dock.
+
+   If a startup file has an old start marker without an end marker, the installer stops before the switch and names the file. Deleting that range would remove the rest of the file.
+7. **Forwarders at the old command paths.** A terminal opened before the switch keeps OpenCode Guard's `bin/` first on its PATH. Deleting the old shims would send `opencode` there to the next `opencode` on PATH, which is unguarded. The forwarders run Agent Guard's launcher in the same mode (`cli` or `gui`) with the same arguments, through an absolute path written at install. Every launch write-protects them and their folders explicitly, like the engine folder. Agent Guard's profile does not name OpenCode Guard's paths today; they are unwritable only because nothing allows them. The added rule is step 5's recorded golden difference (section 8).
+8. **The launcher skips every guard shim.** `next_cli` in `engine/launch` skips only its own shim (`${f:A} != "${bin:A}/$cli"`). With a forwarder and an Agent Guard shim both on PATH, each would find the other and they would call each other forever. The launcher skips Agent Guard's shims and the forwarders by resolved path. The same applies to the nested-launch path, which also calls `next_cli`.
+9. **Check, then retire.** After the switch the installer runs `doctor` and launches OpenCode through the new command path and a forwarder. When those pass it retires OpenCode Guard without running its uninstaller. That uninstaller would put back the original permission values Agent Guard relies on, and delete the old engine folder with the forwarders in it; v1.0.0's would also delete the permission record after a failed restore. Retirement removes:
+   - the old engine's `launch`, `profile.sb`, `uninstall.sh`, `vendor/` and `state/`, once the imported record is written and read back;
+   - `~/.cc-safety-net/rules/opencode-guard/` and `opencode-guard` from `rules` in `rule.json`, leaving `transparent_wrappers` as the old uninstaller does;
+   - the copies kept at the switch.
+10. **What stays.** `~/OpenCode Guard`, with its list, log and any permission backup, is never removed, as OpenCode Guard's own uninstaller keeps it. The forwarders stay until no shell started before the switch can remain: the installer records the switch time, and the first `update` after the Mac's boot time passes it removes them. Uninstall removes them too.
+11. **Reruns.** Running the installer again at any point is safe. It resumes an interrupted switch rather than starting over, and never imports a record or list twice.
+
+### Recovery testing
+
+Recovery is tested against a real install of the latest OpenCode Guard release (v1.0.4 today), made by that release's own `install.sh` in a disposable home, and against the build the two Macs run if it is later. Fixtures cover:
+
+- v1.0.0's failed restore: an install whose record was lost, then reinstalled;
+- permissions the user edited after installing OpenCode Guard;
+- reruns, including after each interrupted phase;
+- a terminal opened before the switch, with the old PATH;
+- a startup file with an unfinished old block.
+
+| Failure | Required outcome |
+|---|---|
+| Before the switch (download, checksum, staging, import, self-test) | OpenCode Guard unchanged and working; its own `launch check` passes. Nothing outside Agent Guard's engine and list folders has changed. |
+| During the switch, interrupted after each step | Every entry point (an old terminal, a new terminal, the app) runs OpenCode under a guard or refuses; none starts it unguarded, and none loops. The inner layer may enforce the other guard's rules until a rerun finishes the switch. |
+| After the switch, before retirement | Putting back the kept copies returns a working OpenCode Guard. Permission values need no restore, because the switch did not change them. |
+| After retirement | Agent Guard's uninstall restores the original permission values from the imported record, keeps the record if a restore fails and keeps `~/Agent Guard` and `~/OpenCode Guard`. |
+
+Every case also checks the permission values, both records and both lists against their expected contents.
+
+## 11. Moving from pi-sandbox-guard
+
+Step 10, after `@project` is defined for OpenCode (section 4) and after the Rust launcher (section 7). The source is pi-sandbox-guard at #10 (commit `7ad441f`).
+
+### What pi-sandbox-guard installs
+
+| Part | Location |
+|---|---|
+| Protected shims | `~/.local/bin/pi` and `~/.local/bin/omp`, byte-identical; the runtime comes from the launcher's own name |
+| Profile and preamble | `~/.local/bin/pi-sandbox.sb`, `~/.local/bin/pi-sandbox-preamble.zsh` |
+| Extension (analyzer) | `~/.pi/agent/extensions/pi-sandbox-guard/`, with a `.deployed-version` stamp and the `.guard-node` binding |
+| Executable bindings | `~/.config/pi-sandbox-guard/executables.conf` |
+| Custom wrappers | Copies in `~/.local/bin/`, installed with `--extra-launchers <dir>` |
+
+It has no uninstaller.
+
+### What carries over
+
+The Pi profile keeps this behavior. The Pi rows of section 3 show where each part lives.
+
+- **#8, project agent config.** Writes, creation, renames and symlinks are denied for any `.pi` or `.omp` folder under the project, and for the folders OMP loads code from: `.claude` and `.codex` `extensions`, `hooks` and `tools`, `.gemini/extensions` and `.opencode/plugins`. The launcher refuses a project inside one of these and a symlinked `.pi` or `.omp` layout.
+- **#9, user package and configuration state.** The active Pi state folder write-protects `npm/`, `git/`, `skills/`, `SYSTEM.md`, `APPEND_SYSTEM.md` and `models.json`, as well as `extensions/`, `settings.json`, `auth.json`, `trust.json` and any `*prompt*.md` under `~/.pi/agent`. Theme files stay writable. Package maintenance and edits to these files need an operator session outside the guard, the same cost as section 9.
+- **#10, Homebrew Node bindings.** A Homebrew Node binding uses the formula's `opt` link when it resolves to the chosen Cellar executable, so a formula upgrade needs no rebind. The launcher resolves both Node bindings at each launch and refuses one whose target is inside a writable folder. Other installs keep resolved paths.
+- **Executable bindings.** `executables.conf` records absolute paths for Pi, OMP and Node. A recorded path is trusted because it is operator-recorded and the agent cannot write it; the `PI_EXECUTABLE` environment variable keeps the trusted-prefix restriction. A stale binding fails closed. The installer imports the file into the write-protected engine folder.
+- **Active git hooks protection.** Writes are denied to `.git/hooks` in the project, to the effective hooks folder resolved at launch (`core.hooksPath` or a linked worktree's shared hooks), to submodule hooks and to hooks in OMP's worktrees. Folder nodes and `*.sample` files stay writable so `git init` works. It stays on throughout the migration. Extending it to OpenCode would change behavior for OpenCode users and is not part of this step.
+- **Relocated Pi and OMP state.** Pi's `PI_CODING_AGENT_DIR`, which must stay under `~/.pi`; OMP's `PI_CONFIG_DIR` (`.omp` or `.omp-*`) and its profile selector (`omp --profile <name>`, selector first, or `OMP_PROFILE`). OMP keeps its allowlist of runtime paths, with its configuration, plugins, hooks, tools, prompts and rules read-only. `agent.db` stays writable because OMP stores credentials in it with operational data; that limit carries over. XDG-split OMP state stays refused.
+- **Launch checks.** Home from the system, not the environment; a pinned PATH before the sandbox; a validated `TMPDIR`; refusal of unsafe project roots; handling of nested launches.
+- **Custom wrappers, their paths and their arguments.** A wrapper hands off to the `pi` next to it (`PI_SHIM="${0:A:h}/pi"`, then `exec "$PI_SHIM" "$@"`). Agent Guard's Pi and OMP entry points therefore take over `~/.local/bin/pi` and `~/.local/bin/omp`, the same paths, so each wrapper keeps its path and its arguments pass through unchanged. The same paths also mean terminals opened before the switch reach the new entry points without forwarders. The entry points and the wrappers are launch links, protected against replacement and ancestor renames (section 6). The launcher still injects the plugin explicitly and keeps it out of Pi's administrative commands.
+
+### Checking custom wrappers
+
+Before the switch, run pi-sandbox-guard's checker once against the custom wrappers, from a pi-sandbox-guard checkout:
+
+```sh
+node scripts/check-launchers.mjs --sources ~/.local/bin/<wrapper> ...
+```
+
+It checks that each wrapper uses `#!/bin/zsh -f`, hands off to the `pi` next to it and calls only permitted helpers before the sandbox. Do not run it with `--deployed` after the switch. That mode requires pi-sandbox-guard's own shim text (for example `PI_SANDBOX=1` and the profile path in `~/.local/bin`) and its profile and preamble, so it rejects a correct migration. Agent Guard's conformance suite (section 8) checks launch behavior of the new entry points, directly and through each wrapper.
+
+### Unguarded refusal is a behavior change
+
+Today the Pi extension only warns when the `PI_SANDBOX_PROFILE_DIGEST` environment marker is missing (`FILTER-ONLY: could not verify launch through the protected Pi/OMP Seatbelt shim`, `src/index.mjs`). It never blocks, and filter-only use (the extension deployed without the launchers, or installed as a Pi package) is a documented mode. The marker is ambient, so a project can set it and silence the warning.
+
+Under Agent Guard the Pi plugin uses the behavioral probe (section 5). Unguarded, it refuses every tool except a safe set, with a message to relaunch through the guard. Filter-only use ends: running the real Pi or OMP binary directly, or any launcher that skips the entry points, gets refusals. Release notes and the Pi migration message state this as a behavior change. The Pi safe set is defined at step 10. An agent session started outside the guard on purpose needs the bypass variable (step 3).
+
+### Analyzer
+
+Pi's analyzer (`src/index.mjs`, `src/guard-core.mjs`, `src/validate-bash-command.sh`) stays as the Pi plugin, with Agent Guard's probe and refusal added. Its ask tier and its fail-closed mode (missing helpers block all bash) stay. Replacing it with cc-safety-net is a separate decision after the corpus run (section 5).
+
+### List proposal
+
+The installer proposes adding `@project` and Pi's credential read denies to the one Guard List. It shows the change and what each harness gains or loses, and writes nothing until the user confirms (section 4). For an existing list with `~/Projects` under ALLOW:
+
+```
+ALLOW - agents may create, change and delete things inside these:
+@project
+~/Projects
+
+DENY - agents may not read, search, change or delete these:
+~/.ssh
+~/.aws/credentials
+~/.aws/config
+~/.docker/config.json
+~/.kube/config
+~/.gnupg
+~/.config/gh
+~/.config/gcloud
+~/.netrc
+~/.git-credentials
+~/.config/git/credentials
+~/.npmrc
+~/.secrets
+```
+
+The DENY entries are the read denies in `sandbox/pi-sandbox.sb`. The installer proposes only those that exist, because a DENY entry that does not exist logs a warning at every launch (`engine/launch`).
+
+What changes:
+
+- **Pi.** `@project` takes the place of `PROJECT` (git top level, `PI_PROJECT` or the start folder). Other ALLOW entries apply to Pi too: with `~/Projects` listed, Pi can write to every project there, not only the one it started in.
+- **OpenCode.** The DENY entries start applying. Git over SSH and cloud command-line tools stop working inside OpenCode's guard, as the list template warns.
+- **No entry needed.** Pi's write denies on whole folders such as `~/.aws`, `~/.docker` and `~/.kube` need no list entry: nothing makes those folders writable unless an ALLOW entry covers them.
+- **No list form.** The list takes paths, not names. Pi's `.env` read deny anywhere and its deny on reading back its security event log stay in the Pi fragment while name entries remain an open decision.
+
+## 12. Plan
+
+Steps are numbered in the order they are done. "Needs step N" marks a step that cannot start until step N is done.
+
+1. **Rules and design.** `AGENTS.md` holds the writing rules and the contribution policy; `CLAUDE.md` contains `@./AGENTS.md`. This document replaces the 2026-09-28 draft and carries the package-store findings (section 9), whose only other copy is a gitignored backlog archive. Backlog items cover steps 2–11, with 2–6 in detail. Done when these are merged and each of steps 2–11 has a backlog item.
+
+2. **Test contract.** The v1.0.3 golden fixtures stay unchanged. The existing integration checks run through an engine adapter, so the same checks run against the zsh engine now and the Rust engine at step 8. Development conformance tests stay separate from the small installed `doctor` check (section 8). Done when the existing checks pass through the adapter against the zsh engine with the fixtures unchanged.
+
+3. **OpenCode Guard's later fixes, then permanent names on the zsh engine.** The first change ports OpenCode Guard's five commits after v1.0.3 (section 10); it needs only step 1. The rename needs step 2. Agent Guard gets its own plugin file, PATH markers, rulebook, status tool, bypass variable, message prefix, nesting marker and app bundle ID, none shared with OpenCode Guard. The launcher skips every guard shim, old and new (section 10). The release contents include the JS plugin, vendored cc-safety-net, templates and license notices. Proposed names, to be confirmed in this step:
+
+   | Item | Stage 1 (shared with OpenCode Guard) | Proposed |
+   |---|---|---|
+   | Plugin file | `opencode-guard.js` | `agent-guard.js` |
+   | PATH markers | `# >>> opencode-guard >>>` | `# >>> agent-guard >>>` |
+   | Rulebook | `~/.cc-safety-net/rules/opencode-guard` | `agent-guard` |
+   | Status tool | `opencode_guard_status` | `agent_guard_status` |
+   | Bypass variable | `OPENCODE_GUARD_BYPASS` | `AGENT_GUARD_BYPASS` |
+   | Message prefix | `opencode-guard:` | `agent-guard:` |
+   | Nesting marker | `OPENCODE_SANDBOXED` | `AGENT_GUARD_SANDBOXED`, set for every harness |
+   | App bundle ID | `ai.opencodeguard.launcher` | `io.github.ebrindley.agentguard` |
+
+   Until step 11 the launcher also treats `OPENCODE_SANDBOXED=1` as already guarded, so a session started under OpenCode Guard that reaches the new launcher does not apply a second profile. The log, `~/Agent Guard/last-launch-opencode.log`, is already Agent Guard's own; OpenCode Guard writes `~/OpenCode Guard/last-launch.log`. Done when OpenCode Guard's later fixes pass their tests here, no identifier is shared with OpenCode Guard, the launcher reaches the real harness with both guards' shims on PATH, and the step 2 checks pass.
+
+4. **Installer: install, update, uninstall.** Needs step 3. The one-liner downloads a complete release and verifies its checksum before it touches the install. The previous version stays until the new one passes its self-test; a failed self-test fails the install and leaves the previous version working. `update` and `uninstall` commands exist. `doctor` replaces `launch check`. A version stamp is written. Until step 5, the installer refuses to run over an OpenCode Guard install (section 6). Done when lists, user edits and permission records survive failed runs and reruns, and an interrupted update leaves the previous version working.
+
+5. **OpenCode Guard migration.** Needs step 4. The installer follows the rules in section 10: import the permission record before any permission write, keep the new plugin out of the plugin folder until the switch, import the list once without overwriting an existing one, switch, leave write-protected forwarders at the old command paths, and retire OpenCode Guard's files without running its uninstaller. Done when recovery passes for failures before, during and after the switch, against a real install of the latest OpenCode Guard release plus the fixtures in section 10.
+
+6. **First public release (OpenCode only) and the two Macs.** Needs step 5. Tracked files and history are reviewed, then the repository goes public with the files and settings in section 13. The home Mac switches first, then the work Mac. Done when the release is public and each Mac passes terminal launch, app launch, `doctor` and recovery.
+
+   Private vulnerability reporting is available only on public repositories, so it is switched on right after the repository goes public, before either Mac uses the release.
+
+   Collected before this step:
+
+   - each Mac's chip, macOS version and OpenCode version;
+   - which OpenCode Guard build each Mac runs (a tag or commit, found by comparing installed files with the tags, since it writes no version stamp);
+   - whether the work Mac runs Santa or another allowlisting tool (`santactl status`), how it admits new binaries, and whether it admits an ad-hoc signed app built on the Mac (section 6).
+
+   The work Mac's admission route gates step 8.
+
+7. **Package-store protection (first policy update).** Needs step 6; it reaches both Macs through `update`. The current, legacy and XDG-relocated package stores are protected; the rest of the cache stays writable. Operator maintenance outside the guard is documented. `doctor` checks that the configured plugins loaded, not only the status tool (section 9). Done when configured plugins load, a representative npm language server works, the missing-package message is clear, and replacement and rename of the store are denied.
+
+8. **Rust launcher, delivered as an update.** Needs step 6, and the work Mac's admission route before the update reaches that Mac. Constraints and parity are in section 7. The update refuses to switch a Mac where the new binary cannot run and leaves the zsh version working there. The zsh engine stays in the repository until both Macs run the Rust version; rollback artifacts are kept after that. Done when the Rust engine passes the golden and behavioral parity tests and both Macs run it.
+
+9. **Per-launch state files.** Needs step 8, so it is built once. Each launch writes its own state file and passes its path to the plugin, which removes the shared `state/rules.json` race (section 2). Done when concurrent launches, missing or malformed state and cleanup of ended launches have defined, tested behavior.
+
+10. **`@project`, then Pi and Oh My Pi (OMP).** Needs step 9, because `@project` makes the rules differ between launches started in different folders (inference from section 4). First `@project` is defined for OpenCode: its positional project argument (`opencode [project]`) and what the app launcher means by it; the app's working directory is unverified. Then the Pi profile carries over what section 11 lists, keeps Pi's analyzer as the Pi plugin and documents unguarded refusal as a behavior change. After Pi works, a short "adding a harness" guide is written from what Pi needed (section 14). Done when Pi runs under Agent Guard on the owner's Mac and the conformance suite passes for both profiles.
+
+11. **Close out.** OpenCode Guard and pi-sandbox-guard each get a final release that says where to go and how to recover. Each repository is archived only after its migration works: OpenCode Guard after step 6, pi-sandbox-guard after step 10. Done when both are archived.
+
+**End state for the existing OpenCode Guard installs.** Done when both Macs run the Rust release, OpenCode Guard's engine, shims, forwarders, plugin, app, rulebook entry and PATH blocks are gone from both, and uninstall has been tested. `~/OpenCode Guard`, with the old list, stays (section 10). They switch at step 6; steps 7 and 8 reach them through `update`.
+
+**End state for open source and more harnesses.** Public from step 6. A harness is a profile (data), hook functions, a plugin adapter and a pass of the conformance suite (section 14). Pi is the first new harness; done when Pi runs under Agent Guard on the owner's Mac, the conformance suite passes for both profiles, and pi-sandbox-guard is archived. Later candidates are in section 14.
+
+## 13. Open source
+
+The repository is private until step 6 and open source from the first public release. The model is pi-sandbox-guard's (`CONTRIBUTING.md`, `SECURITY.md`, `.github/CODEOWNERS`, `.github/ISSUE_TEMPLATE/`).
+
+**License.** MIT, in `LICENSE`. Vendored cc-safety-net keeps its own `engine/vendor/cc-safety-net/LICENSE`, and every release carries the license notices (step 3).
+
+**Contributions.** Issues are welcome. External pull requests are not accepted. `AGENTS.md` states this policy. `CONTRIBUTING.md` states it too and holds the bug-report guidance: reproduction steps, expected and actual behavior, and the macOS, harness and Agent Guard versions. That guidance does not go in `AGENTS.md`.
+
+**Security reporting.** `SECURITY.md` sends vulnerabilities to the private advisory form (`/security/advisories/new`) and defines where a bug ends and a vulnerability begins, as pi-sandbox-guard's does. A link is not enough: GitHub accepts private reports only when private vulnerability reporting is switched on in the repository settings ([GitHub](https://docs.github.com/en/code-security/how-tos/report-and-fix-vulnerabilities/report-privately)), which is possible only once the repository is public. If the form is missing, a reporter opens a public issue with no exploit details asking for a private channel. For that reason `.github/ISSUE_TEMPLATE/config.yml` keeps blank issues enabled and links the advisory form; `bug_report.yml` asks for the `CONTRIBUTING.md` fields.
+
+**Repository settings and files.**
+
+- Pull requests: "Collaborators only" ([GitHub](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/disabling-pull-requests)). In a personal repository a collaborator is anyone invited to it.
+- Private vulnerability reporting: switched on.
+- `.github/CODEOWNERS`: `* @ebrindley`, so review requests and advisory notifications reach the maintainer.
+
+**Before going public.** Every tracked file and every commit in the history, including author metadata, is reviewed for credentials, personal details, account home paths and host names. The gitignored backlog archive is not published; what it holds that the design needs is in this document.
+
+## 14. Adding a harness
+
+A harness is four parts:
+
+| Part | What it is |
+|---|---|
+| Profile | Data: the fields in section 3. zsh assignments now; TOML embedded in the binary from step 8. |
+| Hooks | Functions for what data cannot express, such as OpenCode's permission merge or Pi's state roots. zsh in `hooks.zsh` now; Rust from step 8. |
+| Plugin adapter | A thin layer between the harness's hook API and the plugin core (section 5). |
+| Conformance pass | The suite in section 8, run against the new profile under the real `sandbox-exec`. |
+
+A new harness's protected paths apply to every launch of every installed harness (section 3), so adding one also changes what the others can write.
+
+Pi is the first case. What it needs beyond the OpenCode profile is in section 11: executable bindings, relocated Pi and OMP state, active git hooks protection, custom wrapper paths and arguments, and its own analyzer. The "adding a harness" guide is written after Pi works (step 10), from what Pi actually needed. Until then this section is the outline.
+
+Candidates, ranked. None has an OS sandbox of its own. The reasons and caveats come from the 2026-09-28 draft and were not rechecked for this revision.
+
+1. **Kiro CLI.** Claude-style PreToolUse hooks. They fail open, which is acceptable because the outer layer is the boundary.
+2. **Crush.** A terminal CLI like OpenCode, so the launch model carries over. Hook API not yet verified.
+3. **Mistral Vibe.** Hook API not yet verified.
 
 Aider and OpenHands are not candidates until they have a hook that can refuse a tool call. Hermes Agent is out of scope; its safety stays in its own config.
 
-## 10. Risks and open decisions
+Harnesses that ship their own Seatbelt sandbox (Codex, Claude Code, Gemini CLI) are excluded. Seatbelt sandboxes cannot nest, so a profile would have to switch the harness's own sandbox off (section 1).
+
+## 15. Risks and open decisions
 
 Risks:
 
-- Apple marks `sandbox-exec` deprecated. It still works and Chrome, Codex and Claude Code depend on it. The self-test fails loudly if it stops working.
-- Harness updates can add config or extension paths the profile does not protect. The conformance suite after each update is the check.
-- During stage 2 and 3, two guards can be installed at once with competing shims. The installer must remove the old one before it finishes.
+- **Work-Mac binary admission.** If the work Mac runs Santa in a mode that blocks unknown binaries, the new ad-hoc signed launcher app (step 6) or the Rust binary (step 8) could be blocked. Step 6 checks the app before the switch; step 8 refuses to switch a Mac where the new binary cannot run (sections 6 and 7).
+- **Harness updates move config paths.** An update can add a config, plugin or extension path the profile does not protect. OpenCode's plugin documentation still describes `~/.cache/opencode/node_modules`, while 1.18.33 uses `~/.cache/opencode/packages/` (section 9). The conformance suite runs against new harness versions in development, and `doctor` runs after each update on an installed Mac.
+- **`sandbox-exec` deprecation.** Apple marks `sandbox-exec` deprecated. It still works, and Chrome, Codex and Claude Code depend on it. Both engines depend on Seatbelt; the self-test and `doctor` fail loudly if it stops working. Linux and Windows are non-goals (section 1), so there is no fallback platform.
+- **Two guards installed during migration.** Both plugins would issue competing refusals, the two launchers' shims can call each other, the app bundle ID is shared, and terminals opened earlier keep the old PATH. Section 10 gives the rule for each. The same applies to pi-sandbox-guard's shims and extension at step 10 (section 11).
 
 Open decisions:
 
-- Notarize (paid Apple Developer ID) or stay unsigned.
-- Name entries in the list (such as `.env` anywhere under DENY). Pi denies project `.env` reads today; until this is decided that rule stays in the Pi fragment.
-- Retire Pi's analyzer, after the corpus run.
-- Protect project MCP and settings files that one harness reads from another (`.mcp.json`, `.claude/settings.json`, `.codex/config.toml`, `opencode.json` and similar). They are bare file names that also appear in fixtures and examples, and their MCP commands run inside the sandbox.
-- Protect Pi's user-level package folders (`~/.pi/agent/npm`, `~/.pi/agent/git`) and `~/.pi/agent/SYSTEM.md`. Pi loads them at every start, and pi-sandbox-guard leaves them writable today. Protecting them stops `pi install` from working inside the guard.
-- When to make the Agent Guard repo public.
-
-## 11. Next steps
-
-1. Add an MIT LICENSE and a `.gitignore`.
-2. Copy OpenCode Guard 1.0.3 in and split it into `engine/` and `profiles/opencode/`.
-3. Port `test/test.sh` and add the golden profile test against 1.0.3.
-4. Write the profile loader, with home and the engine folder taken from the account database, and the conformance suite; run it on the OpenCode profile.
-5. Add `@project` and per-launch state files to the list parser.
-6. Write the stage 2 migration path (list and permission record import, old install removal) and test it in a throwaway home.
-7. After the pi-sandbox-guard fix lands on main, draft `profiles/pi` and run Pi's corpus through cc-safety-net.
+- **Notarize or stay unsigned.** The facts are in section 6. The work Mac's admission route, collected before step 6, decides this before step 8.
+- **Name entries in the list**, such as `.env` anywhere under DENY. Pi denies reads of `.env` and `.env.*` files anywhere today; until this is decided that rule stays in the Pi profile.
+- **Retiring Pi's analyzer.** Replacing it with cc-safety-net is decided after the corpus run (section 5), not as part of step 10.
+- **Project config files that one harness reads from another** (`.mcp.json`, `.claude/settings.json`, `.codex/config.toml`, `opencode.json` and similar). They are bare file names that also appear in fixtures and examples, and their MCP commands run inside the sandbox.
