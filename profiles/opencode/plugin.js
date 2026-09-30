@@ -11,6 +11,7 @@ const LIST = "~/Agent Guard/Guard List.txt"
 const SAFE_UNGUARDED = new Set(["invalid", "question", "todowrite", "webfetch", "websearch", "plan_exit", "opencode_guard_status"])
 const READS = new Set(["read", "glob", "grep", "list", "lsp"])
 const CONFIG = /\/\.opencode(\/|$)|\/(opencode|tui)\.jsonc?$|\/\.cc-safety-net(\/|$)/
+const UNSAFE_NET_ENV = ["CC_SAFETY_NET_HOME", "CC_SAFETY_NET_WORKTREE", "SAFETY_NET_WORKTREE"]
 
 const under = (p, root) => p === root || p.startsWith(root === "/" ? "/" : root + "/")
 
@@ -69,6 +70,10 @@ function patchPaths(text) {
 export const AgentGuard = async input => {
   const { directory } = input
   const guarded = sandboxed()
+  if (guarded) {
+    for (const name of UNSAFE_NET_ENV) delete process.env[name]
+    process.env.CC_SAFETY_NET_PARANOID_RM = "1"
+  }
   const bypass = process.env.OPENCODE_GUARD_BYPASS === "1"
   const rules = loadRules()
   const net = await loadSafetyNet(input)

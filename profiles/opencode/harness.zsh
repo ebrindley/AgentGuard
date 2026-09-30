@@ -14,7 +14,7 @@ protected=($protected_paths "$home/.cc-safety-net")
 protected_names=(.opencode opencode.json opencode.jsonc tui.json tui.jsonc)
 protected_fragment=protected.sb
 gui_args=(--no-sandbox)
-env_unset=(ELECTRON_RUN_AS_NODE OPENCODE_SIDECAR_V2 CC_SAFETY_NET_HOME)
+env_unset=(ELECTRON_RUN_AS_NODE OPENCODE_SIDECAR_V2 CC_SAFETY_NET_HOME CC_SAFETY_NET_WORKTREE SAFETY_NET_WORKTREE)
 env_set=(OPENCODE_SANDBOXED=1 CC_SAFETY_NET_PARANOID_RM=1)
 prepare_hook=opencode_prepare
 check_hook=opencode_check
