@@ -200,7 +200,7 @@ ag_recover() {
       kill $pid 2>/dev/null
     /bin/rm -f -- "$state/.serve.pid" "$state"/.serve.<->(N)
   fi
-  /bin/rm -rf -- "$state/txn.new"
+  /bin/rm -rf -- "$state/txn.new" "$state"/.txn-done-*(N)
   if [[ -d $txn_dir ]]; then
     [[ -f $txn_dir/install.sh ]] || { ag_err "$txn_dir holds no copy of the installer; nothing changed"; return 1 }
     /bin/zsh -f "$txn_dir/install.sh" --recover "$caller" ||
@@ -417,13 +417,14 @@ ag_rc_unfinished() {
 }
 
 # rename(2) is atomic only within one volume. Each target is checked through its
-# nearest existing folder, so a fresh account without them passes.
+# nearest existing folder, so a fresh account without them passes, and through
+# symbolic links to where it really is.
 ag_volume() {
   local p want dev
-  want=$(/usr/bin/stat -f %d -- "$engine") || return 1
+  want=$(/usr/bin/stat -L -f %d -- "$engine") || return 1
   for p in "$home/Applications" "${plugins:A}" "$cc"; do
     while [[ ! -e $p ]]; do p=${p:h}; done
-    dev=$(/usr/bin/stat -f %d -- "$p") || return 1
+    dev=$(/usr/bin/stat -L -f %d -- "$p") || return 1
     [[ $dev == "$want" ]] ||
       { ag_err "$p is on another volume than $engine; Agent Guard replaces files by rename and needs one volume. Nothing changed."; return 1 }
   done
@@ -1100,7 +1101,7 @@ ag_cleanup() {
   done
   /bin/rm -rf -- "$ag_tstage" "$txn_dir/backup" || return 1
   /bin/rmdir -- "$engine/stage" 2>/dev/null
-  /bin/rm -rf -- "$txn_dir"
+  ag_drop_txn
 }
 
 # Before the switch: removes the new release, its stage and the transaction.
@@ -1110,7 +1111,16 @@ ag_discard() {
   if [[ -n $ag_rid_new && $cur != "releases/$ag_rid_new" ]]; then /bin/rm -rf -- "$engine/releases/$ag_rid_new" || return 1; fi
   /bin/rm -rf -- "$ag_tstage" || return 1
   /bin/rmdir -- "$engine/stage" "$engine/releases" 2>/dev/null
-  /bin/rm -rf -- "$txn_dir"
+  ag_drop_txn
+}
+
+# Closes the transaction with one rename, so a deletion cut short never leaves a
+# transaction without its plan or its copy of the installer. recover removes a
+# leftover.
+ag_drop_txn() {
+  local gone="$state/.txn-done-$$"
+  /bin/rm -rf -- "$gone"
+  /bin/mv -- "$txn_dir" "$gone" && /bin/rm -rf -- "$gone"
 }
 
 # ag_rollback [recover]: undoes every switch action in reverse (design section
@@ -1118,7 +1128,6 @@ ag_discard() {
 # whose caller still runs inside it.
 ag_rollback() {
   integer bad=0
-  local backup="$list_dir/permissions-backup.json"
   ag_jlast rollback
   if [[ -z $REPLY ]]; then ag_jnl rollback begun || return 1; fi
   test_point rollback
@@ -1138,19 +1147,32 @@ ag_rollback() {
   (( $#ag_unrestored )) && ag_warn "permission values not restored: ${(j:, :)ag_unrestored}"
   if [[ -z $ag_rid_old && ${1:-} != recover ]]; then
     /bin/rm -f -- "$stamp"
-    if [[ -s $record ]] && ! /usr/bin/jq -e '. == {}' "$record" >/dev/null 2>&1; then
-      if /bin/mkdir -p -- "$list_dir" && /bin/cp -- "$record" "$list_dir/.permissions-backup.json.partial" &&
-         /bin/mv -f -- "$list_dir/.permissions-backup.json.partial" "$backup"; then
-        ag_warn "the permission record is saved to $backup"
-      else
-        ag_err "could not save $record; $engine is kept"
-        ag_unlock
-        return 0
-      fi
+    if ! ag_save_record; then
+      ag_err "could not save $record; $engine is kept"
+      ag_unlock
+      return 0
     fi
     ag_remove_engine || ag_unlock
   fi
   return 0
+}
+
+# True when the permission record still holds entries: values not restored.
+ag_record_left() {
+  [[ -s $record ]] && ! /usr/bin/jq -e '. == {}' "$record" >/dev/null 2>&1
+}
+
+# Before the engine goes: a record that still holds entries is copied to
+# ~/Agent Guard/permissions-backup.json. Fails only when that copy fails.
+ag_save_record() {
+  local backup="$list_dir/permissions-backup.json" partial="$list_dir/.permissions-backup.json.partial"
+  ag_record_left || return 0
+  if /bin/mkdir -p -- "$list_dir" && /bin/cp -- "$record" "$partial" && /bin/mv -f -- "$partial" "$backup"; then
+    ag_warn "the permission record is saved to $backup"
+    return 0
+  fi
+  /bin/rm -f -- "$partial"
+  return 1
 }
 
 # --- Entries.

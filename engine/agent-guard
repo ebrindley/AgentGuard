@@ -120,6 +120,7 @@ update() {
 # file runs from, so the uninstaller is found again afterwards.
 uninstall() {
   local u
+  integer left
   load_installer
   ag_probe || exit 1
   ag_lock || exit 1
@@ -129,9 +130,14 @@ uninstall() {
     u="${u:A}/uninstall.sh"
   elif [[ -f $txn_dir/uninstall.sh ]]; then
     u="$txn_dir/uninstall.sh"
-  elif [[ -z $(print -l "$engine"/releases/*(DN)) ]] && { [[ ! -s $record ]] || /usr/bin/jq -e '. == {}' "$record" >/dev/null 2>&1 }; then
-    # Recovery rolled back a fresh install: what is left is the state folder.
+  elif [[ -z $(print -l "$engine"/releases/*(DN)) ]]; then
+    # Recovery rolled back a fresh install: what is left is the state folder, with
+    # record entries only for values the rollback could not restore.
+    left=0
+    ag_record_left && left=1
+    ag_save_record || { ag_unlock; die "could not save $record; $engine is kept" }
     ag_remove_engine || die "cannot remove $engine"
+    (( left )) && die "permission values were not restored; the record is saved to $list_dir/permissions-backup.json"
     print -r -- "Agent Guard removed. Your list is still at $list_dir."
     exit 0
   else

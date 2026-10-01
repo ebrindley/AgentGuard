@@ -278,7 +278,7 @@ Preflight changes nothing and stops on the first failure: required tools; the gu
 
 **Gate.** After the switch: `bin/agent-guard doctor` against the live install, then `bin/opencode --version` through the PATH shim with a 20-second limit, whose log must name the new release. With no OpenCode CLI the launch check is skipped and says so. Any failure rolls back.
 
-**Rollback.** Journals `rollback begun`, undoes every step that began, in reverse order, journals `rollback done`, deletes the new release and closes the transaction. A rollback of a fresh install also removes the engine folder; a permission record that is not empty is first copied to `~/Agent Guard/permissions-backup.json`.
+**Rollback.** Journals `rollback begun`, undoes every step that began, in reverse order, journals `rollback done`, deletes the new release and closes the transaction (one rename, then deletion, so an interrupted deletion leaves no half transaction). A rollback of a fresh install also removes the engine folder; a permission record that is not empty is first copied to `~/Agent Guard/permissions-backup.json`.
 
 **Stamp and cleanup.** `state/stamp.json` is written only after the gate passes: version, tag, commit, release ID, install time, `app_inputs`, the SHA-256 of every file in the release folder, the app and the rulebook, and the targets of `current`, `bin` and the plugin link. Cleanup then journals `cleanup begun`, removes release folders other than the new one and the one `current` named before (the kept one serves sessions started from it, section 5), deletes the stage and closes the transaction.
 
@@ -327,7 +327,7 @@ Lists, user edits and permission records survive failed runs and reruns. An exis
 - `doctor` runs the release's `launch check` (section 8). The gate runs it after the switch. It does not recover an interrupted run; `update` does.
 - `version` prints `Agent Guard <version> (<tag>, commit <12 characters>), release <rid>, installed <UTC time>` from the stamp, then one line per stamped file or link that is missing or changed and per file added to the release folder. It exits 1 on any drift or when there is no stamp.
 - `update` refuses inside a guard, takes the lock and runs recovery, then downloads the latest release's `install.sh` from the download base compiled into it. It requires the file's last line to be `{ agent_guard_bootstrap "$@" }` and exactly one release tag in it. When that tag is the stamp's, or older, it says so and changes nothing; otherwise it runs the bootstrap with `--update` under the same lock, and the full staged install follows. A failed update leaves the installed version working.
-- `uninstall` refuses inside a guard, takes the lock and runs recovery as the uninstall caller, which rolls back an open switch. Recovery can delete the release this command runs from, so it then finds the uninstaller again: `current`'s, else the transaction's copy. When recovery rolled back a fresh install and only an empty state folder is left, it removes the engine folder itself.
+- `uninstall` refuses inside a guard, takes the lock and runs recovery as the uninstall caller, which rolls back an open switch. Recovery can delete the release this command runs from, so it then finds the uninstaller again: `current`'s, else the transaction's copy. When recovery rolled back a fresh install and only the state folder is left, it removes the engine folder itself, first copying a permission record that still holds entries to `~/Agent Guard/permissions-backup.json` and then exiting 1.
 
 ### Uninstall
 
@@ -341,10 +341,10 @@ Lists, user edits and permission records survive failed runs and reruns. An exis
 | U5 | The `agent-guard` entry in `~/.cc-safety-net/rules/rule.json`, then the rulebook folder |
 | U6 | The forwarders at old command paths (section 10; arrives with step 5) |
 | U7 | If any value was not restored, the permission record is copied to `~/Agent Guard/permissions-backup.json`. If that copy fails, the engine is kept and uninstall exits 1. |
-| U3 | The plugin, when it is a link into the engine folder or a regular file |
+| U3 | The plugin, when it is a link into the engine folder or a regular file. If it cannot be removed, the engine is kept and uninstall exits 1. |
 | U8 | The engine folder, renamed to `.AgentGuard.removing` and then deleted, so a rerun finds the whole folder or none of it |
 
-Each step can be repeated, so a rerun after a failed or interrupted uninstall finishes the job. Uninstall exits 1 and names what is left when a PATH block or a permission value was not handled.
+Each step can be repeated, so a rerun after a failed or interrupted uninstall finishes the job. Uninstall exits 1 and names what is left when a PATH block, a permission value, the app, the rulebook or its `rule.json` entry was not handled.
 
 It leaves `~/Agent Guard` (list, logs, any permission backup); the wrapper entries (`env`, `exec`, `nice`, `nohup`, `setsid`, `stdbuf`, `time`, `timeout`) in `rule.json`'s `transparent_wrappers`; the `~/.config/opencode/.gitignore` and default `opencode.json` the launcher creates when missing; the writable folders the launcher creates.
 

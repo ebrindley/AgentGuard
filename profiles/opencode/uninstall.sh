@@ -11,7 +11,7 @@ main() {
   emulate -L zsh
   setopt no_unset pipe_fail extended_glob
   local here=${${(%):-%x}:A:h} rc f out entry scratch removing backup partial
-  local -a unfinished
+  local -a unfinished kept
   integer unreadable=0
   # install.sh holds the account lookup, guard probe, lock and recovery.
   source "$here/install.sh" --lib || { print -ru2 -- "Agent Guard: cannot load $here/install.sh"; exit 1 }
@@ -70,15 +70,15 @@ main() {
 
   # U4: the app.
   test_point uninstall-app || stop uninstall-app
-  /bin/rm -rf -- "$app"
+  /bin/rm -rf -- "$app" || kept+=("$app")
 
   # U5: the rule.json entry, then the rulebook. transparent_wrappers stay.
   test_point uninstall-rulebook || stop uninstall-rulebook
   if [[ -e $cc/rule.json ]] && /usr/bin/jq -e '(.rules // []) | index("agent-guard") != null' "$cc/rule.json" >/dev/null 2>&1; then
     /usr/bin/jq '.rules -= ["agent-guard"]' "$cc/rule.json" > "$scratch/rule" 2>/dev/null && replace_file "$cc/rule.json" "$scratch/rule" ||
-      ag_warn "$cc/rule.json not changed; remove agent-guard from its rules yourself"
+      kept+=("the agent-guard entry in $cc/rule.json")
   fi
-  /bin/rm -rf -- "$cc/agent-guard"
+  /bin/rm -rf -- "$cc/agent-guard" || kept+=("$cc/agent-guard")
 
   # U7: a copy of the record before the engine goes, if any value was not restored.
   test_point uninstall-backup || stop uninstall-backup
@@ -96,12 +96,14 @@ main() {
   fi
 
   # U3: the plugin, a link into the engine or a regular file (an older copy). A
-  # link elsewhere is not Agent Guard's. This ends guarding.
+  # link elsewhere is not Agent Guard's. This ends guarding. If it cannot be
+  # removed, the engine stays, so agent-guard uninstall can run again.
   test_point uninstall-plugin || stop uninstall-plugin
-  if [[ -L $plugin ]]; then
-    [[ $(/usr/bin/readlink -- "$plugin") == "$engine"/* ]] && /bin/rm -f -- "$plugin"
-  elif [[ -f $plugin ]]; then
-    /bin/rm -f -- "$plugin"
+  if [[ -L $plugin && $(/usr/bin/readlink -- "$plugin") == "$engine"/* ]] || [[ -f $plugin && ! -L $plugin ]]; then
+    /bin/rm -f -- "$plugin" || {
+      ag_err "cannot remove $plugin; $engine is kept, so agent-guard uninstall can run again"
+      /bin/rm -rf -- "$scratch"; ag_unlock; exit 1
+    }
   fi
   /bin/rm -f -- "$plugins/.agent-guard.js.partial"
 
@@ -113,8 +115,9 @@ main() {
     /bin/mv -- "$engine" "$removing" && /bin/rm -rf -- "$removing" || { ag_err "cannot remove $engine"; exit 1 }
   fi
 
-  if (( $#unfinished || $#ag_unrestored || unreadable )); then
+  if (( $#unfinished || $#ag_unrestored || unreadable || $#kept )); then
     for f in $unfinished; do ag_err "PATH block not removed: $f"; done
+    for f in $kept; do ag_err "not removed: $f"; done
     for f in $ag_unrestored; do ag_err "permission values not restored: $f"; done
     (( unreadable )) && ag_err "the permission record could not be read; it is saved in $list_dir/permissions-backup.json"
     exit 1

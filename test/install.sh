@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Installer cases from design section 9.4 (step 4): B5, B8, F1, F2, the kill
-# matrix, S1-S6, G1-G5, T1, T2, U1-U4, X1-X4 and P1-P5. Builds test releases
+# matrix, S1-S6, G1-G5, T1, T2, U1-U4, X1-X6 and P1-P5. Builds test releases
 # served by test/release-server.mjs and installs them in a disposable home with the
 # fake CLI (test/fake-opencode.mjs) and a fake OpenCode.app; test/test.sh runs the
 # installer with the real CLI. Runs outside any sandbox, from a checkout; needs Node.
@@ -449,6 +449,31 @@ point= ag uninstall
 rc=$?
 /bin/chmod 755 "$home/Agent Guard"
 (( rc == 1 )) && [[ -d $engine && -L $plugin ]] && pass 'exit 1; engine and plugin kept' || { fail "uninstall (exit $rc)"; show }
+# X5: a first install killed after its permission write, then a config that cannot
+# be restored: recovery rolls the install back, uninstall saves the record and
+# removes the engine.
+label=X5
+restore clean
+point=kill:rc boot v0.0.1
+rc=$?
+(( rc == 137 )) && pass killed || { fail "killed (exit $rc)"; show }
+print -r -- '{not json' > "$cfg"
+point= ag uninstall
+rc=$?
+(( rc == 1 )) && /usr/bin/grep -qF "$cfg" "$out" && pass 'exit 1, the file named' || { fail "uninstall (exit $rc)"; show }
+[[ -f "$home/Agent Guard/permissions-backup.json" && ! -e $engine ]] && pass 'permissions-backup.json saved, engine removed' || fail 'permissions-backup.json saved, engine removed'
+# X6: a plugin that cannot be removed keeps the engine; the rerun finishes.
+label=X6
+restore A
+/bin/chmod 555 "$plugins"
+point= ag uninstall
+rc=$?
+/bin/chmod 755 "$plugins"
+(( rc == 1 )) && [[ -d $engine && -L $plugin ]] && pass 'exit 1; engine and plugin kept' || { fail "uninstall (exit $rc)"; show }
+point= ag uninstall
+rc=$?
+(( rc == 0 )) && pass 'rerun exits 0' || { fail "rerun (exit $rc)"; show }
+same_snapshot 'final state equals one full run' "$run/uninstalled.snapshot"
 
 # --- X4: a kill at each uninstall point, then a rerun. Before the plugin goes every
 # entry point is guarded or refuses (design A2).
