@@ -19,7 +19,12 @@ concurrency:
 
 jobs:
   test:
-    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        # The oldest supported macOS and the current one.
+        os: [macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -35,4 +40,8 @@ jobs:
       - run: zsh test/release.sh
       - run: zsh test/bootstrap.sh
       - run: zsh test/install.sh
-      - run: zsh test/migrate.sh
+      # The migration suite makes its OpenCode Guard installs with OpenCode Guard's own
+      # unmodified installer, which stops on macOS 15: its `plutil -remove CFBundleIconName`
+      # finds no such key in the app osacompile builds there.
+      - if: matrix.os != 'macos-15'
+        run: zsh test/migrate.sh
