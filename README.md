@@ -14,30 +14,97 @@ folder it runs from, which must be directly inside
 `~/Library/Application Support/AgentGuard/releases/`. Ambient `HOME` and `USER`
 cannot choose that profile, and a copy of the launcher elsewhere refuses to run.
 
-Installed layout: each install is a folder `releases/<version>-<UTC time>` in
-`~/Library/Application Support/AgentGuard/`; `current` links to the active one
-and `bin` to `current/bin`, which holds `opencode`, `opencode-gui` and
-`agent-guard`. `state/` (launch rules and the permission record) is outside the
-release folders. `~/.config/opencode/plugins/agent-guard.js` is a link to
-`current/profiles/opencode/plugin.js`. A reinstall adds a new release folder,
-switches `current`, and once its self-test passes removes the older folders
-except the one `current` named before, so OpenCode sessions started from it
-keep working. Each launch sets `AGENT_GUARD_RELEASE` to its release ID; the
-plugin, loaded through `current`, then uses that release's plugin; when that
-release is gone, it refuses every guarded tool with a message to reopen OpenCode.
-`agent-guard doctor` runs the installed self-test; `agent-guard version` prints
-the version and release ID. To remove an install, run
-`"$HOME/Library/Application Support/AgentGuard/current/uninstall.sh"`. The
-installer refuses to run over OpenCode Guard (its engine folder or
-`opencode-guard.js` present), and over an install made before release folders,
-which is removed with its own `uninstall.sh` in the engine folder.
-
 This port retains v1.0.3 policy and limitations: ALLOW contents remain writable,
 reads and network access are broad unless denied, cached OpenCode plugins remain
 writable, and symlink targets of project config names are protected only in the
 start folder. There is no Pi profile, list import, `@project`, or migration yet.
-The installer is retained for development and disposable-home tests until the
-rest of step 4 in [docs/DESIGN.md](docs/DESIGN.md#12-plan) is built.
+
+## Install
+
+In Terminal, outside any agent session, on macOS 15 or later:
+
+```sh
+/bin/zsh -c "$(/usr/bin/curl -fsSL https://github.com/ebrindley/AgentGuard/releases/latest/download/install.sh)"
+```
+
+To allow a projects folder without the prompt, add `install.sh --projects ~/Projects`
+after the closing quote. For a particular release, replace
+`latest/download` with `download/v1.2.3`. From a checkout or an unpacked
+archive, `zsh install.sh [--projects DIR] [--gui]` installs that tree the same
+way.
+
+The command downloads the release's bootstrap, which downloads the release
+archive and its checksum, verifies the SHA-256 sum and only then unpacks the
+archive and runs its installer. The checksum comes from the same release as the
+archive, so it detects a corrupted download or assets that do not belong
+together. It does not prove who published them: whoever can replace the archive
+can replace its checksum. The bootstrap itself is trusted code fetched over
+HTTPS; nothing verifies it before it runs. A download cut short runs nothing.
+
+The installer refuses, before any change, inside a guard or another sandbox,
+while another install runs, over OpenCode Guard (migration arrives in a later
+release) and over an install made before release folders (run its
+`uninstall.sh` in the engine folder first). It assembles the new release in
+`~/Library/Application Support/AgentGuard/releases/<version>-<UTC time>`, builds
+the app, and tests that release with `launch check staged` before it changes
+anything outside the engine folder and `~/Agent Guard`. It then switches the
+rulebook, the app, `current`, the plugin link, the OpenCode permission values
+and the PATH blocks, and runs the gate: `agent-guard doctor` and a launch of
+`opencode --version` through the new PATH shim. If any check fails, it puts
+everything back, exits non-zero and names the failed checks; the previous
+version keeps working. Only after the gate passes does it write the version
+stamp and remove release folders older than the previous one, which stays for
+OpenCode sessions started from it.
+
+Installed layout: `current` links to the active release folder and `bin` to
+`current/bin`, which holds `opencode`, `opencode-gui` and `agent-guard`.
+`state/` (launch rules, the permission record, the stamp, the lock and an open
+transaction) is outside the release folders.
+`~/.config/opencode/plugins/agent-guard.js` is a link to
+`current/profiles/opencode/plugin.js`. Each launch sets `AGENT_GUARD_RELEASE` to
+its release ID; the plugin, loaded through `current`, then uses that release's
+plugin; when that release is gone, it refuses every guarded tool with a message
+to reopen OpenCode.
+
+## Commands
+
+- `agent-guard doctor` runs the installed self-test.
+- `agent-guard version` prints the version, tag, commit, release ID and install
+  time from the stamp, then every installed file or link that changed, went
+  missing or was added since. It exits 1 if anything drifted.
+- `agent-guard update` installs the latest release the same way as the
+  one-liner, with the same checks and rollback. It does nothing when the
+  installed release is the latest or newer.
+- `agent-guard uninstall` removes PATH blocks, restores the permission values
+  the installer changed (unless you changed them since), then removes the app,
+  the rulebook, the plugin and the engine folder. `~/Agent Guard` stays. A value
+  it could not restore is reported, and the permission record is saved to
+  `~/Agent Guard/permissions-backup.json` first. It exits 1 when anything was
+  left; running it again finishes the job.
+
+`update` and `uninstall` refuse inside a guard or another sandbox.
+
+## Recovery after a failed or interrupted install
+
+A failed check is undone at once: the installer prints what failed and the
+previous version stays active. A first install that fails leaves no engine
+folder.
+
+An install, update or uninstall that was interrupted (Terminal closed, the Mac
+restarted, the process killed) leaves its journal in
+`~/Library/Application Support/AgentGuard/state/txn`. The next install,
+`agent-guard update` or `agent-guard uninstall` finishes it first: a run stopped
+before the switch is discarded; one stopped during the switch is completed and
+checked (install, update) or rolled back (uninstall, or a rollback that had
+begun); one stopped after the stamp has its cleanup finished. `agent-guard
+doctor` does not recover. "another Agent Guard install is running" means a live
+run holds the lock; a lock left by a process that is gone is taken over.
+
+Power loss is a limit: macOS shell tools cannot force a write to disk, so after
+a power cut during the switch a change can be lost or reach the disk before the
+journal line that names it. Recovery restores from its backups; a permission
+value whose change was lost is treated as your edit, left unchanged and
+reported. Check `agent-guard version` and `agent-guard doctor` afterwards.
 
 ## Running OpenCode without the guard
 
@@ -76,7 +143,7 @@ The v1.0.3 reference runs unmodified, without the adapter.
 Only the two product path names are normalized. The original source commit is
 `9242c1ad45c895efd63e903e1b27d7bab53620ad`; bundled cc-safety-net is 2.4.14.
 
-`test/golden.mjs`, `test/test.sh`, `test/release.sh`, `test/bootstrap.sh` and `test/plugin.mjs` are development tests.
+`test/golden.mjs`, `test/test.sh`, `test/release.sh`, `test/bootstrap.sh`, `test/install.sh` and `test/plugin.mjs` are development tests.
 They run in a disposable home, are not installed, and the installer does not run
 them. The installed check is `agent-guard doctor` (the release's
 `launch check`), which the installer runs as its self-test: a protected write is
@@ -112,11 +179,6 @@ folder's `stage/`, verifies them, then runs the archive's installer with
 `--stage <id>` and its own arguments. It refuses inside a guard or another
 sandbox, and a copy cut short runs nothing.
 
-The checksum comes from the same release as the archive, so it detects a
-corrupted download or mismatched assets, not a compromised publisher: whoever
-can replace the archive can replace its checksum. The bootstrap itself is
-trusted code fetched over HTTPS from GitHub; nothing verifies it before it runs.
-
 Every build runs `scripts/check-seams.zsh` on what it packages and stops if it
 fails: the production forms of the test seams must occur once each and
 `AG_TEST_` must appear nowhere in the shipped files. Without `--dev` the checkout
@@ -137,6 +199,15 @@ forms from a folder of tags and can cut short or corrupt one asset. The adapter'
 the unmodified source, then applies the test seams to the output: it repacks the
 archive with the test points enabled and the launcher's account home fixed to a
 disposable home, rewrites the checksum, and points the bootstrap at that server. It needs Node.
+
+`zsh test/install.sh` tests the installer, `agent-guard update` and
+`agent-guard uninstall` against releases from that server, in a disposable home
+with a fake OpenCode CLI (`test/fake-opencode.mjs`) and a fake `OpenCode.app`.
+It kills the installer at every test point, runs the next command, and checks
+that recovery leaves either the previous or the new install working and every
+entry point guarded or refused, then covers concurrent runs, failed gates,
+uninstall order and reruns, and refusals inside a guard. It needs Node; it does
+not need the OpenCode CLI.
 
 `LICENSE` covers Agent Guard. `engine/vendor/cc-safety-net/LICENSE` covers
 cc-safety-net, and `engine/vendor/THIRD-PARTY-NOTICES` covers the effect and
