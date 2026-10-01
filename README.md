@@ -2,8 +2,10 @@
 
 Guardrails for terminal coding agents on macOS. One engine runs each agent under a macOS Seatbelt sandbox built from one allow and deny list, with a small profile and plugin per agent. It will replace OpenCode Guard and pi-sandbox-guard.
 
-Stage 1 contains the OpenCode Guard v1.0.3 port, including the v1.0.4 fixes.
-It is not a migration release; OpenCode Guard remains the released product. See
+It contains the OpenCode Guard v1.0.3 port, including the v1.0.4 fixes, and
+replaces an existing OpenCode Guard install (see
+[Moving from OpenCode Guard](#moving-from-opencode-guard)). No Agent Guard release
+is published yet; OpenCode Guard remains the released product. See
 [docs/DESIGN.md](docs/DESIGN.md).
 
 The shared launcher and Seatbelt builder are in `engine/`. OpenCode's paths,
@@ -17,7 +19,7 @@ cannot choose that profile, and a copy of the launcher elsewhere refuses to run.
 This port retains v1.0.3 policy and limitations: ALLOW contents remain writable,
 reads and network access are broad unless denied, cached OpenCode plugins remain
 writable, and symlink targets of project config names are protected only in the
-start folder. There is no Pi profile, list import, `@project`, or migration yet.
+start folder. There is no Pi profile or `@project` yet.
 
 ## Install
 
@@ -42,9 +44,9 @@ can replace its checksum. The bootstrap itself is trusted code fetched over
 HTTPS; nothing verifies it before it runs. A download cut short runs nothing.
 
 The installer refuses, before any change, inside a guard or another sandbox,
-while another install runs, over OpenCode Guard (migration arrives in a later
-release) and over an install made before release folders (run its
-`uninstall.sh` in the engine folder first). It assembles the new release in
+while another install runs and over an install made before release folders (run
+its `uninstall.sh` in the engine folder first). Over OpenCode Guard it migrates
+(below). It assembles the new release in
 `~/Library/Application Support/AgentGuard/releases/<version>-<UTC time>`, builds
 the app, and tests that release with `launch check staged` before it changes
 anything outside the engine folder and `~/Agent Guard`. It then switches the
@@ -66,6 +68,50 @@ its release ID; the plugin, loaded through `current`, then uses that release's
 plugin; when that release is gone, it refuses every guarded tool with a message
 to reopen OpenCode.
 
+## Moving from OpenCode Guard
+
+Run the same one-line install. When it finds any part of OpenCode Guard (v1.0.0
+or later) it replaces it, without running OpenCode Guard's uninstaller:
+
+1. Quit the OpenCode app and every `opencode` in a terminal first. The installer
+   stops while one runs, and names it.
+2. It shows the entries of `~/OpenCode Guard/Guard List.txt` and asks
+   `Import this list? [y/N]`. Yes copies it unchanged to
+   `~/Agent Guard/Guard List.txt`; no, or no terminal, stops with nothing changed.
+   An existing `~/Agent Guard/Guard List.txt` is never changed.
+3. It keeps OpenCode Guard's permission record, so `agent-guard uninstall` can
+   still put back the values you had before OpenCode Guard, and writes no
+   permission value. It reports each value you changed after installing OpenCode
+   Guard; those stay as you set them.
+4. It tests the new release, then switches the PATH blocks, the plugin
+   (`opencode-guard.js` becomes `agent-guard.js` in one rename, so OpenCode never
+   sees both or neither), the app (`OpenCode Guard.app` goes; drag
+   `Agent Guard.app` to the Dock in place of its Dock item) and the rulebook. If a
+   check after the switch fails, OpenCode Guard is put back as it was.
+5. It then removes the rest of OpenCode Guard: its rulebook and `rule.json`
+   entry, and `launch`, `profile.sb`, `uninstall.sh`, `vendor/` and `state/` in
+   `~/Library/Application Support/OpenCodeGuard`. If that fails (for example
+   `rule.json` cannot be written), Agent Guard stays active, the installer exits
+   1 and says what to fix; the next install or `agent-guard update` finishes it.
+
+What stays in `~/OpenCode Guard`: the old list, which is no longer read, its log,
+any `permissions-backup.json`, and a note, `Moved to Agent Guard.txt`. Nothing
+else there is changed or removed.
+
+Terminal windows opened before the switch still have OpenCode Guard's `bin`
+folder on their PATH. Its `opencode` and `opencode-gui` are then forwarders, links
+to Agent Guard's, so those windows run OpenCode under Agent Guard. The forwarders
+and `~/Library/Application Support/OpenCodeGuard` are removed by the first
+`agent-guard update` (or install) after the Mac restarts; if the boot time cannot
+be read they stay. `agent-guard uninstall` removes them at once.
+
+The way back: `agent-guard uninstall`, then OpenCode Guard's own `install.sh`.
+Uninstall puts back, from the imported record, the values you had before
+OpenCode Guard wherever the current value is still the one OpenCode Guard wrote,
+so OpenCode Guard's installer records those as the originals again. It keeps
+`~/OpenCode Guard` and `~/Agent Guard` and, if a value cannot be restored, saves
+both records in `~/Agent Guard`.
+
 ## Commands
 
 - `agent-guard doctor` runs the installed self-test.
@@ -74,12 +120,16 @@ to reopen OpenCode.
   missing or was added since. It exits 1 if anything drifted.
 - `agent-guard update` installs the latest release the same way as the
   one-liner, with the same checks and rollback. It does nothing when the
-  installed release is the latest or newer.
+  installed release is the latest or newer, apart from removing the forwarders
+  at OpenCode Guard's old command paths once the Mac has restarted since the
+  migration.
 - `agent-guard uninstall` removes PATH blocks, restores the permission values
   the installer changed (unless you changed them since), then removes the app,
-  the rulebook, the plugin and the engine folder. `~/Agent Guard` stays. A value
-  it could not restore is reported, and the permission record is saved to
-  `~/Agent Guard/permissions-backup.json` first. It exits 1 when anything was
+  the rulebook, after a migration the forwarders, then the plugin and the engine
+  folder. `~/Agent Guard` stays. A value it could not restore is reported, and
+  the permission record is saved to `~/Agent Guard/permissions-backup.json` first
+  (OpenCode Guard's, after a migration, to
+  `~/Agent Guard/opencode-guard-permissions.json`). It exits 1 when anything was
   left; running it again finishes the job.
 
 `update` and `uninstall` refuse inside a guard or another sandbox.
@@ -134,16 +184,19 @@ The integration test needs Node and the OpenCode CLI. It exercises the ported
 installer, real Seatbelt enforcement, plugin load, permission restoration, and
 uninstall in a disposable home. It also checks both nesting markers, both
 bypass variables, PATH holding both guards' shim folders (with the unmodified
-v1.0.3 launcher as OpenCode Guard), and that OpenCode Guard's PATH blocks,
-rulebook and plugin file are left unchanged. Only its copied launcher has the
+v1.0.3 launcher as OpenCode Guard), that OpenCode Guard's engine folder stays
+write-protected when listed under ALLOW, and that uninstall leaves OpenCode
+Guard's PATH blocks, rulebook and plugin file unchanged. Only its copied launcher has the
 account-home lookup replaced; production has no test override. The golden test checks the
 real account lookup under spoofed environment values, then compares complete
 generated profiles against unmodified v1.0.3 fixtures for empty and nested lists.
 The v1.0.3 reference runs unmodified, without the adapter.
-Only the two product path names are normalized. The original source commit is
+Only the two product path names are normalized, and the recorded differences in
+`test/fixtures/differences/` are applied: step 5 adds the rule that protects
+OpenCode Guard's engine folder. The original source commit is
 `9242c1ad45c895efd63e903e1b27d7bab53620ad`; bundled cc-safety-net is 2.4.14.
 
-`test/golden.mjs`, `test/test.sh`, `test/release.sh`, `test/bootstrap.sh`, `test/install.sh` and `test/plugin.mjs` are development tests.
+`test/golden.mjs`, `test/test.sh`, `test/release.sh`, `test/bootstrap.sh`, `test/install.sh`, `test/migrate.sh` and `test/plugin.mjs` are development tests.
 They run in a disposable home, are not installed, and the installer does not run
 them. The installed check is `agent-guard doctor` (the release's
 `launch check`), which the installer runs as its self-test: a protected write is
@@ -208,6 +261,15 @@ that recovery leaves either the previous or the new install working and every
 entry point guarded or refused, then covers concurrent runs, failed gates,
 uninstall order and reruns, and refusals inside a guard. It needs Node; it does
 not need the OpenCode CLI.
+
+`zsh test/migrate.sh` tests the migration. It installs OpenCode Guard v1.0.4 and
+v1.0.3 with each tag's own `install.sh` from `test/fixtures/installs/` (HOME set
+to a disposable home), edits a config as a user would, then migrates with a test
+release from the same server and the fake CLI, answering the list prompt on a
+terminal made by `/usr/bin/expect`. It covers a failure and a kill at every point
+before, during and after the switch, reruns, uninstall and the way back to
+OpenCode Guard, terminals opened before the switch, forwarder removal by boot
+time, and the refusals. It needs Node; it does not need the OpenCode CLI.
 
 `LICENSE` covers Agent Guard. `engine/vendor/cc-safety-net/LICENSE` covers
 cc-safety-net, and `engine/vendor/THIRD-PARTY-NOTICES` covers the effect and

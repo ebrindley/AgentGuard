@@ -112,7 +112,9 @@ async function guard(input) {
   const rules = loadRules()
   const net = await loadSafetyNet(input)
   const temps = [...new Set([canonical(tmpdir()), "/private/tmp"])]
-  const protectedRoots = [ENGINE, join(HOME, "Agent Guard"), join(HOME, ".config/opencode"), join(HOME, ".cc-safety-net")]
+  // OpenCode Guard's engine folder holds the forwarders after a migration.
+  const protectedRoots = [ENGINE, join(HOME, "Library/Application Support/OpenCodeGuard"), join(HOME, "Agent Guard"),
+    join(HOME, ".config/opencode"), join(HOME, ".cc-safety-net")]
     .map(p => { try { return realpathSync(p) } catch { return p } })
 
   const target = raw => {
