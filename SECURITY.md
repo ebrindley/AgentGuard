@@ -24,14 +24,14 @@ Fixes go into the latest release only. `agent-guard update` installs it.
 ## What Agent Guard is
 
 Agent Guard is a macOS Seatbelt write-containment boundary for terminal coding
-agents. Release 0.1.0 supports OpenCode. The launcher runs OpenCode and every
+agents. Release 0.1.1 supports OpenCode. The launcher runs OpenCode and every
 process it starts under `/usr/bin/sandbox-exec` with a profile generated from the
 Guard List (`~/Agent Guard/Guard List.txt`) at each launch. Under that profile the
 agent can write only to ALLOW folders and the data, cache and temp folders
 OpenCode needs, cannot read or write DENY entries, and cannot change the guard,
 the list, OpenCode's global config and plugin folder (`~/.config/opencode`), the
 shell startup files or `~/Library/LaunchAgents`. The exceptions are under
-[Known limitations](#known-limitations-in-010): OpenCode's cached plugin packages
+[Known limitations](#known-limitations-in-011): OpenCode's cached plugin packages
 under `~/.cache`, and the targets of symlinked project config names.
 
 The OpenCode plugin and cc-safety-net are advisory. They refuse tool calls with
@@ -47,7 +47,7 @@ the boundary.
 - Provider tokens and other secrets the harness itself uses.
 - A VM, container or separate user identity.
 
-## Known limitations in 0.1.0
+## Known limitations in 0.1.1
 
 - **OpenCode's package store is writable.** All of `~/.cache` is writable,
   including OpenCode's npm plugin store under `~/.cache/opencode`. An agent can
