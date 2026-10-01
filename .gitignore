@@ -5,3 +5,5 @@ backlog/archive/
 dist/
 !engine/vendor/cc-safety-net/dist/
 !engine/vendor/cc-safety-net/dist/**
+!test/fixtures/installs/*/vendor/cc-safety-net/dist/
+!test/fixtures/installs/*/vendor/cc-safety-net/dist/**

@@ -7,6 +7,12 @@
 lib_dir=${${(%):-%x}:A:h}
 rid_pattern='[0-9A-Za-z.+-]+-[0-9]{8}T[0-9]{6}Z'
 
+# The installer's and uninstaller's test points that only test/migrate.sh exercises
+# (design section 9.5). test/install.sh counts them as covered; test/migrate.sh fails
+# for any it does not exercise.
+migrate_points=(list-import import discard fwd-cli fwd-gui plugin-take plugin-name app-old switch-time
+                retire-rulejson retire-rulebook retire-compare retire-engine retire-note uninstall-forwarders)
+
 # new_home DIR: replaces DIR with an empty disposable home. REPLY is its real path.
 new_home() {
   /bin/rm -rf -- "$1"
@@ -32,11 +38,21 @@ snapshot() {
     "$h"/.config/opencode/{config.json,opencode.json,opencode.jsonc}
     "$e/state/permissions.json" "$e/state/opencode-guard-permissions.json" "$o/state/permissions.json"
     "$h/Agent Guard/Guard List.txt" "$h/OpenCode Guard/Guard List.txt"
+    "$h/OpenCode Guard/"{permissions-backup.json,"Moved to Agent Guard.txt"}
     "$h/.cc-safety-net/rules/rule.json"
     "$h"/.cc-safety-net/rules/*/**/*(.DN)
     "$h/Applications/"{Agent,OpenCode}" Guard.app/Contents/Info.plist"
   )
   {
+    # OpenCode Guard's engine folder (its state/rules.json changes at each of its
+    # launches), and the migration record without its switch time.
+    for f in "$o"/**/*(DN); do
+      [[ ${f#$o/} == state/rules.json ]] && continue
+      if [[ -L $f ]]; then print -r -- "ocg/${f#$o/} -> ${$(/usr/bin/readlink "$f")//"$h"/<home>}"
+      elif [[ -f $f ]]; then print -r -- "ocg/${f#$o/} $(/usr/bin/shasum -a 256 < "$f")"
+      else print -r -- "ocg/${f#$o/}/"; fi
+    done
+    [[ -f $e/state/migration.json ]] && print -r -- "migration $(/usr/bin/jq -c 'del(.switched_at)' "$e/state/migration.json")"
     for f in ${(u)files}; do
       if [[ -f $f ]]; then
         print -r -- "${f#$h/} $(/usr/bin/shasum -a 256 < "$f")"
@@ -127,6 +143,12 @@ probe_entry_points() {
   # E5 runs each app's target; the harness seam points the launcher at the fake
   # ~/Applications/OpenCode.app, whose executable name no real process has.
   for app in "$h/Applications/"{Agent,OpenCode}" Guard.app"(N); do
+    # OpenCode Guard's launcher has no app seam: it looks in /Applications first,
+    # and only then in the home and through Spotlight.
+    if [[ ${app:t} == "OpenCode Guard.app" ]] && [[ -d /Applications/OpenCode.app ]]; then
+      print -r -- "skip E5 ${app:t}: /Applications/OpenCode.app exists and OpenCode Guard's launcher would open it"
+      continue
+    fi
     target=$(/usr/bin/osadecompile "$app/Contents/Resources/Scripts/main.scpt" 2>/dev/null |
       /usr/bin/grep -o '/[^"]*/bin/opencode-gui' | /usr/bin/head -1)
     [[ -n $target ]] || { fail "E5 ${app:t}: no opencode-gui target"; continue }

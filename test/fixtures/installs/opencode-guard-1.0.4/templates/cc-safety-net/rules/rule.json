@@ -1,0 +1,1 @@
+{"version":1,"rules":["opencode-guard"],"overrides":{},"transparent_wrappers":["env","exec","nice","nohup","setsid","stdbuf","time","timeout"]}
