@@ -67,6 +67,8 @@ const seams = {
   cliSearch: 'cli_search=(/opt/homebrew/bin/opencode /usr/local/bin/opencode "$home/.opencode/bin/opencode")',
   appPaths: 'app_paths=(/Applications/OpenCode.app "$home/Applications/OpenCode.app")',
   appBundleId: 'app_bundle_id=ai.opencode.desktop',
+  bootTime: 'boot_time() {',
+  pgrep: 'local pgrep=/usr/bin/pgrep',
 };
 // The test harness looks for the CLI on PATH and in the disposable home only, and
 // for the app only at ~/Applications/OpenCode.app (a fake bundle in the tests).
@@ -75,7 +77,14 @@ const harness = {
   appPaths: 'app_paths=("$home/Applications/OpenCode.app")',
   appBundleId: 'app_bundle_id=invalid.test',
 };
-const testPoint = 'test_point() { case ${AG_TEST_POINT:-} in ("kill:$1") kill -KILL $$ ;; ("fail:$1") return 1 ;; esac }';
+// AG_TEST_POINT holds one or more space-separated kill:NAME and fail:NAME entries.
+const testPoint = 'test_point() { case " ${AG_TEST_POINT:-} " in (*" kill:$1 "*) kill -KILL $$ ;; (*" fail:$1 "*) return 1 ;; esac }';
+// Boot time: AG_TEST_BOOT_TIME when set (a non-number is a failed lookup); else the
+// production body, which follows under another name.
+const bootTime = 'boot_time() { if (( ${+AG_TEST_BOOT_TIME} )); then [[ $AG_TEST_BOOT_TIME == <-> ]] || return 1; REPLY=$AG_TEST_BOOT_TIME; return 0; fi; ag_test_real_boot_time; }; ag_test_real_boot_time() {';
+// The process check's pgrep: exits AG_TEST_PGREP, default 1 (no such process), so a
+// real OpenCode on the test Mac does not matter.
+const pgrep = 'local pgrep=ag_test_pgrep; ag_test_pgrep() { return ${AG_TEST_PGREP:-1} }';
 const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 
 function replaceOnce(file, from, to) {
@@ -88,11 +97,11 @@ function replaceOnce(file, from, to) {
 // from the unmodified source, so its seam check sees the production forms; then the
 // archive is unpacked and the seams are applied: the installer's test points, the
 // home of the launcher and of account.zsh, agent-guard's download base and the
-// harness's CLI and app lookup. It is repacked with release.sh's tar options and a
-// new .sha256. The bootstrap is pointed at url and at home, with its test point
-// enabled. No test release's installer or uninstaller runs before the account.zsh
-// seam is applied: both take home from it. Returns the asset paths.
-// Pending with step 5: boot time and pgrep.
+// harness's CLI and app lookup, and the installer's boot time and process check.
+// It is repacked with release.sh's tar options and a new .sha256. The bootstrap is
+// pointed at url and at home, with its test point enabled. No test release's
+// installer or uninstaller runs before the account.zsh seam is applied: both take
+// home from it. Returns the asset paths.
 export function release(source, out, { home, tag, version, url }) {
   assert.equal(tag, `v${version}`, 'release.sh names the tag v<version>');
   const dest = join(out, tag);
@@ -112,6 +121,8 @@ export function release(source, out, { home, tag, version, url }) {
   run(['/usr/bin/tar', '-xzf', archive, '-C', unpacked]);
   const tree = join(unpacked, name);
   replaceOnce(join(tree, 'profiles/opencode/install.sh'), seams.testPoint, testPoint);
+  replaceOnce(join(tree, 'profiles/opencode/install.sh'), seams.bootTime, bootTime);
+  replaceOnce(join(tree, 'profiles/opencode/install.sh'), seams.pgrep, pgrep);
   fixtureHome(join(tree, 'engine/launch'), home);
   fixtureAccount(join(tree, 'engine/account.zsh'), home);
   replaceOnce(join(tree, 'engine/agent-guard'), seams.downloadBase, `local repo=${quote(url)}; local -a curl_proto=()`);

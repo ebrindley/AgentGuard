@@ -47,31 +47,39 @@ fail() { print -r -- "FAIL $*"; fails=$((fails + 1)) }
 check() { local name=$1; shift; if "$@" >/dev/null 2>&1; then pass "$name"; else fail "$name"; fi }
 expect() { local want=$1 name=$2; shift 2; "$@" >/dev/null 2>&1; local rc=$?; if [[ ( $want == ok && $rc == 0 ) || ( $want == no && $rc != 0 ) ]]; then pass "$name"; else fail "$name (rc $rc)"; fi }
 
-# OpenCode Guard's PATH blocks, rulebook and plugin, which install and uninstall must leave alone.
-old_block=$'# >>> opencode-guard >>>\npath=("$HOME/Library/Application Support/OpenCodeGuard/bin" $path)\n# <<< opencode-guard <<<'
-print -r -- "export X=1"$'\n'"$old_block" > "$home/Projects/dotfiles/zshrc"
+# Startup files, configs and rule.json before the install. OpenCode Guard's PATH
+# blocks, rulebook and plugin are added only after the last install, which would
+# migrate them (test/migrate.sh), to check that uninstall leaves them alone.
+print -r -- "export X=1" > "$home/Projects/dotfiles/zshrc"
 /bin/ln -s "$home/Projects/dotfiles/zshrc" "$home/.zshrc"
 print 'export Y=1' > "$home/Projects/dotfiles/bash_login"
 /bin/ln -s "$home/Projects/dotfiles/bash_login" "$home/.bash_login"
 print '{}' > "$home/Projects/dotfiles/oc.json"
 /bin/ln -s "$home/Projects/dotfiles/oc.json" "$home/Projects/app/opencode.json"
 /bin/mkdir -p "$home/Projects/archive/.opencode"
-print -rn -- "$old_block"$'\nalias x=y' > "$home/.zprofile"
+print -rn -- 'alias x=y' > "$home/.zprofile"
 original='{"model":"m","permission":{"bash":{"git *":"allow","*":"ask","rm *":"deny"},"task":"ask"}}'
 print -r -- "$original" > "$cfg"
 cc="$home/.cc-safety-net/rules"
-/bin/mkdir -p "$cc/opencode-guard" "$home/.config/opencode/plugins"
-/usr/bin/jq '.name = "opencode-guard"' "$root/profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json" > "$cc/opencode-guard/rulebook.json"
-print -r -- '{"version":1,"rules":["opencode-guard"],"overrides":{},"transparent_wrappers":["env"]}' > "$cc/rule.json"
+/bin/mkdir -p "$cc" "$home/.config/opencode/plugins"
+print -r -- '{"version":1,"rules":["custom"],"overrides":{},"transparent_wrappers":["env"]}' > "$cc/rule.json"
+old_block=$'# >>> opencode-guard >>>\npath=("$HOME/Library/Application Support/OpenCodeGuard/bin" $path)\n# <<< opencode-guard <<<'
 orig="$run/orig"
 /bin/mkdir -p "$orig"
-/bin/cp "$home/.zprofile" "$orig/zprofile"
-/bin/cp "$home/Projects/dotfiles/zshrc" "$orig/zshrc"
-/bin/cp "$cc/opencode-guard/rulebook.json" "$orig/rulebook.json"
-# OpenCode Guard's plugin file. Its presence refuses the install, so it is put in
-# place after the install to check that uninstall leaves it alone.
 print -r -- 'export const OpenCodeGuardFixture = async () => ({})' > "$orig/plugin.js"
 old_plugin="$home/.config/opencode/plugins/opencode-guard.js"
+old_engine="$home/Library/Application Support/OpenCodeGuard"
+# Adds OpenCode Guard's PATH blocks, rulebook, rule.json entry and plugin, and keeps copies.
+add_old_parts() {
+  local rc
+  for rc in "$home/.zprofile" "$home/Projects/dotfiles/zshrc"; do print -r -- "$old_block" >> "$rc"; done
+  /bin/mkdir -p "$cc/opencode-guard"
+  /usr/bin/jq '.name = "opencode-guard"' "$root/profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json" > "$cc/opencode-guard/rulebook.json"
+  /usr/bin/jq -c '.rules += ["opencode-guard"]' "$cc/rule.json" > "$cc/rule.json.new" && /bin/mv "$cc/rule.json.new" "$cc/rule.json"
+  for rc in zprofile zshrc; do /usr/bin/sed '/^# >>> agent-guard >>>$/,/^# <<< agent-guard <<<$/d' "$home/.$rc" > "$orig/$rc"; done
+  /bin/cp "$cc/opencode-guard/rulebook.json" "$orig/rulebook.json"
+  /bin/cp "$orig/plugin.js" "$old_plugin"
+}
 # True when OpenCode Guard's blocks and rulebook match their copies, ignoring Agent Guard's PATH block.
 old_untouched() {
   local rc
@@ -99,13 +107,6 @@ install_refused() {
   refuses "$1" "$2" /bin/zsh "$root/install.sh" --projects "$home/Projects"
   [[ $(snapshot) == "$before" ]] && pass "$1: nothing changed" || fail "$1: nothing changed"
 }
-old_engine="$home/Library/Application Support/OpenCodeGuard"
-/bin/mkdir -p "$old_engine"
-install_refused "install refused when OpenCode Guard's engine folder exists" "Migration from OpenCode Guard arrives in a later release"
-/bin/rmdir "$old_engine"
-/bin/cp "$orig/plugin.js" "$old_plugin"
-install_refused "install refused when OpenCode Guard's plugin exists" "Migration from OpenCode Guard arrives in a later release"
-/bin/rm "$old_plugin"
 /bin/mkdir -p "$engine"
 print -r -- '#!/bin/zsh' > "$engine/launch"
 install_refused "install refused over an install without release folders" "Run \"$engine/uninstall.sh\" first"
@@ -153,7 +154,7 @@ version_line() {
 check "agent-guard version names the version and release and reports no drift" version_line
 refuses "agent-guard lists its commands" "usage: agent-guard doctor|version|update|uninstall" "$engine/bin/agent-guard"
 check "rulebook agent-guard" /usr/bin/jq -e '.name == "agent-guard"' "$cc/agent-guard/rulebook.json"
-check "rule.json lists agent-guard and keeps opencode-guard" /usr/bin/jq -e '.rules == ["agent-guard", "opencode-guard"]' "$cc/rule.json"
+check "rule.json lists agent-guard and keeps the other rule" /usr/bin/jq -e '.rules == ["agent-guard", "custom"]' "$cc/rule.json"
 new_blocks() {
   local rc
   for rc in "$home/.zprofile" "$home/.zshrc"; do
@@ -162,7 +163,6 @@ new_blocks() {
 }
 check "agent-guard PATH blocks" new_blocks
 check "app bundle ID" test "$(/usr/bin/plutil -extract CFBundleIdentifier raw "$home/Applications/Agent Guard.app/Contents/Info.plist")" = io.github.ebrindley.agentguard
-check "install leaves OpenCode Guard's blocks and rulebook unchanged" old_untouched
 
 # Each reinstall switches current and keeps only the release it replaced.
 first=$rid
@@ -177,8 +177,10 @@ done
 release="$engine/releases/$rid"
 check "reinstall keeps one plugin, the link" only_plugin
 
+# OpenCode Guard's engine folder under ALLOW: the profile and the plugin still protect it.
+/bin/mkdir -p "$old_engine"
 /usr/bin/awk -v h="$home" '
-  /^ALLOW -/ { print; print h "/Projects/archive/live"; print h "/Library"; print "/"; next }
+  /^ALLOW -/ { print; print h "/Projects/archive/live"; print h "/Library/Application Support/OpenCodeGuard"; print h "/Library"; print "/"; next }
   /^READ ONLY -/ { print; print h "/Projects/archive"; print "~"; next }
   /^DENY -/ { print; print h "/Projects/app/secret"; print "Allow me to note:"; print "~/Documents/private"; print "~/Documents/typo"; print h "/Library"; print "not a path"; next }
   { print }' "$list" > "$list.tmp" && /bin/mv "$list.tmp" "$list"
@@ -225,6 +227,7 @@ expect no "write outside lists"           sb /usr/bin/touch "$home/Documents/new
 expect no "edit Guard List"               sb /bin/sh -c "echo x >> '$list'"
 expect no "move Guard List folder"        sb /bin/mv "$home/Agent Guard" "$home/moved"
 expect no "write engine"                  sb /usr/bin/touch "$engine/x"
+expect no "write OpenCode Guard's engine folder, though under ALLOW" sb /usr/bin/touch "$old_engine/x"
 expect no "write opencode config"         sb /usr/bin/touch "$home/.config/opencode/x"
 expect no "write symlinked shell profile" sb /bin/sh -c "echo x >> '$home/Projects/dotfiles/zshrc'"
 expect no "write project .opencode"       sb /bin/mkdir -p "$home/Projects/app/.opencode/plugins"
@@ -367,12 +370,12 @@ out=$("$engine/bin/agent-guard" doctor 2>&1) && [[ $out == *"ok   plugins loaded
 /bin/rm -rf "$next"
 
 # OpenCode Guard's plugin next to Agent Guard's: doctor names it; uninstall leaves it.
-/bin/cp "$orig/plugin.js" "$old_plugin"
+add_old_parts
 refuses "doctor fails with OpenCode Guard's plugin also installed" "FAIL OpenCode Guard's plugin is also in" "$engine/bin/agent-guard" doctor
 /bin/zsh "$engine/current/uninstall.sh" >/dev/null 2>&1
 [[ ! -e $engine && ! -L $home/.config/opencode/plugins/agent-guard.js && ! -e $cc/agent-guard ]] && pass "uninstall" || fail "uninstall"
 check "rc block removed" sh -c "! /usr/bin/grep -q agent-guard '$home/.zshrc' '$home/.zprofile'"
-check "rule.json keeps only opencode-guard" /usr/bin/jq -e '.rules == ["opencode-guard"]' "$cc/rule.json"
+check "rule.json keeps the other rule and opencode-guard" /usr/bin/jq -e '.rules == ["custom", "opencode-guard"]' "$cc/rule.json"
 check "uninstall leaves OpenCode Guard's blocks and rulebook unchanged" old_untouched
 check "uninstall leaves OpenCode Guard's plugin unchanged" /usr/bin/cmp -s "$orig/plugin.js" "$old_plugin"
 check "permissions restored" /usr/bin/jq -e --argjson o "$original" '.permission == $o.permission' "$cfg"

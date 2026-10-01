@@ -1,6 +1,7 @@
 #!/bin/zsh
-# Installer cases from design section 9.4 (step 4): B5, B8, F1, F2, the kill
-# matrix, S1-S6, G1-G5, T1, T2, U1-U4, X1-X6 and P1-P5. Builds test releases
+# Installer cases from design section 9.4 (step 4): B5, B8, the kill matrix,
+# S1-S6, G1-G5, T1, T2, U1-U4, X1-X6 and P1-P5. F1 and F2, the refusal of an
+# OpenCode Guard install, became the migration (test/migrate.sh). Builds test releases
 # served by test/release-server.mjs and installs them in a disposable home with the
 # fake CLI (test/fake-opencode.mjs) and a fake OpenCode.app; test/test.sh runs the
 # installer with the real CLI. Runs outside any sandbox, from a checkout; needs Node.
@@ -181,21 +182,6 @@ for p in after-unpack txn-open; do
   rc=$?
   (( rc == 0 )) && [[ $(stamp_version) == 0.0.1 && -z $(print -l "$engine"/stage/*(DN)) && ! -e $state/txn ]] &&
     pass "rerun after kill:$p installs and leaves no stage or transaction" || { fail "rerun after kill:$p (exit $rc)"; show }
-done
-
-# --- F1, F2: an OpenCode Guard install is refused before any change.
-for f in F1 F2; do
-  label=$f
-  restore clean
-  if [[ $f == F1 ]]; then /bin/mkdir -p "$home/Library/Application Support/OpenCodeGuard"
-  else /bin/mkdir -p "$plugins"; print -r -- 'export const OpenCodeGuardFixture = async () => ({})' > "$plugins/opencode-guard.js"; fi
-  before=$(listing "$home")
-  snap=$(snapshot "$home")
-  point= boot v0.0.1 --projects "$home/Projects"
-  rc=$?
-  (( rc != 0 )) && /usr/bin/grep -q 'Migration from OpenCode Guard arrives in a later release' "$out" &&
-    pass "refused (exit $rc) with the migration message" || { fail 'refused with the migration message'; show }
-  [[ $(listing "$home") == "$before" && $(snapshot "$home") == "$snap" ]] && pass 'nothing changed' || fail 'nothing changed'
 done
 
 # --- Kill matrix on a fresh install: every S, C and K point (design 9.4), then
@@ -516,10 +502,11 @@ rc=$?
 (( rc == 0 )) && [[ ! -e $engine ]] && pass 'uninstall recovers and removes the engine' || { fail "uninstall (exit $rc)"; show }
 [[ $(<"$cfg") == "$original" ]] && pass 'config as before' || fail 'config as before'
 
-# Every test point in the shipped scripts is exercised: here, or in test/bootstrap.sh
-# (after-download, after-verify).
+# Every test point in the shipped scripts is exercised: here, in test/bootstrap.sh
+# (after-download, after-verify) or in test/migrate.sh ($migrate_points, test/lib.zsh,
+# whose own check fails for any it does not exercise).
 label=coverage
-covered=($update_points $uninstall_points rollback after-unpack after-download after-verify)
+covered=($update_points $uninstall_points rollback after-unpack after-download after-verify $migrate_points)
 points=(${(f)"$(/usr/bin/grep -ohE 'test_point [a-z0-9-]+' "$source_root"/profiles/opencode/{install,uninstall}.sh "$source_root"/scripts/bootstrap.zsh "$source_root"/engine/agent-guard | /usr/bin/sort -u)"})
 missing=()
 for p in ${points#test_point }; do (( ${covered[(Ie)$p]} )) || missing+=("$p"); done

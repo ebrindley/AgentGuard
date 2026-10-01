@@ -1,0 +1,6 @@
+{
+  "step": 5,
+  "reason": "Protect OpenCode Guard's engine folder, which holds the forwarders after a migration (docs/DESIGN.md section 10, rule 7).",
+  "after": "  (subpath (h \"/Library/Application Support/AgentGuard\"))\n",
+  "insert": "  (subpath (h \"/Library/Application Support/OpenCodeGuard\"))\n"
+}

@@ -23,6 +23,7 @@
 
 (deny file-write*
   (subpath (h "/Library/Application Support/AgentGuard"))
+  (subpath (h "/Library/Application Support/OpenCodeGuard"))
   (subpath (h "/Agent Guard"))
 ;;@PROTECTED@
   (subpath (h "/Library/LaunchAgents"))

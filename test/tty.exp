@@ -1,0 +1,17 @@
+# usage: expect -f tty.exp OUT ANSWER COMMAND...
+# Runs COMMAND with a terminal on standard input, as an installer run from
+# Terminal has, and its output in the file OUT, so the installer prompts but shows
+# no dialog. ANSWER (a line; empty for none) is typed ahead and waits in the
+# terminal until something reads it. Exits with COMMAND's status, 128 + 9 when it
+# was killed.
+set out [lindex $argv 0]
+set answer [lindex $argv 1]
+set command [lrange $argv 2 end]
+set timeout -1
+log_user 0
+spawn -noecho /bin/zsh -fc {exec "$@" > "$0" 2>&1} $out {*}$command
+if {$answer ne ""} { send -- "$answer\r" }
+expect eof
+set result [wait]
+if {[llength $result] > 4 && [lindex $result 4] eq "CHILDKILLED"} { exit 137 }
+exit [lindex $result 3]

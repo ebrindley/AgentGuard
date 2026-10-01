@@ -1,5 +1,6 @@
 #!/bin/zsh
-# Agent Guard installer for OpenCode (docs/DESIGN.md section 6).
+# Agent Guard installer for OpenCode (docs/DESIGN.md section 6), which also migrates
+# an OpenCode Guard install (section 10).
 #   zsh install.sh [--projects DIR] [--gui]
 #       From a checkout or an unpacked archive: copies the tree into the engine
 #       folder's stage/<txn>/tree, then runs that copy with --stage.
@@ -36,45 +37,62 @@ ag_init() {
   txn_dir="$state/txn"
   record="$state/permissions.json"
   stamp="$state/stamp.json"
+  migration="$state/migration.json"
+  ocg_copy="$state/opencode-guard-permissions.json"
+  # OpenCode Guard's install (docs/DESIGN.md section 10).
   ocg="$home/Library/Application Support/OpenCodeGuard"
+  ocg_record="$ocg/state/permissions.json"
+  old_list_dir="$home/OpenCode Guard"
+  old_list="$old_list_dir/Guard List.txt"
+  old_app="$home/Applications/OpenCode Guard.app"
+  old_start='# >>> opencode-guard >>>'
+  old_end='# <<< opencode-guard <<<'
   list_dir="$home/Agent Guard"
   list="$list_dir/Guard List.txt"
   conf="$home/.config/opencode"
   plugins="$conf/plugins"
   plugin="$plugins/agent-guard.js"
+  old_plugin="$plugins/opencode-guard.js"
   plugin_target="$engine/current/profiles/opencode/plugin.js"
   app="$home/Applications/Agent Guard.app"
   cc="$home/.cc-safety-net/rules"
   marker_start='# >>> agent-guard >>>'
   marker_end='# <<< agent-guard <<<'
   bundle_id=io.github.ebrindley.agentguard
-  ag_locked=0 ag_perm_failed=0
-  typeset -ga ag_warnings ag_failed ag_configs ag_unrestored
-  ag_warnings=() ag_failed=() ag_unrestored=()
+  ag_locked=0 ag_perm_failed=0 ag_ocg_state=none
+  typeset -ga ag_warnings ag_failed ag_configs ag_unrestored ag_ocg_parts
+  ag_warnings=() ag_failed=() ag_unrestored=() ag_ocg_parts=()
 }
 
 ag_tools() {
   local t
   [[ $(/usr/bin/uname -s) == Darwin ]] || { ag_err 'macOS only'; return 1 }
-  for t in /usr/bin/{sandbox-exec,jq,osacompile,codesign,curl,shasum,tar,plutil,xattr,dscl,stat,awk,cmp,readlink} /bin/{ps,sync}; do
+  for t in /usr/bin/{sandbox-exec,jq,osacompile,codesign,curl,shasum,tar,plutil,xattr,dscl,stat,awk,cmp,readlink,pgrep} /usr/sbin/sysctl /bin/{ps,sync}; do
     [[ -x $t ]] || { ag_err "missing $t (macOS 15 or later required)"; return 1 }
   done
 }
 
 # Inside a guard or another sandbox the state folder is not writable and the
-# write fails with EPERM. Refuse then, before anything changes.
+# write fails with EPERM. Refuse then, before anything changes. OpenCode Guard's
+# state folder, when present, is probed too: each guard denies the other's.
 ag_probe() {
-  local err= eperm= fd=
+  ag_probe_dir "$state" create || return 1
+  if [[ -e $ocg/state || -L $ocg/state ]]; then ag_probe_dir "$ocg/state" || return 1; fi
+  return 0
+}
+
+ag_probe_dir() {  # DIR [create]
+  local d=$1 err= eperm= fd=
   syserror -e eperm EPERM
-  [[ -L $state ]] && { ag_err "$state is a symbolic link; not changed"; return 1 }
-  /bin/rm -f -- "$state/.probe-$$" 2>/dev/null
-  if ! err=$(/bin/mkdir -p -- "$state" 2>&1) ||
-     ! err=$( { sysopen -w -o creat,excl -u fd "$state/.probe-$$" } 2>&1 ); then
+  [[ -L $d ]] && { ag_err "$d is a symbolic link; not changed"; return 1 }
+  /bin/rm -f -- "$d/.probe-$$" 2>/dev/null
+  if { [[ ${2:-} == create ]] && ! err=$(/bin/mkdir -p -- "$d" 2>&1) } ||
+     ! err=$( { sysopen -w -o creat,excl -u fd "$d/.probe-$$" } 2>&1 ); then
     [[ ${(L)err} == *": ${(L)eperm}" ]] && { ag_err 'run this from Terminal, outside any guard or sandbox'; return 1 }
-    ag_err "cannot write $state: ${err##*: }"
+    ag_err "cannot write $d: ${err##*: }"
     return 1
   fi
-  /bin/rm -f -- "$state/.probe-$$"
+  /bin/rm -f -- "$d/.probe-$$"
 }
 
 # --- Lock: the folder state/lock with files start and pid, as the bootstrap
@@ -305,7 +323,7 @@ ag_switch_begun() {
   local l
   [[ -r $txn_dir/journal ]] || return 1
   for l in "${(@f)$(<"$txn_dir/journal")}"; do
-    [[ $l == (rulebook|rulejson|app|current|plugin|permissions|rc)' '(begun|done|undone)(|' '*) ]] && return 0
+    [[ $l == (rulebook|rulejson|app|current|plugin|permissions|rc|fwd-cli|fwd-gui|plugin-take|plugin-name|app-old|switch-time)' '(begun|done|undone)(|' '*) ]] && return 0
   done
   return 1
 }
@@ -373,14 +391,66 @@ ag_tree_info() {
   return 0
 }
 
+# OpenCode Guard's parts (design section 8.1), in ag_ocg_parts. Its bin/ folder is
+# not one: after a migration it holds Agent Guard's forwarders.
+ag_ocg_find() {
+  local rc
+  ag_ocg_parts=()
+  [[ -e $ocg/launch || -L $ocg/launch ]] && ag_ocg_parts+=(launch)
+  [[ -e $ocg_record || -L $ocg_record ]] && ag_ocg_parts+=(record)
+  if [[ -e $old_plugin || -L $old_plugin ]] && ! ag_ours "$old_plugin"; then ag_ocg_parts+=(plugin); fi
+  [[ -e $old_app || -L $old_app ]] && ag_ocg_parts+=(app)
+  [[ -e $cc/opencode-guard || -L $cc/opencode-guard ]] && ag_ocg_parts+=(rulebook)
+  if [[ -f $cc/rule.json ]] && /usr/bin/jq -e '(.rules // []) | index("opencode-guard") != null' "$cc/rule.json" >/dev/null 2>&1; then
+    ag_ocg_parts+=(rulejson)
+  fi
+  for rc in "$home"/{.zprofile,.zshrc,.bash_profile}; do
+    [[ -f $rc ]] && /usr/bin/grep -Fxq -- "$old_start" "$rc" && ag_ocg_parts+=("block:${rc:t}")
+  done
+  return 0
+}
+
+# True for a plugin path that is Agent Guard's link (into current).
+ag_ours() { [[ -L $1 && $(/usr/bin/readlink -- "$1") == "$plugin_target" ]] }
+
+# True when OpenCode Guard's bin/ holds nothing but links to Agent Guard's shims.
+ag_forwarders_only() {
+  local f
+  local -a all
+  [[ -d $ocg/bin && ! -L $ocg/bin ]] || return 1
+  all=("$ocg"/bin/*(DN))
+  (( $#all )) || return 1
+  for f in $all; do
+    [[ -L $f && $(/usr/bin/readlink -- "$f") == "$engine/bin/${f:t}" ]] || return 1
+  done
+}
+
+# The state of OpenCode Guard on this Mac (design section 8.1), in ag_ocg_state:
+# full (migrate), retiring, migrated, remnant, forwarders-only or none.
+ag_ocg_detect() {
+  local retired
+  ag_ocg_find
+  ag_ocg_state=none
+  if [[ -f $migration ]]; then
+    retired=$(/usr/bin/jq -r 'if type == "object" and (.retired | type) == "boolean" then .retired else "invalid" end' "$migration" 2>/dev/null)
+    case $retired in
+      (false) ag_ocg_state=retiring ;;
+      # Parts found after a finished migration: OpenCode Guard was installed again.
+      (true) ag_ocg_state=migrated; (( $#ag_ocg_parts )) && ag_ocg_state=full ;;
+      (*) ag_err "cannot read $migration; nothing changed"; return 1 ;;
+    esac
+  elif (( $#ag_ocg_parts )); then
+    ag_ocg_state=full
+  elif ag_forwarders_only; then
+    ag_ocg_state=forwarders-only
+  elif [[ -f $old_list && ! -e $list ]]; then
+    ag_ocg_state=remnant
+  fi
+  return 0
+}
+
 ag_layout() {
   local p
-  for p in "$ocg" "$plugins/opencode-guard.js"; do
-    if [[ -e $p || -L $p ]]; then
-      ag_err "OpenCode Guard is installed ($p). Migration from OpenCode Guard arrives in a later release; nothing changed."
-      return 1
-    fi
-  done
   if [[ -f $engine/launch && ! -L $engine/launch ]] || [[ -d $engine/bin && ! -L $engine/bin ]]; then
     ag_err "an earlier Agent Guard install without release folders is in $engine. Run \"$engine/uninstall.sh\" first; nothing changed."
     return 1
@@ -395,6 +465,8 @@ ag_layout() {
     ag_err "$engine/current is not a link; nothing changed"
     return 1
   fi
+  ag_ocg_detect || return 1
+  [[ $ag_ocg_state == full ]] && ag_kind=migrate
   return 0
 }
 
@@ -405,13 +477,18 @@ ag_rc_files() {
   return 0
 }
 
+# A start marker without its end marker, Agent Guard's or OpenCode Guard's: removing
+# that block would remove the rest of the file.
 ag_rc_unfinished() {
-  local rc
+  local rc s e
   for rc in "$home"/{.zprofile,.zshrc,.bash_profile}; do
-    [[ -f $rc ]] && /usr/bin/grep -Fxq -- "$marker_start" "$rc" || continue
-    /usr/bin/grep -Fxq -- "$marker_end" "$rc" && continue
-    ag_err "$rc has an agent-guard start marker without an end marker; fix it by hand. Nothing changed."
-    return 1
+    [[ -f $rc ]] || continue
+    for s e in "$marker_start" "$marker_end" "$old_start" "$old_end"; do
+      /usr/bin/grep -Fxq -- "$s" "$rc" || continue
+      /usr/bin/grep -Fxq -- "$e" "$rc" && continue
+      ag_err "$rc has a start marker ($s) without an end marker; fix it by hand. Nothing changed."
+      return 1
+    done
   done
   return 0
 }
@@ -429,6 +506,59 @@ ag_volume() {
       { ag_err "$p is on another volume than $engine; Agent Guard replaces files by rename and needs one volume. Nothing changed."; return 1 }
   done
   return 0
+}
+
+# The OpenCode app's executable name, found as the launcher finds the app: the
+# tree's harness data (app_paths, then Spotlight by bundle ID).
+ag_app_exec() {
+  REPLY=$(home=$home; source "$ag_tree/profiles/opencode/harness.zsh" 2>/dev/null || exit 1
+    for a in $app_paths ${(f)"$(/usr/bin/mdfind "kMDItemCFBundleIdentifier == '$app_bundle_id'" 2>/dev/null)"}; do
+      [[ -d $a/Contents/MacOS ]] || continue
+      /usr/bin/plutil -extract CFBundleExecutable raw "$a/Contents/Info.plist" 2>/dev/null
+      break
+    done)
+  [[ -n $REPLY ]]
+}
+
+# A server or app started before the switch keeps OpenCode Guard's profile and
+# would run Agent Guard's plugin rules under it, so a migration runs only while
+# no OpenCode process runs (design section 8.2).
+ag_proc_check() {
+  local n
+  local pgrep=/usr/bin/pgrep
+  local -a names=(opencode "OpenCode Helper")
+  integer rc
+  ag_app_exec && names+=("$REPLY")
+  for n in ${(u)names}; do
+    $pgrep -x -- "$n" >/dev/null 2>&1
+    rc=$?
+    case $rc in
+      (0) ag_err "$n is running. Quit the OpenCode app and every opencode in a terminal, then run this command again."; return 1 ;;
+      (1) ;;
+      (*) ag_err "cannot list processes (pgrep exited $rc); run this from Terminal, outside any sandbox."; return 1 ;;
+    esac
+  done
+  return 0
+}
+
+# Before any change in a migration: OpenCode Guard's record must be an object of
+# per-file entries whose keys each have orig. Also reports what is not merged.
+ag_ocg_checks() {
+  local f
+  local -a found
+  if [[ -f $old_list_dir/permissions-backup.json ]]; then
+    ag_say "note: $old_list_dir/permissions-backup.json is from an earlier OpenCode Guard uninstall that could not restore these values; they are not merged."
+  fi
+  if [[ $ag_ocg_state == remnant ]]; then
+    found=("$conf"/{config.json,opencode.json,opencode.jsonc}(N))
+    ag_say "OpenCode Guard was installed here before, and no permission record of it exists, so the values it wrote cannot be restored.${found:+ Check edit, bash and external_directory in: ${(j:, :)found}}"
+  fi
+  [[ $ag_kind == migrate ]] || return 0
+  if [[ -e $ocg_record || -L $ocg_record ]] && ! /usr/bin/jq -e 'type == "object" and all(.[]; type == "object" and all(.[]; type == "object" and has("orig")))' "$ocg_record" >/dev/null 2>&1; then
+    ag_err "OpenCode Guard's permission record $ocg_record cannot be read or is not an object of per-file entries. Nothing changed."
+    return 1
+  fi
+  ag_proc_check || { ag_err 'Nothing changed.'; return 1 }
 }
 
 ag_classify_configs() {
@@ -587,6 +717,114 @@ ag_list_step() {
     esac
   fi
   ag_say "list: $list"
+}
+
+# P6b (before P6): OpenCode Guard's list, copied byte for byte only after the user
+# confirms on the terminal. An existing Agent Guard list is never changed.
+ag_list_import() {
+  local answer= partial="$list_dir/.Guard List.txt.partial"
+  [[ $ag_kind == migrate || $ag_ocg_state == remnant ]] && [[ -f $old_list ]] || return 0
+  if [[ -e $list || -L $list ]]; then
+    /usr/bin/cmp -s -- "$old_list" "$list" ||
+      ag_say "list: $list is kept; the old list $old_list was not imported"
+    return 0
+  fi
+  ag_say "OpenCode Guard's list: $old_list"
+  ag_say "Agent Guard's list:    $list (does not exist yet)"
+  ag_say 'Entries in the old list:'
+  /usr/bin/awk '
+    { t = $0; sub(/\r$/, "", t); gsub(/^[[:space:]]+|[[:space:]]+$/, "", t); u = toupper(t) }
+    t == "" || t ~ /^#/ { next }
+    u ~ /^ALLOW([[:space:]]*[-:].*)?$/ { s = "ALLOW"; next }
+    u ~ /^READ([[:space:]]+|-)ONLY([[:space:]]*[-:].*)?$/ { s = "READ ONLY"; next }
+    u ~ /^DENY([[:space:]]*[-:].*)?$/ { s = "DENY"; next }
+    s != "" { e[s] = e[s] "    " t "\n" }
+    END { n = split("ALLOW,READ ONLY,DENY", k, ",")
+          for (i = 1; i <= n; i++) printf "  %s\n%s", k[i], (k[i] in e ? e[k[i]] : "    (none)\n") }' "$old_list" || return 1
+  ag_say "After the switch the old list is no longer read; Agent Guard reads only $list."
+  if [[ -t 0 ]]; then
+    print -n 'Import this list? [y/N] '
+    read -r answer
+  fi
+  if [[ $answer != [yY]([eE][sS]|) ]]; then
+    ag_err 'the list was not imported. Nothing changed.'
+    return 1
+  fi
+  /bin/mkdir -p -- "$list_dir" && /bin/rm -f -- "$partial" && /bin/cp -p -- "$old_list" "$partial" &&
+    /bin/mv -n -- "$partial" "$list" && /usr/bin/cmp -s -- "$old_list" "$list" || { /bin/rm -f -- "$partial"; return 1 }
+  ag_say "list imported: $list"
+}
+
+# P6a: OpenCode Guard's record, copied unchanged to state/, and each of its entries
+# for a file without an entry in Agent Guard's record. Migrations write no
+# permission value (they skip S6); this reports what the record means now.
+ag_import() {
+  local base="$ag_tstage/record.base.json" out="$ag_tstage/record.json" keys="$txn_dir/imported.json" f k
+  local created=0 copied=0 cur
+  integer i
+  [[ $ag_kind == migrate ]] || return 0
+  if [[ ! -f $ocg_record ]]; then
+    ag_say "OpenCode Guard's permission record is missing, so the values it wrote cannot be restored."
+    return 0
+  fi
+  ag_jlast import
+  [[ $REPLY == done ]] && return 0
+  if [[ -z $REPLY ]]; then
+    [[ -e $record ]] || created=1
+    [[ -e $ocg_copy ]] || copied=1
+    ag_backup import "$record" && ag_backup import-copy "$ocg_copy" && ag_jnl import begun "created=$created copied=$copied" || return 1
+  fi
+  /bin/cp -p -- "$ocg_record" "$ocg_copy.partial" && /bin/mv -f -- "$ocg_copy.partial" "$ocg_copy" &&
+    /usr/bin/cmp -s -- "$ocg_record" "$ocg_copy" || return 1
+  if [[ -f $txn_dir/backup/import/file ]]; then /bin/cp -- "$txn_dir/backup/import/file" "$base" || return 1; else print '{}' > "$base" || return 1; fi
+  /usr/bin/jq -c --slurpfile o "$ocg_copy" '. as $a | [$o[0] | keys[] | select(. as $f | $a | has($f) | not)]' "$base" > "$keys" &&
+    /usr/bin/jq --slurpfile o "$ocg_copy" --slurpfile k "$keys" 'reduce $k[0][] as $f (.; .[$f] = $o[0][$f])' "$base" > "$out" &&
+    replace_file "$record" "$out" || return 1
+  # What each recorded value means now.
+  for f in ${(f)"$(/usr/bin/jq -r 'keys[]' "$ocg_copy")"}; do
+    if ! /usr/bin/jq -e --arg f "$f" 'any(.[]; . == $f)' "$keys" >/dev/null; then
+      ag_say "permissions: $f already has an entry in Agent Guard's record; OpenCode Guard's is not imported"
+      continue
+    fi
+    if [[ ! -f $f ]]; then ag_say "permissions: $f no longer exists"; continue; fi
+    for k in edit bash external_directory; do
+      cur=$(/usr/bin/jq -r --slurpfile o "$ocg_copy" --arg f "$f" --arg k "$k" '($o[0][$f][$k] // null) as $e
+        | if $e == null then "absent" elif ($e | has("wrote") | not) then "nowrote"
+          elif (.permission // {})[$k] == $e.wrote then "kept" else "changed" end' "$f" 2>/dev/null) || cur=unreadable
+      case $cur in
+        (kept) ag_say "permissions: kept $f $k (as OpenCode Guard set it)" ;;
+        (changed) ag_say "permissions: left as is: $f $k was changed after OpenCode Guard's install" ;;
+        (nowrote) ag_say "permissions: $f $k has no recorded value from OpenCode Guard (its install was interrupted); left as is" ;;
+        (unreadable) ag_say "permissions: $f cannot be read; left as is" ;;
+      esac
+    done
+  done
+  for (( i = 1; i <= $#ag_configs; i++ )); do
+    f=$ag_configs[i]
+    [[ -e $f ]] || continue
+    /usr/bin/jq -e --arg f "$f" 'has($f)' "$ocg_copy" >/dev/null 2>&1 && continue
+    /usr/bin/jq -e --arg f "$f" 'has($f)' "$record" >/dev/null 2>&1 && continue
+    ag_say "permissions: $f has no entry in either record; left as is"
+  done
+  ag_jnl import done "created=$created copied=$copied"
+}
+
+# Discard of the import: what this transaction created goes, what it changed comes back.
+undo_import() {
+  local created copied b="$txn_dir/backup"
+  ag_jlast import
+  [[ $REPLY == (begun|done) ]] || return 0
+  ag_jfind import begun
+  local detail=$REPLY
+  ag_jval created; created=$REPLY
+  REPLY=$detail; ag_jval copied; copied=$REPLY
+  if [[ $created == 1 ]]; then /bin/rm -f -- "$record" || return 1
+  elif [[ -f $b/import/file ]] && ! /usr/bin/cmp -s -- "$record" "$b/import/file"; then replace_file "$record" "$b/import/file" || return 1
+  fi
+  if [[ $copied == 1 ]]; then /bin/rm -f -- "$ocg_copy" "$ocg_copy.partial" || return 1
+  elif [[ -f $b/import-copy/file ]] && ! /usr/bin/cmp -s -- "$ocg_copy" "$b/import-copy/file"; then replace_file "$ocg_copy" "$b/import-copy/file" || return 1
+  fi
+  ag_jnl import undone
 }
 
 # P7: the staged release's own check, before anything outside the engine and list
@@ -946,11 +1184,13 @@ ag_rc_line() {
   fi
 }
 
-ag_rc_strip() {  # FILE: FILE without Agent Guard's complete blocks
-  /usr/bin/awk -v s="$marker_start" -v e="$marker_end" '
-    $0 == s { skip = 1; next }
-    skip && $0 == e { skip = 0; next }
-    !skip { print }' "$1"
+ag_rc_strip() {  # FILE [old]: FILE without Agent Guard's complete blocks, and with old, OpenCode Guard's too
+  local os= oe=
+  [[ ${2:-} == old ]] && os=$old_start oe=$old_end
+  /usr/bin/awk -v s="$marker_start" -v e="$marker_end" -v os="$os" -v oe="$oe" '
+    !skip && ($0 == s || (os != "" && $0 == os)) { skip = ($0 == s) ? e : oe; next }
+    skip != "" && $0 == skip { skip = ""; next }
+    skip == "" { print }' "$1"
 }
 
 ag_rc_has() {  # FILE LINE: FILE holds the complete block with LINE
@@ -974,12 +1214,13 @@ do_rc() {
     fi
     ag_rc_line "$rc"
     line=$REPLY
-    if [[ -e $rc ]] && ag_rc_has "$rc" "$line"; then
+    # A migration also removes OpenCode Guard's block, in the same rewrite.
+    if [[ -e $rc ]] && ag_rc_has "$rc" "$line" && ! /usr/bin/grep -Fxq -- "$old_start" "$rc"; then
       if [[ $st == begun ]]; then ag_sha "$rc" && ag_jnl rc done "$name $REPLY" || return 1; fi
       continue
     fi
     new="$ag_tstage/rc$name"
-    { if [[ -e $rc ]]; then ag_rc_strip "$rc" || return 1; fi
+    { if [[ -e $rc ]]; then ag_rc_strip "$rc" old || return 1; fi
       print -r -- "$marker_start"; print -r -- "$line"; print -r -- "$marker_end" } > "$new" || return 1
     if [[ -z $st ]]; then ag_backup "rc$name" "$rc" && ag_jnl rc begun "$name" || return 1; fi
     replace_file "$rc" "$new" || return 1
@@ -1008,16 +1249,163 @@ undo_rc() {
     elif [[ -n $done_hash && $REPLY == "$done_hash" ]]; then
       if [[ -f $b ]]; then replace_file "$rc" "$b" || return 1; else /bin/rm -f -- "$rc" || return 1; fi
     elif [[ -e $rc ]]; then
-      ag_rc_strip "$rc" > "$tmp" && replace_file "$rc" "$tmp" || return 1
+      # Changed since the switch: the inverse edit, which puts back OpenCode Guard's
+      # block from the backup when this run removed it.
+      { ag_rc_strip "$rc" || return 1
+        if [[ -f $b ]] && ! /usr/bin/grep -Fxq -- "$old_start" "$rc"; then
+          /usr/bin/awk -v s="$old_start" -v e="$old_end" '$0 == s { on = 1 } on { print } on && $0 == e { on = 0 }' "$b" || return 1
+        fi } > "$tmp" && replace_file "$rc" "$tmp" || return 1
     fi
     ag_jnl rc undone "$name"
   done
   return 0
 }
 
+# --- Migration switch actions (design section 8.5, M4 to M8). OpenCode Guard's
+# files that become links are put back with restore_over_link, which replaces the
+# link itself and never writes through it into a release (design A1).
+
+# M4a, M4b: a forwarder, a link from OpenCode Guard's shim path to Agent Guard's
+# shim of the same name, for terminals opened before the switch.
+do_forwarder() {  # ACTION NAME
+  local a=$1 f="$ocg/bin/$2" to="$engine/bin/$2"
+  ag_jlast $a
+  [[ $REPLY == done ]] && return 0
+  if [[ -z $REPLY ]]; then
+    if [[ ! -e $f && ! -L $f ]] || [[ -L $f && $(/usr/bin/readlink -- "$f") == "$to" ]]; then test_point $a; return; fi
+    ag_backup $a "$f" && ag_jnl $a begun || return 1
+  fi
+  test_point $a || return 1
+  replace_link "$f" "$to" || return 1
+  ag_jnl $a done
+}
+
+undo_forwarder() {  # ACTION NAME
+  local a=$1 f="$ocg/bin/$2" b="$txn_dir/backup/$1/file"
+  ag_jlast $a
+  [[ $REPLY == (begun|done) ]] || return 0
+  if [[ -f $b ]] && ! { [[ -f $f && ! -L $f ]] && /usr/bin/cmp -s -- "$f" "$b" }; then
+    restore_over_link "$f" "$b" || return 1
+  fi
+  /bin/rm -f -- "${f:h}/.${f:t}.partial"
+  ag_jnl $a undone
+}
+
+# M5a: Agent Guard's plugin link renamed onto opencode-guard.js, so the folder holds
+# one guard plugin at every moment; M5b then renames it to agent-guard.js.
+do_plugin_take() {
+  local tmp="$plugins/.agent-guard.js.partial"
+  ag_jlast plugin-take
+  [[ $REPLY == done ]] && return 0
+  if [[ -z $REPLY ]]; then ag_backup plugin-take "$old_plugin" && ag_jnl plugin-take begun || return 1; fi
+  if ! ag_ours "$old_plugin" && ! { [[ ! -e $old_plugin && ! -L $old_plugin ]] && ag_ours "$plugin" }; then
+    /bin/rm -f -- "$tmp" && /bin/ln -s "$plugin_target" "$tmp" || return 1
+    test_point plugin-take || return 1
+    /bin/mv -fh -- "$tmp" "$old_plugin" || return 1
+  fi
+  ag_jnl plugin-take done
+}
+
+undo_plugin_take() {
+  local b="$txn_dir/backup/plugin-take/file"
+  ag_jlast plugin-take
+  [[ $REPLY == (begun|done) ]] || return 0
+  /bin/rm -f -- "$plugins/.agent-guard.js.partial"
+  if [[ -f $b ]] && ! { [[ -f $old_plugin && ! -L $old_plugin ]] && /usr/bin/cmp -s -- "$old_plugin" "$b" }; then
+    restore_over_link "$old_plugin" "$b" || return 1
+  fi
+  ag_jnl plugin-take undone
+}
+
+do_plugin_name() {
+  local b="$txn_dir/backup/plugin-name"
+  ag_jlast plugin-name
+  [[ $REPLY == done ]] && return 0
+  if [[ -z $REPLY ]]; then
+    ag_backup plugin-name || return 1
+    if [[ -L $plugin ]]; then /usr/bin/readlink -- "$plugin" > "$b/link" || return 1; fi
+    ag_jnl plugin-name begun || return 1
+  fi
+  test_point plugin-name || return 1
+  if ag_ours "$old_plugin"; then /bin/mv -fh -- "$old_plugin" "$plugin" || return 1; fi
+  ag_ours "$plugin" && [[ ! -e $old_plugin && ! -L $old_plugin ]] || return 1
+  ag_jnl plugin-name done
+}
+
+undo_plugin_name() {
+  local b="$txn_dir/backup/plugin-name"
+  ag_jlast plugin-name
+  [[ $REPLY == (begun|done) ]] || return 0
+  if ag_ours "$plugin" && [[ ! -e $old_plugin && ! -L $old_plugin ]]; then
+    /bin/mv -fh -- "$plugin" "$old_plugin" || return 1
+    if [[ -f $b/link ]]; then replace_link "$plugin" "$(<"$b/link")" || return 1; fi
+  fi
+  ag_jnl plugin-name undone
+}
+
+# The plugin step of a migration: the take and rename when OpenCode Guard's plugin
+# is there, else the link as on a fresh install (S5).
+ag_switch_plugin() {
+  ag_jlast plugin-take
+  if [[ -n $REPLY || -e $old_plugin || -L $old_plugin ]]; then
+    do_plugin_take && do_plugin_name
+  else
+    do_plugin
+  fi
+}
+
+# M7b: OpenCode Guard's app into the transaction folder; retirement deletes it.
+do_app_old() {
+  local b="$txn_dir/backup/app-old"
+  ag_jlast app-old
+  [[ $REPLY == done ]] && return 0
+  if [[ -z $REPLY ]]; then
+    if [[ ! -e $old_app && ! -L $old_app ]]; then test_point app-old; return; fi
+    ag_jnl app-old begun || return 1
+  fi
+  test_point app-old || return 1
+  if [[ ( -e $old_app || -L $old_app ) && ! -e $b ]]; then
+    /bin/mkdir -p -- "${b:h}" && /bin/mv -- "$old_app" "$b" || return 1
+  fi
+  ag_jnl app-old done
+}
+
+undo_app_old() {
+  local b="$txn_dir/backup/app-old"
+  ag_jlast app-old
+  [[ $REPLY == (begun|done) ]] || return 0
+  if [[ -e $b && ! -e $old_app && ! -L $old_app ]]; then /bin/mv -- "$b" "$old_app" || return 1; fi
+  ag_jnl app-old undone
+}
+
+# M8: the switch time, last. Forwarder removal waits for a boot after it.
+do_switch_time() {
+  local new="$ag_tstage/migration.json"
+  ag_jlast switch-time
+  [[ $REPLY == done ]] && return 0
+  if [[ -z $REPLY ]]; then ag_backup switch-time "$migration" && ag_jnl switch-time begun || return 1; fi
+  test_point switch-time || return 1
+  /usr/bin/jq -n --argjson t "$EPOCHSECONDS" '{from: "opencode-guard", switched_at: $t, retired: false}' > "$new" &&
+    replace_file "$migration" "$new" || return 1
+  ag_jnl switch-time done
+}
+
+undo_switch_time() {
+  local b="$txn_dir/backup/switch-time/file"
+  ag_jlast switch-time
+  [[ $REPLY == (begun|done) ]] || return 0
+  if [[ -f $b ]]; then replace_file "$migration" "$b" || return 1; else /bin/rm -f -- "$migration" || return 1; fi
+  ag_jnl switch-time undone
+}
+
 ag_switch() {
   ag_say "switching to release $ag_rid_new"
-  do_rulebook && do_rulejson && do_app && do_current && do_plugin && do_permissions && do_rc
+  if [[ $ag_kind == migrate ]]; then
+    do_rulebook && do_rulejson && do_current && do_forwarder fwd-cli opencode && do_forwarder fwd-gui opencode-gui &&
+      ag_switch_plugin && do_rc && do_app && do_app_old && do_switch_time
+  else
+    do_rulebook && do_rulejson && do_app && do_current && do_plugin && do_permissions && do_rc
+  fi
 }
 
 # ag_bounded SECONDS CMD...: CMD's status, or 124 when it runs longer.
@@ -1039,9 +1427,10 @@ ag_bounded() {
 }
 
 # The checks that need the switched install (design section 4.2): the live
-# doctor, then a bounded launch through bin/opencode whose log names the release.
+# doctor, then a bounded launch through bin/opencode whose log names the release,
+# and in a migration the same through the forwarder at OpenCode Guard's old path.
 ag_gate() {
-  local out log="$list_dir/last-launch-opencode.log" first=
+  local out
   integer rc
   ag_say 'checks after the switch:'
   if ! test_point doctor-live; then ag_failed+=('FAIL doctor (stopped at doctor-live)'); return 1; fi
@@ -1054,33 +1443,46 @@ ag_gate() {
     return 1
   fi
   if ! test_point launch-check; then ag_failed+=('FAIL launch (stopped at launch-check)'); return 1; fi
-  out=$(ag_bounded 20 "$engine/bin/opencode" --version 2>&1)
-  rc=$?
-  [[ -r $log ]] && first=$(/usr/bin/head -1 -- "$log")
-  if (( rc != 0 && rc != 124 )) && [[ $out == *'agent-guard: opencode not found'* ]]; then
-    ag_say 'skip launch check (opencode CLI not found)'
-  elif (( rc == 124 )); then
-    ag_failed+=('FAIL opencode --version through bin/opencode did not finish within 20 seconds')
-  elif (( rc )); then
-    ag_failed+=("FAIL opencode --version through bin/opencode exited $rc")
-  elif [[ $first != "Agent Guard cli $ag_rid_new "* ]]; then
-    ag_failed+=("FAIL opencode --version through bin/opencode did not run release $ag_rid_new")
-  else
-    ag_say "ok   opencode --version through bin/opencode ran release $ag_rid_new"
+  ag_launch_check "$engine/bin/opencode" bin/opencode
+  if [[ $ag_kind == migrate && -L $ocg/bin/opencode ]]; then
+    ag_launch_check "$ocg/bin/opencode" "OpenCode Guard's bin/opencode"
   fi
   (( $#ag_failed == 0 )) || { ag_say "${(F)ag_failed}"; return 1 }
 }
 
+ag_launch_check() {  # COMMAND LABEL
+  local out log="$list_dir/last-launch-opencode.log" first=
+  integer rc
+  /bin/rm -f -- "$log"
+  out=$(ag_bounded 20 "$1" --version 2>&1)
+  rc=$?
+  [[ -r $log ]] && first=$(/usr/bin/head -1 -- "$log")
+  if (( rc != 0 && rc != 124 )) && [[ $out == *'agent-guard: opencode not found'* ]]; then
+    ag_say "skip launch check (opencode CLI not found): $2"
+  elif (( rc == 124 )); then
+    ag_failed+=("FAIL opencode --version through $2 did not finish within 20 seconds")
+  elif (( rc )); then
+    ag_failed+=("FAIL opencode --version through $2 exited $rc")
+  elif [[ $first != "Agent Guard cli $ag_rid_new "* ]]; then
+    ag_failed+=("FAIL opencode --version through $2 did not run release $ag_rid_new")
+  else
+    ag_say "ok   opencode --version through $2 ran release $ag_rid_new"
+  fi
+}
+
 # K1: the stamp is the commit point, written only after the checks passed.
 ag_stamp_write() {
-  local out="$ag_tstage/stamp.json" rel="$engine/releases/$ag_rid_new" sums links
-  local -a files
+  local out="$ag_tstage/stamp.json" rel="$engine/releases/$ag_rid_new" sums links f
+  local -a files kv
   test_point stamp || return 1
   files=("$rel"/**/*(.DN) "$cc/agent-guard/rulebook.json"(N) "$app"/**/*(.DN))
   sums=$(/usr/bin/shasum -a 256 -- $files) || return 1
-  links=$(/usr/bin/jq -cn --arg c "$engine/current" --arg cv "$(/usr/bin/readlink -- "$engine/current")" \
-    --arg b "$engine/bin" --arg bv "$(/usr/bin/readlink -- "$engine/bin")" \
-    --arg p "$plugin" --arg pv "$(/usr/bin/readlink -- "$plugin")" '{($c): $cv, ($b): $bv, ($p): $pv}') || return 1
+  kv=("$engine/current" "$(/usr/bin/readlink -- "$engine/current")" "$engine/bin" "$(/usr/bin/readlink -- "$engine/bin")"
+      "$plugin" "$(/usr/bin/readlink -- "$plugin")")
+  for f in opencode opencode-gui; do
+    [[ -L $ocg/bin/$f && $(/usr/bin/readlink -- "$ocg/bin/$f") == "$engine/bin/$f" ]] && kv+=("$ocg/bin/$f" "$engine/bin/$f")
+  done
+  links=$(/usr/bin/jq -cn '[$ARGS.positional | _nwise(2) | {key: .[0], value: .[1]}] | from_entries' --args "${kv[@]}") || return 1
   print -r -- "$sums" | /usr/bin/jq -Rn --arg version "$ag_version" --arg tag "$ag_tag" --arg commit "$ag_commit" \
     --arg release "$ag_rid_new" --argjson at "$EPOCHSECONDS" --arg app_inputs "$ag_app_inputs" --argjson links "$links" \
     '{version: $version, tag: $tag, commit: $commit, release: $release, installed_at: $at, app_inputs: $app_inputs,
@@ -1104,9 +1506,12 @@ ag_cleanup() {
   ag_drop_txn
 }
 
-# Before the switch: removes the new release, its stage and the transaction.
+# Before the switch: removes the new release, its stage, the imported records this
+# transaction created and the transaction.
 ag_discard() {
   local cur=
+  test_point discard
+  undo_import || return 1
   [[ -L $engine/current ]] && cur=$(/usr/bin/readlink -- "$engine/current")
   if [[ -n $ag_rid_new && $cur != "releases/$ag_rid_new" ]]; then /bin/rm -rf -- "$engine/releases/$ag_rid_new" || return 1; fi
   /bin/rm -rf -- "$ag_tstage" || return 1
@@ -1131,11 +1536,24 @@ ag_rollback() {
   ag_jlast rollback
   if [[ -z $REPLY ]]; then ag_jnl rollback begun || return 1; fi
   test_point rollback
-  undo_rc || bad=1
-  undo_permissions || bad=1
-  undo_plugin || bad=1
-  undo_current || bad=1
-  undo_app || bad=1
+  if [[ $ag_kind == migrate ]]; then
+    undo_switch_time || bad=1
+    undo_app_old || bad=1
+    undo_app || bad=1
+    undo_rc || bad=1
+    undo_plugin_name || bad=1
+    undo_plugin_take || bad=1
+    undo_plugin || bad=1
+    undo_forwarder fwd-gui opencode-gui || bad=1
+    undo_forwarder fwd-cli opencode || bad=1
+    undo_current || bad=1
+  else
+    undo_rc || bad=1
+    undo_permissions || bad=1
+    undo_plugin || bad=1
+    undo_current || bad=1
+    undo_app || bad=1
+  fi
   undo_rulejson || bad=1
   undo_rulebook || bad=1
   if (( bad )); then
@@ -1173,6 +1591,156 @@ ag_save_record() {
   fi
   /bin/rm -f -- "$partial"
   return 1
+}
+
+# --- Retirement of OpenCode Guard (design section 8.6 and A7), after the stamp of
+# a migration. Each item runs while it is unfinished, so a rerun after a failure
+# finishes the rest; a failure leaves Agent Guard active and the migration
+# record's retired false. Journaled when a transaction is open. Never runs
+# OpenCode Guard's uninstaller, which would put back the permission values Agent
+# Guard keeps and delete the forwarders.
+
+ag_rjnl() { [[ -d $txn_dir && -f $txn_dir/journal ]] || return 0; ag_jnl "$@" }
+
+ag_retire() {
+  local tmp="$state/.retire-$$.json"
+  integer bad=0
+  [[ -f $migration ]] || return 0
+  [[ $(/usr/bin/jq -r '.retired' "$migration" 2>/dev/null) == false ]] || return 0
+  ag_say 'retiring OpenCode Guard'
+  ag_retire_rules || bad=1
+  ag_retire_engine || bad=1
+  ag_retire_note || bad=1
+  if (( bad )); then
+    /bin/rm -f -- "$tmp"
+    ag_err 'retiring OpenCode Guard is unfinished; Agent Guard is active. Fix what is named above, then run the installer or agent-guard update again.'
+    return 1
+  fi
+  # R5: the transaction's backup, OpenCode Guard's app among it, goes with the cleanup.
+  /usr/bin/jq '.retired = true' "$migration" > "$tmp" && replace_file "$migration" "$tmp" || { /bin/rm -f -- "$tmp"; return 1 }
+  /bin/rm -f -- "$tmp"
+  ag_rjnl retire done
+  ag_say 'OpenCode Guard is retired'
+}
+
+# R1, R2: opencode-guard leaves rule.json's rules (transparent_wrappers stay, as its
+# own uninstaller leaves them); then its rulebook folder. A rule.json that cannot
+# be read or written keeps both.
+ag_retire_rules() {
+  local rj="$cc/rule.json" new="$state/.retire-$$.rule.json"
+  test_point retire-rulejson || return 1
+  if [[ -e $rj ]]; then
+    if ! /usr/bin/jq -e 'type == "object"' "$rj" >/dev/null 2>&1; then
+      ag_warn "$rj cannot be read, so opencode-guard stays in its rules and $cc/opencode-guard stays; fix the file"
+      return 1
+    fi
+    if /usr/bin/jq -e '(.rules // []) | index("opencode-guard") != null' "$rj" >/dev/null 2>&1; then
+      if ! /usr/bin/jq '.rules -= ["opencode-guard"]' "$rj" > "$new" 2>/dev/null || ! replace_file "$rj" "$new"; then
+        /bin/rm -f -- "$new"
+        ag_warn "$rj cannot be written, so opencode-guard stays in its rules and $cc/opencode-guard stays"
+        return 1
+      fi
+      /bin/rm -f -- "$new"
+    fi
+  fi
+  ag_rjnl retire-rulejson done
+  test_point retire-rulebook || return 1
+  /bin/rm -rf -- "$cc/opencode-guard" || return 1
+  ag_rjnl retire-rulebook done
+}
+
+# R3a, R3b: the old engine, except bin/ with the forwarders. Its state folder holds
+# the record, so the copy in Agent Guard's state folder and the imported entries
+# are read back and compared first; state/ is removed last, so a rerun that finds
+# it gone needs no comparison.
+ag_retire_engine() {
+  local keys="$txn_dir/imported.json"
+  if [[ -e $ocg/state || -L $ocg/state ]]; then
+    ag_jlast retire-compare
+    if [[ $REPLY != done ]]; then
+      test_point retire-compare || return 1
+      if [[ -e $ocg_record ]] && ! { [[ -f $ocg_copy ]] && /usr/bin/cmp -s -- "$ocg_copy" "$ocg_record" }; then
+        ag_warn "$ocg_copy does not match $ocg_record, so $ocg/state is kept"
+        return 1
+      fi
+      if [[ -f $keys ]] && ! /usr/bin/jq -e --slurpfile o "$ocg_copy" --slurpfile k "$keys" '. as $r | all($k[0][]; . as $f | $r[$f] == $o[0][$f])' "$record" >/dev/null 2>&1; then
+        ag_warn "the entries imported into $record do not match $ocg_copy, so $ocg/state is kept"
+        return 1
+      fi
+      ag_rjnl retire-compare done
+    fi
+  fi
+  test_point retire-engine || return 1
+  /bin/rm -rf -- "$ocg/launch" "$ocg/profile.sb" "$ocg/uninstall.sh" "$ocg/vendor" "$ocg/state" || return 1
+  ag_rjnl retire-engine done
+}
+
+# R4: a note in ~/OpenCode Guard, the only change ever made there.
+ag_retire_note() {
+  local note="$old_list_dir/Moved to Agent Guard.txt" partial="$old_list_dir/.Moved to Agent Guard.txt.partial"
+  test_point retire-note || return 1
+  [[ -d $old_list_dir && ! -e $note ]] || return 0
+  print -r -- "OpenCode Guard was replaced by Agent Guard. Agent Guard reads its list from
+$list. The list in this folder is no longer read; this folder is kept." > "$partial" &&
+    /bin/mv -n -- "$partial" "$note" || { /bin/rm -f -- "$partial"; return 1 }
+  ag_rjnl retire-note done
+}
+
+# Boot time in seconds since 1970, from kern.boottime ("{ sec = N, usec = M } ...").
+boot_time() {
+  local out
+  out=$(/usr/sbin/sysctl -n kern.boottime 2>/dev/null) || return 1
+  [[ $out == (#b)'{ sec = '([0-9]##)', '* ]] || return 1
+  REPLY=$match[1]
+}
+
+# Removes the forwarders and OpenCode Guard's engine folder once no shell started
+# before the switch can remain: retirement is done and the Mac booted after the
+# switch time. If the boot time cannot be read they stay. With ignore-boot
+# (uninstall) they go whatever the boot time. Names anything else left there.
+ag_forwarders_remove() {  # [ignore-boot]
+  local f p sw tmp="$state/.stamp-$$.json"
+  local -a gone left
+  [[ -f $migration ]] || return 0
+  if [[ ${1:-} != ignore-boot ]]; then
+    [[ $(/usr/bin/jq -r '.retired' "$migration" 2>/dev/null) == true ]] || return 0
+    sw=$(/usr/bin/jq -r '.switched_at' "$migration" 2>/dev/null)
+    [[ $sw == <-> ]] && boot_time && (( REPLY > sw )) || return 0
+  fi
+  if [[ -e $ocg || -L $ocg ]]; then
+    for f in opencode opencode-gui; do
+      p="$ocg/bin/$f"
+      if [[ -L $p && $(/usr/bin/readlink -- "$p") == "$engine/bin/$f" ]]; then
+        /bin/rm -f -- "$p"
+      fi
+      /bin/rm -f -- "$ocg/bin/.$f.partial"
+    done
+    /bin/rmdir -- "$ocg/bin" "$ocg" 2>/dev/null
+    if [[ -e $ocg ]]; then
+      left=("$ocg"/**/*(DN))
+      ag_warn "kept in $ocg, not Agent Guard's: ${(j:, :)${left:-$ocg}}"
+    else
+      ag_say "removed the forwarders and $ocg"
+    fi
+  fi
+  # The stamp lists the forwarders among its links; agent-guard version must not
+  # report them missing, also when a run stopped after removing them.
+  for f in opencode opencode-gui; do
+    [[ -e $ocg/bin/$f || -L $ocg/bin/$f ]] || gone+=("$ocg/bin/$f")
+  done
+  if (( $#gone )) && [[ -f $stamp ]] &&
+     /usr/bin/jq -e '[.links | keys[] | select(IN($ARGS.positional[]))] | length > 0' "$stamp" --args "${gone[@]}" >/dev/null 2>&1; then
+    /usr/bin/jq '.links |= with_entries(select(.key | IN($ARGS.positional[]) | not))' "$stamp" --args "${gone[@]}" > "$tmp" &&
+      replace_file "$stamp" "$tmp"
+    /bin/rm -f -- "$tmp"
+  fi
+  return 0
+}
+
+# Run at the end of every successful install or update and by agent-guard update
+# (design section 8.7).
+ag_maintenance() {
+  ag_forwarders_remove
 }
 
 # --- Entries.
@@ -1257,7 +1825,10 @@ ag_install_main() {
   ag_rc_unfinished || ag_abort
   ag_volume || ag_abort
   ag_classify_configs
+  ag_ocg_checks || ag_abort
   ag_projects_check || ag_abort
+  # A migration whose retirement stopped: finish it, then install as an update.
+  if [[ $ag_ocg_state == retiring ]]; then ag_retire || ag_abort; fi
   ag_app_decide || ag_abort
   ag_new_rid
   ag_rid_new=$REPLY
@@ -1266,26 +1837,49 @@ ag_install_main() {
   ag_phase=staged
   test_point txn-open || ag_abort 'stopped at txn-open'
   ag_say "engine: $engine (release $ag_rid_new)"
+  [[ $ag_kind == migrate ]] && ag_say "migrating from OpenCode Guard (found: ${(j:, :)ag_ocg_parts})"
   ag_assemble || ag_abort "cannot assemble release $ag_rid_new"
   test_point assemble || ag_abort 'stopped at assemble'
   ag_build || ag_abort 'cannot build the release files'
   test_point build || ag_abort 'stopped at build'
+  ag_list_import || ag_abort
+  test_point list-import || ag_abort 'stopped at list-import'
   ag_list_step || ag_abort
   test_point list || ag_abort 'stopped at list'
+  ag_import || ag_abort "cannot import OpenCode Guard's permission record"
+  test_point import || ag_abort 'stopped at import'
   ag_selftest_staged || ag_abort 'the staged release failed its self-test; the installed version is unchanged'
   test_point selftest-staged || ag_abort 'stopped at selftest-staged'
+  # The list prompt can take minutes: OpenCode may have been started meanwhile.
+  if [[ $ag_kind == migrate ]]; then ag_proc_check || ag_abort 'stopped before the switch; OpenCode Guard is unchanged.'; fi
 
   ag_phase=switch
   ag_switch || ag_abort 'the switch failed'
   ag_gate || ag_abort 'the checks after the switch failed'
   ag_stamp_write || ag_abort "cannot write $stamp"
   ag_phase=committed
+  if [[ $ag_kind == migrate ]] && ! ag_retire; then
+    ag_unlock
+    exit 1
+  fi
   ag_cleanup || ag_warn 'cleanup is unfinished; the next run finishes it'
+  # Forwarders left by an earlier Agent Guard install: removed after a later boot.
+  if [[ $ag_ocg_state == forwarders-only && ! -e $migration ]]; then
+    /usr/bin/jq -n --argjson t "$EPOCHSECONDS" '{from: "forwarders", switched_at: $t, retired: true}' > "$state/.migration-$$.json" &&
+      replace_file "$migration" "$state/.migration-$$.json"
+    /bin/rm -f -- "$state/.migration-$$.json"
+  fi
+  ag_maintenance
   ag_unlock
 
   ag_say "Agent Guard $ag_version is installed (release $ag_rid_new)."
   ag_say 'PATH: new terminal windows run opencode inside the guard'
   ag_say "GUI: $app (drag it to the Dock)"
+  if [[ $ag_kind == migrate ]]; then
+    ag_say "OpenCode Guard is replaced. A Dock item for OpenCode Guard.app no longer opens; drag $app to the Dock instead."
+    ag_say "Terminal windows opened before now reach Agent Guard through $ocg/bin, which the first agent-guard update after a restart removes."
+    ag_say "Your list is now $list; $old_list is no longer read."
+  fi
   "$engine/current/launch" find-app >/dev/null 2>&1 || ag_warnings+=('OpenCode.app not found: install it, then open Agent Guard')
   for w in $ag_warnings; do ag_say "warning: $w"; done
   if [[ $ag_gui == 1 || -t 1 ]]; then
@@ -1310,6 +1904,8 @@ ag_recover_main() {
   [[ -f $stamp ]] && rel=$(/usr/bin/jq -r '.release // empty' "$stamp" 2>/dev/null)
   if [[ $rel == "$ag_rid_new" ]]; then
     ag_say "finishing the cleanup after release $ag_rid_new"
+    # Uninstall goes on without it and repeats retirement itself (U6).
+    if [[ $ag_kind == migrate ]] && ! ag_retire && [[ $caller != uninstall ]]; then exit 1; fi
     ag_cleanup
     exit
   fi
@@ -1317,6 +1913,12 @@ ag_recover_main() {
     ag_say "discarding the unfinished install of release $ag_rid_new"
     ag_discard
     exit
+  fi
+  # OpenCode started since the interrupted run may hold either guard's profile;
+  # finishing or undoing the switch would give it the other guard's plugin.
+  if [[ $ag_kind == migrate ]]; then
+    ag_tree="$engine/releases/$ag_rid_new"
+    ag_proc_check || exit 1
   fi
   ag_jlast rollback
   if [[ -n $REPLY || $caller == uninstall ]]; then
@@ -1327,6 +1929,7 @@ ag_recover_main() {
   ag_say "resuming the unfinished switch to release $ag_rid_new"
   if ag_switch && ag_gate && ag_stamp_write; then
     ag_say "Agent Guard $ag_version is installed (release $ag_rid_new)."
+    if [[ $ag_kind == migrate ]]; then ag_retire || exit 1; fi
     ag_cleanup || ag_warn 'cleanup is unfinished; the next run finishes it'
     exit 0
   fi

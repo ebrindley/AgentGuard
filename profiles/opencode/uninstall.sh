@@ -1,7 +1,8 @@
 #!/bin/zsh
 # usage: uninstall.sh   (agent-guard uninstall runs it)
 # Removes Agent Guard in this order (docs/DESIGN.md section 6): PATH blocks, the
-# permission values it set, the app, the rulebook, then the plugin and last the
+# permission values it set, the app, the rulebook, after a migration the
+# forwarders at OpenCode Guard's old command paths, then the plugin and last the
 # engine folder. Until the plugin goes, a start without a PATH block meets the
 # plugin's unguarded refusal, and an old terminal still reaches working shims.
 # Each step can be repeated, so a rerun after a failed or interrupted run
@@ -80,12 +81,25 @@ main() {
   fi
   /bin/rm -rf -- "$cc/agent-guard" || kept+=("$cc/agent-guard")
 
-  # U7: a copy of the record before the engine goes, if any value was not restored.
+  # U6: after a migration, OpenCode Guard's retirement if it is unfinished, then the
+  # forwarders at its old command paths and its engine folder, whatever the boot
+  # time. ~/OpenCode Guard stays.
+  test_point uninstall-forwarders || stop uninstall-forwarders
+  if [[ -f $migration ]]; then
+    ag_retire || kept+=("OpenCode Guard's files named above")
+    ag_forwarders_remove ignore-boot
+    [[ -e $ocg ]] && kept+=("$ocg")
+  fi
+
+  # U7: a copy of the record before the engine goes, if any value was not restored,
+  # and of OpenCode Guard's record that was imported into it.
   test_point uninstall-backup || stop uninstall-backup
   if (( $#ag_unrestored || unreadable )); then
     backup="$list_dir/permissions-backup.json" partial="$list_dir/.permissions-backup.json.partial"
-    if /bin/mkdir -p -- "$list_dir" && /bin/cp -- "$record" "$partial" && /bin/mv -f -- "$partial" "$backup"; then
+    if /bin/mkdir -p -- "$list_dir" && /bin/cp -- "$record" "$partial" && /bin/mv -f -- "$partial" "$backup" &&
+       { [[ ! -f $ocg_copy ]] || { /bin/cp -- "$ocg_copy" "$partial" && /bin/mv -f -- "$partial" "$list_dir/opencode-guard-permissions.json" } }; then
       ag_warn "original permission settings saved to $backup"
+      [[ -f $ocg_copy ]] && ag_warn "OpenCode Guard's permission record saved to $list_dir/opencode-guard-permissions.json"
     else
       /bin/rm -f -- "$partial"
       ag_err "could not save $record, so $engine is kept. Not restored: ${(j:, :)ag_unrestored:-the record is unreadable}"
