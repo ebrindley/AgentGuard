@@ -178,7 +178,9 @@ stub_src="$run/stub-src"
 /bin/mkdir -p "$stub_src"
 /bin/cp -R "$source_root"/{engine,profiles,scripts,install.sh,LICENSE} "$stub_src/"
 print -r -- '#!/bin/zsh
-# Test stub: records its arguments, its pid and the lock owner.
+# Test stub: records its arguments, its pid and the lock owner. The test_point
+# line is the production seam form that scripts/check-seams.zsh requires.
+test_point() { : }
 print -rl -- "pid $$" "lock $(<"'"$state"'/lock/pid")" "self ${0:A}" "$@" > "'"$run"'/stub-args"' > "$stub_src/profiles/opencode/install.sh"
 build "$stub_src" 0.0.9 || fail "B7 cannot build the stub release"
 new_home "$home" >/dev/null

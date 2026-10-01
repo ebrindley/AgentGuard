@@ -37,4 +37,14 @@ opencode_check() {
     else
       print "skip plugin check (opencode CLI not found)"
     fi
+    # Live only: OpenCode Guard's plugin would enforce its own rules next to this one.
+    if (( ! staged )); then
+      local old="$home/.config/opencode/plugins/opencode-guard.js"
+      if [[ ! -e $old && ! -L $old ]] || within "${old:A}" "$engine/releases"; then
+        print "ok   one guard plugin"
+      else
+        print "FAIL OpenCode Guard's plugin is also in ~/.config/opencode/plugins"
+        ok=0
+      fi
+    fi
 }

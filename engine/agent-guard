@@ -1,10 +1,10 @@
 #!/bin/zsh
-# usage: agent-guard doctor|version
+# usage: agent-guard doctor|version|update|uninstall
 emulate -L zsh
-setopt err_exit no_unset pipe_fail extended_glob
+setopt no_unset pipe_fail extended_glob
 
 die() { print -ru2 -- "agent-guard: $*"; exit 1 }
-usage() { print -ru2 -- 'usage: agent-guard doctor|version'; exit 2 }
+usage() { print -ru2 -- 'usage: agent-guard doctor|version|update|uninstall'; exit 2 }
 
 # This file is bin/agent-guard inside a release folder. Only a folder shaped like
 # one is trusted to supply the account lookup; after it, the release must be a
@@ -12,15 +12,146 @@ usage() { print -ru2 -- 'usage: agent-guard doctor|version'; exit 2 }
 release=${0:A:h:h}
 [[ ${release:h:t} == releases && ${release:t} == [0-9A-Za-z.+-]## && -f $release/RELEASE && -f $release/account.zsh ]] ||
   die "not an installed release: $release"
-source "$release/account.zsh"
+source "$release/account.zsh" || die 'cannot load account.zsh'
 account_home || die 'cannot resolve account home'
 home=${REPLY:A}
 engine="$home/Library/Application Support/AgentGuard"
 [[ ${release:h} == "$engine/releases" ]] || die "not an installed release: $release"
 
+# The installer's functions: guard probe, lock and recovery (profiles/opencode/install.sh).
+load_installer() {
+  source "$release/install.sh" --lib || die "cannot load $release/install.sh"
+  ag_init || exit 1
+}
+
+# Prints the stamp, then each installed path that no longer matches it. Read-only.
+version() {
+  local stamp="$engine/state/stamp.json" out p want got
+  local -a v paths present
+  local -A files
+  integer drift=0
+  if [[ ! -f $stamp ]]; then
+    print -r -- "Agent Guard $(<"$release/VERSION"), release $(<"$release/RELEASE"): no version stamp in $stamp"
+    exit 1
+  fi
+  out=$(/usr/bin/jq -r '.version, .tag, .commit, .release, (.installed_at | tostring)' "$stamp") || die "cannot read $stamp"
+  v=("${(@f)out}")
+  (( $#v == 5 )) && [[ $v[5] == <-> ]] || die "cannot read $stamp"
+  print -r -- "Agent Guard $v[1] ($v[2], commit ${v[3][1,12]}), release $v[4], installed $(/bin/date -u -r $v[5] '+%Y-%m-%d %H:%M:%S UTC')"
+  out=$(/usr/bin/jq -r '.files | to_entries[] | .key, .value' "$stamp") || die "cannot read $stamp"
+  v=("${(@f)out}")
+  files=("${(@)v}")
+  paths=(${(k)files})
+  for p in ${(o)paths}; do
+    if [[ -f $p ]]; then present+=("$p"); else print -r -- "missing: $p"; drift=1; fi
+  done
+  if (( $#present )); then
+    out=$(/usr/bin/shasum -a 256 -- $present) || die 'cannot hash the installed files'
+    for p in "${(@f)out}"; do
+      got=${p[1,64]} p=${p[67,-1]}
+      [[ ${files[$p]:-} == "$got" ]] || { print -r -- "changed: $p"; drift=1 }
+    done
+  fi
+  # Files added to the release folder.
+  for p in "$engine/releases/$(/usr/bin/jq -r .release "$stamp")"/**/*(.DN); do
+    (( ${+files[$p]} )) || { print -r -- "extra: $p"; drift=1 }
+  done
+  out=$(/usr/bin/jq -r '.links | to_entries[] | .key, .value' "$stamp") || die "cannot read $stamp"
+  v=("${(@f)out}")
+  for p want in "${(@)v}"; do
+    if [[ ! -L $p ]]; then print -r -- "missing: $p"; drift=1
+    elif [[ $(/usr/bin/readlink -- "$p") != "$want" ]]; then print -r -- "changed: $p"; drift=1
+    fi
+  done
+  exit $drift
+}
+
+# Older: each dot-separated field of both tags is a number and $1 sorts before $2.
+older() {
+  local -a a b
+  integer i
+  a=("${(@s:.:)${1#v}}") b=("${(@s:.:)${2#v}}")
+  for i in {1..$(( $#a > $#b ? $#a : $#b ))}; do
+    [[ ${a[i]:-0} == <-> && ${b[i]:-0} == <-> ]] || return 1
+    (( ${a[i]:-0} < ${b[i]:-0} )) && return 0
+    (( ${a[i]:-0} > ${b[i]:-0} )) && return 1
+  done
+  return 1
+}
+
+# Runs the latest release's bootstrap, with the same verification, staging, gate
+# and rollback as a fresh install. Downloads use this compiled base, never the
+# environment.
+update() {
+  local repo='https://github.com/ebrindley/AgentGuard'; local -a curl_proto=(--proto '=https' --proto-redir '=https')
+  local url="$repo/releases/latest/download/install.sh" text tag cur=
+  local -a lines tags
+  integer rc
+  load_installer
+  ag_probe || exit 1
+  ag_lock || exit 1
+  ag_recover update || { ag_unlock; exit 1 }
+  text=$(/usr/bin/curl -q -fsSL $curl_proto -- "$url")
+  rc=$?
+  (( rc == 0 )) || { ag_unlock; die "download failed (curl $rc): $url" }
+  lines=("${(@f)text}")
+  [[ ${lines[-1]} == '{ agent_guard_bootstrap "$@" }' ]] ||
+    { ag_unlock; die "$url is not an Agent Guard bootstrap (unexpected last line)" }
+  tags=(${(M)lines:#[[:space:]]#local tag=\'v[0-9A-Za-z.+-]##\' version=\'[0-9A-Za-z.+-]##\'})
+  (( $#tags == 1 )) || { ag_unlock; die "$url does not name one release tag" }
+  tag=${${tags[1]#*local tag=\'}%%\'*}
+  [[ -f $stamp ]] && cur=$(/usr/bin/jq -r '.tag // empty' "$stamp" 2>/dev/null)
+  if [[ $tag == "$cur" ]]; then
+    ag_unlock
+    print -r -- "Agent Guard ${tag#v} is current."
+    exit 0
+  fi
+  if [[ -n $cur ]] && older "$tag" "$cur"; then
+    ag_unlock
+    print -r -- "The installed release ($cur) is newer than the latest release ($tag); nothing changed."
+    exit 0
+  fi
+  print -r -- "updating to Agent Guard ${tag#v}"
+  # exec keeps this process, so the bootstrap and its installer keep the lock.
+  exec /bin/zsh -fc "$text" install.sh --update
+}
+
+# Recovery first: it may roll back an open switch and delete the release this
+# file runs from, so the uninstaller is found again afterwards.
+uninstall() {
+  local u
+  integer left
+  load_installer
+  ag_probe || exit 1
+  ag_lock || exit 1
+  ag_recover uninstall || { ag_unlock; exit 1 }
+  if [[ -L $engine/current && -f $engine/current/uninstall.sh ]]; then
+    u="$engine/current"
+    u="${u:A}/uninstall.sh"
+  elif [[ -f $txn_dir/uninstall.sh ]]; then
+    u="$txn_dir/uninstall.sh"
+  elif [[ -z $(print -l "$engine"/releases/*(DN)) ]]; then
+    # Recovery rolled back a fresh install: what is left is the state folder, with
+    # record entries only for values the rollback could not restore.
+    left=0
+    ag_record_left && left=1
+    ag_save_record || { ag_unlock; die "could not save $record; $engine is kept" }
+    ag_remove_engine || die "cannot remove $engine"
+    (( left )) && die "permission values were not restored; the record is saved to $list_dir/permissions-backup.json"
+    print -r -- "Agent Guard removed. Your list is still at $list_dir."
+    exit 0
+  else
+    ag_unlock
+    die "no installed release in $engine (current is missing); its permission record is $record. Nothing changed."
+  fi
+  exec /bin/zsh -f "$u"
+}
+
 (( $# == 1 )) || usage
 case $1 in
   (doctor) exec "$release/launch" check ;;
-  (version) print -r -- "Agent Guard $(<"$release/VERSION"), release $(<"$release/RELEASE")" ;;
+  (version) version ;;
+  (update) update ;;
+  (uninstall) uninstall ;;
   (*) usage ;;
 esac

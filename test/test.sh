@@ -144,8 +144,14 @@ only_plugin() {
   [[ ${#found} == 1 && ${found[1]:t} == agent-guard.js ]]
 }
 check "plugin folder holds no other .js or .ts file" only_plugin
-check "agent-guard version names the version and release" test "$("$engine/bin/agent-guard" version)" = "Agent Guard $version, release $rid"
-refuses "agent-guard lists only doctor and version" "usage: agent-guard doctor|version" "$engine/bin/agent-guard"
+version_line() {
+  setopt local_options extended_glob
+  local out
+  out=$("$engine/bin/agent-guard" version) &&
+    [[ $out == "Agent Guard $version ("(v$version|checkout)", commit "[0-9A-Za-z]##"), release $rid, installed "[0-9-]##" "[0-9:]##" UTC" ]]
+}
+check "agent-guard version names the version and release and reports no drift" version_line
+refuses "agent-guard lists its commands" "usage: agent-guard doctor|version|update|uninstall" "$engine/bin/agent-guard"
 check "rulebook agent-guard" /usr/bin/jq -e '.name == "agent-guard"' "$cc/agent-guard/rulebook.json"
 check "rule.json lists agent-guard and keeps opencode-guard" /usr/bin/jq -e '.rules == ["agent-guard", "opencode-guard"]' "$cc/rule.json"
 new_blocks() {
@@ -170,7 +176,6 @@ for n in 2 3; do
 done
 release="$engine/releases/$rid"
 check "reinstall keeps one plugin, the link" only_plugin
-/bin/cp "$orig/plugin.js" "$old_plugin"
 
 /usr/bin/awk -v h="$home" '
   /^ALLOW -/ { print; print h "/Projects/archive/live"; print h "/Library"; print "/"; next }
@@ -361,6 +366,9 @@ out=$("$engine/bin/agent-guard" doctor 2>&1) && [[ $out == *"ok   plugins loaded
   pass "doctor passes with the live plugin meanwhile" || { fail "doctor passes with the live plugin meanwhile"; print -r -- "$out" }
 /bin/rm -rf "$next"
 
+# OpenCode Guard's plugin next to Agent Guard's: doctor names it; uninstall leaves it.
+/bin/cp "$orig/plugin.js" "$old_plugin"
+refuses "doctor fails with OpenCode Guard's plugin also installed" "FAIL OpenCode Guard's plugin is also in" "$engine/bin/agent-guard" doctor
 /bin/zsh "$engine/current/uninstall.sh" >/dev/null 2>&1
 [[ ! -e $engine && ! -L $home/.config/opencode/plugins/agent-guard.js && ! -e $cc/agent-guard ]] && pass "uninstall" || fail "uninstall"
 check "rc block removed" sh -c "! /usr/bin/grep -q agent-guard '$home/.zshrc' '$home/.zprofile'"
