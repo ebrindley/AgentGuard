@@ -6,8 +6,8 @@ home=${HOME:A}
 engine="$home/Library/Application Support/AgentGuard"
 record="$engine/state/permissions.json"
 cc="$home/.cc-safety-net/rules"
-marker_start='# >>> opencode-guard >>>'
-marker_end='# <<< opencode-guard <<<'
+marker_start='# >>> agent-guard >>>'
+marker_end='# <<< agent-guard <<<'
 
 warn() { print -ru2 -- "warning: $*" }
 
@@ -16,7 +16,7 @@ for rc in "$home/.zprofile" "$home/.zshrc" "$home/.bash_profile"; do
   if /usr/bin/grep -Fxq -- "$marker_end" "$rc"; then
     /usr/bin/sed -i '' "/^$marker_start\$/,/^$marker_end\$/d" "${rc:A}"
   else
-    warn "${rc:t} has an unfinished opencode-guard block; remove it by hand"
+    warn "${rc:t} has an unfinished agent-guard block; remove it by hand"
   fi
 done
 
@@ -37,10 +37,10 @@ if [[ -e $record ]]; then
   done
 fi
 
-/bin/rm -f "$home/.config/opencode/plugins/opencode-guard.js"
-/bin/rm -rf "$home/Applications/Agent Guard.app" "$cc/opencode-guard"
+/bin/rm -f "$home/.config/opencode/plugins/agent-guard.js"
+/bin/rm -rf "$home/Applications/Agent Guard.app" "$cc/agent-guard"
 if [[ -e $cc/rule.json ]]; then
-  if /usr/bin/jq '.rules -= ["opencode-guard"]' "$cc/rule.json" > "$cc/rule.json.tmp" 2>/dev/null; then
+  if /usr/bin/jq '.rules -= ["agent-guard"]' "$cc/rule.json" > "$cc/rule.json.tmp" 2>/dev/null; then
     /bin/mv -f "$cc/rule.json.tmp" "$cc/rule.json"
   else
     /bin/rm -f "$cc/rule.json.tmp"

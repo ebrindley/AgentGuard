@@ -28,8 +28,8 @@ The engine as built (stage 1) is zsh and uses only macOS tools (`sandbox-exec`, 
 
 | Part | Built as |
 |---|---|
-| Launcher | `engine/launch`. Takes the login name from `id -un` and home from `dscl /Search -read /Users/<login> NFSHomeDirectory`, and stops if that is missing, `/` or not a folder. Only then does it source `profiles/opencode/harness.zsh` and `hooks.zsh` from `~/Library/Application Support/AgentGuard/` under that home, and set `HOME` to it. `HOME` and `USER` from the environment cannot choose the profile. Finds the real CLI on PATH, skipping only its own shim (section 10, rule 8), then in `cli_search`; finds the app in `app_paths`, then by bundle ID through Spotlight. In every mode, before the nested-launch check, unsets `env_unset` and exports `env_set` except the nesting marker; exports the marker only just before it execs under `sandbox-exec`. |
-| Nested launch | If `OPENCODE_SANDBOXED=1` and a trivial `sandbox-exec` call fails (the caller is already sandboxed), `cli` runs the harness directly and every other mode refuses. |
+| Launcher | `engine/launch`. Takes the login name from `id -un` and home from `dscl /Search -read /Users/<login> NFSHomeDirectory`, and stops if that is missing, `/` or not a folder. Only then does it source `profiles/opencode/harness.zsh` and `hooks.zsh` from `~/Library/Application Support/AgentGuard/` under that home, and set `HOME` to it. `HOME` and `USER` from the environment cannot choose the profile. Finds the real CLI on PATH, then in `cli_search`, skipping any candidate whose resolved path is inside a guard shim folder: its own `bin/` or OpenCode Guard's `~/Library/Application Support/OpenCodeGuard/bin` (section 10, rule 8). Finds the app in `app_paths`, then by bundle ID through Spotlight. In every mode, before the nested-launch check, unsets `env_unset` and exports `env_set`. It sets its own nesting marker, `AGENT_GUARD_SANDBOXED=1`, for every harness, only just before it execs under `sandbox-exec`. |
+| Nested launch | If `AGENT_GUARD_SANDBOXED=1`, or OpenCode Guard's `OPENCODE_SANDBOXED=1` until step 11, and a trivial `sandbox-exec` call fails (the caller is already sandboxed), `cli` runs the harness directly and every other mode refuses. |
 | List parser | In `engine/launch`. Rules in section 4. |
 | Profile builder | Fills the slots of `engine/profile.sb` (`@WRITABLE@`, `@WRITABLE_GUI@`, `@USER_RULES@`, `@PROTECTED@`, `@PROTECTED_NAMES@`) from the profile and the list, and passes `HOME`, `DARWIN_TEMP`, `DARWIN_CACHE` and `GUI` as `-D` parameters. Rule order in section 3. |
 | Log | `~/Agent Guard/last-launch-opencode.log`, rewritten at each launch: skipped, refused and overridden entries; the resolved ALLOW, READ ONLY and DENY sets; what OpenCode can always write. |
@@ -38,7 +38,7 @@ The engine as built (stage 1) is zsh and uses only macOS tools (`sandbox-exec`, 
 | cc-safety-net | Version 2.4.14, unmodified, in `engine/vendor/cc-safety-net`. |
 | Installer and uninstaller | `install.sh` forwards to `profiles/opencode/install.sh`; `profiles/opencode/uninstall.sh` is copied into the engine folder. Section 6. |
 
-Launcher modes: `cli` (the `opencode` shim), `gui` (the `opencode-gui` shim, used by the app; refuses if OpenCode is already running and shows failures as an alert), `profile` (prints the generated SBPL) and `check` (the installer's self-test: a protected write is denied, a temp write is allowed, `open` is denied, then the profile's `check_hook`). The installer also calls an internal `find-app` mode. The built launcher loads only the OpenCode profile, and its nested-launch check, log name and message prefix are OpenCode's.
+Launcher modes: `cli` (the `opencode` shim), `gui` (the `opencode-gui` shim, used by the app; refuses if OpenCode is already running and shows failures as an alert), `profile` (prints the generated SBPL) and `check` (the installer's self-test: a protected write is denied, a temp write is allowed, `open` is denied, then the profile's `check_hook`). The installer also calls an internal `find-app` mode. The built launcher loads only the OpenCode profile, and its log name and some messages ("OpenCode needs", "opencode not found") are OpenCode's.
 
 At step 8 the launcher becomes one Rust binary with the same parts: account lookup, list parser, profile builder, log and state. Profiles become TOML embedded in the binary (section 3), hooks become Rust functions and one module builds the Seatbelt profile. The plugin stays JavaScript and cc-safety-net stays vendored. It reaches the two existing installs through `update`, after both switched on the zsh engine, so migration failures and rewrite failures stay separate (section 7).
 
@@ -49,11 +49,11 @@ Install layout as built:
 | `~/Library/Application Support/AgentGuard/` | `launch`, `profile.sb`, `uninstall.sh`; shims `bin/opencode` and `bin/opencode-gui`; `profiles/opencode/`; `vendor/cc-safety-net/`; `state/rules.json` and the permission record `state/permissions.json` |
 | `~/Agent Guard/` | `Guard List.txt` and the launch log |
 | `~/Applications/Agent Guard.app` | An AppleScript applet that runs `bin/opencode-gui`, ad-hoc signed |
-| `~/.config/opencode/plugins/opencode-guard.js` | The plugin |
-| `~/.cc-safety-net/rules/opencode-guard/` | The rulebook, plus an entry in `~/.cc-safety-net/rules/rule.json` |
-| `.zprofile`, `.zshrc`, `.bash_profile` if present | A PATH block between `# >>> opencode-guard >>>` markers that puts `bin/` first |
+| `~/.config/opencode/plugins/agent-guard.js` | The plugin |
+| `~/.cc-safety-net/rules/agent-guard/` | The rulebook, named `agent-guard`, plus an entry in `~/.cc-safety-net/rules/rule.json` |
+| `.zprofile`, `.zshrc`, `.bash_profile` if present | A PATH block between `# >>> agent-guard >>>` markers that puts `bin/` first |
 
-The plugin file name, PATH markers, rulebook, status tool, bypass variable, message prefix, nesting marker and app bundle ID are still OpenCode Guard's; step 3 replaces them (section 12). Until the migration (step 5), this installer is for development and disposable-home tests and must not run over an OpenCode Guard install (section 10).
+None of these names is shared with OpenCode Guard, and neither are the status tool, bypass variable, message prefix, nesting marker or app bundle ID (`io.github.ebrindley.agentguard`); the names are listed in section 12, step 3. The launcher still honors OpenCode Guard's nesting marker until step 11 and skips its shim folder. An existing OpenCode Guard PATH block, rulebook or plugin file is left unchanged. Until the migration (step 5), this installer is for development and disposable-home tests and must not run over an OpenCode Guard install (section 10).
 
 ## 3. Harness profiles
 
@@ -79,7 +79,7 @@ The contract. "Planned" fields do not exist in the built engine.
 | `protected` | Paths whose symlink targets are resolved and protected at launch | `protected_paths` plus `~/.cc-safety-net` | Same as `protected_paths` |
 | `protected_names` | Names whose symlinks directly in the launch folder are resolved at launch | `.opencode`, `opencode.json`, `opencode.jsonc`, `tui.json`, `tui.jsonc` | `.pi`, `.omp` and the cross-harness folders below |
 | `protected_fragment` | SBPL added at the end of the final deny block | `protected.sb`: the name regexes and `.cc-safety-net` | `pi-protected.sb`, below |
-| `env_unset`, `env_set` | Environment changes, applied in every mode; the nesting marker is set only before exec | Unset `ELECTRON_RUN_AS_NODE`, `OPENCODE_SIDECAR_V2`, `CC_SAFETY_NET_HOME`, `CC_SAFETY_NET_WORKTREE`, `SAFETY_NET_WORKTREE`; set `OPENCODE_SANDBOXED=1`, `CC_SAFETY_NET_PARANOID_RM=1` | Set `NPM_CONFIG_USERCONFIG=/dev/null` |
+| `env_unset`, `env_set` | Environment changes, applied in every mode. The engine sets its nesting marker itself; profiles do not list it | Unset `ELECTRON_RUN_AS_NODE`, `OPENCODE_SIDECAR_V2`, `CC_SAFETY_NET_HOME`, `CC_SAFETY_NET_WORKTREE`, `SAFETY_NET_WORKTREE`; set `CC_SAFETY_NET_PARANOID_RM=1` | Set `NPM_CONFIG_USERCONFIG=/dev/null` |
 | `prepare_hook` | Runs after the profile is built, before the state write and exec | `opencode_prepare`: creates `~/.config/opencode`, its `.gitignore` and a minimal `opencode.json` if none exists | `pi_prepare`: resolves the active git hooks folder; refuses symlinked `.pi` and `.omp` layouts |
 | `check_hook` | Extra step in `check` | `opencode_check`: runs `opencode serve` under the guard and looks for the status tool | `pi_check` |
 | `allow_fragment` | Planned. SBPL added after `writable`, before the list rules | None | `pi-allow.sb`, below |
@@ -87,7 +87,7 @@ The contract. "Planned" fields do not exist in the built engine.
 | `launch_hook` | Planned. Adjusts the harness arguments | None | Adds `--extension <plugin>` for agent sessions, not for administrative subcommands |
 | `binding_file` | Planned. Recorded executable and interpreter paths | None | Imported from `~/.config/pi-sandbox-guard/executables.conf` (section 11) |
 | `start_folder` | Planned for step 10. What `@project` means (section 4) | Defined at step 10 from `opencode [project]` | `PI_PROJECT`, else git top level, else the launch folder |
-| `plugin_dir`, `plugin_files` | Planned. Where the installer puts the plugin | Hard-coded in the installer as `~/.config/opencode/plugins/opencode-guard.js` | `~/.pi/agent/extensions` |
+| `plugin_dir`, `plugin_files` | Planned. Where the installer puts the plugin | Hard-coded in the installer as `~/.config/opencode/plugins/agent-guard.js` | `~/.pi/agent/extensions` |
 | `install_hook` | Planned. Harness-specific install steps | The permission merge, now inline in `install.sh` | None |
 | `inner_sandbox` | Planned. How to switch off a harness's own Seatbelt, or that the harness is unsupported | None | None |
 
@@ -111,7 +111,7 @@ protected_names=(.opencode opencode.json opencode.jsonc tui.json tui.jsonc)
 protected_fragment=protected.sb
 gui_args=(--no-sandbox)
 env_unset=(ELECTRON_RUN_AS_NODE OPENCODE_SIDECAR_V2 CC_SAFETY_NET_HOME CC_SAFETY_NET_WORKTREE SAFETY_NET_WORKTREE)
-env_set=(OPENCODE_SANDBOXED=1 CC_SAFETY_NET_PARANOID_RM=1)
+env_set=(CC_SAFETY_NET_PARANOID_RM=1)
 prepare_hook=opencode_prepare
 check_hook=opencode_check
 ```
@@ -219,10 +219,10 @@ Recommendation: cc-safety-net for shell commands in every harness, plus Agent Gu
 The OpenCode plugin as built (`profiles/opencode/plugin.js`):
 
 - **Guard probe.** It creates a file in the engine's `state/` folder. EPERM means guarded. Success, any other error, a missing folder or a symlinked folder means unguarded.
-- **Unguarded refusal.** Unguarded, it refuses every tool except `invalid`, `question`, `todowrite`, `webfetch`, `websearch`, `plan_exit` and the status tool, with a message to quit and open Agent Guard or run `opencode` from a new terminal. `OPENCODE_GUARD_BYPASS=1` lifts the refusal. This also covers any launcher that bypasses the guard, including custom wrappers.
+- **Unguarded refusal.** Unguarded, it refuses every tool except `invalid`, `question`, `todowrite`, `webfetch`, `websearch`, `plan_exit` and the status tool, with a message to quit and open Agent Guard or run `opencode` from a new terminal. `AGENT_GUARD_BYPASS=1` lifts the refusal; OpenCode Guard's `OPENCODE_GUARD_BYPASS` does not. This also covers any launcher that bypasses the guard, including custom wrappers.
 - **Path checks.** Guarded, it refuses every tool if cc-safety-net fails to load. `read`, `glob`, `grep`, `list` and `lsp` are refused under DENY. `edit`, `write` and each path in `apply_patch` are refused when the path is protected (the engine folder, the list folder, `~/.config/opencode`, `~/.cc-safety-net` or a protected name on the path as typed or as resolved), under DENY or outside ALLOW and temp. Writes are refused when `state/rules.json` could not be read.
 - **Shell commands** go to cc-safety-net 2.4.14, loaded from the engine's `vendor/`. The profile sets `CC_SAFETY_NET_PARANOID_RM=1` and unsets `CC_SAFETY_NET_HOME`, `CC_SAFETY_NET_WORKTREE` and `SAFETY_NET_WORKTREE`. Guarded, the plugin also deletes those three from its own environment and sets `CC_SAFETY_NET_PARANOID_RM=1` before it loads cc-safety-net; unguarded, it leaves the environment alone. The installer adds an Agent Guard rulebook.
-- **Status tool** `opencode_guard_status` reports whether the guard is active. `check` looks for it.
+- **Status tool** `agent_guard_status` reports whether the guard is active. `check` looks for it.
 
 cc-safety-net 2.4.14 ships entry points for OpenCode and Pi, and a hook mode for Claude Code, Codex, Copilot CLI, Cursor, Gemini CLI, Grok Build, Kimi Code, Antigravity CLI, Amp, OpenClaw and Hermes Agent. One upstream blocker is less to maintain than a second analyzer (pi-sandbox-guard's `src/validate-bash-command.sh`, 4,417 lines).
 
@@ -367,7 +367,7 @@ zsh test/test.sh
 
 **Golden fixtures.** `test/fixtures/opencode-guard-1.0.3` holds unmodified `engine/launch` and `engine/profile.sb` from OpenCode Guard v1.0.3, commit `9242c1ad45c895efd63e903e1b27d7bab53620ad`. `test/golden.mjs` first checks that the launcher's account lookup returns the real account home when `HOME` and `USER` are spoofed. It then generates the complete SBPL for an empty and a nested list with both launchers and compares them byte for byte, replacing only `OpenCodeGuard` and `OpenCode Guard` with the Agent Guard names. It proves profile bytes only. The fixtures stay unchanged. When a later step changes the profile on purpose (step 7's package-store protection, for example), the golden test compares against the fixture plus that step's recorded, reviewed difference, not an edited fixture.
 
-**Engine adapter.** `test/test.sh` runs 76 checks in a disposable home: 44 shell checks (install, permission merge, list refusals and log, real Seatbelt enforcement, CLI launch, nested launch, uninstall) and 32 plugin checks from `test/plugin.mjs` in four modes (unguarded, bypass, guarded, symlinked state folder). It needs Node and the OpenCode CLI. Step 2 moves engine specifics behind an adapter (install into the disposable home, run `profile`, `cli`, `gui` and `check`, inject the test home), so the same checks run against the zsh engine now and the Rust engine at step 8.
+**Engine adapter.** `test/test.sh` runs 96 checks in a disposable home: 59 shell checks (install and installed names, permission merge, list refusals and log, real Seatbelt enforcement, CLI launch and nested launch with each nesting marker, the shim loop in both PATH orders and through symlinks, OpenCode Guard's PATH blocks, rulebook and plugin file left unchanged, uninstall) and 37 plugin checks from `test/plugin.mjs` in five modes (unguarded, bypass, OpenCode Guard's bypass variable, guarded, symlinked state folder). It needs Node and the OpenCode CLI. The shim loop checks install the unmodified v1.0.3 fixture launcher as OpenCode Guard and give up after 20 seconds, so a loop fails instead of hanging. Engine specifics sit behind an adapter, `test/engines/<name>.mjs`, with four functions: `name`; `stage`, which copies `engine/`, `profiles/` and `install.sh` into a disposable tree and injects the test home into the copied launcher; `launcher`, the command that runs the installed launcher; and `identity`, which runs the unmodified account lookup. Both tests take `--engine NAME` (default `zsh`), so the same checks run against the zsh engine now and the Rust engine at step 8.
 
 **Test-only home injection.** Today `test/fixture-home.mjs` rewrites the account lookup in a copied launcher to a fixed home and fails unless that line occurs exactly once. The installed launcher has no environment variable or flag that chooses home. Rewriting source cannot work on a Rust binary, so the Rust launcher gets a home injection compiled only into test builds, and the release build is checked for its absence.
 
@@ -487,11 +487,11 @@ The permission record maps each config file to `{"orig": …, "wrote": …}` for
    - replaces OpenCode Guard's `bin/opencode` and `bin/opencode-gui` with forwarders (rule 7);
    - removes each old PATH block and writes Agent Guard's block, one startup file at a time, editing a symlinked startup file at its target as the old installer does;
    - puts Agent Guard's plugin in `~/.config/opencode/plugins` and removes `opencode-guard.js`;
-   - installs `~/Applications/Agent Guard.app` with Agent Guard's own bundle ID (proposed `io.github.ebrindley.agentguard`, step 3) and removes `OpenCode Guard.app`. A Dock item for the old app then fails to open; it cannot start OpenCode unguarded. The installer says to add the new app to the Dock.
+   - installs `~/Applications/Agent Guard.app` with Agent Guard's own bundle ID (`io.github.ebrindley.agentguard`, since step 3) and removes `OpenCode Guard.app`. A Dock item for the old app then fails to open; it cannot start OpenCode unguarded. The installer says to add the new app to the Dock.
 
    If a startup file has an old start marker without an end marker, the installer stops before the switch and names the file. Deleting that range would remove the rest of the file.
 7. **Forwarders at the old command paths.** A terminal opened before the switch keeps OpenCode Guard's `bin/` first on its PATH. Deleting the old shims would send `opencode` there to the next `opencode` on PATH, which is unguarded. The forwarders run Agent Guard's launcher in the same mode (`cli` or `gui`) with the same arguments, through an absolute path written at install. Every launch write-protects them and their folders explicitly, like the engine folder. Agent Guard's profile does not name OpenCode Guard's paths today; they are unwritable only because nothing allows them. The added rule is step 5's recorded golden difference (section 8).
-8. **The launcher skips every guard shim.** `next_cli` in `engine/launch` skips only its own shim (`${f:A} != "${bin:A}/$cli"`). With a forwarder and an Agent Guard shim both on PATH, each would find the other and they would call each other forever. The launcher skips Agent Guard's shims and the forwarders by resolved path. The same applies to the nested-launch path, which also calls `next_cli`.
+8. **The launcher skips every guard shim.** Before step 3, `next_cli` in `engine/launch` skipped only its own shim. With a forwarder and an Agent Guard shim both on PATH, each would find the other and they would call each other forever. Since step 3 it skips any candidate whose resolved path is inside Agent Guard's or OpenCode Guard's `bin/`, which covers the forwarders. The nested-launch path and the `check` plugin probe also call `next_cli`.
 9. **Check, then retire.** After the switch the installer runs `doctor` and launches OpenCode through the new command path and a forwarder. When those pass it retires OpenCode Guard without running its uninstaller. That uninstaller would put back the original permission values Agent Guard relies on, and delete the old engine folder with the forwarders in it; v1.0.0's would also delete the permission record after a failed restore. Retirement removes:
    - the old engine's `launch`, `profile.sb`, `uninstall.sh`, `vendor/` and `state/`, once the imported record is written and read back;
    - `~/.cc-safety-net/rules/opencode-guard/` and `opencode-guard` from `rules` in `rule.json`, leaving `transparent_wrappers` as the old uninstaller does;
@@ -609,16 +609,17 @@ Steps are numbered in the order they are done. "Needs step N" marks a step that 
 
 2. **Test contract.** The v1.0.3 golden fixtures stay unchanged. The existing integration checks run through an engine adapter, so the same checks run against the zsh engine now and the Rust engine at step 8. Development conformance tests stay separate from the small installed `doctor` check (section 8). Done when the existing checks pass through the adapter against the zsh engine with the fixtures unchanged.
 
-3. **OpenCode Guard's later fixes, then permanent names on the zsh engine.** The first change ports OpenCode Guard's five commits after v1.0.3 (section 10); it needs only step 1. The rename needs step 2. Agent Guard gets its own plugin file, PATH markers, rulebook, status tool, bypass variable, message prefix, nesting marker and app bundle ID, none shared with OpenCode Guard. The launcher skips every guard shim, old and new (section 10). The release contents include the JS plugin, vendored cc-safety-net, templates and license notices. Proposed names, to be confirmed in this step:
+3. **OpenCode Guard's later fixes, then permanent names on the zsh engine.** The first change ports OpenCode Guard's five commits after v1.0.3 (section 10); it needs only step 1. The rename needs step 2. Agent Guard gets its own plugin file, PATH markers, rulebook, status tool, bypass variable, message prefix, nesting marker and app bundle ID, none shared with OpenCode Guard. The launcher skips every guard shim, old and new (section 10). The release contents include the JS plugin, vendored cc-safety-net, templates and license notices. Confirmed names:
 
-   | Item | Stage 1 (shared with OpenCode Guard) | Proposed |
+   | Item | Stage 1 (shared with OpenCode Guard) | Agent Guard |
    |---|---|---|
    | Plugin file | `opencode-guard.js` | `agent-guard.js` |
    | PATH markers | `# >>> opencode-guard >>>` | `# >>> agent-guard >>>` |
-   | Rulebook | `~/.cc-safety-net/rules/opencode-guard` | `agent-guard` |
+   | Rulebook | `~/.cc-safety-net/rules/opencode-guard` | `agent-guard` (folder, rulebook `name` and `rule.json` entry) |
    | Status tool | `opencode_guard_status` | `agent_guard_status` |
    | Bypass variable | `OPENCODE_GUARD_BYPASS` | `AGENT_GUARD_BYPASS` |
    | Message prefix | `opencode-guard:` | `agent-guard:` |
+   | Check probe file | `.opencode-guard-check` | `.agent-guard-check` |
    | Nesting marker | `OPENCODE_SANDBOXED` | `AGENT_GUARD_SANDBOXED`, set for every harness |
    | App bundle ID | `ai.opencodeguard.launcher` | `io.github.ebrindley.agentguard` |
 
