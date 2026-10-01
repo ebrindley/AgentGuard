@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Installer cases from design section 9.4 (step 4): B5, B8, the kill matrix,
-# S1-S6, G1-G5, T1, T2, U1-U4, X1-X6 and P1-P5. F1 and F2, the refusal of an
+# S1-S6, G1-G5, T1, T2, U1-U4, X1-X7 and P1-P5. F1 and F2, the refusal of an
 # OpenCode Guard install, became the migration (test/migrate.sh). Builds test releases
 # served by test/release-server.mjs and installs them in a disposable home with the
 # fake CLI (test/fake-opencode.mjs) and a fake OpenCode.app; test/test.sh runs the
@@ -418,6 +418,19 @@ rc=$?
 [[ -f $list ]] && pass 'list kept' || fail 'list kept'
 [[ $(<"$cfg") == "$original" ]] || /usr/bin/jq -e --argjson o "$original" '. == $o' "$cfg" >/dev/null && pass 'permissions restored' || fail 'permissions restored'
 snapshot "$home" > "$run/uninstalled.snapshot"
+
+# --- X7: a record entry without wrote (an interrupted OpenCode Guard install) and
+# a config whose bash key the user deleted: uninstall leaves the config as it is.
+label=X7
+restore A
+/usr/bin/jq --arg f "$cfg" '.[$f] = {"edit":{"orig":null},"bash":{"orig":{"ls *":"allow","*":"ask"}},"external_directory":{"orig":null}}' \
+  "$state/permissions.json" > "$state/permissions.json.new" && /bin/mv "$state/permissions.json.new" "$state/permissions.json"
+print -r -- '{"model":"m","permission":{"task":"ask"}}' > "$cfg"
+cfg_hash=$(sha "$cfg")
+point= ag uninstall
+rc=$?
+(( rc == 0 )) && /usr/bin/grep -q 'Agent Guard removed.' "$out" && pass 'exit 0' || { fail "uninstall (exit $rc)"; show }
+[[ $(sha "$cfg") == "$cfg_hash" ]] && pass 'config byte-identical, bash still absent' || { fail "config changed: $(/usr/bin/jq -c . "$cfg")"; show }
 
 # --- X2, X3: a config that cannot be restored.
 label=X2

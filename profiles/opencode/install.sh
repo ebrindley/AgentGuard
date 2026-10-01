@@ -1060,11 +1060,12 @@ ag_perm_report() {  # FILE CUR ENTRY: names each key changed after install
 }
 
 # ag_perm_restore FILE ENTRY TMP: puts back each orig value where FILE still holds
-# the wrote value (null deletes the key). FILE is rewritten only when that
-# changes its content, so a file the user changed back is not reformatted.
+# the recorded wrote value (null deletes the key); a key with no recorded wrote
+# value is left as is. FILE is rewritten only when that changes its content, so a
+# file the user changed back is not reformatted.
 ag_perm_restore() {
   /usr/bin/jq --argjson e "$2" 'reduce ($e | to_entries[]) as $x (.;
-      if .permission[$x.key] == $x.value.wrote then
+      if ($x.value // {} | has("wrote")) and .permission[$x.key] == $x.value.wrote then
         (if $x.value.orig == null then del(.permission[$x.key]) else .permission[$x.key] = $x.value.orig end)
       else . end)' "$1" > "$3" 2>/dev/null || return 1
   /usr/bin/jq -e --slurpfile n "$3" '. == $n[0]' "$1" >/dev/null 2>&1 && return 0
