@@ -2,8 +2,9 @@
 
 Guardrails for terminal coding agents on macOS. One engine runs each agent under a macOS Seatbelt sandbox built from one allow and deny list, with a small profile and plugin per agent. It will replace OpenCode Guard and pi-sandbox-guard.
 
-Stage 1 contains the OpenCode Guard v1.0.3 port. It is not a migration release;
-OpenCode Guard remains the released product. See [docs/DESIGN.md](docs/DESIGN.md).
+Stage 1 contains the OpenCode Guard v1.0.3 port, including the v1.0.4 fixes.
+It is not a migration release; OpenCode Guard remains the released product. See
+[docs/DESIGN.md](docs/DESIGN.md).
 
 The shared launcher and Seatbelt builder are in `engine/`. OpenCode's paths,
 protected-name fragment, lifecycle hooks, plugin, and installation support are
@@ -19,6 +20,13 @@ start folder. There is no Pi profile, list import, `@project`, or migration yet.
 The installer is retained for development and disposable-home tests; do not use
 it to replace an existing OpenCode Guard installation before step 5 in
 [docs/DESIGN.md](docs/DESIGN.md#12-plan).
+
+## Running OpenCode without the guard
+
+Started without the guard, the plugin refuses every tool except a few that do
+not touch files ([docs/DESIGN.md](docs/DESIGN.md#5-inner-layer)). Set
+`AGENT_GUARD_BYPASS=1` in OpenCode's environment to lift that refusal. OpenCode
+Guard's `OPENCODE_GUARD_BYPASS` is no longer honored.
 
 ## Tests
 
@@ -37,8 +45,11 @@ non-zero, lists the known engines and runs no checks.
 
 The integration test needs Node and the OpenCode CLI. It exercises the ported
 installer, real Seatbelt enforcement, plugin load, permission restoration, and
-uninstall in a disposable home. Only its copied launcher has the account-home
-lookup replaced; production has no test override. The golden test checks the
+uninstall in a disposable home. It also checks both nesting markers, both
+bypass variables, PATH holding both guards' shim folders (with the unmodified
+v1.0.3 launcher as OpenCode Guard), and that OpenCode Guard's PATH blocks,
+rulebook and plugin file are left unchanged. Only its copied launcher has the
+account-home lookup replaced; production has no test override. The golden test checks the
 real account lookup under spoofed environment values, then compares complete
 generated profiles against unmodified v1.0.3 fixtures for empty and nested lists.
 The v1.0.3 reference runs unmodified, without the adapter.
@@ -50,6 +61,6 @@ They run in a disposable home, are not installed, and the installer does not run
 them. The installed check is `launch check`, which the installer runs as its
 self-test: a protected write is denied, a temp write is allowed, `open` is
 denied, then the profile's `check_hook`. For OpenCode that hook confirms the
-`opencode_guard_status` tool is visible through `opencode serve`. Step 4 renames
+`agent_guard_status` tool is visible through `opencode serve`. Step 4 renames
 it `agent-guard doctor`. The development tests may read its output; it never
 depends on `test/`.
