@@ -2,8 +2,9 @@
 # Migration cases from design section 9.5 (step 5): M1-M14, the refusal inside
 # OpenCode Guard's guard and the static check that the old uninstaller is never
 # called. The profile difference is test/golden.mjs. Each case starts from a real
-# OpenCode Guard install made by a fixture's own install.sh
-# (test/fixtures/installs) with HOME set to a disposable home, then migrates it with
+# install of OpenCode Guard v1.0.4, v1.0.3, v1.0.1 or v1.0.0 made by the tag's own
+# install.sh (test/fixtures/installs) with HOME set to a disposable home, or from
+# v1.0.0 upgraded in place by v1.0.4's install.sh, then migrates it with
 # test releases served by test/release-server.mjs, the fake CLI
 # (test/fake-opencode.mjs) and a fake OpenCode.app. The list import is answered on
 # a terminal made by /usr/bin/expect (test/tty.exp). Cases test/install.sh covers
@@ -187,9 +188,13 @@ print -r -- '<?xml version="1.0" encoding="UTF-8"?>
 /bin/cp "$fakebin/opencode" "$fake_app/Contents/MacOS/FakeOpenCodeApp"
 save clean
 
-# ocg_install VERSION: OpenCode Guard VERSION installed by its own installer; then
-# the user edits a config: bash changed and edit removed in opencode.json, a key
-# added to config.json.
+# The OpenCode Guard releases with a fixture, newest first. v1.0.2 needs none: its
+# install.sh and every file it installs equal v1.0.3's, apart from the list template,
+# which equals v1.0.1's.
+versions=(1.0.4 1.0.3 1.0.1 1.0.0)
+# ocg_install VERSION: OpenCode Guard VERSION installed by its own installer.
+# user_edits: the user edits a config: bash changed and edit removed in
+# opencode.json, a key added to config.json.
 ocg_install() {
   run_timeout 120 /usr/bin/env -i HOME="$home" PATH="$base" /bin/zsh "$fixtures/opencode-guard-$1/install.sh" --projects "$home/Projects" < /dev/null > "$out" 2>&1
 }
@@ -197,7 +202,7 @@ user_edits() {
   /usr/bin/jq -c '.permission.bash = "ask" | del(.permission.edit)' "$cfg" > "$cfg.new" && /bin/mv "$cfg.new" "$cfg"
   /usr/bin/jq -c '.permission.webfetch = "deny"' "$cfg2" > "$cfg2.new" && /bin/mv "$cfg2.new" "$cfg2"
 }
-for v in 1.0.4 1.0.3; do
+for v in $versions; do
   label="setup $v"
   restore clean
   ocg_install $v || { fail "OpenCode Guard $v's install.sh (exit $?)"; show; finish }
@@ -206,6 +211,7 @@ for v in 1.0.4 1.0.3; do
     /usr/bin/grep -qFx '# >>> opencode-guard >>>' "$home/.zprofile" && pass "OpenCode Guard $v installed by its own installer" ||
     { fail "OpenCode Guard $v installed by its own installer"; show; finish }
   /bin/cp "$ocg/state/permissions.json" "$run/record-$v"
+  /bin/cp "$old_list" "$run/list-$v"
   save "ocg-$v"
   ocg_files > "$run/ocg-$v.files"
   snapshot "$home" > "$run/ocg-$v.snapshot"
@@ -216,10 +222,10 @@ for v in 1.0.4 1.0.3; do
   /usr/bin/jq -S . "$cfg2" > "$run/twin-$v.cfg2"
 done
 
-# --- M1: a real install of each version migrates. M7 rides on v1.0.3 (a backup left
-# by an earlier failed uninstall); a sampler lists the plugin folder every 10 ms
-# during each run (I1).
-for v in 1.0.4 1.0.3; do
+# --- M1: a real install of each version migrates, and afterwards every entry point
+# is guarded or refuses. M7 rides on v1.0.3 (a backup left by an earlier failed
+# uninstall); a sampler lists the plugin folder every 10 ms during each run (I1).
+for v in $versions; do
   label="M1 $v"
   restore "ocg-$v"
   if [[ $v == 1.0.3 ]]; then
@@ -267,16 +273,20 @@ for v in 1.0.4 1.0.3; do
   /usr/bin/grep -qF "left as is: $cfg bash was changed after OpenCode Guard's install" "$out" && /usr/bin/grep -qF "kept $cfg external_directory" "$out" &&
     pass "the import reports kept and changed keys" || { fail 'import report'; show }
   /usr/bin/grep -q 'Dock item for OpenCode Guard.app' "$out" && pass 'says to replace the Dock item' || fail 'Dock message'
+  save "M1-$v"
+  snapshot "$home" > "$run/M1-$v.snapshot"
+  # After the save, so the saved state has none of the probe's launches.
+  probe_entry_points "$home" "$base" "$old_path"
   if [[ $v == 1.0.3 ]]; then
     label="M7 $v"
     /usr/bin/grep -q 'permissions-backup.json is from an earlier OpenCode Guard uninstall' "$out" &&
       /usr/bin/jq -e 'has("/nowhere/opencode.json") | not' "$state/permissions.json" >/dev/null &&
       pass 'permissions-backup.json reported and not merged' || fail 'permissions-backup.json'
   fi
-  save "M1-$v"
-  snapshot "$home" > "$run/M1-$v.snapshot"
 done
-[[ -d $run/saved-M1-1.0.4 && -d $run/saved-M1-1.0.3 ]] || { print -ru2 'M1 failed; the other cases start from it'; finish }
+for v in $versions; do
+  [[ -d $run/saved-M1-$v ]] || { print -ru2 'M1 failed; the other cases start from it'; finish }
+done
 
 # --- M10: a rerun after a finished migration changes nothing.
 label=M10
@@ -346,15 +356,18 @@ rc=$?
 
 # --- M1, M9, M5: uninstall after the migration, then the way back with the same
 # OpenCode Guard build's installer.
-for v in 1.0.4 1.0.3; do
+restored_values() {  # the configs hold the pre-guard values and the user's edits
+  /usr/bin/jq -e --argjson p "$pre_cfg" '. == ($p | .permission = {"bash": "ask", "task": "ask"})' "$cfg" >/dev/null &&
+    /usr/bin/jq -e '. == {"theme": "x", "permission": {"webfetch": "deny"}}' "$cfg2" >/dev/null &&
+    pass "pre-guard values back where unchanged; the user's bash, removed edit and added key kept" || fail 'restored values'
+}
+for v in $versions; do
   label="M1 $v uninstall"
   restore "M1-$v"
   point= ag uninstall
   rc=$?
   (( rc == 0 )) && pass 'exit 0' || { fail "uninstall (exit $rc)"; show }
-  /usr/bin/jq -e --argjson p "$pre_cfg" '. == ($p | .permission = {"bash": "ask", "task": "ask"})' "$cfg" >/dev/null &&
-    /usr/bin/jq -e '. == {"theme": "x", "permission": {"webfetch": "deny"}}' "$cfg2" >/dev/null &&
-    pass "pre-guard values back where unchanged; the user's bash, removed edit and added key kept" || fail 'restored values'
+  restored_values
   label="M9 $v"
   [[ $(/usr/bin/jq -S . "$cfg") == "$(<$run/twin-$v.cfg)" && $(/usr/bin/jq -S . "$cfg2") == "$(<$run/twin-$v.cfg2)" ]] &&
     pass "the configs equal what OpenCode Guard's own uninstall.sh leaves" || fail 'configs differ from the twin'
@@ -385,6 +398,33 @@ point= ag uninstall
 rc=$?
 (( rc == 0 )) && pass 'rerun exits 0' || { fail "rerun (exit $rc)"; show }
 same_snapshot 'final state equals one full uninstall' "$run/uninstalled-1.0.4.snapshot"
+
+# --- v1.0.0 upgraded in place by v1.0.4's installer, which keeps the record entries
+# and the list it finds. The migration imports both, and uninstall puts back the
+# values from before v1.0.0's install.
+label='upgrade 1.0.0 to 1.0.4'
+restore clean
+ocg_install 1.0.0 && ocg_install 1.0.4
+rc=$?
+(( rc == 0 )) && pass "v1.0.4's install.sh over v1.0.0's install" || { fail "install (exit $rc)"; show }
+user_edits
+/usr/bin/jq -e --slurpfile o "$run/record-1.0.0" 'map_values(map_values(.orig)) == ($o[0] | map_values(map_values(.orig)))' "$ocg/state/permissions.json" >/dev/null &&
+  pass "the record keeps v1.0.0's orig values" || fail "record: $(<"$ocg/state/permissions.json")"
+/usr/bin/cmp -s "$old_list" "$run/list-1.0.0" && ! /usr/bin/cmp -s "$old_list" "$run/list-1.0.4" &&
+  pass "the list is v1.0.0's, which differs from v1.0.4's" || fail "the list is not v1.0.0's"
+/bin/cp "$ocg/state/permissions.json" "$run/record-upgrade"
+point= boot y
+rc=$?
+(( rc == 0 )) && pass 'migrated (exit 0)' || { fail "migration (exit $rc)"; show }
+/usr/bin/cmp -s "$state/opencode-guard-permissions.json" "$run/record-upgrade" &&
+  /usr/bin/jq -e --slurpfile o "$run/record-upgrade" '. == $o[0]' "$state/permissions.json" >/dev/null &&
+  pass "OpenCode Guard's record imported, and its unchanged copy kept" || fail 'imported record'
+/usr/bin/cmp -s "$list" "$run/list-1.0.0" && pass "v1.0.0's list imported byte for byte" || fail 'imported list'
+probe_entry_points "$home" "$base" "$old_path"
+point= ag uninstall
+rc=$?
+(( rc == 0 )) && pass 'uninstall exits 0' || { fail "uninstall (exit $rc)"; show }
+restored_values
 
 # --- M2: failures before the switch leave OpenCode Guard as it was and working.
 pre_switch() {  # NAME
@@ -435,23 +475,31 @@ rc=$?
 # --- M3: a failure after each switch action and after the live doctor rolls back.
 # OpenCode Guard's files that were links during the switch are regular files again,
 # byte-identical (design A1).
-a1_files() {  # NAME
-  local f bad=
+a1_files() {  # NAME [VERSION]: compared with VERSION's install, v1.0.4's by default
+  local f bad= v=${2:-1.0.4}
   for f in "$old_plugin" "$ocg/bin/opencode" "$ocg/bin/opencode-gui"; do
-    [[ -f $f && ! -L $f ]] && /usr/bin/cmp -s "$f" "$run/saved-ocg-1.0.4${f#$home}" || bad+=" ${f:t}"
+    [[ -f $f && ! -L $f ]] && /usr/bin/cmp -s "$f" "$run/saved-ocg-$v${f#$home}" || bad+=" ${f:t}"
   done
   [[ -z $bad ]] && pass "$1: opencode-guard.js and both old shims are regular files as before" || fail "$1: changed:$bad"
 }
-for p in rulebook rulejson current fwd-cli fwd-gui plugin-take plugin-name rc app app-old switch-time doctor-live launch-check; do
-  label="M3 fail:$p"
-  restore ocg-1.0.4
-  point=fail:$p boot y
+rolled_back() {  # VERSION POINT: a failure at POINT from VERSION's install
+  restore "ocg-$1"
+  point=fail:$2 boot y
   rc=$?
   (( rc != 0 )) && pass "exit $rc" || { fail "exit $rc"; show }
-  a1_files after
-  same_ocg "the state is as before the switch" "$run/ocg-1.0.4.files"
+  a1_files after $1
+  same_ocg "the state is as before the switch" "$run/ocg-$1.files"
   [[ ! -e $engine && $(guard_plugins; print -r -- $reply) == opencode-guard.js ]] && pass 'no engine folder; only opencode-guard.js' || fail 'engine or plugins left'
   old_guarded after
+}
+for p in rulebook rulejson current fwd-cli fwd-gui plugin-take plugin-name rc app app-old switch-time doctor-live launch-check; do
+  label="M3 fail:$p"
+  rolled_back 1.0.4 $p
+done
+# A late rollback, after the live doctor, from v1.0.1's and v1.0.0's installs.
+for v in 1.0.1 1.0.0; do
+  label="M3 $v fail:doctor-live"
+  rolled_back $v doctor-live
 done
 
 # A rollback writes nothing into the release it discards: killed just before the
@@ -495,6 +543,18 @@ for p in list-import import rulebook rulejson current fwd-cli fwd-gui plugin-tak
   (( rc == 0 )) && pass 'rerun recovers and finishes' || { fail "rerun (exit $rc)"; show }
   same_snapshot 'final state equals an uninterrupted migration' "$run/M1-1.0.4.snapshot"
 done
+# The same from v1.0.0's install, killed with the CLI forwarder in place while
+# v1.0.0's GUI shim, launcher and plugin are still in use.
+label='M3 1.0.0 kill:fwd-gui'
+restore ocg-1.0.0
+point=kill:fwd-gui boot y
+rc=$?
+(( rc == 137 )) && pass killed || { fail "killed (exit $rc)"; show }
+probe_entry_points "$home" "$base" "$old_path"
+point= boot y
+rc=$?
+(( rc == 0 )) && pass 'rerun recovers and finishes' || { fail "rerun (exit $rc)"; show }
+same_snapshot 'final state equals an uninterrupted migration' "$run/M1-1.0.0.snapshot"
 
 # An interrupted switch is neither finished nor undone while OpenCode runs.
 label='M3 kill:fwd-cli, then OpenCode running'

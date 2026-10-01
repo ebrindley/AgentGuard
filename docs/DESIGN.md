@@ -521,7 +521,7 @@ Every release from v1.0.0 to v1.0.4 installs to the same places (`install.sh` at
 | Permission record | `state/permissions.json` in the engine |
 | Launcher app | `~/Applications/OpenCode Guard.app`, bundle ID `ai.opencodeguard.launcher`; it runs `bin/opencode-gui` |
 | Plugin | `~/.config/opencode/plugins/opencode-guard.js` |
-| cc-safety-net | `~/.cc-safety-net/rules/opencode-guard/`, plus `opencode-guard` in the `rules` of `~/.cc-safety-net/rules/rule.json` (v1.0.1 and later also add `env` to `transparent_wrappers`; v1.0.4 adds `exec`, `nice`, `nohup`, `setsid`, `stdbuf`, `time` and `timeout`) |
+| cc-safety-net | `~/.cc-safety-net/rules/opencode-guard/`, plus `opencode-guard` in the `rules` of `~/.cc-safety-net/rules/rule.json` (v1.0.2 and later also add `env` to `transparent_wrappers`; v1.0.4 adds `exec`, `nice`, `nohup`, `setsid`, `stdbuf`, `time` and `timeout`) |
 | PATH | A block between `# >>> opencode-guard >>>` and `# <<< opencode-guard <<<` in `~/.zprofile`, `~/.zshrc` and, if it exists, `~/.bash_profile`, putting the engine's `bin/` first |
 | OpenCode permissions | `edit`, `bash` and `external_directory` set to allow in `~/.config/opencode/config.json`, `opencode.json` and `opencode.jsonc`, where each is a JSON object |
 | List | `~/OpenCode Guard/Guard List.txt` and `last-launch.log`; after a failed uninstall restore (v1.0.1 and later), also `permissions-backup.json` |
@@ -612,13 +612,13 @@ The migration never runs `$ocg/uninstall.sh`.
 
 **Forwarder removal.** At the end of every successful install or update, and in `agent-guard update` before it downloads anything (so also when the install is current): when `retired` is true and the boot time is later than `switched_at`, each of `$ocg/bin/opencode` and `opencode-gui` that is a link to `$engine/bin/<name>` is removed, then `rmdir` of `$ocg/bin` and `$ocg`, which succeeds only when they are empty; anything else left there is named. The stamp's links are updated. Uninstall (U6) does the same whatever the boot time, after finishing retirement if `retired` is false; an unfinished retirement does not stop the uninstall, which names what it could not retire.
 
-**Tests.** `test/migrate.sh` installs OpenCode Guard v1.0.4 and v1.0.3 with each tag's own `install.sh` (`test/fixtures/installs/`) in a disposable home with a user-edited config and covers the cases below. It answers the list prompt on a terminal made by `/usr/bin/expect` (`test/tty.exp`). Test points in the migration actions are counted by a coverage check.
+**Tests.** `test/migrate.sh` installs OpenCode Guard v1.0.4, v1.0.3, v1.0.1 and v1.0.0 with each tag's own `install.sh` (`test/fixtures/installs/`) in a disposable home with a user-edited config and covers the cases below. v1.0.2 needs no fixture: its `install.sh` and every file it installs equal v1.0.3's, apart from the list template, which equals v1.0.1's. Each of the four installs migrates, passes the entry-point probe, uninstalls and is installed again. One more case upgrades v1.0.0 in place with v1.0.4's `install.sh`, which keeps v1.0.0's record and list, then migrates it and uninstalls back to the values from before v1.0.0's install. It answers the list prompt on a terminal made by `/usr/bin/expect` (`test/tty.exp`). Test points in the migration actions are counted by a coverage check.
 
 ### Recovery testing
 
-Recovery is tested against a real install of the latest OpenCode Guard release (v1.0.4 today), made by that release's own `install.sh` in a disposable home, and against the build the two Macs run if it is later. Fixtures cover:
+Recovery is tested against real installs, each made by that release's own `install.sh` in a disposable home: every failure and kill point against the latest OpenCode Guard release (v1.0.4 today), a rollback after the live doctor against v1.0.1 and v1.0.0, and a kill during the switch against v1.0.0. It is also tested against the build the two Macs run if that is later. Fixtures cover:
 
-- v1.0.0's failed restore: an install whose record was lost, then reinstalled;
+- v1.0.0's failed restore, simulated from a v1.0.4 install by removing its engine folder and every other part, which leaves `~/OpenCode Guard` and the allow values in the configs but no record;
 - permissions the user edited after installing OpenCode Guard;
 - reruns, including after each interrupted phase;
 - a terminal opened before the switch, with the old PATH;
