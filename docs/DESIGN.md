@@ -1,6 +1,6 @@
 # Agent Guard design
 
-Status: accepted plan, 2026-09-30. Stage 1 (the OpenCode Guard v1.0.3 port on the zsh engine) is built; steps 2–11 are not.
+Status: accepted plan, 2026-09-30. Built on the zsh engine: stage 1 (the OpenCode Guard v1.0.3 port, with the v1.0.4 fixes) and steps 2 and 3. Steps 4–11 are not built.
 
 Agent Guard is one macOS guard for terminal coding agents. It replaces OpenCode Guard (v1.0.4) and pi-sandbox-guard with one engine and a small profile, hook set and plugin adapter per harness.
 
@@ -46,7 +46,7 @@ Install layout as built:
 
 | Path | Holds |
 |---|---|
-| `~/Library/Application Support/AgentGuard/` | `launch`, `profile.sb`, `uninstall.sh`; shims `bin/opencode` and `bin/opencode-gui`; `profiles/opencode/`; `vendor/cc-safety-net/`; `state/rules.json` and the permission record `state/permissions.json` |
+| `~/Library/Application Support/AgentGuard/` | `launch`, `profile.sb`, `uninstall.sh`, `LICENSE`; shims `bin/opencode` and `bin/opencode-gui`; `profiles/opencode/`; `vendor/cc-safety-net/` and `vendor/THIRD-PARTY-NOTICES`; `state/rules.json` and the permission record `state/permissions.json` |
 | `~/Agent Guard/` | `Guard List.txt` and the launch log |
 | `~/Applications/Agent Guard.app` | An AppleScript applet that runs `bin/opencode-gui`, ad-hoc signed |
 | `~/.config/opencode/plugins/agent-guard.js` | The plugin |
