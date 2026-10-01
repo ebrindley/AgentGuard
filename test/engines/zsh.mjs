@@ -9,10 +9,10 @@ import { fixtureHome } from '../fixture-home.mjs';
 
 export const name = 'zsh';
 
-// Copies engine/, profiles/ and install.sh from source into dest, then points
-// the copied launcher's account lookup at home. The source tree is not touched.
+// Copies engine/, profiles/, install.sh and LICENSE from source into dest, then
+// points the copied launcher's account lookup at home. The source tree is not touched.
 export function stage(source, dest, home) {
-  const copy = spawnSync('/bin/cp', ['-R', join(source, 'engine'), join(source, 'profiles'), join(source, 'install.sh'), dest + '/'], { encoding: 'utf8' });
+  const copy = spawnSync('/bin/cp', ['-R', ...['engine', 'profiles', 'install.sh', 'LICENSE'].map((f) => join(source, f)), dest + '/'], { encoding: 'utf8' });
   assert.equal(copy.status, 0, copy.stderr);
   fixtureHome(join(dest, 'engine/launch'), home);
 }

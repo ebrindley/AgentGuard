@@ -39,9 +39,10 @@ zsh test/test.sh
 
 Both take `--engine NAME` to choose the engine under test; the default is
 `zsh`. Each engine has an adapter in `test/engines/` that stages a copy of
-`engine/`, `profiles/` and `install.sh`, gives the command that runs the
-installed launcher, and runs the account lookup. An unknown name exits
-non-zero, lists the known engines and runs no checks.
+`engine/`, `profiles/`, `install.sh` and `LICENSE`, gives the command that runs
+the installed launcher, and runs the account lookup. An unknown name exits
+non-zero, lists the known engines and runs no checks. `test.sh --source DIR`
+stages those files from `DIR` instead of the checkout.
 
 The integration test needs Node and the OpenCode CLI. It exercises the ported
 installer, real Seatbelt enforcement, plugin load, permission restoration, and
@@ -56,7 +57,7 @@ The v1.0.3 reference runs unmodified, without the adapter.
 Only the two product path names are normalized. The original source commit is
 `9242c1ad45c895efd63e903e1b27d7bab53620ad`; bundled cc-safety-net is 2.4.14.
 
-`test/golden.mjs`, `test/test.sh` and `test/plugin.mjs` are development tests.
+`test/golden.mjs`, `test/test.sh`, `test/release.sh` and `test/plugin.mjs` are development tests.
 They run in a disposable home, are not installed, and the installer does not run
 them. The installed check is `launch check`, which the installer runs as its
 self-test: a protected write is denied, a temp write is allowed, `open` is
@@ -64,3 +65,30 @@ denied, then the profile's `check_hook`. For OpenCode that hook confirms the
 `agent_guard_status` tool is visible through `opencode serve`. Step 4 renames
 it `agent-guard doctor`. The development tests may read its output; it never
 depends on `test/`.
+
+## Building a release
+
+```sh
+scripts/release.sh 1.2.3
+```
+
+This writes `dist/agent-guard-1.2.3.tar.gz` and
+`dist/agent-guard-1.2.3.tar.gz.sha256`. The archive holds one
+`agent-guard-1.2.3/` folder with the files listed in the script, the whole of
+`engine/vendor/cc-safety-net` and `profiles/opencode/templates`, and a
+`VERSION` file. The script stops if a listed file is missing. It uses only
+tools that ship with macOS. The checksum file names the archive without a
+folder, so check it from `dist/`:
+
+```sh
+cd dist && shasum -a 256 -c agent-guard-1.2.3.tar.gz.sha256
+```
+
+`zsh test/release.sh` builds `0.0.0-test`, compares the archive listing with the
+release file list, checks the checksum and `VERSION`, then runs `test/test.sh`
+against the unpacked archive. It needs the same conditions as `test/test.sh`.
+
+`LICENSE` covers Agent Guard. `engine/vendor/cc-safety-net/LICENSE` covers
+cc-safety-net, and `engine/vendor/THIRD-PARTY-NOTICES` covers the effect and
+`@opencode/schema` code bundled in cc-safety-net's `dist/index.js`. The
+installer copies all three into the engine folder.
