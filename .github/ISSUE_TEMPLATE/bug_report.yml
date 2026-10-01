@@ -1,0 +1,75 @@
+name: Bug report
+description: A wrong refusal, a failed install, update or uninstall, or another defect
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Redact credentials, tokens and private paths (for example your account
+        name in `/Users/...`) before you paste anything.
+
+        If this is a way for an agent under the guard to write outside ALLOW, read
+        a DENY entry, change the guard or its protected files, or start OpenCode
+        unguarded without the plugin's refusal, close this and file a
+        [private advisory](https://github.com/ebrindley/AgentGuard/security/advisories/new)
+        instead.
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What you ran or asked the agent to do, from a fresh start.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead, with the exact message.
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and chip
+      description: "Output of `sw_vers -productVersion` and `uname -m`"
+    validations:
+      required: true
+  - type: input
+    id: harness
+    attributes:
+      label: Harness and version
+      description: "For OpenCode, the output of `opencode --version`"
+    validations:
+      required: true
+  - type: textarea
+    id: version
+    attributes:
+      label: Agent Guard version
+      description: "Output of `agent-guard version`"
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: route
+    attributes:
+      label: Launch route
+      options:
+        - opencode in a terminal
+        - Agent Guard app
+        - Other or not sure
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: agent-guard doctor output
+      description: "Output of `agent-guard doctor`"
+      render: text
+    validations:
+      required: true

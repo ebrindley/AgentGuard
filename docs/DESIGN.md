@@ -1,6 +1,6 @@
 # Agent Guard design
 
-Status: accepted plan, 2026-09-30. Built on the zsh engine: stage 1 (the OpenCode Guard v1.0.3 port, with the v1.0.4 fixes) and steps 2 to 5: the test contract, permanent names, the staged installer with update, uninstall, recovery and the version stamp, and the migration from OpenCode Guard (section 10). Steps 6–11 are not built.
+Status: accepted plan, 2026-09-30. Built on the zsh engine: stage 1 (the OpenCode Guard v1.0.3 port, with the v1.0.4 fixes) and steps 2 to 5: the test contract, permanent names, the staged installer with update, uninstall, recovery and the version stamp, and the migration from OpenCode Guard (section 10). Step 6 is the first public release, 0.1.0 (OpenCode only); steps 7–11 are not built.
 
 Agent Guard is one macOS guard for terminal coding agents. It replaces OpenCode Guard (v1.0.4) and pi-sandbox-guard with one engine and a small profile, hook set and plugin adapter per harness.
 
@@ -772,7 +772,7 @@ Steps are numbered in the order they are done. "Needs step N" marks a step that 
 
 ## 13. Open source
 
-The repository is private until step 6 and open source from the first public release. The model is pi-sandbox-guard's (`CONTRIBUTING.md`, `SECURITY.md`, `.github/CODEOWNERS`, `.github/ISSUE_TEMPLATE/`).
+The repository was private until step 6 and is open source from the first public release, 0.1.0. The model is pi-sandbox-guard's (`CONTRIBUTING.md`, `SECURITY.md`, `.github/CODEOWNERS`, `.github/ISSUE_TEMPLATE/`).
 
 **License.** MIT, in `LICENSE`. Vendored cc-safety-net keeps its own `engine/vendor/cc-safety-net/LICENSE`, and every release carries the license notices (step 3).
 

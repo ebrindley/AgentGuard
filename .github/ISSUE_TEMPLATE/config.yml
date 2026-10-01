@@ -1,0 +1,8 @@
+# Blank issues stay enabled: a feature request has nothing to put in the bug
+# form, and SECURITY.md tells a reporter who finds no advisory form to open a
+# public issue that only asks for a private channel.
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/ebrindley/AgentGuard/security/advisories/new
+    about: Report privately, not as a public issue. A way for an agent to get past the guard belongs here.
