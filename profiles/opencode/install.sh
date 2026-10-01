@@ -105,11 +105,11 @@ say "list: $list"
 /bin/cp "$profile_src/templates/cc-safety-net/rules/opencode-guard/rulebook.json" "$cc/opencode-guard/rulebook.json"
 if [[ ! -e $cc/rule.json ]]; then
   /bin/cp "$profile_src/templates/cc-safety-net/rules/rule.json" "$cc/rule.json"
-elif /usr/bin/jq '.rules = ((.rules // []) + ["opencode-guard"] | unique) | .transparent_wrappers = ((.transparent_wrappers // []) + ["env"] | unique)' "$cc/rule.json" > "$cc/rule.json.tmp" 2>/dev/null; then
+elif /usr/bin/jq --slurpfile t "$profile_src/templates/cc-safety-net/rules/rule.json" '.rules = ((.rules // []) + ["opencode-guard"] | unique) | .transparent_wrappers = ((.transparent_wrappers // []) + $t[0].transparent_wrappers | unique)' "$cc/rule.json" > "$cc/rule.json.tmp" 2>/dev/null; then
   /bin/mv -f "$cc/rule.json.tmp" "$cc/rule.json"
 else
   /bin/rm -f "$cc/rule.json.tmp"
-  warnings+=("$cc/rule.json not changed (invalid JSON): add opencode-guard to its rules and env to its transparent_wrappers")
+  warnings+=("$cc/rule.json not changed (invalid JSON): add opencode-guard to its rules and env, exec, nice, nohup, setsid, stdbuf, time and timeout to its transparent_wrappers")
 fi
 
 record="$state/permissions.json"
