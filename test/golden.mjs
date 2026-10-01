@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { userInfo } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -21,6 +21,19 @@ const home = join(run, 'home with spaces');
 const source = join(run, 'source');
 const engine = join(home, 'Library/Application Support/AgentGuard');
 const reference = join(root, 'test/fixtures/opencode-guard-1.0.3');
+// Recorded, reviewed changes to the generated profile since v1.0.3, applied in step
+// order to the renamed v1.0.3 output: each inserts a line right after an anchor line.
+const differences = readdirSync(join(root, 'test/fixtures/differences'))
+  .filter((f) => /^step-\d+\.json$/.test(f))
+  .map((f) => JSON.parse(readFileSync(join(root, 'test/fixtures/differences', f), 'utf8')))
+  .sort((a, b) => a.step - b.step);
+function applyDifferences(text) {
+  for (const { step, after, insert } of differences) {
+    assert.equal(text.split(after).length, 2, `step ${step}: the text to insert after must occur exactly once`);
+    text = text.replace(after, () => after + insert);
+  }
+  return text;
+}
 function exec([command, ...args], options = {}) {
   const result = spawnSync(command, args, { encoding: 'utf8', ...options });
   assert.equal(result.status, 0, result.stderr);
@@ -46,8 +59,8 @@ try {
     // v1.0.3 takes its home from $HOME, so the reference runs unmodified.
     const old = exec(['/bin/zsh', join(reference, 'launch'), 'profile'], options);
     const current = exec([...adapter.launcher(engine), 'profile'], options);
-    assert.equal(current, old.replaceAll('OpenCodeGuard', 'AgentGuard').replaceAll('OpenCode Guard', 'Agent Guard'), name);
-    console.log(`ok   ${name} profile matches v1.0.3 exactly apart from renamed paths`);
+    assert.equal(current, applyDifferences(old.replaceAll('OpenCodeGuard', 'AgentGuard').replaceAll('OpenCode Guard', 'Agent Guard')), name);
+    console.log(`ok   ${name} profile matches v1.0.3 exactly apart from renamed paths and recorded differences (step ${differences.map((d) => d.step).join(', ')})`);
   }
 } finally {
   rmSync(run, { recursive: true, force: true });
