@@ -483,10 +483,13 @@ a1_files() {  # NAME [VERSION]: compared with VERSION's install, v1.0.4's by def
   [[ -z $bad ]] && pass "$1: opencode-guard.js and both old shims are regular files as before" || fail "$1: changed:$bad"
 }
 rolled_back() {  # VERSION POINT: a failure at POINT from VERSION's install
+  local want='Agent Guard: the switch failed'
+  [[ $2 == (doctor-live|launch-check) ]] && want="stopped at $2"
   restore "ocg-$1"
+  /bin/rm -f -- "$out"
   point=fail:$2 boot y
   rc=$?
-  (( rc != 0 )) && pass "exit $rc" || { fail "exit $rc"; show }
+  (( rc != 0 )) && /usr/bin/grep -qF "$want" "$out" && pass "exit $rc, $want" || { fail "exit $rc"; show }
   a1_files after $1
   same_ocg "the state is as before the switch" "$run/ocg-$1.files"
   [[ ! -e $engine && $(guard_plugins; print -r -- $reply) == opencode-guard.js ]] && pass 'no engine folder; only opencode-guard.js' || fail 'engine or plugins left'
@@ -496,7 +499,8 @@ for p in rulebook rulejson current fwd-cli fwd-gui plugin-take plugin-name rc ap
   label="M3 fail:$p"
   rolled_back 1.0.4 $p
 done
-# A late rollback, after the live doctor, from v1.0.1's and v1.0.0's installs.
+# A late rollback, at the live doctor after every switch action, from v1.0.1's and
+# v1.0.0's installs.
 for v in 1.0.1 1.0.0; do
   label="M3 $v fail:doctor-live"
   rolled_back $v doctor-live

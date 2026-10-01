@@ -616,7 +616,7 @@ The migration never runs `$ocg/uninstall.sh`.
 
 ### Recovery testing
 
-Recovery is tested against real installs, each made by that release's own `install.sh` in a disposable home: every failure and kill point against the latest OpenCode Guard release (v1.0.4 today), a rollback after the live doctor against v1.0.1 and v1.0.0, and a kill during the switch against v1.0.0. It is also tested against the build the two Macs run if that is later. Fixtures cover:
+Recovery is tested against real installs, each made by that release's own `install.sh` in a disposable home: every failure and kill point against the latest OpenCode Guard release (v1.0.4 today), a rollback at the live doctor, after every switch action, against v1.0.1 and v1.0.0, and a kill during the switch against v1.0.0. It is also tested against the build the two Macs run if that is later. Fixtures cover:
 
 - v1.0.0's failed restore, simulated from a v1.0.4 install by removing its engine folder and every other part, which leaves `~/OpenCode Guard` and the allow values in the configs but no record;
 - permissions the user edited after installing OpenCode Guard;
