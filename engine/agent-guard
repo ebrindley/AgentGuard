@@ -91,6 +91,9 @@ update() {
   ag_probe || exit 1
   ag_lock || exit 1
   ag_recover update || { ag_unlock; exit 1 }
+  # Forwarders at OpenCode Guard's old command paths go after the first boot that
+  # follows the switch, also when the install is current.
+  ag_maintenance
   text=$(/usr/bin/curl -q -fsSL $curl_proto -- "$url")
   rc=$?
   (( rc == 0 )) || { ag_unlock; die "download failed (curl $rc): $url" }

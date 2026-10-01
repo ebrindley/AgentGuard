@@ -46,5 +46,18 @@ opencode_check() {
         print "FAIL OpenCode Guard's plugin is also in ~/.config/opencode/plugins"
         ok=0
       fi
+      # After a migration: OpenCode Guard's shim paths, while present, link to Agent Guard's shims.
+      if [[ -f $engine/state/migration.json ]]; then
+        local f p found=0 bad=0
+        for f in opencode opencode-gui; do
+          p="$home/Library/Application Support/OpenCodeGuard/bin/$f"
+          [[ -e $p || -L $p ]] || continue
+          found=1
+          [[ -L $p && $(/usr/bin/readlink -- "$p") == "$engine/bin/$f" ]] || bad=1
+        done
+        if (( bad )); then print "FAIL forwarders do not point to Agent Guard"; ok=0
+        elif (( found )); then print "ok   forwarders point to Agent Guard"
+        fi
+      fi
     fi
 }

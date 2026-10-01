@@ -1,0 +1,227 @@
+#!/bin/zsh
+# usage: launch cli|gui|profile|check [args...]
+emulate -L zsh
+setopt err_exit no_unset pipe_fail extended_glob
+
+mode=${1:-}
+(( $# )) && shift
+
+home=${HOME:A}
+engine="$home/Library/Application Support/OpenCodeGuard"
+bin="$engine/bin"
+list_dir="$home/OpenCode Guard"
+list="$list_dir/Guard List.txt"
+log="$list_dir/last-launch.log"
+here=${0:A:h}
+
+fail() {
+  print -ru2 -- "opencode-guard: $*"
+  if [[ $mode == gui ]]; then
+    /usr/bin/osascript -e 'on run argv' -e 'display alert "OpenCode Guard" message (item 1 of argv) as critical' -e 'end run' "$*" >/dev/null 2>&1 || true
+  fi
+  exit 1
+}
+
+note() {
+  print -r -- "$*" >> "$log"
+  [[ $mode == (gui|check) ]] || print -ru2 -- "opencode-guard: $*"
+}
+
+next_opencode() {
+  local d f
+  for d in $path; do
+    f="$d/opencode"
+    [[ -x $f && ! -d $f && ${f:A} != "${bin:A}/opencode" ]] || continue
+    REPLY=$f
+    return 0
+  done
+  for f in /opt/homebrew/bin/opencode /usr/local/bin/opencode "$home/.opencode/bin/opencode"; do
+    [[ -x $f ]] && { REPLY=$f; return 0 }
+  done
+  return 1
+}
+
+find_app() {
+  local a
+  for a in /Applications/OpenCode.app "$home/Applications/OpenCode.app" \
+           ${(f)"$(/usr/bin/mdfind "kMDItemCFBundleIdentifier == 'ai.opencode.desktop'" 2>/dev/null)"}; do
+    [[ -d $a/Contents/MacOS ]] && { REPLY=$a; return 0 }
+  done
+  return 1
+}
+[[ $mode == find-app ]] && { find_app && print -r -- "$REPLY"; exit }
+
+unset CC_SAFETY_NET_HOME CC_SAFETY_NET_WORKTREE SAFETY_NET_WORKTREE
+export CC_SAFETY_NET_PARANOID_RM=1
+
+if [[ ${OPENCODE_SANDBOXED:-} == 1 ]] && ! /usr/bin/sandbox-exec -p '(version 1)(allow default)' /usr/bin/true 2>/dev/null; then
+  [[ $mode == cli ]] || fail "already inside the guard"
+  next_opencode || fail "opencode not found"
+  exec "$REPLY" "$@"
+fi
+[[ -r $list ]] || fail "cannot read $list"
+
+normalize() {
+  local p=$1
+  [[ $p == (\"*\"|\'*\') ]] && p=${p[2,-2]}
+  [[ -e $p || $p != *\\* ]] || p=${(Q)p}
+  [[ $p == '~' || $p == '~/'* ]] && p=$home${p#\~}
+  [[ $p == /* ]] || return 1
+  REPLY=${p:A}
+}
+
+within() { [[ $2 == / || $1 == "$2" || $1 == "$2"/* ]] }
+
+print -r -- "OpenCode Guard $mode $(/bin/date '+%Y-%m-%d %H:%M:%S')" > "$log"
+
+essential=(/ $home $home/Library $home/.config $home/.local $home/.cache
+           /usr /bin /sbin /System /Library /private /dev /opt /Applications)
+sensitive=($home/Library/Application\ Support $home/.config $home/.local)
+typeset -a allow readonly deny scoped
+section=
+while IFS= read -r line || [[ -n $line ]]; do
+  line=${${line%$'\r'}##[[:space:]]##}
+  line=${line%%[[:space:]]##}
+  [[ -z $line || $line == \#* ]] && continue
+  case ${(U)line} in
+    (ALLOW(|[[:space:]]#[-:]*)) section=allow; continue ;;
+    (READ([[:space:]]##|-)ONLY(|[[:space:]]#[-:]*)) section=readonly; continue ;;
+    (DENY(|[[:space:]]#[-:]*)) section=deny; continue ;;
+  esac
+  [[ -n $section ]] || continue
+  normalize "$line" || { note "skipped, not a full path: $line"; continue }
+  p=$REPLY
+  if [[ $section != allow ]]; then
+    for e in $essential; do
+      within "$e" "$p" && { note "refused ${${section:u}/READONLY/READ ONLY}, OpenCode needs $e: $p"; continue 2 }
+    done
+  fi
+  if [[ $section == deny ]]; then
+    [[ -e $p ]] || note "warning: DENY entry does not exist, check the spelling: $p"
+    deny+=("$p")
+    continue
+  fi
+  [[ -e $p ]] || { note "skipped, does not exist: $p"; continue }
+  if [[ $section == allow ]]; then
+    for e in $sensitive; do
+      within "$e" "$p" && { note "refused ALLOW, too broad: $p"; continue 2 }
+    done
+    allow+=("$p")
+  else
+    readonly+=("$p")
+  fi
+  scoped+=("${(l:3::0:)${#${p//[^\/]/}}}"$'\t'"$section"$'\t'"$p")
+done < "$list"
+
+sbpl() { local s=${1//\\/\\\\}; REPLY="\"${s//\"/\\\"}\"" }
+typeset -a rules
+typeset -U pinned
+for entry in ${(o)scoped}; do
+  kind=${${entry#*$'\t'}%%$'\t'*}
+  p=${entry##*$'\t'}
+  sbpl "$p"
+  if [[ $kind == allow ]]; then
+    rules+=("(allow file-write* (subpath $REPLY))")
+    [[ -d $p ]] && pinned+=("$p")
+  else
+    rules+=("(deny file-write* (subpath $REPLY))")
+  fi
+done
+for p in $deny; do
+  sbpl "$p"
+  rules+=("(deny file-read* file-write* (subpath $REPLY))")
+  for s in $allow $readonly; do
+    within "$s" "$p" && note "overridden by DENY $p: $s"
+  done
+done
+
+protected=("$engine" "$list_dir" $home/.config/opencode $home/.opencode $home/.cc-safety-net
+           $home/Library/LaunchAgents $home/.{zshenv,zprofile,zshrc,zlogin,profile,bash_profile,bash_login,bashrc}
+           "$PWD"/{.opencode,opencode.json,opencode.jsonc,tui.json,tui.jsonc})
+for p in $protected; do
+  [[ -e $p && ${p:A} != "$p" ]] || continue
+  sbpl "${p:A}"
+  rules+=("(deny file-write* (subpath $REPLY))")
+  readonly+=("${p:A}")
+done
+for p in $deny $readonly; do
+  a=${p:h}
+  while [[ $a != / ]]; do pinned+=("$a"); a=${a:h}; done
+done
+for p in $pinned; do sbpl "$p"; rules+=("(deny file-write* (literal $REPLY))"); done
+
+note "allow: ${(j:, :)allow:-none}"
+note "read only: ${(j:, :)readonly:-none}"
+note "deny: ${(j:, :)deny:-none}"
+note "always writable for OpenCode itself: ~/.local/share/opencode, ~/.local/state/opencode, ~/.cache, ~/Library/Caches, ~/.npm, ~/.bun/install/cache, /private/tmp, per-user temp and cache"
+
+profile=$(<"$here/profile.sb")
+profile=${profile/';;@USER_RULES@'/${(F)rules}}
+darwin_temp=${$(/usr/bin/getconf DARWIN_USER_TEMP_DIR):A}
+darwin_cache=${$(/usr/bin/getconf DARWIN_USER_CACHE_DIR):A}
+
+/bin/mkdir -p "$home"/{.local/share/opencode,.local/state/opencode,.cache,Library/Caches,.npm,.bun/install/cache,.cc-safety-net/logs}
+[[ $mode == gui ]] && /bin/mkdir -p "$home/Library/Application Support/ai.opencode.desktop"
+oc="$home/.config/opencode"
+/bin/mkdir -p "$oc"
+[[ -e $oc/.gitignore ]] || print -l node_modules package.json package-lock.json bun.lock .gitignore > "$oc/.gitignore"
+[[ -e $oc/config.json || -e $oc/opencode.json || -e $oc/opencode.jsonc ]] || print -r -- '{"$schema": "https://opencode.ai/config.json"}' > "$oc/opencode.json"
+
+jarr() { /usr/bin/jq -cn '$ARGS.positional' --args "$@" }
+/bin/mkdir -p "$engine/state"
+print -r -- "{\"allow\":$(jarr $allow),\"readonly\":$(jarr $readonly),\"deny\":$(jarr $deny)}" > "$engine/state/rules.json.$$"
+/bin/mv -f "$engine/state/rules.json.$$" "$engine/state/rules.json"
+
+sandbox=(/usr/bin/sandbox-exec -D "HOME=$home" -D "DARWIN_TEMP=$darwin_temp" -D "DARWIN_CACHE=$darwin_cache" -p "$profile")
+
+case $mode in
+  (cli)
+    next_opencode || fail "opencode not found"
+    set -- -D GUI=0 "$REPLY" "$@"
+    ;;
+  (gui)
+    find_app || fail "OpenCode.app not found"
+    app=$REPLY
+    main=$(/usr/bin/plutil -extract CFBundleExecutable raw "$app/Contents/Info.plist")
+    /usr/bin/pgrep -x "$main" >/dev/null && fail "OpenCode is already running. Quit it, then open OpenCode Guard."
+    set -- -D GUI=1 "$app/Contents/MacOS/$main" --no-sandbox "$@"
+    ;;
+  (profile)
+    print -r -- "$profile"
+    exit 0
+    ;;
+  (check)
+    probe="$engine/state/.check" tmp="$darwin_temp/.opencode-guard-check" ok=1 rc=0
+    $sandbox -D GUI=0 /usr/bin/touch "$probe" 2>/dev/null && { print "FAIL protected write allowed"; ok=0 } || print "ok   protected write denied"
+    $sandbox -D GUI=0 /usr/bin/touch "$tmp" && print "ok   temp write allowed" || { print "FAIL temp write denied"; ok=0 }
+    $sandbox -D GUI=0 /usr/bin/open -h >/dev/null 2>&1 || rc=$?
+    (( rc == 71 )) && print "ok   open denied" || { print "FAIL open allowed"; ok=0 }
+    /bin/rm -f "$probe" "$tmp"
+    if next_opencode; then
+      out="$engine/state/.serve.$$"
+      OPENCODE_SANDBOXED=1 $sandbox -D GUI=0 "$REPLY" serve --hostname 127.0.0.1 --port $(( 20000 + RANDOM % 30000 )) > "$out" 2>&1 &
+      pid=$!
+      ids=
+      for i in {1..40}; do
+        kill -0 $pid 2>/dev/null || break
+        url=$(/usr/bin/grep -o 'http://127\.0\.0\.1:[0-9]*' "$out" 2>/dev/null | head -1) || true
+        [[ -n $url ]] && ids=$(/usr/bin/curl -sf --max-time 5 "$url/experimental/tool/ids?directory=${darwin_temp// /%20}" 2>/dev/null) &&
+          [[ $ids == *'"opencode_guard_status"'* ]] && break
+        sleep 0.5
+      done
+      kill $pid 2>/dev/null || true
+      wait $pid 2>/dev/null || true
+      /bin/rm -f "$out"
+      [[ $ids == *'"opencode_guard_status"'* ]] && print "ok   plugins loaded in OpenCode" || { print "FAIL plugins not loaded in OpenCode"; ok=0 }
+    else
+      print "skip plugin check (opencode CLI not found)"
+    fi
+    (( ok ))
+    exit
+    ;;
+  (*) fail "usage: launch cli|gui|profile|check" ;;
+esac
+
+unset ELECTRON_RUN_AS_NODE OPENCODE_SIDECAR_V2
+export OPENCODE_SANDBOXED=1
+exec $sandbox "$@"

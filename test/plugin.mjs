@@ -3,7 +3,9 @@ import { homedir } from "node:os"
 
 // STATUS, in guarded mode: the exact text the status tool must return.
 const [plugin, mode, status] = process.argv.slice(2)
-const { AgentGuard } = await import(plugin)
+// OpenCode Guard's plugin exports OpenCodeGuard; the migration tests probe it too.
+const mod = await import(plugin)
+const AgentGuard = mod.AgentGuard ?? mod.OpenCodeGuard
 const home = realpathSync(homedir())
 const directory = `${home}/Projects/app`
 if (mode === "guarded") process.env.CC_SAFETY_NET_HOME = `${home}/Projects/net`
@@ -64,6 +66,8 @@ if (mode === "unguarded" || mode === "old-bypass" || mode === "symlinked") {
   await expect("blocked", "read DENY", "read", { filePath: "secret/key" })
   await expect("blocked", "grep DENY", "grep", { pattern: "x", path: `${home}/Documents/private` })
   await expect("blocked", "edit Guard List", "edit", { filePath: `${home}/Agent Guard/Guard List.txt` })
+  // test.sh lists this folder under ALLOW; it stays protected.
+  await expect("blocked", "write OpenCode Guard's engine folder", "write", { filePath: `${home}/Library/Application Support/OpenCodeGuard/bin/opencode` }, "is protected")
   await expect("blocked", "project plugin", "write", { filePath: ".opencode/plugins/x.js" })
   await expect("blocked", "project config", "edit", { filePath: "opencode.json" })
   await expect("blocked", "project tui config", "write", { filePath: "tui.json" })
