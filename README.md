@@ -278,9 +278,10 @@ entry point guarded or refused, then covers concurrent runs, failed gates,
 uninstall order and reruns, and refusals inside a guard. It needs Node; it does
 not need the OpenCode CLI.
 
-`zsh test/migrate.sh` tests the migration. It installs OpenCode Guard v1.0.4 and
-v1.0.3 with each tag's own `install.sh` from `test/fixtures/installs/` (HOME set
-to a disposable home), edits a config as a user would, then migrates with a test
+`zsh test/migrate.sh` tests the migration. It installs OpenCode Guard v1.0.4,
+v1.0.3, v1.0.1 and v1.0.0 with each tag's own `install.sh` from
+`test/fixtures/installs/` (HOME set to a disposable home), and v1.0.0 upgraded in
+place by v1.0.4's, edits a config as a user would, then migrates with a test
 release from the same server and the fake CLI, answering the list prompt on a
 terminal made by `/usr/bin/expect`. It covers a failure and a kill at every point
 before, during and after the switch, reruns, uninstall and the way back to
