@@ -71,6 +71,11 @@ find_app() {
 }
 [[ $mode == find-app ]] && { find_app && print -r -- "$REPLY"; exit }
 
+# Apply in every mode, including nested launches and check. The nesting marker
+# waits until exec, since exporting it here would trip the nested-launch check.
+unset $env_unset
+export ${env_set:#OPENCODE_SANDBOXED=*}
+
 if [[ ${OPENCODE_SANDBOXED:-} == 1 ]] && ! /usr/bin/sandbox-exec -p '(version 1)(allow default)' /usr/bin/true 2>/dev/null; then
   [[ $mode == cli ]] || fail "already inside the guard"
   next_cli || fail "opencode not found"
@@ -232,6 +237,5 @@ case $mode in
   (*) fail "usage: launch cli|gui|profile|check" ;;
 esac
 
-unset $env_unset
 export $env_set
 exec $sandbox "$@"
