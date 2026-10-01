@@ -1,6 +1,6 @@
 {
   "rulebook_version": 1,
-  "name": "opencode-guard",
+  "name": "agent-guard",
   "version": "1.0.0",
   "allowed_commands": ["rm"],
   "rules": [
