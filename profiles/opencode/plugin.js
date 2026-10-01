@@ -1,8 +1,8 @@
-import { closeSync, constants, lstatSync, openSync, readFileSync, realpathSync, unlinkSync } from "node:fs"
+import { closeSync, constants, existsSync, lstatSync, openSync, readFileSync, realpathSync, unlinkSync } from "node:fs"
 import { basename, dirname, join, resolve } from "node:path"
 import { homedir, tmpdir } from "node:os"
 import { randomBytes } from "node:crypto"
-import { pathToFileURL } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
 
 const HOME = realpathSync(homedir())
 const ENGINE = join(HOME, "Library/Application Support/AgentGuard")
@@ -12,6 +12,21 @@ const SAFE_UNGUARDED = new Set(["invalid", "question", "todowrite", "webfetch", 
 const READS = new Set(["read", "glob", "grep", "list", "lsp"])
 const CONFIG = /\/\.opencode(\/|$)|\/(opencode|tui)\.jsonc?$|\/\.cc-safety-net(\/|$)/
 const UNSAFE_NET_ENV = ["CC_SAFETY_NET_HOME", "CC_SAFETY_NET_WORKTREE", "SAFETY_NET_WORKTREE"]
+
+// The release folder this file really lives in, whatever link OpenCode loaded it
+// through. cc-safety-net and the version come from that release; a copy outside
+// releases/ gets neither.
+const SELF = realpathSync(fileURLToPath(import.meta.url))
+const RELEASES = join(ENGINE, "releases") + "/"
+const RELEASE = (() => {
+  if (!SELF.startsWith(RELEASES)) return null
+  const dir = join(RELEASES, SELF.slice(RELEASES.length).split("/")[0])
+  return existsSync(join(dir, "RELEASE")) ? dir : null
+})()
+const VERSION = (() => {
+  try { return readFileSync(join(RELEASE, "VERSION"), "utf8").trim() } catch { return "unknown" }
+})()
+const NAME = RELEASE ? `Agent Guard ${VERSION} (${basename(RELEASE)})` : "Agent Guard"
 
 const under = (p, root) => p === root || p.startsWith(root === "/" ? "/" : root + "/")
 
@@ -54,8 +69,9 @@ function loadRules() {
 }
 
 async function loadSafetyNet(input) {
+  if (!RELEASE) return null
   try {
-    const url = pathToFileURL(join(ENGINE, "vendor/cc-safety-net/dist/index.js")).href
+    const url = pathToFileURL(join(RELEASE, "vendor/cc-safety-net/dist/index.js")).href
     return await (await import(url)).default.server(input)
   } catch {
     return null
@@ -129,10 +145,10 @@ export const AgentGuard = async input => {
   }
 
   const status = {
-    description: "Report whether Agent Guard is active.",
+    description: `Report whether Agent Guard is active. Installed: ${NAME}.`,
     args: {},
     async execute() {
-      return guarded ? "Agent Guard is active." : "Agent Guard is NOT active: OpenCode was started without the guard."
+      return guarded ? `${NAME} is active.` : `${NAME} is NOT active: OpenCode was started without the guard.`
     },
   }
 

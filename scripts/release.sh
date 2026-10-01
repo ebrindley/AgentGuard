@@ -15,6 +15,8 @@ files=(
   install.sh
   LICENSE
   engine/launch
+  engine/account.zsh
+  engine/agent-guard
   engine/profile.sb
   engine/vendor/THIRD-PARTY-NOTICES
   profiles/opencode/harness.zsh

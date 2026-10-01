@@ -1,7 +1,8 @@
 import { realpathSync } from "node:fs"
 import { homedir } from "node:os"
 
-const [plugin, mode] = process.argv.slice(2)
+// STATUS, in guarded mode: the exact text the status tool must return.
+const [plugin, mode, status] = process.argv.slice(2)
 const { AgentGuard } = await import(plugin)
 const home = realpathSync(homedir())
 const directory = `${home}/Projects/app`
@@ -25,10 +26,23 @@ if (mode === "unguarded" || mode === "old-bypass" || mode === "symlinked") {
   await expect("allowed", "question allowed", "question", {})
 } else if (mode === "bypass") {
   await expect("allowed", "bash allowed", "bash", { command: "ls" })
+} else if (mode === "outside") {
+  // A copy outside releases/, run guarded: no cc-safety-net, so no status tool and every tool refused.
+  const absent = hooks.tool?.agent_guard_status === undefined
+  console.log(`${absent ? "ok  " : "FAIL"} plugin ${mode}: no agent_guard_status`)
+  if (!absent) failures++
+  await expect("blocked", "bash refused", "bash", { command: "ls" })
+  await expect("blocked", "read refused", "read", { filePath: "README.md" })
+  await expect("blocked", "edit in ALLOW refused", "edit", { filePath: "src/index.js" })
 } else {
   const registered = typeof hooks.tool?.agent_guard_status?.execute === "function"
   console.log(`${registered ? "ok  " : "FAIL"} plugin ${mode}: agent_guard_status registered`)
   if (!registered) failures++
+  if (status !== undefined) {
+    const said = registered ? await hooks.tool.agent_guard_status.execute({}) : ""
+    console.log(`${said === status ? "ok  " : "FAIL"} plugin ${mode}: status reports "${status}"`)
+    if (said !== status) failures++
+  }
   await expect("allowed", "bash allowed", "bash", { command: "ls" })
   await expect("blocked", "absolute-path env wrapper", "bash", { command: "/usr/bin/env git reset --hard" })
   await expect("blocked", "recursive rm despite agent-set CC_SAFETY_NET_HOME", "bash", { command: "rm -r sample" })

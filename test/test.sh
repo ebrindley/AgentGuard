@@ -61,30 +61,89 @@ cc="$home/.cc-safety-net/rules"
 /bin/mkdir -p "$cc/opencode-guard" "$home/.config/opencode/plugins"
 /usr/bin/jq '.name = "opencode-guard"' "$root/profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json" > "$cc/opencode-guard/rulebook.json"
 print -r -- '{"version":1,"rules":["opencode-guard"],"overrides":{},"transparent_wrappers":["env"]}' > "$cc/rule.json"
-print -r -- 'export const OpenCodeGuardFixture = async () => ({})' > "$home/.config/opencode/plugins/opencode-guard.js"
 orig="$run/orig"
 /bin/mkdir -p "$orig"
 /bin/cp "$home/.zprofile" "$orig/zprofile"
 /bin/cp "$home/Projects/dotfiles/zshrc" "$orig/zshrc"
 /bin/cp "$cc/opencode-guard/rulebook.json" "$orig/rulebook.json"
-/bin/cp "$home/.config/opencode/plugins/opencode-guard.js" "$orig/plugin.js"
-# True when OpenCode Guard's files match their copies, ignoring Agent Guard's PATH block.
+# OpenCode Guard's plugin file. Its presence refuses the install, so it is put in
+# place after the install to check that uninstall leaves it alone.
+print -r -- 'export const OpenCodeGuardFixture = async () => ({})' > "$orig/plugin.js"
+old_plugin="$home/.config/opencode/plugins/opencode-guard.js"
+# True when OpenCode Guard's blocks and rulebook match their copies, ignoring Agent Guard's PATH block.
 old_untouched() {
   local rc
   for rc in zprofile zshrc; do
     [[ "$(/usr/bin/sed '/^# >>> agent-guard >>>$/,/^# <<< agent-guard <<<$/d' "$home/.$rc")" == "$(<"$orig/$rc")" ]] || return 1
   done
-  /usr/bin/cmp -s "$orig/rulebook.json" "$cc/opencode-guard/rulebook.json" &&
-    /usr/bin/cmp -s "$orig/plugin.js" "$home/.config/opencode/plugins/opencode-guard.js"
+  /usr/bin/cmp -s "$orig/rulebook.json" "$cc/opencode-guard/rulebook.json"
 }
+
+# Every path under the test home, and the hash of every file in it.
+snapshot() {
+  /usr/bin/find "$home" -print | /usr/bin/sort
+  /usr/bin/find "$home" -type f -exec /usr/bin/shasum -a 256 {} + | /usr/bin/sort
+}
+# refuses NAME TEXT COMMAND...: COMMAND exits non-zero and prints TEXT.
+refuses() {
+  local name=$1 text=$2 out rc=0
+  shift 2
+  out=$("$@" 2>&1 </dev/null) || rc=$?
+  if (( rc != 0 )) && [[ $out == *"$text"* ]]; then pass "$name"; else fail "$name (rc $rc)"; print -r -- "$out"; fi
+}
+# install_refused NAME TEXT: the installer refuses with TEXT and the home is unchanged.
+install_refused() {
+  local before=$(snapshot)
+  refuses "$1" "$2" /bin/zsh "$root/install.sh" --projects "$home/Projects"
+  [[ $(snapshot) == "$before" ]] && pass "$1: nothing changed" || fail "$1: nothing changed"
+}
+old_engine="$home/Library/Application Support/OpenCodeGuard"
+/bin/mkdir -p "$old_engine"
+install_refused "install refused when OpenCode Guard's engine folder exists" "Migration from OpenCode Guard arrives in a later release"
+/bin/rmdir "$old_engine"
+/bin/cp "$orig/plugin.js" "$old_plugin"
+install_refused "install refused when OpenCode Guard's plugin exists" "Migration from OpenCode Guard arrives in a later release"
+/bin/rm "$old_plugin"
+/bin/mkdir -p "$engine"
+print -r -- '#!/bin/zsh' > "$engine/launch"
+install_refused "install refused over an install without release folders" "Run \"$engine/uninstall.sh\" first"
+/bin/rm -r "$engine"
+
+account_fn() { /usr/bin/sed -n '/^account_home() {$/,/^}$/p' "$1" }
+check "engine/account.zsh holds the launcher's account_home verbatim" \
+  test -n "$(account_fn "$tested/engine/account.zsh")" -a "$(account_fn "$tested/engine/account.zsh")" = "$(account_fn "$tested/engine/launch")"
 
 /bin/zsh "$root/install.sh" --projects "$home/Projects" </dev/null > "$home/install.log" 2>&1 || { fail "install"; /bin/cat "$home/install.log" }
 check "install self-test incl. plugin load" /usr/bin/grep -q "ok   plugins loaded in OpenCode" "$home/install.log"
 check "projects added to ALLOW" /usr/bin/grep -Fxq "$home/Projects" "$list"
 check "zprofile without final newline kept intact" /usr/bin/grep -Fxq 'alias x=y' "$home/.zprofile"
-check "engine folder has LICENSE and notices" test -f "$engine/LICENSE" -a -f "$engine/vendor/THIRD-PARTY-NOTICES"
+rid=$(<"$engine/current/RELEASE")
+release="$engine/releases/$rid"
+version=dev
+[[ -f $tested/VERSION ]] && version=$(<"$tested/VERSION")
+rid_form() { setopt local_options extended_glob; [[ $1 == "$version"-[0-9](#c8)T[0-9](#c6)Z ]] }
+check "release ID is the version and the UTC install time" rid_form "$rid"
+check "current links to releases/<rid>, bin to current/bin" \
+  test "$(/usr/bin/readlink "$engine/current")" = "releases/$rid" -a "$(/usr/bin/readlink "$engine/bin")" = current/bin -a -d "$release"
+check "release holds the runtime layout" test -x "$release/launch" -a -f "$release/profile.sb" -a -f "$release/account.zsh" \
+  -a -x "$release/uninstall.sh" -a -x "$release/bin/opencode" -a -x "$release/bin/opencode-gui" -a -x "$release/bin/agent-guard" \
+  -a -f "$release/profiles/opencode/harness.zsh" -a -f "$release/vendor/cc-safety-net/dist/index.js" \
+  -a "$(<"$release/VERSION")" = "$version"
+check "release has LICENSE and notices" test -f "$release/LICENSE" -a -f "$release/vendor/THIRD-PARTY-NOTICES"
+check "check-config plugin links to the release's plugin.js" \
+  test -L "$release/profiles/opencode/check-config/opencode/plugins/agent-guard.js" -a \
+    "$release/profiles/opencode/check-config/opencode/plugins/agent-guard.js" -ef "$release/profiles/opencode/plugin.js"
 check "permission merge" /usr/bin/jq -e '.permission == {"bash":{"*":"allow","git *":"allow","rm *":"deny"},"task":"ask","edit":"allow","external_directory":"allow"} and (.permission.bash | keys_unsorted[0]) == "*"' "$cfg"
-check "plugin installed as agent-guard.js" test -f "$home/.config/opencode/plugins/agent-guard.js"
+check "plugin is a link to current's plugin.js" \
+  test -L "$home/.config/opencode/plugins/agent-guard.js" -a "$(/usr/bin/readlink "$home/.config/opencode/plugins/agent-guard.js")" = "$engine/current/profiles/opencode/plugin.js"
+only_plugin() {
+  setopt local_options extended_glob
+  local -a found=("$home/.config/opencode/plugins"/(#i)*.(js|ts)(ND))
+  [[ ${#found} == 1 && ${found[1]:t} == agent-guard.js ]]
+}
+check "plugin folder holds no other .js or .ts file" only_plugin
+check "agent-guard version names the version and release" test "$("$engine/bin/agent-guard" version)" = "Agent Guard $version, release $rid"
+refuses "agent-guard lists only doctor and version" "usage: agent-guard doctor|version" "$engine/bin/agent-guard"
 check "rulebook agent-guard" /usr/bin/jq -e '.name == "agent-guard"' "$cc/agent-guard/rulebook.json"
 check "rule.json lists agent-guard and keeps opencode-guard" /usr/bin/jq -e '.rules == ["agent-guard", "opencode-guard"]' "$cc/rule.json"
 new_blocks() {
@@ -95,7 +154,17 @@ new_blocks() {
 }
 check "agent-guard PATH blocks" new_blocks
 check "app bundle ID" test "$(/usr/bin/plutil -extract CFBundleIdentifier raw "$home/Applications/Agent Guard.app/Contents/Info.plist")" = io.github.ebrindley.agentguard
-check "install leaves OpenCode Guard's blocks, rulebook and plugin unchanged" old_untouched
+check "install leaves OpenCode Guard's blocks and rulebook unchanged" old_untouched
+
+first=$rid
+/bin/zsh "$root/install.sh" </dev/null > "$home/reinstall.log" 2>&1 || { fail "reinstall"; /bin/cat "$home/reinstall.log" }
+rid=$(<"$engine/current/RELEASE")
+release="$engine/releases/$rid"
+releases=("$engine"/releases/*(N))
+check "reinstall replaces current and leaves one release folder" \
+  test "$rid" != "$first" -a ${#releases} -eq 1 -a "${releases[1]:t}" = "$rid" -a "$(/usr/bin/readlink "$engine/current")" = "releases/$rid"
+check "reinstall keeps one plugin, the link" only_plugin
+/bin/cp "$orig/plugin.js" "$old_plugin"
 
 /usr/bin/awk -v h="$home" '
   /^ALLOW -/ { print; print h "/Projects/archive/live"; print h "/Library"; print "/"; next }
@@ -112,6 +181,20 @@ check "missing DENY warned" /usr/bin/grep -q "DENY entry does not exist, check t
 check "junk line skipped" /usr/bin/grep -q "skipped, not a full path: not a path" "$log"
 check "built-ins listed" /usr/bin/grep -q "always writable for OpenCode itself" "$log"
 check "rules.json" /usr/bin/jq -e --arg h "$home" '.deny == [$h + "/Projects/app/secret", $h + "/Documents/private", $h + "/Documents/typo"]' "$engine/state/rules.json"
+first_line() { [[ "$(/usr/bin/head -1 "$log")" == "Agent Guard profile $rid "* ]] }
+check "first log line names the release" first_line
+
+# The launcher runs only from a release folder directly inside the engine's releases/.
+copy="$home/Projects/releases/$rid"
+/bin/mkdir -p "${copy:h}"
+/bin/cp -R "$release/" "$copy"
+refuses "copied launcher outside the engine refused" "not an installed release: $copy" /bin/zsh "$copy/launch" profile
+/bin/rm -rf "${copy:h}"
+/bin/cp -R "$release/" "$engine/releases/no-release-file"
+/bin/rm "$engine/releases/no-release-file/RELEASE"
+refuses "launcher in a release folder without RELEASE refused" "not an installed release" \
+  /bin/zsh "$engine/releases/no-release-file/launch" profile
+/bin/rm -rf "$engine/releases/no-release-file"
 
 temp=${$(/usr/bin/getconf DARWIN_USER_TEMP_DIR):A}
 cache=${$(/usr/bin/getconf DARWIN_USER_CACHE_DIR):A}
@@ -166,7 +249,6 @@ for marker in AGENT_GUARD_SANDBOXED OPENCODE_SANDBOXED; do
 done
 
 # Shim loop: OpenCode Guard v1.0.3 installed next to Agent Guard, both shim folders on PATH.
-old_engine="$home/Library/Application Support/OpenCodeGuard"
 /bin/mkdir -p "$old_engine/bin" "$home/OpenCode Guard" "$home/stub" "$home/linkbin"
 /bin/cp "$source_root/test/fixtures/opencode-guard-1.0.3/launch" "$source_root/test/fixtures/opencode-guard-1.0.3/profile.sb" "$old_engine/"
 print -r -- $'#!/bin/zsh\nexec "${0:A:h:h}/launch" cli "$@"' > "$old_engine/bin/opencode"
@@ -211,6 +293,16 @@ for target in "$engine/bin/opencode" "$old_engine/bin/opencode"; do
   stub_ran "symlink to ${target:h:h:t} shim skipped" '1 - confined' \
     /usr/bin/env PATH="$home/linkbin:$home/stub:$PATH" "$engine/bin/opencode"
 done
+# Any executable inside either engine folder is skipped, not only the shims.
+inside=("$engine/state/fakebin" "$old_engine/fakebin")
+for d in $inside; do
+  /bin/mkdir -p "$d"
+  print -r -- $'#!/bin/sh\necho engine >> "$HOME/Projects/app/stub-runs"' > "$d/opencode"
+  /bin/chmod 755 "$d/opencode"
+done
+stub_ran "candidates inside either engine folder skipped" '1 - confined' \
+  /usr/bin/env PATH="${(j.:.)inside}:$home/stub:$PATH" "$engine/bin/opencode"
+/bin/rm -rf $inside
 
 {
   plugin="$home/.config/opencode/plugins/agent-guard.js"
@@ -219,17 +311,40 @@ done
   node "$root/test/plugin.mjs" "$plugin" unguarded || fails=$((fails + 1))
   AGENT_GUARD_BYPASS=1 node "$root/test/plugin.mjs" "$plugin" bypass || fails=$((fails + 1))
   OPENCODE_GUARD_BYPASS=1 node "$root/test/plugin.mjs" "$plugin" old-bypass || fails=$((fails + 1))
-  sb "$(command -v node)" "$root/test/plugin.mjs" "$plugin" guarded || fails=$((fails + 1))
+  sb "$(command -v node)" "$root/test/plugin.mjs" "$plugin" guarded "Agent Guard $version ($rid) is active." || fails=$((fails + 1))
+  # A copy of the plugin outside releases/ loads no cc-safety-net.
+  /bin/cp "$release/profiles/opencode/plugin.js" "$home/Projects/plugin-copy.js"
+  sb "$(command -v node)" "$root/test/plugin.mjs" "$home/Projects/plugin-copy.js" outside || fails=$((fails + 1))
   /bin/mv "$engine/state" "$engine/state.real" && /bin/ln -s /System "$engine/state"
   node "$root/test/plugin.mjs" "$plugin" symlinked || fails=$((fails + 1))
   /bin/rm "$engine/state" && /bin/mv "$engine/state.real" "$engine/state"
 }
 
-/bin/zsh "$engine/uninstall.sh" >/dev/null 2>&1
-[[ ! -e $engine && ! -e $home/.config/opencode/plugins/agent-guard.js && ! -e $cc/agent-guard ]] && pass "uninstall" || fail "uninstall"
+# check staged on a release that is not current: it must load that release's
+# plugin, not the live one, and leave rules.json and OpenCode's config alone.
+refuses "check staged refused for the current release" "not current" "$engine/current/launch" check staged
+refuses "check staged refused for the current release by its real path" "not current" "$release/launch" check staged
+next="$engine/releases/0.0.0-20000101T000000Z"
+/bin/cp -R "$release/" "$next"
+print -r -- "${next:t}" > "$next/RELEASE"
+/bin/rm -f "$engine/state/rules.json" "$home/.config/opencode/.gitignore"
+out=$("$next/launch" check staged 2>&1) && [[ $out == *"ok   plugins loaded in OpenCode (staged)"* ]] &&
+  pass "check staged passes for a staged release" || { fail "check staged passes for a staged release"; print -r -- "$out" }
+check "check staged writes no rules.json, no OpenCode config and no serve pid" \
+  test ! -e "$engine/state/rules.json" -a ! -e "$home/.config/opencode/.gitignore" -a ! -e "$engine/state/.serve.pid"
+/usr/bin/sed -i '' 's/agent_guard_status: status/agent_guard_status_off: status/' "$next/profiles/opencode/plugin.js"
+refuses "check staged fails when the staged plugin lacks the status tool" "FAIL plugins not loaded in OpenCode (staged)" \
+  "$next/launch" check staged
+out=$("$engine/bin/agent-guard" doctor 2>&1) && [[ $out == *"ok   plugins loaded in OpenCode"* ]] &&
+  pass "doctor passes with the live plugin meanwhile" || { fail "doctor passes with the live plugin meanwhile"; print -r -- "$out" }
+/bin/rm -rf "$next"
+
+/bin/zsh "$engine/current/uninstall.sh" >/dev/null 2>&1
+[[ ! -e $engine && ! -L $home/.config/opencode/plugins/agent-guard.js && ! -e $cc/agent-guard ]] && pass "uninstall" || fail "uninstall"
 check "rc block removed" sh -c "! /usr/bin/grep -q agent-guard '$home/.zshrc' '$home/.zprofile'"
 check "rule.json keeps only opencode-guard" /usr/bin/jq -e '.rules == ["opencode-guard"]' "$cc/rule.json"
-check "uninstall leaves OpenCode Guard's blocks, rulebook and plugin unchanged" old_untouched
+check "uninstall leaves OpenCode Guard's blocks and rulebook unchanged" old_untouched
+check "uninstall leaves OpenCode Guard's plugin unchanged" /usr/bin/cmp -s "$orig/plugin.js" "$old_plugin"
 check "permissions restored" /usr/bin/jq -e --argjson o "$original" '.permission == $o.permission' "$cfg"
 
 /bin/rm -rf "$run"

@@ -1,10 +1,18 @@
 #!/bin/zsh
-# usage: launch cli|gui|profile|check [args...]
+# usage: launch cli|gui|profile|check [staged] [args...]
 emulate -L zsh
 setopt err_exit no_unset pipe_fail extended_glob
 
 mode=${1:-}
 (( $# )) && shift
+
+fail() {
+  print -ru2 -- "agent-guard: $*"
+  if [[ $mode == gui ]]; then
+    /usr/bin/osascript -e 'on run argv' -e 'display alert "Agent Guard" message (item 1 of argv) as critical' -e 'end run' "$*" >/dev/null 2>&1 || true
+  fi
+  exit 1
+}
 
 # Resolve the account before reading any executable profile. No ambient override.
 account_home() {
@@ -23,36 +31,45 @@ account_home() {
 account_home || { print -ru2 'agent-guard: cannot resolve account home'; exit 1 }
 home=${REPLY:A}
 engine="$home/Library/Application Support/AgentGuard"
-bin="$engine/bin"
+# Run only from a release folder directly inside the account-derived engine
+# folder, whatever path was used to call this file. Checked before any source.
+release=${0:A:h}
+[[ ${release:h} == "$engine/releases" && ${release:t} == [0-9A-Za-z.+-]## && -f $release/RELEASE ]] ||
+  fail "not an installed release: $release"
 list_dir="$home/Agent Guard"
 list="$list_dir/Guard List.txt"
 log="$list_dir/last-launch-opencode.log"
-here=$engine
-profile_dir="$engine/profiles/opencode"
+here=$release
+profile_dir="$release/profiles/opencode"
+
+# check staged tests a release that is not current yet, without the steps that
+# would publish its rules or create harness config.
+staged=0
+if [[ $mode == check && ${1:-} == staged ]]; then
+  shift
+  current="$engine/current"
+  [[ $release != ${current:A} ]] || fail "check staged is for a release that is not current; run check"
+  staged=1
+fi
+
 source "$profile_dir/harness.zsh"
 source "$profile_dir/hooks.zsh"
-
-fail() {
-  print -ru2 -- "agent-guard: $*"
-  if [[ $mode == gui ]]; then
-    /usr/bin/osascript -e 'on run argv' -e 'display alert "Agent Guard" message (item 1 of argv) as critical' -e 'end run' "$*" >/dev/null 2>&1 || true
-  fi
-  exit 1
-}
 
 note() {
   print -r -- "$*" >> "$log"
   [[ $mode == (gui|check) ]] || print -ru2 -- "agent-guard: $*"
 }
 
-# Guard shim folders: Agent Guard's and OpenCode Guard's. A command that resolves
-# into one of them starts a guard, not the harness; following it can loop.
-shim_dirs=("$bin" "$home/Library/Application Support/OpenCodeGuard/bin")
+within() { [[ $2 == / || $1 == "$2" || $1 == "$2"/* ]] }
 
-guard_shim() {
-  local s
-  for s in $shim_dirs; do
-    [[ ${1:A} == "${s:A}"/* ]] && return 0
+# Engine folders: Agent Guard's and OpenCode Guard's. A command that resolves
+# into one of them starts a guard, not the harness; following it can loop.
+guard_engines=("$engine" "$home/Library/Application Support/OpenCodeGuard")
+
+in_guard() {
+  local e
+  for e in $guard_engines; do
+    within "${1:A}" "${e:A}" && return 0
   done
   return 1
 }
@@ -62,13 +79,13 @@ next_cli() {
   for d in $path; do
     for cli in $cli_names; do
       f="$d/$cli"
-      [[ -x $f && ! -d $f ]] && ! guard_shim "$f" || continue
+      [[ -x $f && ! -d $f ]] && ! in_guard "$f" || continue
       REPLY=$f
       return 0
     done
   done
   for f in $cli_search; do
-    [[ -x $f ]] && ! guard_shim "$f" && { REPLY=$f; return 0 }
+    [[ -x $f ]] && ! in_guard "$f" && { REPLY=$f; return 0 }
   done
   return 1
 }
@@ -107,9 +124,7 @@ normalize() {
   REPLY=${p:A}
 }
 
-within() { [[ $2 == / || $1 == "$2" || $1 == "$2"/* ]] }
-
-print -r -- "Agent Guard $mode $(/bin/date '+%Y-%m-%d %H:%M:%S')" > "$log"
+print -r -- "Agent Guard $mode ${release:t} $(/bin/date '+%Y-%m-%d %H:%M:%S')" > "$log"
 
 essential=(/ $home $home/Library $home/.config $home/.local $home/.cache
            /usr /bin /sbin /System /Library /private /dev /opt /Applications)
@@ -212,12 +227,14 @@ darwin_cache=${$(/usr/bin/getconf DARWIN_USER_CACHE_DIR):A}
 
 /bin/mkdir -p $writable
 [[ $mode == gui ]] && /bin/mkdir -p "$writable_gui[1]"
-$prepare_hook
+(( staged )) || $prepare_hook
 
 jarr() { /usr/bin/jq -cn '$ARGS.positional' --args "$@" }
 /bin/mkdir -p "$engine/state"
-print -r -- "{\"allow\":$(jarr $allow),\"readonly\":$(jarr $readonly),\"deny\":$(jarr $deny)}" > "$engine/state/rules.json.$$"
-/bin/mv -f "$engine/state/rules.json.$$" "$engine/state/rules.json"
+if (( ! staged )); then
+  print -r -- "{\"allow\":$(jarr $allow),\"readonly\":$(jarr $readonly),\"deny\":$(jarr $deny)}" > "$engine/state/rules.json.$$"
+  /bin/mv -f "$engine/state/rules.json.$$" "$engine/state/rules.json"
+fi
 
 sandbox=(/usr/bin/sandbox-exec -D "HOME=$home" -D "DARWIN_TEMP=$darwin_temp" -D "DARWIN_CACHE=$darwin_cache" -p "$profile")
 
@@ -248,7 +265,7 @@ case $mode in
     (( ok ))
     exit
     ;;
-  (*) fail "usage: launch cli|gui|profile|check" ;;
+  (*) fail "usage: launch cli|gui|profile|check [staged]" ;;
 esac
 
 export AGENT_GUARD_SANDBOXED=1
