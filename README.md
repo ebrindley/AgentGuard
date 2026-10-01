@@ -1,11 +1,11 @@
 # Agent Guard
 
-Guardrails for terminal coding agents on macOS. One engine runs each agent under a macOS Seatbelt sandbox built from one allow and deny list, with a small profile and plugin per agent. It will replace OpenCode Guard and pi-sandbox-guard.
+Guardrails for terminal coding agents on macOS. One engine runs each agent under a macOS Seatbelt sandbox built from one allow and deny list, with a small profile and plugin per agent. It replaces OpenCode Guard and, later, pi-sandbox-guard.
 
-It contains the OpenCode Guard v1.0.3 port, including the v1.0.4 fixes, and
-replaces an existing OpenCode Guard install (see
-[Moving from OpenCode Guard](#moving-from-opencode-guard)). No Agent Guard release
-is published yet; OpenCode Guard remains the released product. See
+Release 0.1.0 supports OpenCode only. It is the OpenCode Guard v1.0.3 port,
+including the v1.0.4 fixes, under Agent Guard's own names, and replaces an
+existing OpenCode Guard install (see
+[Moving from OpenCode Guard](#moving-from-opencode-guard)). The design is in
 [docs/DESIGN.md](docs/DESIGN.md).
 
 The shared launcher and Seatbelt builder are in `engine/`. OpenCode's paths,
@@ -16,10 +16,17 @@ folder it runs from, which must be directly inside
 `~/Library/Application Support/AgentGuard/releases/`. Ambient `HOME` and `USER`
 cannot choose that profile, and a copy of the launcher elsewhere refuses to run.
 
-This port retains v1.0.3 policy and limitations: ALLOW contents remain writable,
-reads and network access are broad unless denied, cached OpenCode plugins remain
-writable, and symlink targets of project config names are protected only in the
-start folder. There is no Pi profile or `@project` yet.
+There is no Pi profile or `@project` yet; both are planned.
+
+## Requirements
+
+- macOS 15 or later. The installer uses only tools that ship with macOS and
+  stops, naming the tool, if one is missing.
+- OpenCode: the `opencode` CLI on PATH, in `/opt/homebrew/bin`, `/usr/local/bin`
+  or `~/.opencode/bin`; for the app route, `OpenCode.app`, looked for in
+  `/Applications` and `~/Applications`, then by its bundle ID.
+- Terminal, outside any agent session or other sandbox, for install, update and
+  uninstall.
 
 ## Install
 
@@ -31,7 +38,7 @@ In Terminal, outside any agent session, on macOS 15 or later:
 
 To allow a projects folder without the prompt, add `install.sh --projects ~/Projects`
 after the closing quote. For a particular release, replace
-`latest/download` with `download/v1.2.3`. From a checkout or an unpacked
+`latest/download` with `download/v0.1.0`. From a checkout or an unpacked
 archive, `zsh install.sh [--projects DIR] [--gui]` installs that tree the same
 way.
 
@@ -163,6 +170,15 @@ not touch files ([docs/DESIGN.md](docs/DESIGN.md#5-inner-layer)). Set
 `AGENT_GUARD_BYPASS=1` in OpenCode's environment to lift that refusal. OpenCode
 Guard's `OPENCODE_GUARD_BYPASS` is no longer honored.
 
+## Limitations
+
+Agent Guard limits writes. It does not limit network access, reads outside DENY
+entries or what the agent does inside ALLOW folders. OpenCode's package store
+under `~/.cache/opencode` is writable, concurrent launches share one rules file,
+and a symlinked project config name has its target protected only when OpenCode
+starts from that folder in a terminal. Each limitation, and what is planned for
+it, is in [SECURITY.md](SECURITY.md#known-limitations-in-010).
+
 ## Tests
 
 Run from a checkout, outside any agent sandbox, on macOS 15 or later:
@@ -210,23 +226,23 @@ on `test/`.
 ## Building a release
 
 ```sh
-scripts/release.sh [--dev] [--out DIR] 1.2.3
+scripts/release.sh [--dev] [--out DIR] 0.1.0
 ```
 
 This writes three release assets to `dist/` (or `DIR`):
-`agent-guard-1.2.3.tar.gz`, `agent-guard-1.2.3.tar.gz.sha256` and
-`install.sh`. The archive holds one `agent-guard-1.2.3/` folder with the files
+`agent-guard-0.1.0.tar.gz`, `agent-guard-0.1.0.tar.gz.sha256` and
+`install.sh`. The archive holds one `agent-guard-0.1.0/` folder with the files
 listed in the script, the whole of `engine/vendor/cc-safety-net` and
 `profiles/opencode/templates`, a `VERSION` file and a `COMMIT` file. The script
 stops if a listed file is missing. It uses only tools that ship with macOS. The
 checksum file names the archive without a folder, so check it from `dist/`:
 
 ```sh
-cd dist && shasum -a 256 -c agent-guard-1.2.3.tar.gz.sha256
+cd dist && shasum -a 256 -c agent-guard-0.1.0.tar.gz.sha256
 ```
 
 `install.sh` is the bootstrap for the one-line install, filled in from
-`scripts/bootstrap.zsh` with the tag `v1.2.3`, the version and the launcher's
+`scripts/bootstrap.zsh` with the tag `v0.1.0`, the version and the launcher's
 account lookup. It downloads that tag's archive and checksum into the engine
 folder's `stage/`, verifies them, then runs the archive's installer with
 `--stage <id>` and its own arguments. It refuses inside a guard or another
@@ -271,7 +287,15 @@ before, during and after the switch, reruns, uninstall and the way back to
 OpenCode Guard, terminals opened before the switch, forwarder removal by boot
 time, and the refusals. It needs Node; it does not need the OpenCode CLI.
 
-`LICENSE` covers Agent Guard. `engine/vendor/cc-safety-net/LICENSE` covers
+## Contributing and security
+
+Issues are welcome; external pull requests are not accepted. Bug-report
+guidance is in [CONTRIBUTING.md](CONTRIBUTING.md). Report vulnerabilities
+privately as described in [SECURITY.md](SECURITY.md).
+
+## License
+
+MIT. `LICENSE` covers Agent Guard. `engine/vendor/cc-safety-net/LICENSE` covers
 cc-safety-net, and `engine/vendor/THIRD-PARTY-NOTICES` covers the effect and
 `@opencode/schema` code bundled in cc-safety-net's `dist/index.js`. The
 installer copies all three into each release folder.
