@@ -116,6 +116,12 @@ print -l node_modules package.json package-lock.json bun.lock .gitignore > "$sta
 /usr/bin/xattr -dr com.apple.quarantine "$staged" 2>/dev/null || true
 /bin/mv "$staged" "$release"
 /bin/rmdir "$engine/stage" 2>/dev/null || true
+# Kept after the self-test: OpenCode sessions launched from it still load its plugin.
+previous=
+if [[ -L $engine/current ]]; then
+  previous=$(/usr/bin/readlink "$engine/current")
+  previous=${previous:t}
+fi
 replace_link "$engine/current" "releases/$rid"
 replace_link "$engine/bin" current/bin
 say "engine: $engine (release $rid)"
@@ -207,9 +213,9 @@ say "GUI: $launcher (drag it to the Dock)"
 
 say "self-test:"
 if out=$("$engine/bin/agent-guard" doctor 2>&1); then
-  # Earlier releases go only once this one has passed.
+  # Releases older than the previous one go only once this one has passed.
   for r in "$engine"/releases/*(N/); do
-    [[ ${r:t} == "$rid" ]] || /bin/rm -rf "$r"
+    [[ ${r:t} == ("$rid"|"$previous") ]] || /bin/rm -rf "$r"
   done
 else
   failed=(${(M)${(f)out}:#FAIL*})

@@ -19,7 +19,7 @@ opencode_check() {
     fi
     if next_cli; then
       out="$engine/state/.serve.$$"
-      AGENT_GUARD_SANDBOXED=1 $scope $sandbox -D GUI=0 "$REPLY" serve --hostname 127.0.0.1 --port $(( 20000 + RANDOM % 30000 )) > "$out" 2>&1 &
+      AGENT_GUARD_SANDBOXED=1 AGENT_GUARD_RELEASE=${release:t} $scope $sandbox -D GUI=0 "$REPLY" serve --hostname 127.0.0.1 --port $(( 20000 + RANDOM % 30000 )) > "$out" 2>&1 &
       pid=$!
       print -r -- $pid > "$engine/state/.serve.pid"
       ids=

@@ -268,5 +268,7 @@ case $mode in
   (*) fail "usage: launch cli|gui|profile|check [staged]" ;;
 esac
 
-export AGENT_GUARD_SANDBOXED=1
+# The plugin loads through current, which an update can move; AGENT_GUARD_RELEASE
+# tells it to use this release.
+export AGENT_GUARD_SANDBOXED=1 AGENT_GUARD_RELEASE=${release:t}
 exec $sandbox "$@"

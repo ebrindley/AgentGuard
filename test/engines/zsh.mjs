@@ -33,9 +33,10 @@ export function layout(tree, engine, rid = '0.0.0-20260101T000000Z') {
   return release;
 }
 
-// The argv that runs the launcher of the current release in the engine folder.
-export function launcher(engine) {
-  return ['/bin/zsh', join(engine, 'current/launch')];
+// The argv that runs the launcher of the current release in the engine folder,
+// or of the release rid when given.
+export function launcher(engine, rid) {
+  return ['/bin/zsh', join(engine, rid ? join('releases', rid) : 'current', 'launch')];
 }
 
 // Runs the unmodified account lookup from source/engine/launch, and the one in
@@ -61,12 +62,12 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
   const [command, ...args] = process.argv.slice(2);
   if (command === 'name') console.log(name);
   else if (command === 'stage' && args.length === 3) stage(...args);
-  else if (command === 'launcher' && args.length === 1) console.log(launcher(args[0]).join('\n'));
+  else if (command === 'launcher' && (args.length === 1 || args.length === 2)) console.log(launcher(...args).join('\n'));
   else if (command === 'identity' && args.length === 3) {
     const found = identity(args[0], { HOME: args[1], USER: args[2] });
     console.log(`${found.home}\n${found.engine}`);
   } else {
-    console.error('usage: zsh.mjs name | stage SOURCE DEST HOME | launcher ENGINE | identity SOURCE HOME USER');
+    console.error('usage: zsh.mjs name | stage SOURCE DEST HOME | launcher ENGINE [RID] | identity SOURCE HOME USER');
     process.exit(2);
   }
 }

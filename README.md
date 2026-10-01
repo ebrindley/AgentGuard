@@ -20,7 +20,11 @@ and `bin` to `current/bin`, which holds `opencode`, `opencode-gui` and
 `agent-guard`. `state/` (launch rules and the permission record) is outside the
 release folders. `~/.config/opencode/plugins/agent-guard.js` is a link to
 `current/profiles/opencode/plugin.js`. A reinstall adds a new release folder,
-switches `current`, and removes the older folders once its self-test passes.
+switches `current`, and once its self-test passes removes the older folders
+except the one `current` named before, so OpenCode sessions started from it
+keep working. Each launch sets `AGENT_GUARD_RELEASE` to its release ID; the
+plugin, loaded through `current`, then uses that release's plugin; when that
+release is gone, it refuses every guarded tool with a message to reopen OpenCode.
 `agent-guard doctor` runs the installed self-test; `agent-guard version` prints
 the version and release ID. To remove an install, run
 `"$HOME/Library/Application Support/AgentGuard/current/uninstall.sh"`. The
@@ -54,8 +58,8 @@ zsh test/test.sh
 Both take `--engine NAME` to choose the engine under test; the default is
 `zsh`. Each engine has an adapter in `test/engines/` that stages a copy of
 `engine/`, `profiles/`, `install.sh`, `LICENSE` and `VERSION` if present, lays a
-staged tree out as a release folder, gives the command that runs the current
-release's launcher, and runs the account lookup. An unknown name exits
+staged tree out as a release folder, gives the command that runs the launcher
+of the current or a named release, and runs the account lookup. An unknown name exits
 non-zero, lists the known engines and runs no checks. `test.sh --source DIR`
 stages those files from `DIR` instead of the checkout.
 

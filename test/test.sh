@@ -2,6 +2,8 @@
 # Runs outside any sandbox. Requires node for the plugin checks and the opencode CLI for the install self-test.
 emulate -L zsh
 setopt no_unset pipe_fail
+# Set inside an Agent Guard session; it would choose the plugin's release.
+unset AGENT_GUARD_RELEASE
 command -v node >/dev/null || { print -ru2 'Node is required for fixture isolation'; exit 1 }
 
 source_root=${0:A:h:h}
@@ -156,13 +158,17 @@ check "agent-guard PATH blocks" new_blocks
 check "app bundle ID" test "$(/usr/bin/plutil -extract CFBundleIdentifier raw "$home/Applications/Agent Guard.app/Contents/Info.plist")" = io.github.ebrindley.agentguard
 check "install leaves OpenCode Guard's blocks and rulebook unchanged" old_untouched
 
+# Each reinstall switches current and keeps only the release it replaced.
 first=$rid
-/bin/zsh "$root/install.sh" </dev/null > "$home/reinstall.log" 2>&1 || { fail "reinstall"; /bin/cat "$home/reinstall.log" }
-rid=$(<"$engine/current/RELEASE")
+for n in 2 3; do
+  /bin/zsh "$root/install.sh" </dev/null > "$home/reinstall.log" 2>&1 || { fail "reinstall $n"; /bin/cat "$home/reinstall.log" }
+  prev=$rid
+  rid=$(<"$engine/current/RELEASE")
+  releases=("$engine"/releases/*(N:t)) kept=("$rid" "$prev")
+  check "reinstall $n switches current and keeps the new and the previous release" \
+    test "$rid" != "$prev" -a "$(/usr/bin/readlink "$engine/current")" = "releases/$rid" -a "${(j: :)releases}" = "${(j: :)${(@o)kept}}"
+done
 release="$engine/releases/$rid"
-releases=("$engine"/releases/*(N))
-check "reinstall replaces current and leaves one release folder" \
-  test "$rid" != "$first" -a ${#releases} -eq 1 -a "${releases[1]:t}" = "$rid" -a "$(/usr/bin/readlink "$engine/current")" = "releases/$rid"
 check "reinstall keeps one plugin, the link" only_plugin
 /bin/cp "$orig/plugin.js" "$old_plugin"
 
@@ -312,6 +318,22 @@ stub_ran "candidates inside either engine folder skipped" '1 - confined' \
   AGENT_GUARD_BYPASS=1 node "$root/test/plugin.mjs" "$plugin" bypass || fails=$((fails + 1))
   OPENCODE_GUARD_BYPASS=1 node "$root/test/plugin.mjs" "$plugin" old-bypass || fails=$((fails + 1))
   sb "$(command -v node)" "$root/test/plugin.mjs" "$plugin" guarded "Agent Guard $version ($rid) is active." || fails=$((fails + 1))
+  # A launch from the previous release loads that release's plugin through current,
+  # which names the new one. The fake CLI runs its arguments.
+  /bin/mkdir -p "$home/execbin"
+  print -r -- $'#!/bin/sh\nexec "$@"' > "$home/execbin/opencode"
+  /bin/chmod 755 "$home/execbin/opencode"
+  launch_prev_argv=$(node "$adapter" launcher "$engine" "$prev") || fail "adapter launcher for a release"
+  (cd "$home/Projects/app" && PATH="$home/execbin:$PATH" "${(@f)launch_prev_argv}" cli \
+    "$(command -v node)" "$root/test/plugin.mjs" "$plugin" guarded "Agent Guard $version ($prev) is active." 2>/dev/null) || fails=$((fails + 1))
+  launched_prev() { [[ "$(/usr/bin/head -1 "$log")" == "Agent Guard cli $prev "* && $(<"$engine/current/RELEASE") == "$rid" ]] }
+  check "launch from the previous release logs it while current names the new one" launched_prev
+  # A launch whose release is gone refuses guarded tools; other names are ignored.
+  sb /usr/bin/env AGENT_GUARD_RELEASE="$first" "$(command -v node)" "$root/test/plugin.mjs" "$plugin" updated || fails=$((fails + 1))
+  for name in "../releases/$prev" "$engine/releases/$prev"; do
+    sb /usr/bin/env AGENT_GUARD_RELEASE="$name" "$(command -v node)" "$root/test/plugin.mjs" "$plugin" status \
+      "Agent Guard $version ($rid) is active." || fails=$((fails + 1))
+  done
   # A copy of the plugin outside releases/ loads no cc-safety-net.
   /bin/cp "$release/profiles/opencode/plugin.js" "$home/Projects/plugin-copy.js"
   sb "$(command -v node)" "$root/test/plugin.mjs" "$home/Projects/plugin-copy.js" outside || fails=$((fails + 1))
