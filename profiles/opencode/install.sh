@@ -533,7 +533,7 @@ ag_proc_check() {
     $pgrep -x -- "$n" >/dev/null 2>&1
     rc=$?
     case $rc in
-      (0) ag_err "$n is running. Quit the OpenCode app and every opencode in a terminal, then run the installer again."; return 1 ;;
+      (0) ag_err "$n is running. Quit the OpenCode app and every opencode in a terminal, then run this command again."; return 1 ;;
       (1) ;;
       (*) ag_err "cannot list processes (pgrep exited $rc); run this from Terminal, outside any sandbox."; return 1 ;;
     esac
@@ -1707,25 +1707,30 @@ ag_forwarders_remove() {  # [ignore-boot]
     sw=$(/usr/bin/jq -r '.switched_at' "$migration" 2>/dev/null)
     [[ $sw == <-> ]] && boot_time && (( REPLY > sw )) || return 0
   fi
-  [[ -e $ocg || -L $ocg ]] || return 0
-  for f in opencode opencode-gui; do
-    p="$ocg/bin/$f"
-    if [[ -L $p && $(/usr/bin/readlink -- "$p") == "$engine/bin/$f" ]]; then
-      /bin/rm -f -- "$p" && gone+=("$p")
+  if [[ -e $ocg || -L $ocg ]]; then
+    for f in opencode opencode-gui; do
+      p="$ocg/bin/$f"
+      if [[ -L $p && $(/usr/bin/readlink -- "$p") == "$engine/bin/$f" ]]; then
+        /bin/rm -f -- "$p"
+      fi
+      /bin/rm -f -- "$ocg/bin/.$f.partial"
+    done
+    /bin/rmdir -- "$ocg/bin" "$ocg" 2>/dev/null
+    if [[ -e $ocg ]]; then
+      left=("$ocg"/**/*(DN))
+      ag_warn "kept in $ocg, not Agent Guard's: ${(j:, :)${left:-$ocg}}"
+    else
+      ag_say "removed the forwarders and $ocg"
     fi
-    /bin/rm -f -- "$ocg/bin/.$f.partial"
-  done
-  /bin/rmdir -- "$ocg/bin" "$ocg" 2>/dev/null
-  if [[ -e $ocg ]]; then
-    left=("$ocg"/**/*(DN))
-    ag_warn "kept in $ocg, not Agent Guard's: ${(j:, :)${left:-$ocg}}"
-  else
-    ag_say "removed the forwarders and $ocg"
   fi
   # The stamp lists the forwarders among its links; agent-guard version must not
-  # report them missing.
-  if (( $#gone )) && [[ -f $stamp ]]; then
-    /usr/bin/jq '.links |= with_entries(select(.key as $k | any($ARGS.positional[]; . == $k) | not))' "$stamp" --args "${gone[@]}" > "$tmp" &&
+  # report them missing, also when a run stopped after removing them.
+  for f in opencode opencode-gui; do
+    [[ -e $ocg/bin/$f || -L $ocg/bin/$f ]] || gone+=("$ocg/bin/$f")
+  done
+  if (( $#gone )) && [[ -f $stamp ]] &&
+     /usr/bin/jq -e '[.links | keys[] | select(IN($ARGS.positional[]))] | length > 0' "$stamp" --args "${gone[@]}" >/dev/null 2>&1; then
+    /usr/bin/jq '.links |= with_entries(select(.key | IN($ARGS.positional[]) | not))' "$stamp" --args "${gone[@]}" > "$tmp" &&
       replace_file "$stamp" "$tmp"
     /bin/rm -f -- "$tmp"
   fi
@@ -1908,6 +1913,12 @@ ag_recover_main() {
     ag_say "discarding the unfinished install of release $ag_rid_new"
     ag_discard
     exit
+  fi
+  # OpenCode started since the interrupted run may hold either guard's profile;
+  # finishing or undoing the switch would give it the other guard's plugin.
+  if [[ $ag_kind == migrate ]]; then
+    ag_tree="$engine/releases/$ag_rid_new"
+    ag_proc_check || exit 1
   fi
   ag_jlast rollback
   if [[ -n $REPLY || $caller == uninstall ]]; then

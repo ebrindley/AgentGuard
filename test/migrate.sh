@@ -320,6 +320,9 @@ for b in $(( sw - 10 )) not-a-number; do
   (( rc == 0 )) && /usr/bin/grep -q 'is current' "$out" && [[ -L $ocg/bin/opencode && -L $ocg/bin/opencode-gui ]] &&
     pass "boot time $b: update is current and keeps the forwarders" || { fail "boot time $b (exit $rc)"; show }
 done
+# One forwarder is already gone, as after a run stopped while removing them: the
+# stamp must still lose both.
+/bin/rm "$ocg/bin/opencode-gui"
 point= boot_at=$(( sw + 10 )) ag update
 rc=$?
 boot_at=
@@ -492,6 +495,25 @@ for p in list-import import rulebook rulejson current fwd-cli fwd-gui plugin-tak
   (( rc == 0 )) && pass 'rerun recovers and finishes' || { fail "rerun (exit $rc)"; show }
   same_snapshot 'final state equals an uninterrupted migration' "$run/M1-1.0.4.snapshot"
 done
+
+# An interrupted switch is neither finished nor undone while OpenCode runs.
+label='M3 kill:fwd-cli, then OpenCode running'
+restore ocg-1.0.4
+point=kill:fwd-cli boot y
+rc=$?
+(( rc == 137 )) && pass killed || { fail "killed (exit $rc)"; show }
+snapshot "$home" > "$run/killed.snapshot"
+journal_hash=$(sha "$state/txn/journal")
+pgrep_status=0 point= boot y
+rc=$?
+pgrep_status=
+(( rc != 0 )) && /usr/bin/grep -q 'opencode is running' "$out" && pass "exit $rc: opencode is running" || { fail "exit $rc"; show }
+[[ $(sha "$state/txn/journal") == "$journal_hash" ]] && pass 'the transaction is kept as it was' || fail 'the journal changed'
+same_snapshot 'nothing changed' "$run/killed.snapshot"
+point= boot y
+rc=$?
+(( rc == 0 )) && pass 'after OpenCode quits, the rerun recovers and finishes' || { fail "rerun (exit $rc)"; show }
+same_snapshot 'final state equals an uninterrupted migration' "$run/M1-1.0.4.snapshot"
 
 # --- M4: retirement fails on a rule.json that cannot be written; Agent Guard stays
 # active, and the rerun after a fix finishes with no second import.
