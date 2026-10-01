@@ -12,12 +12,15 @@ fails=0
 pass() { print -r -- "ok   $*" }
 fail() { print -r -- "FAIL $*"; fails=$((fails + 1)) }
 
-/bin/zsh "$source_root/scripts/release.sh" $version >/dev/null || { print -ru2 'release.sh failed'; exit 1 }
+# --dev so a checkout with uncommitted changes can be tested; COMMIT then reads "dev".
+# release.sh stops when the seam check fails, with --dev too.
+built=$(/bin/zsh "$source_root/scripts/release.sh" --dev $version 2>&1 >/dev/null) || { print -ru2 "release.sh failed: $built"; exit 1 }
+pass "release.sh passed the seam check: production seam forms present, no AG_TEST_"
 
-# The file list from the backlog item: named files, VERSION, and every tracked
-# file in the two folders shipped whole.
+# The file list from the backlog item: named files, VERSION, COMMIT, and every
+# tracked file in the two folders shipped whole.
 expected=(
-  VERSION install.sh LICENSE
+  VERSION COMMIT install.sh LICENSE
   engine/launch engine/account.zsh engine/agent-guard engine/profile.sb engine/vendor/THIRD-PARTY-NOTICES
   profiles/opencode/{harness.zsh,hooks.zsh,protected.sb,plugin.js,opencode,opencode-gui,install.sh,uninstall.sh}
   profiles/opencode/assets/AgentGuard.icns
@@ -34,6 +37,11 @@ unwanted=(${(M)${(f)listed}:#(*/|)(test|docs|backlog|.poetic)/*} ${(M)${(f)liste
 (( $#unwanted == 0 )) && pass "no test, docs, backlog, .poetic, .DS_Store or AppleDouble entries" || fail "unwanted entries: $unwanted"
 (cd "${archive:h}" && /usr/bin/shasum -a 256 -c "${archive:t}.sha256" >/dev/null 2>&1) && pass "shasum -a 256 -c accepts the .sha256" || fail "checksum"
 [[ $(/usr/bin/tar -xOzf "$archive" "$name/VERSION") == $version ]] && pass "VERSION holds $version" || fail "VERSION"
+if [[ -z $(/usr/bin/git -C "$source_root" status --porcelain) ]]; then want=$(/usr/bin/git -C "$source_root" rev-parse HEAD); else want=dev; fi
+[[ $(/usr/bin/tar -xOzf "$archive" "$name/COMMIT") == $want ]] && pass "COMMIT holds $want" || fail "COMMIT"
+bootstrap="$source_root/dist/install.sh"
+[[ $(/usr/bin/grep -c "local tag='v$version' version='$version'" "$bootstrap") == 1 ]] && ! /usr/bin/grep -qE '@[A-Z_]+@' "$bootstrap" &&
+  /bin/zsh -n "$bootstrap" && pass "dist/install.sh names v$version, has no placeholder and parses" || fail "dist/install.sh"
 
 run=$(/usr/bin/mktemp -d "$source_root/test/.run-release-XXXXXX")
 /usr/bin/tar -xzf "$archive" -C "$run" || fail "unpack"
