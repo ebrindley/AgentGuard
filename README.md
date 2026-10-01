@@ -2,7 +2,7 @@
 
 Guardrails for terminal coding agents on macOS. One engine runs each agent under a macOS Seatbelt sandbox built from one allow and deny list, with a small profile and plugin per agent. It replaces OpenCode Guard and, later, pi-sandbox-guard.
 
-Release 0.1.0 supports OpenCode only. It is the OpenCode Guard v1.0.3 port,
+Release 0.1.1 supports OpenCode only. It is the OpenCode Guard v1.0.3 port,
 including the v1.0.4 fixes, under Agent Guard's own names, and replaces an
 existing OpenCode Guard install (see
 [Moving from OpenCode Guard](#moving-from-opencode-guard)). The design is in
@@ -38,7 +38,7 @@ In Terminal, outside any agent session, on macOS 15 or later:
 
 To allow a projects folder without the prompt, add `install.sh --projects ~/Projects`
 after the closing quote. For a particular release, replace
-`latest/download` with `download/v0.1.0`. From a checkout or an unpacked
+`latest/download` with `download/v0.1.1`. From a checkout or an unpacked
 archive, `zsh install.sh [--projects DIR] [--gui]` installs that tree the same
 way.
 
@@ -177,7 +177,7 @@ entries or what the agent does inside ALLOW folders. OpenCode's package store
 under `~/.cache/opencode` is writable, concurrent launches share one rules file,
 and a symlinked project config name has its target protected only when OpenCode
 starts from that folder in a terminal. Each limitation, and what is planned for
-it, is in [SECURITY.md](SECURITY.md#known-limitations-in-010).
+it, is in [SECURITY.md](SECURITY.md#known-limitations-in-011).
 
 ## Tests
 
@@ -226,23 +226,23 @@ on `test/`.
 ## Building a release
 
 ```sh
-scripts/release.sh [--dev] [--out DIR] 0.1.0
+scripts/release.sh [--dev] [--out DIR] 0.1.1
 ```
 
 This writes three release assets to `dist/` (or `DIR`):
-`agent-guard-0.1.0.tar.gz`, `agent-guard-0.1.0.tar.gz.sha256` and
-`install.sh`. The archive holds one `agent-guard-0.1.0/` folder with the files
+`agent-guard-0.1.1.tar.gz`, `agent-guard-0.1.1.tar.gz.sha256` and
+`install.sh`. The archive holds one `agent-guard-0.1.1/` folder with the files
 listed in the script, the whole of `engine/vendor/cc-safety-net` and
 `profiles/opencode/templates`, a `VERSION` file and a `COMMIT` file. The script
 stops if a listed file is missing. It uses only tools that ship with macOS. The
 checksum file names the archive without a folder, so check it from `dist/`:
 
 ```sh
-cd dist && shasum -a 256 -c agent-guard-0.1.0.tar.gz.sha256
+cd dist && shasum -a 256 -c agent-guard-0.1.1.tar.gz.sha256
 ```
 
 `install.sh` is the bootstrap for the one-line install, filled in from
-`scripts/bootstrap.zsh` with the tag `v0.1.0`, the version and the launcher's
+`scripts/bootstrap.zsh` with the tag `v0.1.1`, the version and the launcher's
 account lookup. It downloads that tag's archive and checksum into the engine
 folder's `stage/`, verifies them, then runs the archive's installer with
 `--stage <id>` and its own arguments. It refuses inside a guard or another

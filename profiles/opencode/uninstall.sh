@@ -46,8 +46,8 @@ main() {
       { ag_warn "$rc not changed"; unfinished+=("$rc") }
   done
 
-  # U2: each recorded value, only where the current value still equals the
-  # recorded wrote value. A restored file's entry leaves the record at once, so a
+  # U2: each recorded value, only where a wrote value is recorded and the current
+  # value still equals it. A restored file's entry leaves the record at once, so a
   # rerun never treats restored values as user edits.
   test_point uninstall-restore || stop uninstall-restore
   if [[ -e $record ]]; then
