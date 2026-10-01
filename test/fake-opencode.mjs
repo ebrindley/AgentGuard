@@ -5,6 +5,9 @@
 // GET /experimental/tool/ids with a JSON array: a few built-in ids plus every tool registered by
 // the *.js plugins in $XDG_CONFIG_HOME/opencode/{plugin,plugins} (default ~/.config).
 //
+// `--version` prints a version. `status` loads those plugins as serve does and prints one line
+// per plugin with a status tool: "launcher=<AGENT_GUARD_RELEASE> status=<its text>".
+//
 // Any other arguments run the sandbox probe: try to create ~/Documents/escaped, which a guard
 // denies, then create ~/Projects/app/launched. Exits 0 when launched was written.
 import { createServer } from 'node:http';
@@ -21,8 +24,9 @@ function option(name, fallback) {
   return i >= 0 && i + 1 < args.length ? args[i + 1] : fallback;
 }
 
-async function toolIds(directory) {
-  const ids = ['bash', 'read', 'edit', 'write', 'glob', 'grep', 'list'];
+// The hooks of every plugin function in the config folder's plugin folders.
+async function pluginHooks(directory) {
+  const all = [];
   const config = join(process.env.XDG_CONFIG_HOME || join(home, '.config'), 'opencode');
   for (const folder of ['plugin', 'plugins'].map((f) => join(config, f))) {
     if (!existsSync(folder)) continue;
@@ -30,19 +34,30 @@ async function toolIds(directory) {
       try {
         const mod = await import(pathToFileURL(join(folder, name)).href);
         for (const init of Object.values(mod)) {
-          if (typeof init !== 'function') continue;
-          const hooks = await init({ directory, worktree: directory });
-          ids.push(...Object.keys(hooks?.tool ?? {}));
+          if (typeof init === 'function') all.push(await init({ directory, worktree: directory }));
         }
       } catch (error) {
         console.error(`plugin ${name} failed: ${error?.message ?? error}`);
       }
     }
   }
+  return all;
+}
+
+async function toolIds(directory) {
+  const ids = ['bash', 'read', 'edit', 'write', 'glob', 'grep', 'list'];
+  for (const hooks of await pluginHooks(directory)) ids.push(...Object.keys(hooks?.tool ?? {}));
   return ids;
 }
 
-if (args[0] === 'serve') {
+if (args[0] === '--version') {
+  console.log('0.0.0-fake');
+} else if (args[0] === 'status') {
+  for (const hooks of await pluginHooks(process.cwd())) {
+    const tool = hooks?.tool?.agent_guard_status;
+    if (tool) console.log(`launcher=${process.env.AGENT_GUARD_RELEASE ?? ''} status=${await tool.execute({})}`);
+  }
+} else if (args[0] === 'serve') {
   const host = option('--hostname', '127.0.0.1');
   const port = Number(option('--port', '4096'));
   const server = createServer(async (req, res) => {

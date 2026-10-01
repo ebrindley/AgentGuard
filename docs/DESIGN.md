@@ -36,8 +36,9 @@ The engine as built (stage 1) is zsh and uses only macOS tools (`sandbox-exec`, 
 | State | `state/rules.json` in the engine folder: the resolved allow, read only and deny paths. Every launch, in every mode including `profile` and `check` but except `check staged`, writes it to a temp file and renames it over the old one. The plugin reads it once at start, so launch B can replace it before launch A's plugin reads it; A's plugin then refuses and reports against B's rules while Seatbelt still enforces A's own profile. Step 9 replaces it with a state file per launch whose path the launcher passes to the plugin. |
 | Plugin | `profiles/opencode/plugin.js`: guard probe, path checks, unguarded refusal, status tool, cc-safety-net loading (section 5). One file for now; it splits into a shared core and a per-harness adapter when Pi arrives (step 10). |
 | cc-safety-net | Version 2.4.14, unmodified, in `engine/vendor/cc-safety-net`. |
-| Installer and uninstaller | `install.sh` forwards to `profiles/opencode/install.sh`; `profiles/opencode/uninstall.sh` is copied into each release folder. Both take home from `engine/account.zsh`, a verbatim copy of the launcher's `account_home` function; `test/test.sh` checks that the two match. Section 6. |
-| Command | `engine/agent-guard`, installed as `bin/agent-guard`. `doctor` runs its release's `launch check`; `version` prints the version and release ID. It takes its release from its own resolved location, sources that release's `account.zsh` only if the folder has the shape of a release (a `RELEASE` file, a parent named `releases`), then applies the launcher's check. |
+| Bootstrap | `scripts/bootstrap.zsh`, built into the release asset `install.sh`: downloads the archive and its checksum, verifies, unpacks into `stage/<txn>/tree` and runs the archive's installer under its lock. Section 6. |
+| Installer and uninstaller | `profiles/opencode/install.sh` and `profiles/opencode/uninstall.sh`, both copied into each release folder; `install.sh` at the repository root forwards to the first. The installer is also a library (`source install.sh --lib`) for the guard probe, lock, recovery and file primitives that the uninstaller and `agent-guard` use. Both take home from `engine/account.zsh`, a verbatim copy of the launcher's `account_home` function; `scripts/check-seams.zsh` and `test/test.sh` check that the two match. Section 6. |
+| Command | `engine/agent-guard`, installed as `bin/agent-guard`: `doctor`, `version`, `update`, `uninstall` (section 6). It takes its release from its own resolved location, sources that release's `account.zsh` only if the folder has the shape of a release (a `RELEASE` file, a parent named `releases`), then applies the launcher's check. |
 
 Launcher modes: `cli` (the `opencode` shim), `gui` (the `opencode-gui` shim, used by the app; refuses if OpenCode is already running and shows failures as an alert), `profile` (prints the generated SBPL), `check` (the installer's self-test: a protected write is denied, a temp write is allowed, `open` is denied, then the profile's `check_hook`) and `check staged` (section 6). The installer also calls an internal `find-app` mode. The built launcher loads only the OpenCode profile, and its log name and some messages ("OpenCode needs", "opencode not found") are OpenCode's.
 
@@ -50,19 +51,22 @@ Install layout as built:
   current -> releases/<rid>                           relative symlink, replaced only by replace_link
   bin     -> current/bin                              the folder the PATH blocks name
   releases/<rid>/                                     rid = <version>-<UTC yyyymmddTHHMMSSZ>, e.g. 0.2.0-20261001T120000Z
-    VERSION  LICENSE  RELEASE                         RELEASE holds <rid>; VERSION is "dev" from a checkout without one
-    launch  profile.sb  account.zsh  uninstall.sh
+    VERSION  COMMIT  LICENSE  RELEASE                 RELEASE holds <rid>; COMMIT is "checkout" from a checkout without one
+    launch  profile.sb  account.zsh  install.sh  uninstall.sh
     bin/opencode  bin/opencode-gui  bin/agent-guard
     profiles/opencode/{harness.zsh,hooks.zsh,protected.sb,plugin.js,templates/,assets/}
     profiles/opencode/check-config/opencode/          .gitignore and plugins/agent-guard.js -> ../../../plugin.js
     vendor/cc-safety-net/  vendor/THIRD-PARTY-NOTICES
-  stage/<rid>/                                        the release while the installer assembles it
+  stage/<txn>/                                        one run's unpacked tree, assembled release, built app and temp files
   state/
     rules.json                                        shared launch state (step 9 replaces it)
     permissions.json                                  permission record
+    stamp.json                                        version stamp, written after the gate passes
+    lock/{pid,start}                                  the running install, update or uninstall
+    txn/                                              open transaction: install.sh, account.zsh, uninstall.sh, plan.json, journal, backup/
 ```
 
-`releases/` holds the current release and, after a reinstall, the release `current` named before it; older ones are removed once the new release passes its self-test (section 6). The kept release serves OpenCode sessions started from it, whose plugin hands over to it (section 5).
+`releases/` holds the current release and, after a reinstall, the release `current` named before it; older ones are removed once the new release passes the gate (section 6). The kept release serves OpenCode sessions started from it, whose plugin hands over to it (section 5).
 
 `replace_link LINK TARGET` makes a link under a temporary name and runs `/bin/mv -fh` onto `LINK`, so `LINK` exists at every moment. `ln -sfh` unlinks before linking, and `mv` without `-h` would move the new link into the old release folder. State that must survive a switch is in `state/`, outside the release folders. The shims keep `exec "${0:A:h:h}/launch"`, which resolves through `bin` and `current` to the release folder.
 
@@ -260,19 +264,36 @@ Pi keeps its analyzer as the Pi plugin through step 10; the Pi adapter adds the 
 
 ## 6. Install, update and uninstall
 
-### Today
+### The installer as built
 
-The installer runs from a checkout or an unpacked release archive: `zsh install.sh [--projects DIR] [--gui]`, which forwards to `profiles/opencode/install.sh`. The README limits it to development and disposable-home tests. As built:
+`profiles/opencode/install.sh` has three entries. The bootstrap runs `install.sh --stage <txn>` on the unpacked tree in `stage/<txn>/tree`, under the lock it took. From a checkout or an unpacked archive, `zsh install.sh [--projects DIR] [--gui]` copies the tree into `stage/<txn>/tree` (with `COMMIT` set to `checkout` when the tree has none) and runs that copy the same way. Recovery runs `state/txn/install.sh --recover <caller>` (below). Every function runs from `main` on the last line, so a file replaced or deleted mid-run is never read half-way.
 
-- It refuses, before any change, when OpenCode Guard's engine folder or `opencode-guard.js` exists (migration arrives in step 5), and when the engine folder holds an install made before release folders (`$engine/launch` a regular file); that one is removed with its own `"$engine/uninstall.sh"`.
-- Each run assembles a new release folder in `stage/<rid>`, renames it into `releases/<rid>` and switches `current` and `bin` with `replace_link` (section 2). The version comes from `VERSION` in the source tree, or `dev` without one.
-- The plugin is a link through `current`, placed by rename (section 2).
-- It runs the self-test (`agent-guard doctor`) after the switch. When it passes, the release folders other than the new one and the one `current` named before the switch are removed; the kept one serves OpenCode sessions started from it (section 5). When it fails, all are kept, a warning is added and the installer still exits 0. Uninstall removes every release.
-- It records a config file's permission values once, on its first run, so reruns keep the first `orig`. It does not read OpenCode Guard's record (section 10, rule 3).
-- It writes no version stamp. Updating means running it again from a newer checkout.
-- The installer and the uninstaller take home from `account.zsh`, like the launcher.
+Preflight changes nothing and stops on the first failure: required tools; the guard probe (an exclusive create in `state/`, refused with "run this from Terminal, outside any guard or sandbox" when Seatbelt denies it); the lock; recovery of an earlier run; OpenCode Guard's engine folder or `opencode-guard.js` (migration arrives in step 5); an install made before release folders (`$engine/launch` a regular file, removed with its own `"$engine/uninstall.sh"`); an unfinished PATH block in a startup file; any file the run replaces on another volume than the engine; the projects folder. Only then does a run name its release ID and open a transaction.
 
-Step 4's remaining work replaces this with the behavior below: the bootstrap, `check staged` before the switch, the post-switch gate with rollback, recovery of an interrupted run and the stamp.
+**Lock.** `state/lock/` holds `pid` and `start`, the owner's start time from `ps -o lstart=`. A lock is live when that pid runs zsh with the same start time; a lock without both files counts as held for 10 seconds, so a run that is still writing them is not taken over. A stale lock is taken over under an `fcntl` lock on `state/.lock-takeover`. The bootstrap, the installer and `agent-guard update` hand the lock on through `exec`, which keeps the pid. A recovery child adopts its parent's lock and refuses to run without it.
+
+**Transaction.** The installer builds `state/txn.new/` with copies of `install.sh`, `account.zsh` and `uninstall.sh`, `plan.json` (release IDs, kind, stage, projects folder, app decision and the config files) and an empty `journal`, syncs, and renames it to `state/txn/`. The journal has one line per step, `<action> begun|done|undone [detail]`; a line of any other form, such as a torn last line, is ignored. Before a step changes a file it copies the original to `txn/backup/<name>/file` through a temporary name. Runs before the switch (assemble into `stage/<txn>/release` and rename to `releases/<rid>`, the rulebook and merged `rule.json` in the stage, the app build with `codesign --verify --strict` and a bundle ID check, the list, then `releases/<rid>/launch check staged`) touch nothing outside the engine folder and the list.
+
+**Switch.** In order: rulebook folder, `rule.json`, app, `current`, plugin link, permission values, PATH blocks. Each step journals `begun` before it changes anything and `done` after, and each has an undo that uses the backup and the journal detail. The app is rebuilt only when its inputs (the AppleScript, which names `bin/opencode-gui` through `bin`, the bundle ID and the icon) differ from the stamp's `app_inputs`; otherwise the installed app is kept. The permission record is written before the config it describes, so a run stopped between the two writes leaves a record that matches either config state. `/bin/sync` runs after each `begun` line, after the transaction opens and after the stamp is written.
+
+**Gate.** After the switch: `bin/agent-guard doctor` against the live install, then `bin/opencode --version` through the PATH shim with a 20-second limit, whose log must name the new release. With no OpenCode CLI the launch check is skipped and says so. Any failure rolls back.
+
+**Rollback.** Journals `rollback begun`, undoes every step that began, in reverse order, journals `rollback done`, deletes the new release and closes the transaction (one rename, then deletion, so an interrupted deletion leaves no half transaction). A rollback of a fresh install also removes the engine folder; a permission record that is not empty is first copied to `~/Agent Guard/permissions-backup.json`.
+
+**Stamp and cleanup.** `state/stamp.json` is written only after the gate passes: version, tag, commit, release ID, install time, `app_inputs`, the SHA-256 of every file in the release folder, the app and the rulebook, and the targets of `current`, `bin` and the plugin link. Cleanup then journals `cleanup begun`, removes release folders other than the new one and the one `current` named before (the kept one serves sessions started from it, section 5), deletes the stage and closes the transaction.
+
+**Recovery.** Every install, update and uninstall first runs `ag_recover`: it stops a `serve` left by `check staged` (`state/.serve.pid`), deletes `state/txn.new`, and when `state/txn` exists runs the copy of the installer in it, which decides from the stamp and the journal:
+
+| State | Action |
+|---|---|
+| The stamp names the new release | finish the cleanup |
+| No switch step began | discard: delete the new release and the stage, close the transaction |
+| `rollback begun` is journaled, or the caller is uninstall | finish the rollback |
+| Otherwise (install, update) | redo the switch from the first unfinished step, run the gate and write the stamp; roll back if any of these fails |
+
+Recovery then deletes the stage folders other than the open transaction's and the running bootstrap's. If recovery fails, `state/txn` is kept and the caller stops without changing anything.
+
+**Power loss.** macOS shell tools have no `fsync`; `/bin/sync` asks the system to write its buffers but does not wait for the disk. The journal, the plan and each rename are ordered with it, and a torn journal line is ignored. After a power loss in a switch, a renamed file can still be lost or reach the disk before the journal line that names it. Recovery then undoes from the backups it finds; a permission value whose change was lost appears as a user edit and is left unchanged and reported.
 
 **Testing the staged copy.** `releases/<rid>/launch check staged` tests a release that is not current; it refuses the current one. It runs checks 1–3 of `check` under the staged profile and skips `prepare_hook` and the `state/rules.json` write, so an unproven release creates no harness config and publishes no rules to running sessions. Its plugin check runs `opencode serve` with `AGENT_GUARD_RELEASE` set to the staged release, `OPENCODE_CONFIG`, `OPENCODE_CONFIG_DIR` and `OPENCODE_CONFIG_CONTENT` unset and `XDG_CONFIG_HOME` set to `profiles/opencode/check-config` in the staged release, whose only plugin links to that release's `plugin.js`. The status tool registers only when that plugin loaded cc-safety-net from its own release, so a pass shows the staged plugin and vendored code loaded, not the live plugin. The serve pid is kept in `state/.serve.pid` while it runs. OpenCode 1.18.33 loads no config, and so no plugin, when it cannot create `.gitignore` in the config folder, and the staged profile denies writes there, so the installer writes that file into `check-config/opencode/`. `~/.opencode` is still scanned.
 
@@ -291,38 +312,41 @@ The checksum comes from the same release as the archive. It detects a corrupted 
 Staged install:
 
 1. The previous version stays in place and keeps working.
-2. The self-test runs against the staged version.
-3. If it passes, the switch runs, followed by the checks that need the switched install: the plugin in `~/.config/opencode/plugins` and a launch through the command path. The stamp is written only after those pass. A failure after the switch restores the previous version.
-4. If it fails, the install fails: the installer exits non-zero, names the failed checks, removes the staged copy and leaves the previous version working.
+2. `check staged` runs against the new release folder before anything outside the engine folder and the list changes.
+3. If it passes, the switch runs, followed by the gate: the live doctor, which checks the plugin in `~/.config/opencode/plugins`, and a launch through the command path. The stamp is written only after those pass. A failure after the switch restores the previous version.
+4. If it fails, the install fails: the installer exits non-zero, names the failed checks, removes the new release and the stage and leaves the previous version working.
 
 The launcher finds its engine from the account home, and production has no path override (section 8). Each install is a folder `releases/<id>` in the engine folder, and `current` names the active one. The staged copy is tested in its final folder before `current` moves (`check staged`, above).
 
-Lists, user edits and permission records survive failed runs and reruns. An existing `~/Agent Guard/Guard List.txt` is never overwritten; the installer already copies the template only when the list is missing.
-
-The version stamp records the release version, the source commit and a hash of each installed file, so drift can be reported. pi-sandbox-guard's stamp works this way today (`scripts/status.sh` reports a stamped hash that no longer matches the file).
+Lists, user edits and permission records survive failed runs and reruns. An existing `~/Agent Guard/Guard List.txt` is never overwritten; the installer copies the template only when the list is missing. A config file's permission values are recorded once, on the first run that changes them, so reruns keep the first `orig`. The installer does not read OpenCode Guard's record (section 10, rule 3).
 
 ### Commands
 
-Step 4 adds one command, `agent-guard`, installed as `$engine/bin/agent-guard`. Built:
+`agent-guard`, installed as `$engine/bin/agent-guard`:
 
-- `doctor` runs the release's `launch check` (section 8). The installer's self-test runs it, and `update` will.
-- `version` prints `Agent Guard <version>, release <rid>`. Reporting drift against the version stamp comes with the stamp.
-
-Not built yet:
-
-- `update` fetches the latest release and runs the same sequence: download, checksum, stage, self-test, switch. A failed update leaves the installed version working. After both Macs switch at step 6, steps 7 and 8 reach them this way.
-- `uninstall`, below. Until then, run `"$engine/current/uninstall.sh"`.
+- `doctor` runs the release's `launch check` (section 8). The gate runs it after the switch. It does not recover an interrupted run; `update` does.
+- `version` prints `Agent Guard <version> (<tag>, commit <12 characters>), release <rid>, installed <UTC time>` from the stamp, then one line per stamped file or link that is missing or changed and per file added to the release folder. It exits 1 on any drift or when there is no stamp.
+- `update` refuses inside a guard, takes the lock and runs recovery, then downloads the latest release's `install.sh` from the download base compiled into it. It requires the file's last line to be `{ agent_guard_bootstrap "$@" }` and exactly one release tag in it. When that tag is the stamp's, or older, it says so and changes nothing; otherwise it runs the bootstrap with `--update` under the same lock, and the full staged install follows. A failed update leaves the installed version working.
+- `uninstall` refuses inside a guard, takes the lock and runs recovery as the uninstall caller, which rolls back an open switch. Recovery can delete the release this command runs from, so it then finds the uninstaller again: `current`'s, else the transaction's copy. When recovery rolled back a fresh install and only the state folder is left, it removes the engine folder itself, first copying a permission record that still holds entries to `~/Agent Guard/permissions-backup.json` and then exiting 1.
 
 ### Uninstall
 
-`uninstall` removes Agent Guard. Today's `profiles/opencode/uninstall.sh`, whose rules step 4 keeps:
+`profiles/opencode/uninstall.sh` runs in this order. Until the plugin goes, a start without a PATH block meets the plugin's unguarded refusal, and an old terminal still reaches working shims.
 
-| Action | What |
+| Step | What |
 |---|---|
-| Removes | PATH blocks between the markers in `.zprofile`, `.zshrc` and `.bash_profile` (an unfinished block is reported, not touched); the plugin, when it is a link into the engine folder or a regular file; the launcher app; the rulebook folder and its entry in `~/.cc-safety-net/rules/rule.json`; the engine folder, with every release, `current`, `bin` and `state/` |
-| Restores | Each recorded permission value, only where the current value still equals the recorded `wrote` value, so later user edits survive. An `orig` of null deletes the key. |
-| Keeps on failure | If any restore fails, it copies the permission record to `~/Agent Guard/permissions-backup.json` before removing the engine. If that copy fails, it keeps the engine and exits 1. |
-| Leaves | `~/Agent Guard` (list, logs, any permission backup); the wrapper entries (`env`, `exec`, `nice`, `nohup`, `setsid`, `stdbuf`, `time`, `timeout`) in `rule.json`'s `transparent_wrappers`; the `~/.config/opencode/.gitignore` and default `opencode.json` the launcher creates when missing; the writable folders the launcher creates |
+| U1 | PATH blocks between the markers in `.zprofile`, `.zshrc` and `.bash_profile`, at each file's resolved target; an unfinished block is reported, not touched |
+| U2 | Each recorded permission value, only where the current value still equals the recorded `wrote` value, so later user edits survive; an `orig` of null deletes the key. A file's entry leaves the record once the file is restored. |
+| U4 | The launcher app |
+| U5 | The `agent-guard` entry in `~/.cc-safety-net/rules/rule.json`, then the rulebook folder |
+| U6 | The forwarders at old command paths (section 10; arrives with step 5) |
+| U7 | If any value was not restored, the permission record is copied to `~/Agent Guard/permissions-backup.json`. If that copy fails, the engine is kept and uninstall exits 1. |
+| U3 | The plugin, when it is a link into the engine folder or a regular file. If it cannot be removed, the engine is kept and uninstall exits 1. |
+| U8 | The engine folder, renamed to `.AgentGuard.removing` and then deleted, so a rerun finds the whole folder or none of it |
+
+Each step can be repeated, so a rerun after a failed or interrupted uninstall finishes the job. Uninstall exits 1 and names what is left when a PATH block, a permission value, the app, the rulebook or its `rule.json` entry was not handled.
+
+It leaves `~/Agent Guard` (list, logs, any permission backup); the wrapper entries (`env`, `exec`, `nice`, `nohup`, `setsid`, `stdbuf`, `time`, `timeout`) in `rule.json`'s `transparent_wrappers`; the `~/.config/opencode/.gitignore` and default `opencode.json` the launcher creates when missing; the writable folders the launcher creates.
 
 What uninstall does with OpenCode Guard's retired files and the forwarders at old command paths is in section 10.
 

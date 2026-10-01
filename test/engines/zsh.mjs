@@ -64,6 +64,16 @@ const seams = {
   downloadBase: "local repo='https://github.com/ebrindley/AgentGuard'; local -a curl_proto=(--proto '=https' --proto-redir '=https')",
   testPoint: 'test_point() { : }',
   bootstrapHome: "account_home || die 'cannot resolve account home'",
+  cliSearch: 'cli_search=(/opt/homebrew/bin/opencode /usr/local/bin/opencode "$home/.opencode/bin/opencode")',
+  appPaths: 'app_paths=(/Applications/OpenCode.app "$home/Applications/OpenCode.app")',
+  appBundleId: 'app_bundle_id=ai.opencode.desktop',
+};
+// The test harness looks for the CLI on PATH and in the disposable home only, and
+// for the app only at ~/Applications/OpenCode.app (a fake bundle in the tests).
+const harness = {
+  cliSearch: 'cli_search=("$home/.opencode/bin/opencode")',
+  appPaths: 'app_paths=("$home/Applications/OpenCode.app")',
+  appBundleId: 'app_bundle_id=invalid.test',
 };
 const testPoint = 'test_point() { case ${AG_TEST_POINT:-} in ("kill:$1") kill -KILL $$ ;; ("fail:$1") return 1 ;; esac }';
 const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
@@ -76,10 +86,13 @@ function replaceOnce(file, from, to) {
 
 // Builds a test release of source into out/<tag>. scripts/release.sh --dev builds
 // from the unmodified source, so its seam check sees the production forms; then the
-// archive is unpacked, its test points and the launcher's home seam are applied, and
-// it is repacked with release.sh's tar options and a new .sha256. The bootstrap is
-// pointed at url and at home, with its test point enabled. Returns the asset paths.
-// Pending with the installer: the account.zsh home seam, boot time, pgrep and app lookup.
+// archive is unpacked and the seams are applied: the installer's test points, the
+// home of the launcher and of account.zsh, agent-guard's download base and the
+// harness's CLI and app lookup. It is repacked with release.sh's tar options and a
+// new .sha256. The bootstrap is pointed at url and at home, with its test point
+// enabled. No test release's installer or uninstaller runs before the account.zsh
+// seam is applied: both take home from it. Returns the asset paths.
+// Pending with step 5: boot time and pgrep.
 export function release(source, out, { home, tag, version, url }) {
   assert.equal(tag, `v${version}`, 'release.sh names the tag v<version>');
   const dest = join(out, tag);
@@ -98,11 +111,11 @@ export function release(source, out, { home, tag, version, url }) {
   const entries = run(['/usr/bin/tar', '-tzf', archive]).split('\n').filter(Boolean);
   run(['/usr/bin/tar', '-xzf', archive, '-C', unpacked]);
   const tree = join(unpacked, name);
-  for (const f of ['profiles/opencode/install.sh', 'profiles/opencode/uninstall.sh', 'engine/agent-guard']) {
-    const path = join(tree, f);
-    if (existsSync(path) && readFileSync(path, 'utf8').includes(seams.testPoint)) replaceOnce(path, seams.testPoint, testPoint);
-  }
+  replaceOnce(join(tree, 'profiles/opencode/install.sh'), seams.testPoint, testPoint);
   fixtureHome(join(tree, 'engine/launch'), home);
+  fixtureAccount(join(tree, 'engine/account.zsh'), home);
+  replaceOnce(join(tree, 'engine/agent-guard'), seams.downloadBase, `local repo=${quote(url)}; local -a curl_proto=()`);
+  for (const key of Object.keys(harness)) replaceOnce(join(tree, 'profiles/opencode/harness.zsh'), seams[key], harness[key]);
   rmSync(archive);
   run(['/usr/bin/tar', '-czf', archive, '--no-xattrs', '--no-acls', '--no-fflags', '--uid', '0', '--gid', '0', '--uname', 'root', '--gname', 'wheel', '-C', unpacked, ...entries],
     { env: { ...process.env, COPYFILE_DISABLE: '1' } });
