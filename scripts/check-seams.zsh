@@ -6,11 +6,8 @@
 # than once, or when AG_TEST_ appears anywhere in the shipped files.
 #
 # Pending: add each with the code that introduces it (design section 9.2):
-#   test_point() { : }           profiles/opencode/install.sh, uninstall.sh, engine/agent-guard
-#   boot_time() {                installer, sysctl kern.boottime
-#   local pgrep=/usr/bin/pgrep   installer, process check
-#   app_paths=( / app_bundle_id= profiles/opencode/harness.zsh, app lookup
-#   account_home() {             engine/account.zsh
+#   boot_time() {                installer, sysctl kern.boottime (step 5)
+#   local pgrep=/usr/bin/pgrep   installer, process check (step 5)
 emulate -L zsh
 setopt no_unset pipe_fail extended_glob
 
@@ -30,11 +27,21 @@ once() {
   fails=$((fails + 1))
 }
 
-once "$bootstrap" "local repo='https://github.com/ebrindley/AgentGuard'; local -a curl_proto=(--proto '=https' --proto-redir '=https')"
+download_base="local repo='https://github.com/ebrindley/AgentGuard'; local -a curl_proto=(--proto '=https' --proto-redir '=https')"
+once "$bootstrap" "$download_base"
 once "$bootstrap" 'test_point() { : }'
 once "$bootstrap" "account_home || die 'cannot resolve account home'"
 # The launcher's account lookup, which test/fixture-home.mjs replaces.
 once "$tree/engine/launch" "account_home || { print -ru2 'agent-guard: cannot resolve account home'; exit 1 }"
+# account.zsh keeps its function; a test copy appends an override after it.
+once "$tree/engine/account.zsh" 'account_home() {'
+# The installer's kill and fail points; uninstall.sh uses the same function.
+once "$tree/profiles/opencode/install.sh" 'test_point() { : }'
+once "$tree/engine/agent-guard" "$download_base"
+# Where the launcher looks for the CLI and the app.
+once "$tree/profiles/opencode/harness.zsh" 'cli_search=(/opt/homebrew/bin/opencode /usr/local/bin/opencode "$home/.opencode/bin/opencode")'
+once "$tree/profiles/opencode/harness.zsh" 'app_paths=(/Applications/OpenCode.app "$home/Applications/OpenCode.app")'
+once "$tree/profiles/opencode/harness.zsh" 'app_bundle_id=ai.opencode.desktop'
 
 found=(${(f)"$(/usr/bin/grep -rl -- AG_TEST_ "$tree" "$bootstrap")"})
 if (( $#found )); then

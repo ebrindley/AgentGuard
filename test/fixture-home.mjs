@@ -12,10 +12,12 @@ export function fixtureHome(file, home) {
   writeFileSync(file, source.replace(marker, `REPLY=${quote(home)}`));
 }
 
-// engine/account.zsh, used by the installer, the uninstaller and agent-guard.
+// engine/account.zsh, used by the installer, the uninstaller and agent-guard. The
+// production function stays as it is; a later definition overrides it, so the
+// copy still holds the launcher's function verbatim.
 export function fixtureAccount(file, home) {
   const source = readFileSync(file, 'utf8');
   const marker = 'account_home() {';
   assert.equal(source.split(marker).length, 2, 'account.zsh seam must be unique');
-  writeFileSync(file, source.replace(marker, `account_home() { REPLY=${quote(home)} }\nproduction_account_home() {`));
+  writeFileSync(file, `${source}${source.endsWith('\n') ? '' : '\n'}account_home() { REPLY=${quote(home)} }\n`);
 }

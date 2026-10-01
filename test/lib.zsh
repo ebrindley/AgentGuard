@@ -80,8 +80,6 @@ run_timeout() {
   wait $pid
 }
 
-# --- Used by later cases: these need the transactional installer. ---
-
 # probe_entry_points HOME BASE_PATH OLD_PATH [PRE_SNAPSHOT]
 # Design section 9.3. BASE_PATH holds the fake opencode (test/fake-opencode.mjs) and
 # the system folders; OLD_PATH is the PATH a terminal had before the run;
@@ -89,11 +87,15 @@ run_timeout() {
 # Every entry must be guarded (launched written, escaped not) or refused (non-zero
 # exit, nothing launched). escaped, or a timeout, fails. The plugin folder must
 # never hold both guards' plugins (I1).
+# A terminal whose PATH reaches no guard shim (E1 before a PATH block exists, E2
+# from before a fresh install) runs the bare binary, which the fake CLI cannot
+# refuse; E6 covers it: the plugin must refuse, or with no guard plugin the
+# OpenCode config and plugin folder must be as before the install.
 probe_entry_points() {
   local h=${1:A} base=$2 old=$3 pre=${4:-}
   local e="$h/Library/Application Support/AgentGuard" o="$h/Library/Application Support/OpenCodeGuard"
   local plugins="$h/.config/opencode/plugins" app target f
-  local -a guard_plugins
+  local -a guard_plugins blocks
 
   probe_one() {
     local name=$1 rc
@@ -109,11 +111,21 @@ probe_entry_points() {
     fi
   }
 
-  probe_one "E1 new terminal" /usr/bin/env -i HOME="$h" PATH="$base" /bin/zsh -l -i -c opencode
-  probe_one "E2 old terminal" /usr/bin/env -i HOME="$h" PATH="$old" /bin/zsh -f -c opencode
+  blocks=(${(f)"$(/usr/bin/grep -lFx -e '# >>> agent-guard >>>' -e '# >>> opencode-guard >>>' "$h/.zprofile" "$h/.zshrc" 2>/dev/null)"})
+  if (( $#blocks )); then
+    probe_one "E1 new terminal" /usr/bin/env -i HOME="$h" PATH="$base" /bin/zsh -l -i -c opencode
+  else
+    pass "E1 new terminal: no PATH block, so the bare binary (E6)"
+  fi
+  if [[ ":$old:" == *":$e/bin:"* || ":$old:" == *":$o/bin:"* ]]; then
+    probe_one "E2 old terminal" /usr/bin/env -i HOME="$h" PATH="$old" /bin/zsh -f -c opencode
+  else
+    pass "E2 old terminal: no guard on its PATH, so the bare binary (E6)"
+  fi
   [[ -e $e/bin/opencode ]] && probe_one "E3 $e/bin/opencode" /usr/bin/env -i HOME="$h" PATH="$base" "$e/bin/opencode"
   [[ -e $o/bin/opencode ]] && probe_one "E4 $o/bin/opencode" /usr/bin/env -i HOME="$h" PATH="$base" "$o/bin/opencode"
-  # E5 runs each app's target with the fake app bundle and pgrep seams (pending in the installer).
+  # E5 runs each app's target; the harness seam points the launcher at the fake
+  # ~/Applications/OpenCode.app, whose executable name no real process has.
   for app in "$h/Applications/"{Agent,OpenCode}" Guard.app"(N); do
     target=$(/usr/bin/osadecompile "$app/Contents/Resources/Scripts/main.scpt" 2>/dev/null |
       /usr/bin/grep -o '/[^"]*/bin/opencode-gui' | /usr/bin/head -1)
@@ -128,8 +140,12 @@ probe_entry_points() {
         pass "E6 ${f:t} refuses unguarded" || fail "E6 ${f:t} refuses unguarded"
     done
   elif [[ -n $pre ]]; then
-    [[ $(snapshot "$h") == "$(<$pre)" ]] && pass "E6 no guard plugin; state as before the install" ||
-      fail "E6 no guard plugin and state differs from before the install"
+    # What a bare OpenCode reads: its configs and the plugin names it loads.
+    [[ ${(M)${(f)"$(snapshot "$h")"}:#(.config/opencode/*|(#i)plugins/[^[:space:]]#.(js|ts)[[:space:]]*)} == ${(M)${(f)"$(<$pre)"}:#(.config/opencode/*|(#i)plugins/[^[:space:]]#.(js|ts)[[:space:]]*)} ]] &&
+      pass "E6 no guard plugin; OpenCode config and plugins as before the install" ||
+      fail "E6 no guard plugin and the OpenCode config or plugins differ from before the install"
+  else
+    fail "E6 no guard plugin after an install"
   fi
   (( $#guard_plugins < 2 )) && pass "I1 one guard plugin at most" || fail "I1 both guard plugins present"
 }
