@@ -5,9 +5,12 @@ setopt err_exit no_unset pipe_fail extended_glob
 
 src=${0:A:h:h:h}
 profile_src="$src/profiles/opencode"
-home=${HOME:A}
+source "$src/engine/account.zsh"
+account_home || { print -ru2 'Agent Guard: cannot resolve account home'; exit 1 }
+home=${REPLY:A}
 engine="$home/Library/Application Support/AgentGuard"
 state="$engine/state"
+old_engine="$home/Library/Application Support/OpenCodeGuard"
 list_dir="$home/Agent Guard"
 list="$list_dir/Guard List.txt"
 conf="$home/.config/opencode"
@@ -34,6 +37,23 @@ say() { print -r -- "$*" }
 for t in /usr/bin/sandbox-exec /usr/bin/jq /usr/bin/osacompile /usr/bin/codesign /usr/bin/curl; do
   [[ -x $t ]] || die "missing $t (macOS 15 or later required)"
 done
+
+# Fresh installs only; nothing has changed yet.
+for p in "$old_engine" "$conf/plugins/opencode-guard.js"; do
+  if [[ -e $p || -L $p ]]; then
+    die "OpenCode Guard is installed ($p). Migration from OpenCode Guard arrives in a later release; nothing changed."
+  fi
+done
+if [[ -f $engine/launch && ! -L $engine/launch ]] || [[ -d $engine/bin && ! -L $engine/bin ]]; then
+  die "an earlier Agent Guard install without release folders is in $engine. Run \"$engine/uninstall.sh\" first; nothing changed."
+fi
+
+if [[ -f $src/VERSION ]]; then
+  version=$(<"$src/VERSION")
+else
+  version=dev
+fi
+[[ $version == [0-9A-Za-z][0-9A-Za-z.+-]# ]] || die "invalid VERSION: $version"
 
 if [[ -z $projects && $gui == 0 && -t 0 ]]; then
   print -n "Drag your projects folder here and press Return (Return alone skips): "
@@ -62,16 +82,49 @@ for f in "$conf/config.json" "$conf/opencode.json" "$conf/opencode.jsonc"; do
 done
 [[ -e $conf/config.json || -e $conf/opencode.json || -e $conf/opencode.jsonc ]] || configs=("$conf/opencode.json")
 
-/bin/mkdir -p "$engine/bin" "$state"
-/bin/cp "$src/engine/launch" "$src/engine/profile.sb" "$profile_src/uninstall.sh" "$src/LICENSE" "$engine/"
-/bin/cp "$profile_src/opencode" "$profile_src/opencode-gui" "$engine/bin/"
-/bin/rm -rf "$engine/vendor"
-/bin/cp -R "$src/engine/vendor" "$engine/vendor"
-/bin/chmod 755 "$engine/launch" "$engine/uninstall.sh" "$engine/bin/opencode" "$engine/bin/opencode-gui"
-/usr/bin/xattr -dr com.apple.quarantine "$engine" 2>/dev/null || true
-/bin/mkdir -p "$engine/profiles/opencode"
-/bin/cp "$profile_src/harness.zsh" "$profile_src/hooks.zsh" "$profile_src/protected.sb" "$engine/profiles/opencode/"
-say "engine: $engine"
+# replace_link LINK TARGET: a new link under a temporary name, then one rename, so
+# LINK always exists. -h renames onto a link to a folder instead of into it.
+replace_link() {
+  local tmp="${1:h}/.${1:t}.partial"
+  /bin/rm -f "$tmp"
+  /bin/ln -s "$2" "$tmp" && /bin/mv -fh "$tmp" "$1"
+}
+
+# Each install gets its own release folder; a same-version reinstall stages
+# beside the live copy, never over it.
+rid_now() { REPLY="$version-$(/bin/date -u +%Y%m%dT%H%M%SZ)" }
+rid_now
+while [[ -e $engine/releases/$REPLY || -e $engine/stage/$REPLY ]]; do /bin/sleep 1; rid_now; done
+rid=$REPLY
+release="$engine/releases/$rid"
+staged="$engine/stage/$rid"
+/bin/mkdir -p "$state" "$engine/releases" "$staged/bin" "$staged/profiles/opencode/check-config/opencode/plugins"
+/bin/cp "$src/engine/launch" "$src/engine/profile.sb" "$src/engine/account.zsh" "$profile_src/uninstall.sh" "$src/LICENSE" "$staged/"
+print -r -- "$version" > "$staged/VERSION"
+print -r -- "$rid" > "$staged/RELEASE"
+/bin/cp "$profile_src/opencode" "$profile_src/opencode-gui" "$src/engine/agent-guard" "$staged/bin/"
+/bin/cp -R "$src/engine/vendor" "$staged/vendor"
+/bin/cp "$profile_src/harness.zsh" "$profile_src/hooks.zsh" "$profile_src/protected.sb" "$profile_src/plugin.js" "$staged/profiles/opencode/"
+/bin/cp -R "$profile_src/templates" "$profile_src/assets" "$staged/profiles/opencode/"
+# check staged points OpenCode's config folder here; its only plugin is this release's.
+# OpenCode 1.18.33 loads no config, and so no plugin, when it cannot create
+# .gitignore in the config folder. The guard denies writes here, so the file is
+# made now, as opencode_prepare does for ~/.config/opencode.
+/bin/ln -s ../../../plugin.js "$staged/profiles/opencode/check-config/opencode/plugins/agent-guard.js"
+print -l node_modules package.json package-lock.json bun.lock .gitignore > "$staged/profiles/opencode/check-config/opencode/.gitignore"
+/bin/chmod 755 "$staged/launch" "$staged/uninstall.sh" "$staged/bin/opencode" "$staged/bin/opencode-gui" "$staged/bin/agent-guard"
+/usr/bin/xattr -dr com.apple.quarantine "$staged" 2>/dev/null || true
+/bin/mv "$staged" "$release"
+/bin/rmdir "$engine/stage" 2>/dev/null || true
+# Kept after the self-test: OpenCode sessions launched from it still load its plugin.
+previous=
+if [[ -L $engine/current ]]; then
+  previous=$(/usr/bin/readlink "$engine/current")
+  previous=${previous:t}
+fi
+replace_link "$engine/current" "releases/$rid"
+replace_link "$engine/bin" current/bin
+say "engine: $engine (release $rid)"
 
 /bin/mkdir -p "$list_dir"
 [[ -e $list ]] || /bin/cp "$profile_src/templates/Guard List.txt" "$list"
@@ -98,8 +151,10 @@ if [[ -n $projects ]]; then
 fi
 say "list: $list"
 
+# A link through current, so the same rename switches the launcher and the plugin.
+# OpenCode does not load the temporary name .agent-guard.js.partial.
 /bin/mkdir -p "$conf/plugins"
-/bin/cp "$profile_src/plugin.js" "$conf/plugins/agent-guard.js"
+replace_link "$conf/plugins/agent-guard.js" "$engine/current/profiles/opencode/plugin.js"
 
 /bin/mkdir -p "$cc/agent-guard"
 /bin/cp "$profile_src/templates/cc-safety-net/rules/agent-guard/rulebook.json" "$cc/agent-guard/rulebook.json"
@@ -154,10 +209,15 @@ say "PATH: new terminal windows run opencode inside the guard"
 /usr/bin/plutil -remove CFBundleIconName "$launcher/Contents/Info.plist"
 /usr/bin/codesign --force --sign - "$launcher" 2>/dev/null
 say "GUI: $launcher (drag it to the Dock)"
-"$engine/launch" find-app >/dev/null || warnings+=("OpenCode.app not found: install it, then open Agent Guard")
+"$engine/current/launch" find-app >/dev/null || warnings+=("OpenCode.app not found: install it, then open Agent Guard")
 
 say "self-test:"
-if ! out=$("$engine/launch" check 2>&1); then
+if out=$("$engine/bin/agent-guard" doctor 2>&1); then
+  # Releases older than the previous one go only once this one has passed.
+  for r in "$engine"/releases/*(N/); do
+    [[ ${r:t} == ("$rid"|"$previous") ]] || /bin/rm -rf "$r"
+  done
+else
   failed=(${(M)${(f)out}:#FAIL*})
   (( $#failed )) || failed=("$out")
   warnings+=("self-test failed, the guard may not work: ${(j:; :)failed}")

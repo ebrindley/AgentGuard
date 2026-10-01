@@ -1,7 +1,8 @@
 import { realpathSync } from "node:fs"
 import { homedir } from "node:os"
 
-const [plugin, mode] = process.argv.slice(2)
+// STATUS, in guarded mode: the exact text the status tool must return.
+const [plugin, mode, status] = process.argv.slice(2)
 const { AgentGuard } = await import(plugin)
 const home = realpathSync(homedir())
 const directory = `${home}/Projects/app`
@@ -10,9 +11,10 @@ const hooks = await AgentGuard({ directory })
 const hook = hooks["tool.execute.before"]
 let failures = 0
 
-async function expect(want, name, tool, args) {
+// TEXT, when given, must be part of the refusal.
+async function expect(want, name, tool, args, text) {
   let blocked = false
-  try { await hook({ tool }, { args }) } catch { blocked = true }
+  try { await hook({ tool }, { args }) } catch (error) { blocked = text === undefined || error.message.includes(text) }
   const ok = want === "blocked" ? blocked : !blocked
   console.log(`${ok ? "ok  " : "FAIL"} plugin ${mode}: ${name}`)
   if (!ok) failures++
@@ -25,10 +27,28 @@ if (mode === "unguarded" || mode === "old-bypass" || mode === "symlinked") {
   await expect("allowed", "question allowed", "question", {})
 } else if (mode === "bypass") {
   await expect("allowed", "bash allowed", "bash", { command: "ls" })
+} else if (mode === "outside" || mode === "updated") {
+  // Run guarded, a copy outside releases/ (outside) or a plugin whose
+  // AGENT_GUARD_RELEASE names a release that is gone (updated): no cc-safety-net,
+  // so no status tool and every tool refused.
+  const text = mode === "updated" ? "Agent Guard was updated; quit and reopen OpenCode" : undefined
+  const absent = hooks.tool?.agent_guard_status === undefined
+  console.log(`${absent ? "ok  " : "FAIL"} plugin ${mode}: no agent_guard_status`)
+  if (!absent) failures++
+  await expect("blocked", "bash refused", "bash", { command: "ls" }, text)
+  await expect("blocked", "read refused", "read", { filePath: "README.md" }, text)
+  await expect("blocked", "edit in ALLOW refused", "edit", { filePath: "src/index.js" }, text)
 } else {
   const registered = typeof hooks.tool?.agent_guard_status?.execute === "function"
   console.log(`${registered ? "ok  " : "FAIL"} plugin ${mode}: agent_guard_status registered`)
   if (!registered) failures++
+  if (status !== undefined) {
+    const said = registered ? await hooks.tool.agent_guard_status.execute({}) : ""
+    console.log(`${said === status ? "ok  " : "FAIL"} plugin ${mode}: status reports "${status}"`)
+    if (said !== status) failures++
+  }
+  // status mode checks only which release answered.
+  if (mode === "status") process.exit(failures ? 1 : 0)
   await expect("allowed", "bash allowed", "bash", { command: "ls" })
   await expect("blocked", "absolute-path env wrapper", "bash", { command: "/usr/bin/env git reset --hard" })
   await expect("blocked", "recursive rm despite agent-set CC_SAFETY_NET_HOME", "bash", { command: "rm -r sample" })
