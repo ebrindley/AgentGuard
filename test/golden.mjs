@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { userInfo } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -31,8 +31,7 @@ try {
     mkdirSync(join(home, dir), { recursive: true });
   mkdirSync(source);
   adapter.stage(root, source, home);
-  cpSync(join(source, 'engine'), engine, { recursive: true });
-  cpSync(join(source, 'profiles'), join(engine, 'profiles'), { recursive: true });
+  adapter.layout(source, engine);
   writeFileSync(join(home, 'Projects/dotfiles/config'), '{}');
   symlinkSync(join(home, 'Projects/dotfiles/config'), join(home, 'Projects/app/opencode.json'));
   const identity = adapter.identity(root, { HOME: home, USER: 'not-the-login-user' });
