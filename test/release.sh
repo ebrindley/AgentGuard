@@ -18,7 +18,7 @@ fail() { print -r -- "FAIL $*"; fails=$((fails + 1)) }
 # file in the two folders shipped whole.
 expected=(
   VERSION install.sh LICENSE
-  engine/launch engine/profile.sb engine/vendor/THIRD-PARTY-NOTICES
+  engine/launch engine/account.zsh engine/agent-guard engine/profile.sb engine/vendor/THIRD-PARTY-NOTICES
   profiles/opencode/{harness.zsh,hooks.zsh,protected.sb,plugin.js,opencode,opencode-gui,install.sh,uninstall.sh}
   profiles/opencode/assets/AgentGuard.icns
   ${(f)"$(/usr/bin/git -C "$source_root" ls-files -- engine/vendor/cc-safety-net profiles/opencode/templates)"}

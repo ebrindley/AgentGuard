@@ -1,0 +1,26 @@
+#!/bin/zsh
+# usage: agent-guard doctor|version
+emulate -L zsh
+setopt err_exit no_unset pipe_fail extended_glob
+
+die() { print -ru2 -- "agent-guard: $*"; exit 1 }
+usage() { print -ru2 -- 'usage: agent-guard doctor|version'; exit 2 }
+
+# This file is bin/agent-guard inside a release folder. Only a folder shaped like
+# one is trusted to supply the account lookup; after it, the release must be a
+# direct child of releases/ in the account-derived engine folder, as in launch.
+release=${0:A:h:h}
+[[ ${release:h:t} == releases && ${release:t} == [0-9A-Za-z.+-]## && -f $release/RELEASE && -f $release/account.zsh ]] ||
+  die "not an installed release: $release"
+source "$release/account.zsh"
+account_home || die 'cannot resolve account home'
+home=${REPLY:A}
+engine="$home/Library/Application Support/AgentGuard"
+[[ ${release:h} == "$engine/releases" ]] || die "not an installed release: $release"
+
+(( $# == 1 )) || usage
+case $1 in
+  (doctor) exec "$release/launch" check ;;
+  (version) print -r -- "Agent Guard $(<"$release/VERSION"), release $(<"$release/RELEASE")" ;;
+  (*) usage ;;
+esac

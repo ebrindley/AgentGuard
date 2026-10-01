@@ -2,10 +2,18 @@
 emulate -L zsh
 setopt no_unset pipe_fail
 
-home=${HOME:A}
+# Installed, this file sits next to account.zsh in a release folder; in a checkout
+# the function is in engine/.
+here=${0:A:h}
+account="$here/account.zsh"
+[[ -f $account ]] || account="${here:h:h}/engine/account.zsh"
+source "$account" || exit 1
+account_home || { print -ru2 'Agent Guard: cannot resolve account home'; exit 1 }
+home=${REPLY:A}
 engine="$home/Library/Application Support/AgentGuard"
 record="$engine/state/permissions.json"
 cc="$home/.cc-safety-net/rules"
+plugin="$home/.config/opencode/plugins/agent-guard.js"
 marker_start='# >>> agent-guard >>>'
 marker_end='# <<< agent-guard <<<'
 
@@ -37,7 +45,13 @@ if [[ -e $record ]]; then
   done
 fi
 
-/bin/rm -f "$home/.config/opencode/plugins/agent-guard.js"
+# The plugin is a link into the engine; a regular file is an older copy. A link
+# elsewhere is not Agent Guard's.
+if [[ -L $plugin ]]; then
+  [[ $(/usr/bin/readlink "$plugin") == "$engine"/* ]] && /bin/rm -f "$plugin"
+elif [[ -f $plugin ]]; then
+  /bin/rm -f "$plugin"
+fi
 /bin/rm -rf "$home/Applications/Agent Guard.app" "$cc/agent-guard"
 if [[ -e $cc/rule.json ]]; then
   if /usr/bin/jq '.rules -= ["agent-guard"]' "$cc/rule.json" > "$cc/rule.json.tmp" 2>/dev/null; then
@@ -53,5 +67,6 @@ if (( failed )); then
   /bin/mkdir -p "${backup:h}" && /bin/cp "$record" "$backup" || { warn "could not save $record; engine kept"; exit 1 }
   warn "original permission settings saved to $backup"
 fi
+# Removes every release, current, bin and state together.
 /bin/rm -rf "$engine"
 print -r -- "Agent Guard removed. Your list is still at $home/Agent Guard."
