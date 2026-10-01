@@ -8,11 +8,12 @@ oc="$home/.config/opencode"
 }
 opencode_check() {
     if next_cli; then
-      out="$darwin_temp/opencode-guard-serve.$$"
+      out="$engine/state/.serve.$$"
       OPENCODE_SANDBOXED=1 $sandbox -D GUI=0 "$REPLY" serve --hostname 127.0.0.1 --port $(( 20000 + RANDOM % 30000 )) > "$out" 2>&1 &
       pid=$!
       ids=
       for i in {1..40}; do
+        kill -0 $pid 2>/dev/null || break
         url=$(/usr/bin/grep -o 'http://127\.0\.0\.1:[0-9]*' "$out" 2>/dev/null | head -1) || true
         [[ -n $url ]] && ids=$(/usr/bin/curl -sf --max-time 5 "$url/experimental/tool/ids?directory=${darwin_temp// /%20}" 2>/dev/null) &&
           [[ $ids == *'"opencode_guard_status"'* ]] && break

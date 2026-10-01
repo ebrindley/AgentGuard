@@ -43,7 +43,7 @@ real account lookup under spoofed environment values, then compares complete
 generated profiles against unmodified v1.0.3 fixtures for empty and nested lists.
 The v1.0.3 reference runs unmodified, without the adapter.
 Only the two product path names are normalized. The original source commit is
-`9242c1ad45c895efd63e903e1b27d7bab53620ad`; bundled cc-safety-net is unchanged.
+`9242c1ad45c895efd63e903e1b27d7bab53620ad`; bundled cc-safety-net is 2.4.14.
 
 `test/golden.mjs`, `test/test.sh` and `test/plugin.mjs` are development tests.
 They run in a disposable home, are not installed, and the installer does not run

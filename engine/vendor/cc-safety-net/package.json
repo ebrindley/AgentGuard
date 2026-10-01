@@ -1,6 +1,6 @@
 {
   "name": "cc-safety-net",
-  "version": "2.4.6",
+  "version": "2.4.14",
   "description": "A coding agent CLI hook - block destructive commands and secret file access",
   "keywords": [
     "amp",
@@ -60,10 +60,11 @@
     "verify:repository-plugin": "bun run scripts/verify-repository-plugin.ts",
     "verify:coverage": "bun run scripts/verify-coverage.ts",
     "clean": "rm -rf dist",
-    "check": "bun run lint && bun run format:check && bun run typecheck && bun run knip && bun run check-duplicates && bun run test:coverage && bun run verify:coverage",
+    "check": "bun run lint && bun run lint:comments && bun run format:check && bun run typecheck && bun run knip && bun run check-duplicates && bun run test:coverage && bun run verify:coverage",
     "check:ci": "bun run check",
     "lint": "oxlint src tests scripts knip.ts",
     "lint:ci": "bun run lint && bun run format:check",
+    "lint:comments": "bun scripts/check-comments.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.gui.json --noEmit",
     "knip": "knip-bun --production",
     "check-duplicates": "jscpd src tests --threshold 0 --exit-code 1 --no-tips --reporters ai --ignore '**/*.svg' --ignore-pattern 'import\\s[\\s\\S]*?from\\s[^;]*;'",
@@ -87,6 +88,7 @@
     "jscpd": "^5.0.14",
     "knip": "^6.32.0",
     "lefthook": "^2.1.10",
+    "oxc-parser": "0.142.0",
     "oxfmt": "0.70.0",
     "oxlint": "1.85.0",
     "oxlint-tsgolint": "7.0.2002",
@@ -121,5 +123,5 @@
       "./dist/pi/index.js"
     ]
   },
-  "gitHead": "3a3d2414610195c00f4807b05ecc63ed2c3b497b"
+  "gitHead": "f9bfeca0ecf361ac3240e10bbb36dca68fe17a38"
 }
