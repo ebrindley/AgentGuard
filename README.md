@@ -17,7 +17,8 @@ reads and network access are broad unless denied, cached OpenCode plugins remain
 writable, and symlink targets of project config names are protected only in the
 start folder. There is no Pi profile, list import, `@project`, or migration yet.
 The installer is retained for development and disposable-home tests; do not use
-it to replace an existing OpenCode Guard installation before stage 2.
+it to replace an existing OpenCode Guard installation before step 5 in
+[docs/DESIGN.md](docs/DESIGN.md#12-plan).
 
 Run outside any agent sandbox on macOS 15 or later:
 
