@@ -76,7 +76,7 @@ The v1.0.3 reference runs unmodified, without the adapter.
 Only the two product path names are normalized. The original source commit is
 `9242c1ad45c895efd63e903e1b27d7bab53620ad`; bundled cc-safety-net is 2.4.14.
 
-`test/golden.mjs`, `test/test.sh`, `test/release.sh` and `test/plugin.mjs` are development tests.
+`test/golden.mjs`, `test/test.sh`, `test/release.sh`, `test/bootstrap.sh` and `test/plugin.mjs` are development tests.
 They run in a disposable home, are not installed, and the installer does not run
 them. The installed check is `agent-guard doctor` (the release's
 `launch check`), which the installer runs as its self-test: a protected write is
@@ -90,24 +90,53 @@ on `test/`.
 ## Building a release
 
 ```sh
-scripts/release.sh 1.2.3
+scripts/release.sh [--dev] [--out DIR] 1.2.3
 ```
 
-This writes `dist/agent-guard-1.2.3.tar.gz` and
-`dist/agent-guard-1.2.3.tar.gz.sha256`. The archive holds one
-`agent-guard-1.2.3/` folder with the files listed in the script, the whole of
-`engine/vendor/cc-safety-net` and `profiles/opencode/templates`, and a
-`VERSION` file. The script stops if a listed file is missing. It uses only
-tools that ship with macOS. The checksum file names the archive without a
-folder, so check it from `dist/`:
+This writes three release assets to `dist/` (or `DIR`):
+`agent-guard-1.2.3.tar.gz`, `agent-guard-1.2.3.tar.gz.sha256` and
+`install.sh`. The archive holds one `agent-guard-1.2.3/` folder with the files
+listed in the script, the whole of `engine/vendor/cc-safety-net` and
+`profiles/opencode/templates`, a `VERSION` file and a `COMMIT` file. The script
+stops if a listed file is missing. It uses only tools that ship with macOS. The
+checksum file names the archive without a folder, so check it from `dist/`:
 
 ```sh
 cd dist && shasum -a 256 -c agent-guard-1.2.3.tar.gz.sha256
 ```
 
+`install.sh` is the bootstrap for the one-line install, filled in from
+`scripts/bootstrap.zsh` with the tag `v1.2.3`, the version and the launcher's
+account lookup. It downloads that tag's archive and checksum into the engine
+folder's `stage/`, verifies them, then runs the archive's installer with
+`--stage <id>` and its own arguments. It refuses inside a guard or another
+sandbox, and a copy cut short runs nothing.
+
+The checksum comes from the same release as the archive, so it detects a
+corrupted download or mismatched assets, not a compromised publisher: whoever
+can replace the archive can replace its checksum. The bootstrap itself is
+trusted code fetched over HTTPS from GitHub; nothing verifies it before it runs.
+
+Every build runs `scripts/check-seams.zsh` on what it packages and stops if it
+fails: the production forms of the test seams must occur once each and
+`AG_TEST_` must appear nowhere in the shipped files. Without `--dev` the checkout
+must have no uncommitted changes and `COMMIT` holds its `HEAD`. `--dev` builds
+from any tree and writes `COMMIT` as `dev` unless the checkout is clean. Do not
+publish a `--dev` build.
+
 `zsh test/release.sh` builds `0.0.0-test`, compares the archive listing with the
-release file list, checks the checksum and `VERSION`, then runs `test/test.sh`
-against the unpacked archive. It needs the same conditions as `test/test.sh`.
+release file list, checks the checksum, `VERSION`, `COMMIT` and `install.sh`,
+then runs `test/test.sh` against the unpacked archive. It needs the same
+conditions as `test/test.sh`.
+
+`zsh test/bootstrap.sh` tests the bootstrap without an installer. It starts
+`test/release-server.mjs`, a local HTTP server on 127.0.0.1 that answers
+GitHub's `releases/latest/download/<asset>` and `releases/download/<tag>/<asset>`
+forms from a folder of tags and can cut short or corrupt one asset. The adapter's
+`release` function builds each test release with `scripts/release.sh --dev` from
+the unmodified source, then applies the test seams to the output: it repacks the
+archive with the test points enabled and the launcher's account home fixed to a
+disposable home, rewrites the checksum, and points the bootstrap at that server. It needs Node.
 
 `LICENSE` covers Agent Guard. `engine/vendor/cc-safety-net/LICENSE` covers
 cc-safety-net, and `engine/vendor/THIRD-PARTY-NOTICES` covers the effect and
