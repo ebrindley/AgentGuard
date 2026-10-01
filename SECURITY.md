@@ -29,8 +29,10 @@ process it starts under `/usr/bin/sandbox-exec` with a profile generated from th
 Guard List (`~/Agent Guard/Guard List.txt`) at each launch. Under that profile the
 agent can write only to ALLOW folders and the data, cache and temp folders
 OpenCode needs, cannot read or write DENY entries, and cannot change the guard,
-the list, OpenCode's config and plugins, the shell startup files or
-`~/Library/LaunchAgents`.
+the list, OpenCode's global config and plugin folder (`~/.config/opencode`), the
+shell startup files or `~/Library/LaunchAgents`. The exceptions are under
+[Known limitations](#known-limitations-in-010): OpenCode's cached plugin packages
+under `~/.cache`, and the targets of symlinked project config names.
 
 The OpenCode plugin and cc-safety-net are advisory. They refuse tool calls with
 a clear message, but nothing depends on them for safety. The Seatbelt profile is
@@ -51,13 +53,15 @@ the boundary.
   including OpenCode's npm plugin store under `~/.cache/opencode`. An agent can
   change cached plugin code that OpenCode imports at its next start, and an
   OpenCode started later without the guard runs that code with full authority.
-  Planned: the next policy update write-protects the package store.
+  Planned: step 7 of the plan in [docs/DESIGN.md](docs/DESIGN.md#12-plan)
+  write-protects the package store.
 - **Concurrent launches share `state/rules.json`.** Each launch writes the
   resolved ALLOW, READ ONLY and DENY paths to one file in the engine folder, and
   each plugin reads it once at start. When two launches start close together, or
   start in folders whose symlinked config names differ, the first session's
   plugin can refuse and report against the second launch's rules. Seatbelt still
-  enforces each session's own profile. Planned: one state file per launch.
+  enforces each session's own profile. Planned: step 9 of the plan in
+  [docs/DESIGN.md](docs/DESIGN.md#12-plan) writes one state file per launch.
 - **Symlinked project config names.** The names `.opencode`, `opencode.json`,
   `opencode.jsonc`, `tui.json` and `tui.jsonc` cannot be created, replaced or
   removed anywhere. When one of them is a symlink, its target is write-protected
@@ -74,7 +78,11 @@ the boundary.
 - **Reads are broad unless denied.** Without DENY entries the agent can read
   `~/.ssh`, `~/.aws` and every other file the account can read. Add DENY entries
   to the Guard List for what it must not read; denying `~/.ssh` also stops git
-  over SSH inside the guard. Not planned.
+  over SSH inside the guard. A DENY or READ ONLY entry that is or contains a
+  folder OpenCode needs (`/`, home, `~/Library`, `~/.config`, `~/.local`,
+  `~/.cache`, `/usr`, `/bin`, `/sbin`, `/System`, `/Library`, `/private`, `/dev`,
+  `/opt`, `/Applications`) is refused, not applied; each launch names refused
+  and skipped entries in `~/Agent Guard/last-launch-opencode.log`. Not planned.
 
 ## Bug or vulnerability
 
