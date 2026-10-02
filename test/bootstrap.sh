@@ -176,18 +176,10 @@ done
 # B7: arguments reach the release's installer after --stage <txn>, in the same process.
 stub_src="$run/stub-src"
 /bin/mkdir -p "$stub_src"
-/bin/cp -R "$source_root"/{engine,profiles,scripts,install.sh,LICENSE} "$stub_src/"
+/bin/cp -R "$source_root"/{engine,profiles,installer,scripts,install.sh,LICENSE} "$stub_src/"
 print -r -- '#!/bin/zsh
-# Test stub: records its arguments, its pid and the lock owner. The test_point,
-# boot_time and pgrep lines are the production seam forms that
-# scripts/check-seams.zsh requires.
-test_point() { : }
-boot_time() {
-  :
-}
-proc_check() {
-  local pgrep=/usr/bin/pgrep
-}
+# Test stub: records its arguments, its pid and the lock owner. The seam forms
+# scripts/check-seams.zsh requires stay in the copied installer/lib.zsh.
 print -rl -- "pid $$" "lock $(<"'"$state"'/lock/pid")" "self ${0:A}" "$@" > "'"$run"'/stub-args"' > "$stub_src/profiles/opencode/install.sh"
 build "$stub_src" 0.0.9 || fail "B7 cannot build the stub release"
 new_home "$home" >/dev/null

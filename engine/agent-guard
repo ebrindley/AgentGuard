@@ -18,10 +18,29 @@ home=${REPLY:A}
 engine="$home/Library/Application Support/AgentGuard"
 [[ ${release:h} == "$engine/releases" ]] || die "not an installed release: $release"
 
-# The installer's functions: guard probe, lock and recovery (profiles/opencode/install.sh).
+# The installer's functions: guard probe, lock, recovery and the harness and
+# migration modules (install.sh loads installer/ of this release).
 load_installer() {
   source "$release/install.sh" --lib || die "cannot load $release/install.sh"
   ag_init || exit 1
+}
+
+# Each harness's checks: those of the harnesses the open transaction installs
+# while it installs this release (its gate runs before the stamp), else the stamp's.
+doctor() {
+  local h
+  integer bad=0
+  load_installer
+  ag_doctor_harnesses "${release:t}"
+  for h in $reply; do
+    if (( ! ${ag_harness_modules[(Ie)$h]} )); then
+      print -r -- "FAIL release ${release:t} has no checks for harness $h"
+      bad=1
+      continue
+    fi
+    ag_hook h $h doctor "$release" || bad=1
+  done
+  exit $bad
 }
 
 # Prints the stamp, then each installed path that no longer matches it. Read-only.
@@ -105,16 +124,21 @@ update() {
   tag=${${tags[1]#*local tag=\'}%%\'*}
   [[ -f $stamp ]] && cur=$(/usr/bin/jq -r '.tag // empty' "$stamp" 2>/dev/null)
   if [[ $tag == "$cur" ]]; then
-    ag_unlock
-    print -r -- "Agent Guard ${tag#v} is current."
-    exit 0
-  fi
-  if [[ -n $cur ]] && older "$tag" "$cur"; then
+    # Current, unless a registered source is still to migrate or retire, or a
+    # harness on this Mac is missing from the stamp: then the install runs again.
+    if ! ag_pending; then
+      ag_unlock
+      print -r -- "Agent Guard ${tag#v} is current."
+      exit 0
+    fi
+    print -r -- "Agent Guard ${tag#v} is installed; installing it again for $REPLY"
+  elif [[ -n $cur ]] && older "$tag" "$cur"; then
     ag_unlock
     print -r -- "The installed release ($cur) is newer than the latest release ($tag); nothing changed."
     exit 0
+  else
+    print -r -- "updating to Agent Guard ${tag#v}"
   fi
-  print -r -- "updating to Agent Guard ${tag#v}"
   # exec keeps this process, so the bootstrap and its installer keep the lock.
   exec /bin/zsh -fc "$text" install.sh --update
 }
@@ -152,7 +176,7 @@ uninstall() {
 
 (( $# == 1 )) || usage
 case $1 in
-  (doctor) exec "$release/launch" check ;;
+  (doctor) doctor ;;
   (version) version ;;
   (update) update ;;
   (uninstall) uninstall ;;
