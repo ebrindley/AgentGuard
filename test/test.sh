@@ -318,6 +318,103 @@ done
 refuses "terminal launch with an unresolvable XDG_CACHE_HOME refused" "XDG_CACHE_HOME must name" \
   /usr/bin/env XDG_CACHE_HOME=cache "$engine/bin/opencode" --version
 
+# Pi's guard files (docs/DESIGN.md section 11, What changes for OpenCode sessions),
+# under ALLOW entries for ~/.local/bin, ~/.pi and ~/.config/pi-sandbox-guard. omp
+# is a link to a file in ALLOW and ~/.pi/agent a link to a folder in ALLOW, so the
+# denies must hold at link targets and the links must stay in place.
+pi_stamp="$engine/state/stamp.json" pi_wrappers="$engine/state/wrappers.json" pi_txn="$engine/state/txn"
+pi_bin="$home/.local/bin" pi_ext="$home/.pi/agent/extensions/pi-sandbox-guard" pi_conf="$home/.config/pi-sandbox-guard/executables.conf"
+pi_agent="$home/Projects/dotfiles/pi-agent" pi_omp="$home/Projects/pi-links/omp" pi_new="$home/Projects/pi-new"
+/bin/mkdir -p "$pi_bin" "$home/.pi" "$pi_agent/extensions/pi-sandbox-guard/src" "${pi_conf:h}" "${pi_omp:h}"
+/bin/ln -s "$pi_agent" "$home/.pi/agent"
+for f in pi pi-sandbox.sb pi-sandbox-preamble.zsh pi-work pi-old other-tool; do print '#!/bin/zsh -f' > "$pi_bin/$f"; done
+print '#!/bin/zsh -f' > "$pi_omp"
+/bin/ln -s "$pi_omp" "$pi_bin/omp"
+for f in index.ts src/index.mjs; do print '// guard' > "$pi_ext/$f"; done
+print 'pi=/usr/bin/true' > "$pi_conf"
+/bin/cp "$list" "$run/list.saved"
+/bin/cp "$pi_stamp" "$run/stamp.saved"
+print -rl -- 'ALLOW - Pi' '~/.local/bin' '~/.pi' '~/.config/pi-sandbox-guard' >> "$list"
+pi_stamped() { /usr/bin/jq "$1" "$run/stamp.saved" > "$pi_stamp" }
+pi_launch() { (cd "$home/Projects/app" && "${launcher[@]}" profile 2>/dev/null) }
+# No rule in the final deny block names a Pi path.
+no_pi_rules() { [[ $1 != *'(h "/.local/bin'* && $1 != *'(h "/.pi'* && $1 != *'(h "/Projects/dotfiles/pi-agent'* && $1 != *'(h "/.config/pi-sandbox-guard'* ]] }
+# Without Pi in the stamp nothing changes, and a malformed wrapper record is not read.
+print -r -- 'not json' > "$pi_wrappers"
+check "the install's stamp lists OpenCode alone" /usr/bin/jq -e '.harnesses == ["opencode"]' "$pi_stamp"
+pi_profile=$(pi_launch) && no_pi_rules "$pi_profile" && pass "without Pi in the stamp no Pi file is protected" ||
+  fail "without Pi in the stamp no Pi file is protected"
+pi_stamped 'del(.harnesses)'
+[[ $(pi_launch) == "$pi_profile" ]] && pass "a stamp from before 0.2.0 means OpenCode alone" || fail "a stamp from before 0.2.0 means OpenCode alone"
+psb() { local profile=$pi_profile; sb "$@" }
+expect ok "without Pi in the stamp: write pi under ALLOW" psb /bin/sh -c "echo x >> '$pi_bin/pi'"
+# With Pi in the stamp: one recorded wrapper, one historical name, keys that are ignored.
+pi_stamped '.harnesses = ["opencode", "pi"]'
+print -r -- '{"wrappers":{"pi-work":{"sha256":"00"},".":{"sha256":"00"},"..":{"sha256":"00"},"../escape":{"sha256":"00"}},"historical":["pi-old"]}' > "$pi_wrappers"
+pi_profile=$(pi_launch) || fail "profile with Pi installed"
+check "launch log names Pi's write-protected files" /usr/bin/grep -Fxq \
+  "write-protected for Pi, maintained outside the guard: $pi_bin/pi, $pi_bin/omp, $pi_bin/pi-sandbox.sb, $pi_bin/pi-sandbox-preamble.zsh, $pi_bin/pi-work, $pi_ext, $pi_conf" "$log"
+ignored_keys() {
+  local l
+  for l in "${(@f)pi_profile}"; do
+    [[ $l == *escape* || $l == '  (subpath (h "/.local"))' || $l == '  (subpath (h "/.local/bin"))' ]] && return 1
+  done
+  return 0
+}
+check "ignored wrapper keys get no rule" ignored_keys
+expect ok "Pi installed: write another file in ~/.local/bin" psb /bin/sh -c "echo x >> '$pi_bin/other-tool'"
+expect ok "Pi installed: create a file in ~/.local/bin"      psb /usr/bin/touch "$pi_bin/new-tool"
+expect ok "Pi installed: write a historical wrapper name"    psb /bin/sh -c "echo x >> '$pi_bin/pi-old'"
+expect ok "Pi installed: write another file in ~/.pi/agent"  psb /usr/bin/touch "$home/.pi/agent/settings.json"
+expect ok "Pi installed: write beside the bindings"          psb /usr/bin/touch "${pi_conf:h}/notes"
+# pi_denied LABEL FILE: FILE cannot be written, renamed, deleted, or replaced by a
+# rename or by a link. Each check holds whether or not the one before it changed FILE.
+pi_denied() {
+  local l=$1 f=$2
+  expect no "$l: write"                psb /bin/sh -c "echo x >> '$f'"
+  expect no "$l: rename"               psb /bin/mv "$f" "$f.old"
+  expect no "$l: delete"               psb /bin/rm -f "$f"
+  expect no "$l: replace by a rename"  psb /bin/sh -c "echo x > '$pi_new' && /bin/mv -f '$pi_new' '$f'"
+  expect no "$l: replace with a link"  psb /bin/ln -sfh /private/tmp "$f"
+}
+for f in pi omp pi-sandbox.sb pi-sandbox-preamble.zsh pi-work; do pi_denied "Pi installed: ~/.local/bin/$f" "$pi_bin/$f"; done
+pi_denied "Pi installed: the extension's index.ts" "$pi_ext/index.ts"
+pi_denied "Pi installed: the bindings" "$pi_conf"
+expect no "Pi installed: write omp's link target"            psb /bin/sh -c "echo x >> '$pi_omp'"
+expect no "Pi installed: rename the folder of omp's target"  psb /bin/mv "${pi_omp:h}" "${pi_omp:h}.old"
+expect no "Pi installed: add a file to the extension"        psb /usr/bin/touch "$pi_ext/src/new.mjs"
+expect no "Pi installed: rename the extension folder"        psb /bin/mv "$pi_ext" "$pi_ext.old"
+expect no "Pi installed: rename the extensions folder"       psb /bin/mv "${pi_ext:h}" "${pi_ext:h}.old"
+expect no "Pi installed: rename the target of ~/.pi/agent"   psb /bin/mv "$pi_agent" "$pi_agent.old"
+expect no "Pi installed: rename the link ~/.pi/agent"        psb /bin/mv "$home/.pi/agent" "$home/.pi/agent.old"
+expect no "Pi installed: delete the link ~/.pi/agent"        psb /bin/rm -f "$home/.pi/agent"
+# An open transaction's candidate inventory counts while it is open.
+pi_stamped '.'
+/bin/mkdir -p "$pi_txn"
+print -r -- '{"txn":"t","kind":"update","harnesses":["opencode","pi"]}' > "$pi_txn/plan.json"
+txn_profile=$(pi_launch)
+[[ $txn_profile == "$pi_profile" ]] && ! no_pi_rules "$txn_profile" &&
+  pass "a transaction plan listing Pi protects Pi's files" || fail "a transaction plan listing Pi protects Pi's files"
+# A record that exists but cannot be read refuses the launch.
+print -r -- '{"txn":"t","harnesses":"pi"}' > "$pi_txn/plan.json"
+refuses "malformed transaction plan refused" "cannot read the installed harnesses in $pi_txn/plan.json" "${launcher[@]}" profile
+/bin/rm -r "$pi_txn"
+for value in 'not json' '{"harnesses":["opencode",1]}' '{"harnesses":null}'; do
+  print -r -- "$value" > "$pi_stamp"
+  refuses "stamp $value refused" "cannot read the installed harnesses in $pi_stamp" "${launcher[@]}" profile
+done
+refuses "terminal launch with a malformed stamp refused" "cannot read the installed harnesses" "$engine/bin/opencode" --version
+pi_stamped '.harnesses = ["opencode", "pi"]'
+print -r -- '{"wrappers":["pi-work"]}' > "$pi_wrappers"
+refuses "malformed wrapper record refused" "cannot read Pi's recorded wrappers in $pi_wrappers" "${launcher[@]}" profile
+print -r -- '{"wrappers":{}}' > "$pi_wrappers"
+/bin/chmod 000 "$pi_wrappers"
+refuses "unreadable wrapper record refused" "cannot read Pi's recorded wrappers" "${launcher[@]}" profile
+/bin/rm -f "$pi_wrappers"
+/bin/cp "$run/stamp.saved" "$pi_stamp"
+/bin/cp "$run/list.saved" "$list"
+/bin/rm -rf "$pi_bin" "$home/.pi" "${pi_conf:h}" "$pi_agent" "${pi_omp:h}" "$pi_new"
+
 /bin/mkdir -p "$home/fakebin"
 child_home="$home/Projects/nested-home"
 /bin/mkdir -p "$child_home"

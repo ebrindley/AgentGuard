@@ -1248,7 +1248,38 @@ Not changed yet: Pi does not read the Guard List until Pi's migration; OpenCode'
 
 ### What changes for OpenCode sessions
 
-Planned for step 7c. Once Pi is installed, OpenCode sessions also write-protect Pi's guard files: `pi`, `omp`, `pi-sandbox.sb`, `pi-sandbox-preamble.zsh` and the recorded wrappers in `~/.local/bin`, the extension folder and the bindings. Installed has the meaning of section 3, Every installed harness: the candidate inventory while a transaction is open, the stamp's `harnesses` after it. The denies go in the final deny block (section 3, Rule order), so no ALLOW entry reopens them. Without them, an `ALLOW ~/.local/bin` entry, which the list accepts (section 4), would let an OpenCode session rewrite the launcher, preamble and wrappers, which run outside the sandbox at the next Pi start. Installing Pi changes nothing else in OpenCode sessions until step 10c.
+Built at step 7c, zsh engine. Once Pi is installed, OpenCode sessions also write-protect Pi's guard files: `pi`, `omp`, `pi-sandbox.sb`, `pi-sandbox-preamble.zsh` and the recorded wrappers in `~/.local/bin`, the extension folder `~/.pi/agent/extensions/pi-sandbox-guard/` and the bindings `~/.config/pi-sandbox-guard/executables.conf`. Without these denies, an `ALLOW ~/.local/bin` entry, which the list accepts (section 4), would let an OpenCode session rewrite the launcher, preamble and wrappers, which run outside the sandbox at the next Pi start. Installing Pi changes nothing else in OpenCode sessions until step 10c.
+
+- **Installed** has the meaning of section 3, Every installed harness. `engine/launch` reads `harnesses` from `state/txn/plan.json` while a transaction is open, whichever release it installs, else from `state/stamp.json`. A plan or stamp without `harnesses`, from before 0.2.0, and a missing stamp mean OpenCode alone. Unlike `doctor`, the launch does not require the plan to install its own release: the adoption's switch places Pi's files before `current` moves (The adoption, item 5), and a session started meanwhile from an earlier release from 0.2.0 on must protect them. A plan that disappears between the two reads, because its transaction closed, leaves the stamp to read.
+- **Wrappers.** With Pi installed, the recorded wrappers are the keys of `wrappers` in `state/wrappers.json`; without Pi the file is not read. A key that does not match `[A-Za-z0-9._-]+`, or is `.` or `..`, is ignored. Historical names are not protected.
+- **Unreadable records refuse the launch.** A plan, stamp or wrapper record that exists but cannot be read, or does not have the shape above (`harnesses` an array of strings, `wrappers` an object), refuses the launch with a message naming the file, in every mode. Refusing was chosen over rendering Pi's denies regardless: an unreadable wrapper record leaves no names to deny, and section 3 already refuses a launch whose protections cannot be looked up. The installer writes these records inside the write-protected engine folder, so a session cannot cause the refusal; a damaged record stops OpenCode until it is repaired.
+- **Rules.** The denies are rendered after step 7's in the final deny block (the `;;@STATE_PROTECTED@` slot in `engine/profile.sb`), so no ALLOW entry reopens them; other files in `~/.local/bin` stay writable under an ALLOW entry. Each path is denied as named with its folder resolved, which keeps a link at that name in place, and at its resolved target (zsh `:A`). Each folder on the way from home, as named, and each folder above each of those and above the target, up to home, gets a `literal` deny against rename and removal, so no link on the way can be moved or removed. With the plain layout and one wrapper, `pi-work` (`test/fixtures/differences/step-7c.json`), these follow step 7's rules:
+
+```
+  (subpath (h "/.local/bin/pi"))
+  (subpath (h "/.local/bin/omp"))
+  (subpath (h "/.local/bin/pi-sandbox.sb"))
+  (subpath (h "/.local/bin/pi-sandbox-preamble.zsh"))
+  (subpath (h "/.local/bin/pi-work"))
+  (subpath (h "/.pi/agent/extensions/pi-sandbox-guard"))
+  (subpath (h "/.config/pi-sandbox-guard/executables.conf"))
+```
+
+  and these follow step 7's pins:
+
+```
+  (literal (h "/.local/bin"))
+  (literal (h "/.local"))
+  (literal (h "/.pi/agent/extensions"))
+  (literal (h "/.pi/agent"))
+  (literal (h "/.pi"))
+  (literal (h "/.config/pi-sandbox-guard"))
+  (literal (h "/.config"))
+```
+
+- The launch log names the paths: `write-protected for Pi, maintained outside the guard: …`.
+- **Limits**, shared with step 7's denies: a link inside the extension folder carries writes to its target, and a protected path that is a link to a missing target is denied at its name only, since `:A` cannot resolve it.
+- **Tests.** `test/test.sh`, through the real launch in a disposable home, with ALLOW entries for `~/.local/bin`, `~/.pi` and `~/.config/pi-sandbox-guard`, `omp` a link to a file in ALLOW and `~/.pi/agent` a link to a folder in ALLOW: with Pi in the stamp, writing, renaming, deleting and replacing by a rename or a link are denied for each of the four files, a recorded wrapper, the extension's `index.ts` and the bindings; so are writing `omp`'s target, adding a file to the extension, renaming the extension folder, `extensions`, the folder of `omp`'s target and the target of `~/.pi/agent`, and renaming or deleting the link `~/.pi/agent`. Another file in `~/.local/bin`, a historical wrapper name, another file in `~/.pi/agent` and another file beside the bindings stay writable, and ignored wrapper keys render no rule. With OpenCode alone in the stamp, or a stamp without `harnesses`, no Pi path gets a rule and a malformed wrapper record is not read. A transaction plan listing Pi gives the same profile as a stamp listing it. A malformed plan, three malformed stamps (also from the terminal entry point), a malformed wrapper record and an unreadable one each refuse the launch. `test/golden.mjs` renders the profile with Pi installed and one wrapper under `ALLOW ~/.local/bin`, and compares it with v1.0.3's plus the recorded differences and `step-7c.json`.
 
 ### The adoption
 
