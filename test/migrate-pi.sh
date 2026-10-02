@@ -454,6 +454,19 @@ rc=$?
 (( rc != 0 )) && /usr/bin/grep -qF "a running process runs $pi_bin. Quit every Pi and OMP session" "$out" && pass "exit $rc, the bound Pi named" || { fail "exit $rc"; show }
 kill $session_pid; wait $session_pid 2>/dev/null
 psg_kept after
+# A session the launcher started with another accepted executable (PI_EXECUTABLE)
+# does not name the bound Pi; its argument list names the guard's extension.
+label='a Pi session runs another executable'
+restore psg
+fake_pi "$home/other/cli.js"
+/usr/bin/env -i HOME="$home" PATH="$base" "$node_bin" "$home/other/cli.js" --wait --extension "$ext/index.ts" >/dev/null 2>&1 &
+session_pid=$!
+pgrep_status=real boot
+rc=$?
+kill $session_pid; wait $session_pid 2>/dev/null
+(( rc != 0 )) && /usr/bin/grep -qF "a running process runs $ext/index.ts. Quit every Pi and OMP session" "$out" &&
+  pass "exit $rc, the guard's extension named" || { fail "exit $rc"; show }
+same 'nothing changed' "$run/psg.files" pi_files
 label='kill:pi-launcher-omp, then a Pi session runs'
 restore psg
 point=kill:pi-launcher-omp boot
