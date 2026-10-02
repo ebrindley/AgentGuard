@@ -237,6 +237,16 @@ function runOmpShim(fx, extraEnv = {}, args = ['hello']) {
   });
 }
 
+// Agent Guard: the profile's AG_* parameters (Agent Guard's
+// test/fixtures/differences/pi.json), inert as the launcher passes them when no
+// protected path is a symlink and XDG_CACHE_HOME is unset.
+function agentGuardParams(profilePath, home) {
+  const names = new Set([...readFileSync(profilePath, 'utf8').matchAll(/\(param "(AG_[A-Z_]+)"\)/g)].map((m) => m[1]));
+  return [...names].flatMap((name) => ['-D', name === 'AG_XDG_CACHE_HOME'
+    ? `${name}=${home}/.cache`
+    : `${name}=/private/tmp/pi-sandbox-guard-unused/agent-guard-no-link`]);
+}
+
 function runNestedShim(fx, extraEnv = {}, args = ['nested-ok']) {
   const activeHooks = join(repo, '.githooks');
   return spawnSync(
@@ -250,6 +260,7 @@ function runNestedShim(fx, extraEnv = {}, args = ['nested-ok']) {
       '-D', `OMP_AGENT_STATE=${process.env.HOME}/.pi-sandbox-guard-unused/omp-agent`,
       '-D', `OMP_STATE_ROOT=${process.env.HOME}/.pi-sandbox-guard-unused/omp-state`,
       '-D', `OMP_BASE_ROOT=${process.env.HOME}/.pi-sandbox-guard-unused/omp-base`,
+      ...agentGuardParams(fx.profileCopy, process.env.HOME),
       '-f', fx.profileCopy,
       fx.shim,
       ...args,
@@ -455,9 +466,9 @@ check('env absolute target outside trusted prefixes is STILL refused', () => {
   assert.notEqual(r.status, 0);
   assert.match(r.stderr, /not an accepted ambient override/);
   // The remedy must be named, or the user's next move is to weaken something —
-  // and it must be a command that actually exists (there is no `pi-sandbox-bind`
-  // binary; binding runs from the checkout).
-  assert.match(r.stderr, /npm run bind/);
+  // and it must be a command that actually exists (Agent Guard: `agent-guard bind`
+  // replaces `npm run bind`).
+  assert.match(r.stderr, /agent-guard bind/);
 });
 
 check('env cannot borrow the exemption granted to a recorded binding', () => {

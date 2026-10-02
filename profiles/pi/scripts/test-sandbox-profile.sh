@@ -99,6 +99,17 @@ printf 'omp-hook\n' > "$FAKEHOME/.omp/agent/hooks/pre-tool.sh"
 printf 'omp-tool\n' > "$FAKEHOME/.omp/agent/tools/custom.ts"
 printf 'omp-plugin\n' > "$FAKEHOME/.omp/plugins/package.json"
 
+# Agent Guard: the profile's AG_* parameters (Agent Guard's
+# test/fixtures/differences/pi.json), inert as the launcher passes them when no
+# protected path is a symlink and XDG_CACHE_HOME is unset.
+AG_PARAMS=()
+for ag_param in $(/usr/bin/grep -o '(param "AG_[A-Z_]*")' "$PROFILE_SRC" | /usr/bin/sed 's/^(param "//; s/")$//' | /usr/bin/sort -u); do
+  case "$ag_param" in
+    AG_XDG_CACHE_HOME) AG_PARAMS+=(-D "$ag_param=$FAKEHOME/.cache") ;;
+    *) AG_PARAMS+=(-D "$ag_param=$FAKEHOME/.unused/agent-guard-no-link") ;;
+  esac
+done
+
 # Always pass ACTIVE_HOOKS (required profile param; the launcher supplies it at runtime).
 sb() {
   "$SBX" -D PROJECT="$PROJ" -D HOME="$FAKEHOME" -D TMPDIR="$FAKETMP" \
@@ -107,6 +118,7 @@ sb() {
     -D OMP_AGENT_STATE="$FAKEHOME/.unused/omp-agent" \
     -D OMP_STATE_ROOT="$FAKEHOME/.unused/omp-state" \
     -D OMP_BASE_ROOT="$FAKEHOME/.unused/omp-base" \
+    "${AG_PARAMS[@]}" \
     -f "$PROFILE_SRC" "$@"
 }
 sb_omp() {
@@ -116,6 +128,7 @@ sb_omp() {
     -D OMP_AGENT_STATE="$FAKEHOME/.omp/agent" \
     -D OMP_STATE_ROOT="$FAKEHOME/.omp" \
     -D OMP_BASE_ROOT="$FAKEHOME/.omp" \
+    "${AG_PARAMS[@]}" \
     -f "$PROFILE_SRC" "$@"
 }
 sb_pi_relocated() {
@@ -125,6 +138,7 @@ sb_pi_relocated() {
     -D OMP_AGENT_STATE="$FAKEHOME/.unused/omp-agent" \
     -D OMP_STATE_ROOT="$FAKEHOME/.unused/omp-state" \
     -D OMP_BASE_ROOT="$FAKEHOME/.unused/omp-base" \
+    "${AG_PARAMS[@]}" \
     -f "$PROFILE_SRC" "$@"
 }
 
