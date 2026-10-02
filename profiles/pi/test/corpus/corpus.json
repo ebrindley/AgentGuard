@@ -125,6 +125,8 @@
     { "command": "git push origin main --force; git status", "expect": "ask", "note": "Agent Guard difference 8: a shell separator ends the option" },
     { "command": "(git push -f)", "expect": "ask", "note": "Agent Guard difference 8: in a subshell" },
     { "command": "git --git-dir .git push --force", "expect": "ask", "note": "Agent Guard difference 8: a global option with its argument before push" },
+    { "command": "git -C \"release repo\" push origin main --force", "expect": "ask", "note": "Agent Guard difference 8: a quoted argument with a space" },
+    { "command": "git push >push.log origin main --force", "expect": "ask", "note": "Agent Guard difference 8: a redirection before the option" },
     { "command": "git push origin main && ls -d /tmp", "expect": "allow", "note": "Agent Guard difference 8: another command's options do not count" },
     { "command": "git diff -- push -d", "expect": "allow", "note": "Agent Guard difference 8: a pathspec named push is not the subcommand" },
     { "command": "find . -name \"*.tmp\" -delete", "expect": "ask" },

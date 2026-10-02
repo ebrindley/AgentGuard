@@ -435,6 +435,11 @@ try {
       symlinkSync(join(dotfiles, 'opencode'), join(a.project, '.opencode'));
       allowed(session(a, ['/bin/echo', 'started']), 'links into dotfiles');
     });
+    check('difference 7: a link to a project path the profile denies by name starts, with the target write-denied', () => {
+      writeFileSync(join(a.project, 'config/opencode.json'), '{}\n');
+      symlinkSync('config/opencode.json', join(a.project, 'opencode.json'));
+      denied(write(a, join(a.project, 'config/opencode.json')), 'named link target');
+    });
   }
 
   // Nested launches.

@@ -1115,7 +1115,10 @@ TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
 # Prints the offending path and returns 1 on a refused layout.
 # Agent Guard difference 7 applies the same checks to OpenCode's names, except
 # that a link at one of them is refused only when its target is writable in the
-# session, so a link into a dotfiles folder outside the write roots still launches.
+# session, so a link into a dotfiles folder outside the write roots still launches,
+# and so does one to a project path whose own name the profile denies. A link
+# whose target is missing resolves to itself and is refused, since the session
+# could create the target.
 project_config_symlink_offender() {
   emulate -L zsh
   local base dir dir_canon link target name
@@ -1124,6 +1127,11 @@ project_config_symlink_offender() {
       link="$base/$name"
       [ -L "$link" ] || continue
       target="${link:A}"
+      if [[ -e $link && $target == "$PROJECT"/* ]]; then
+        case "$target" in
+          */.opencode|*/.opencode/*|*/.cc-safety-net|*/.cc-safety-net/*|*/opencode.json|*/opencode.jsonc|*/tui.json|*/tui.jsonc|*/.pi|*/.pi/*|*/.omp|*/.omp/*) continue ;;
+        esac
+      fi
       if executable_under_sandbox_write_root \
            "$target/." "$HOME_CANON" "$PROJECT" "$TMPDIR_CANON"; then
         print -r -- "$link -> $target"; return 1
