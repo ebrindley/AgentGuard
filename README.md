@@ -126,10 +126,11 @@ both records in `~/Agent Guard`.
   time from the stamp, then every installed file or link that changed, went
   missing or was added since. It exits 1 if anything drifted.
 - `agent-guard update` installs the latest release the same way as the
-  one-liner, with the same checks and rollback. It does nothing when the
-  installed release is the latest or newer, apart from removing the forwarders
-  at OpenCode Guard's old command paths once the Mac has restarted since the
-  migration.
+  one-liner, with the same checks and rollback. When the installed release is
+  the latest, it installs it again only to finish an OpenCode Guard migration or
+  retirement that is still pending. Otherwise, and when the installed release is
+  newer, it does nothing apart from removing the forwarders at OpenCode Guard's
+  old command paths once the Mac has restarted since the migration.
 - `agent-guard uninstall` removes PATH blocks, restores the permission values
   the installer changed (unless you changed them since), then removes the app,
   the rulebook, after a migration the forwarders, then the plugin and the engine
