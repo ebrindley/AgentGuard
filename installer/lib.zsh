@@ -1086,7 +1086,9 @@ ag_gate() {
   integer rc
   ag_say 'checks after the switch:'
   if ! test_point doctor-live; then ag_failed+=('FAIL doctor (stopped at doctor-live)'); return 1; fi
-  out=$("$engine/bin/agent-guard" doctor 2>&1)
+  # AGENT_GUARD_GATE=1: another plugin that fails to load is a warning here
+  # (opencode_check), not a reason to roll back.
+  out=$(AGENT_GUARD_GATE=1 "$engine/bin/agent-guard" doctor 2>&1)
   rc=$?
   ag_say "$out"
   if (( rc )); then
