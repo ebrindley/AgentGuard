@@ -1,4 +1,4 @@
-# The seven test suites on a standard GitHub-hosted macOS runner, which is free for
+# The eight test suites on a standard GitHub-hosted macOS runner, which is free for
 # public repositories. Larger runners are billed even then; do not switch to one.
 name: Tests
 
@@ -41,6 +41,7 @@ jobs:
       - run: zsh test/release.sh
       - run: zsh test/bootstrap.sh
       - run: zsh test/install.sh
+      - run: zsh test/pi-commands.sh
       # The migration suite makes its OpenCode Guard installs with OpenCode Guard's own
       # unmodified installer, which stops on macOS 15: its `plutil -remove CFBundleIconName`
       # finds no such key in the app osacompile builds there.

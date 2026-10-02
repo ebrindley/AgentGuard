@@ -1,7 +1,7 @@
 {
   "source": "pi-sandbox-guard",
   "commit": "7ad441f",
-  "reason": "profiles/pi carries pi-sandbox-guard 7ad441f's Pi profile with the protections Agent Guard adds to Pi sessions (docs/DESIGN.md section 11). Every change to a vendored file is in the patch and listed here; test/pi-files.mjs checks both, and test/pi-launch.mjs tests each difference.",
+  "reason": "profiles/pi carries pi-sandbox-guard 7ad441f's Pi profile with the protections Agent Guard adds to Pi sessions (docs/DESIGN.md section 11). Every change to a vendored file is in the patch and listed here; test/pi-files.mjs checks both, test/pi-launch.mjs tests differences 1 to 5 and test/pi-commands.sh difference 6.",
   "patch": "pi.patch",
   "files": {
     "LICENSE": { "mode": "644", "blob": "18a32b25985be476250a26c9e8c47f823ae92172", "commit": "b60240a", "note": "From b60240a, the pi-sandbox-guard commit after 7ad441f that changed only LICENSE's copyright line, to name pi-sandbox-guard contributors." },
@@ -9,8 +9,10 @@
     "launchers/pi": { "mode": "755", "blob": "f5e94c2190a90829f670d6740282ac479f12228a" },
     "sandbox/pi-sandbox-preamble.zsh": { "mode": "644", "blob": "9b7c7885c787dc911ee2592d7d075f16c553df9f" },
     "sandbox/pi-sandbox.sb": { "mode": "644", "blob": "f560a319d701e3381238010dc185749499e502ed" },
+    "scripts/bind-executable.sh": { "mode": "755", "blob": "3fe1692ae5902f01058895f9a928ed06d8d68ba6" },
     "scripts/check-launchers.mjs": { "mode": "644", "blob": "e69270f00af20d12ff24a4f78ecaefcfe30bc9f1" },
     "scripts/extension-entry.ts": { "mode": "644", "blob": "28af70dc91218de34d442b6d09287e2d0033331c" },
+    "scripts/lib-ops.sh": { "mode": "755", "blob": "aca2e2124e45d60a239bc088bcf0648fdc783695" },
     "scripts/test-sandbox-profile.sh": { "mode": "755", "blob": "4dcdf9c919b45acd4afbf41844c147d8846be627" },
     "src/guard-core.mjs": { "mode": "644", "blob": "8969f00f5d6cde5a5a44d7a328cc78e83421b7e0" },
     "src/index.mjs": { "mode": "644", "blob": "d997be1bc417effcf0c0318cdc2e3bafb542b342" },
@@ -24,12 +26,15 @@
     "test/smoke.mjs": { "mode": "644", "blob": "c31f80d4745fc151903f3f8a1cdae9293995a619" }
   },
   "added": {
-    "package.json": "Replaces 7ad441f's package.json, whose scripts run the npm deploy, bind and status commands that Agent Guard replaces; keeps the module fields."
+    "package.json": "Replaces 7ad441f's package.json, whose scripts run the npm deploy, bind and status commands that Agent Guard replaces; keeps the module fields.",
+    "commands/bind.zsh": "agent-guard bind: runs scripts/bind-executable.sh with HOME set to the account home and its path overrides unset; replaces npm run bind.",
+    "commands/doctor.zsh": "The Pi checks of agent-guard doctor, which replace scripts/status.sh and scripts/check-path.sh.",
+    "commands/wrapper.zsh": "agent-guard wrapper add|remove|list; replaces deploy-launchers.sh --extra-launchers."
   },
   "not_vendored": {
     "scripts/test-ops.sh": "Tests pi-sandbox-guard's npm deploy, status and bind scripts, which Agent Guard replaces.",
     "scripts/deploy-all.sh, scripts/deploy-launchers.sh, scripts/deploy-local.sh, scripts/setup-hooks.sh, .githooks/pre-push": "Replaced by Agent Guard's installer and CI.",
-    "scripts/bind-executable.sh, scripts/lib-ops.sh, scripts/status.sh, scripts/check-path.sh": "Replaced by agent-guard bind and doctor; the vendored suites do not need them.",
+    "scripts/status.sh, scripts/check-path.sh": "Replaced by agent-guard doctor; the vendored suites do not need them.",
     "test/e2e-demo.mjs": "A manual demonstration, not a suite.",
     "config/, docs/, README.md, SECURITY.md, CONTRIBUTING.md, .github/": "pi-sandbox-guard's own documentation and repository files."
   },
@@ -69,6 +74,11 @@
       "id": 5,
       "change": "User-facing repair text names Agent Guard's commands instead of pi-sandbox-guard's npm commands, which no longer exist after the adoption: the preamble's messages and its binding comment say agent-guard bind instead of npm run bind and drop 'from the repo checkout'; src/index.mjs's FILTER-ONLY warning says to install Agent Guard (agent-guard update, or the one-line installer) and run agent-guard bind instead of npm run deploy:launchers and npm run bind from a checkout; launchers/example-custom's missing-shim message says to install Agent Guard first (agent-guard update, or the one-line installer) instead of npm run deploy:launchers.",
       "files": ["sandbox/pi-sandbox-preamble.zsh", "src/index.mjs", "launchers/example-custom"]
+    },
+    {
+      "id": 6,
+      "change": "scripts/bind-executable.sh runs as agent-guard bind (commands/bind.zsh) instead of npm run bind: its usage, hints and executables.conf header name agent-guard bind; every mode but --show stops when node is not on PATH, which npm run guaranteed; --show also prints the checker Node; --checker-node [PATH] records the analyzer's Node in the extension's .guard-node as deploy-local.sh did (validated outside every sandbox-writable root, a Homebrew Cellar path kept as its opt link, mode 0600; without a path, the node on PATH) and cannot be combined with another mode; an executables.conf or .guard-node that is a symbolic link or not a regular file is refused before it is written. scripts/lib-ops.sh is unchanged.",
+      "files": ["scripts/bind-executable.sh"]
     }
   ],
   "test_notes": [
