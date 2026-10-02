@@ -33,6 +33,20 @@ ag_h_pi_init() {
 
 ag_h_pi_title() { REPLY='Pi and OMP' }
 
+# The caller's environment, a project's .envrc for example, can make bash, zsh, node
+# or perl (shasum) load or run code before the script they are given, or write to a
+# file it names. agent-guard's Pi commands and the Pi doctor checks clear these
+# first. The Pi harness and the pi-sandbox-guard migration start each bash, node,
+# shasum and Pi launcher in a subshell that clears them, so the installer's own
+# environment, which the OpenCode harness uses, is unchanged. zsh does not pass on
+# bash's exported functions (BASH_FUNC_*), which are not valid parameter names.
+ag_pi_clean_env() {
+  unset BASH_ENV ENV SHELLOPTS BASHOPTS CDPATH GLOBIGNORE ZDOTDIR \
+    NODE_OPTIONS NODE_PATH NODE_PRESERVE_SYMLINKS NODE_PRESERVE_SYMLINKS_MAIN NODE_REPL_EXTERNAL_MODULE \
+    NODE_REDIRECT_WARNINGS NODE_V8_COVERAGE NODE_COMPILE_CACHE NODE_ICU_DATA OPENSSL_CONF OPENSSL_MODULES \
+    PERL5OPT PERL5LIB PERLLIB PERL5DB
+}
+
 # Installed when the stamp lists it, pi-sandbox-guard is present or a Pi or OMP
 # CLI is found as bind-executable.sh's detection finds one.
 ag_h_pi_detect() {
@@ -82,7 +96,7 @@ ag_pi_cli() {
           "$home/.yarn/global/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"(N)
           "$home/.local/lib/omp/omp"(N*) ${^pi_roots}/bin/omp(N*) ${^pi_roots}/Cellar/omp/*/bin/omp(N*) "$home/.bun/bin/omp"(N*))
   if [[ -n $pi_path ]]; then
-    n=$(PATH=$pi_path; whence -p npm 2>/dev/null) && c=$(PATH=$pi_path "$n" prefix -g 2>/dev/null) &&
+    n=$(PATH=$pi_path; whence -p npm 2>/dev/null) && c=$(ag_pi_clean_env; PATH=$pi_path "$n" prefix -g 2>/dev/null) &&
       [[ -e $c/$pkg ]] && found+=("$c/$pkg")
     for n in pi omp; do
       c=$(PATH=$pi_path; whence -p $n 2>/dev/null) && found+=("$c")
@@ -113,7 +127,8 @@ ag_pi_conf_get() {
 
 # The rule of lib-ops.sh: true when PATH lies in a folder Pi sessions can write.
 ag_pi_write_root() {
-  /bin/bash -c '. "$1" && ops_path_is_known_sandbox_write_root "$2" "$3"' _ "$ag_tree/profiles/pi/scripts/lib-ops.sh" "$1" "$home"
+  ( ag_pi_clean_env
+    /bin/bash -c '. "$1" && ops_path_is_known_sandbox_write_root "$2" "$3"' _ "$ag_tree/profiles/pi/scripts/lib-ops.sh" "$1" "$home" )
 }
 
 # ag_pi_target PATH: as agent-guard bind validates a target (bind-executable.sh,
@@ -147,7 +162,7 @@ ag_pi_node() {
     if ag_pi_node_ok "$n"; then ag_pi_node_path=$n; return 0; fi
     ag_pi_node_note="the analyzer's Node in ${f/#$home/~} ($n) is not usable"
   fi
-  n=$(node -p process.execPath 2>/dev/null) || n=
+  n=$(ag_pi_clean_env; node -p process.execPath 2>/dev/null) || n=
   if [[ $n != /* || ! -x $n || -d $n ]]; then
     ag_err "Pi's guard runs its analyzer on Node, and no node on PATH can be used${n:+ ($n)}. Install Node (for example: brew install node), then run this again. Nothing changed."
     return 1
@@ -156,7 +171,7 @@ ag_pi_node() {
     ag_err "the node on PATH ($n) is in a folder Pi sessions can write, so it cannot run Pi's analyzer. Install Node elsewhere (for example: brew install node), then run this again. Nothing changed."
     return 1
   fi
-  n=$(PATH="${n:h}:/usr/bin:/bin" /bin/bash -c '. "$1" && ops_stable_node_path "$2"' _ "$lib" "$n") && [[ $n == /* ]] ||
+  n=$(ag_pi_clean_env; PATH="${n:h}:/usr/bin:/bin" /bin/bash -c '. "$1" && ops_stable_node_path "$2"' _ "$lib" "$n") && [[ $n == /* ]] ||
     { ag_err 'cannot resolve the path of the node on PATH. Nothing changed.'; return 1 }
   ag_pi_node_path=$n
   [[ -n $ag_pi_node_note ]] && ag_pi_notes+=("$ag_pi_node_note; the analyzer now runs $n")
@@ -286,7 +301,7 @@ ag_h_pi_staged() {
   ag_pi_node || { ag_failed+=('FAIL no usable Node for the analyzer'); return 1 }
   ag_pi_entries_check || { ag_failed+=('FAIL an entry in ~/.local/bin cannot be recorded'); return 1 }
   ag_pi_stage || { ag_failed+=('FAIL cannot stage the Pi files'); return 1 }
-  out=$(ag_bounded 120 /usr/bin/env PI_SANDBOX_PROFILE_STRICT=1 /bin/bash "$rel/scripts/test-sandbox-profile.sh" "$s/pi-sandbox.sb" 2>&1)
+  out=$(ag_pi_clean_env; ag_bounded 120 /usr/bin/env PI_SANDBOX_PROFILE_STRICT=1 /bin/bash "$rel/scripts/test-sandbox-profile.sh" "$s/pi-sandbox.sb" 2>&1)
   rc=$?
   lines=(${(f)out})
   if (( rc == 0 )); then ag_say 'ok   Pi profile self-test of the staged pi-sandbox.sb'
@@ -296,7 +311,7 @@ ag_h_pi_staged() {
   work=$(/usr/bin/mktemp -d "$temp/agent-guard-staged.XXXXXX") || { ag_failed+=("FAIL cannot create a folder in $temp"); return 1 }
   # HOME is the scratch folder, so the blocked command is not logged in the
   # account's security event log.
-  out=$(cd "$work" && ag_bounded 60 /usr/bin/env "HOME=$work" "$ag_pi_node_path" --input-type=module -e '
+  out=$(ag_pi_clean_env; cd "$work" && ag_bounded 60 /usr/bin/env "HOME=$work" "$ag_pi_node_path" --input-type=module -e '
     import { pathToFileURL } from "node:url";
     const [ext, cwd] = process.argv.slice(1);
     const m = await import(pathToFileURL(`${ext}/src/guard-core.mjs`).href);
@@ -497,7 +512,7 @@ ag_h_pi_gate() {
   work=$(/usr/bin/mktemp -d "$temp/agent-guard-gate.XXXXXX") || { ag_failed+=("FAIL cannot create a folder in $temp"); return }
   /bin/mkdir -p -- "$work/project"
   for rt label in pi Pi omp OMP; do
-    out=$(cd "$work/project" && ag_bounded 20 /usr/bin/env "PI_PROJECT=$work/project" "TMPDIR=$temp/" "$engine/bin/$rt" --version 2>"$work/$rt.err")
+    out=$(ag_pi_clean_env; cd "$work/project" && ag_bounded 20 /usr/bin/env "PI_PROJECT=$work/project" "TMPDIR=$temp/" "$engine/bin/$rt" --version 2>"$work/$rt.err")
     rc=$?
     err=$(<"$work/$rt.err")
     lines=(${(f)out}) errs=(${(f)err})
@@ -566,12 +581,13 @@ ag_h_pi_report() {
 }
 
 # Pi's part of agent-guard doctor (profiles/pi/commands/doctor.zsh), which needs
-# home, engine and release as agent-guard sets them, and runs after agent-guard's
-# pi_clean_env.
+# home, engine and release as agent-guard sets them. It runs in agent-guard's
+# doctor process, after the other harnesses' checks, and clears the startup and
+# preload variables there (ag_pi_clean_env).
 ag_h_pi_doctor() {  # RELEASE [--json]
   local mod="$1/profiles/pi/commands/doctor.zsh" f
   integer rc
-  (( $+functions[pi_clean_env] )) && pi_clean_env
+  ag_pi_clean_env
   if [[ ! -f $mod ]] || ! source "$mod"; then
     f="FAIL release ${1:t} has no Pi checks ($mod)"
     if [[ ${2:-} == --json ]]; then reply=("$f") REPLY='{}'; else print -r -- "$f"; fi

@@ -136,7 +136,7 @@ do_psg_wrappers() {
     if [[ ! -e $f && ! -L $f ]]; then
       ag_say "wrappers: ${f/#$home/~} is gone; $n is recorded as a historical name"
       hist+=("$n")
-    elif [[ -f $f && ! -L $f && $h == [0-9a-f](#c64) ]] && sum=$(/usr/bin/shasum -a 256 < "$f") && [[ ${sum%% *} == "$h" ]]; then
+    elif [[ -f $f && ! -L $f && $h == [0-9a-f](#c64) ]] && sum=$(ag_pi_clean_env; /usr/bin/shasum -a 256 < "$f") && [[ ${sum%% *} == "$h" ]]; then
       wrappers+=("$n" "$h")
     else
       bad+=("${f/#$home/~} changed since pi-sandbox-guard installed it")
