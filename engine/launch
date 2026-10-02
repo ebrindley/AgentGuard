@@ -118,6 +118,32 @@ export HOME=$home
 typeset -aU cache_given cache_roots
 $state_hook
 cache_prefix="${cache_roots[1]%/}/"
+# Installed harnesses (docs/DESIGN.md section 3, Every installed harness): the open
+# transaction's candidate inventory, else the stamp's; either without harnesses is
+# from before 0.2.0 and means OpenCode alone. With Pi installed, its recorded
+# wrappers are the keys of state/wrappers.json; a key that does not match
+# [A-Za-z0-9._-]+, or is . or .., is ignored. A record that exists but cannot be
+# read, or does not hold exactly one JSON document, such as an empty file, refuses
+# the launch, so the denies it adds are never dropped; a transaction that closes
+# between the two reads leaves the stamp to read.
+typeset -aU installed pi_wrappers
+installed=(opencode)
+one_doc='[inputs] | if length != 1 then error else .[0] end | '
+for f in "$engine/state/txn/plan.json" "$engine/state/stamp.json"; do
+  [[ -e $f || -L $f ]] || continue
+  if out=$(/usr/bin/jq -rn "$one_doc"'if type != "object" then error elif has("harnesses") | not then "opencode"
+      elif (.harnesses | type) == "array" and all(.harnesses[]; type == "string") then .harnesses[] else error end' "$f" 2>/dev/null); then
+    installed=(${(f)out})
+    break
+  fi
+  [[ ! -e $f && ! -L $f ]] || fail "cannot read the installed harnesses in $f"
+done
+f="$engine/state/wrappers.json"
+if (( ${installed[(Ie)pi]} )) && [[ -e $f || -L $f ]]; then
+  out=$(/usr/bin/jq -rn "$one_doc"'if type == "object" and (.wrappers | type) == "object" then .wrappers | keys[] else error end' "$f" 2>/dev/null) ||
+    fail "cannot read Pi's recorded wrappers in $f"
+  pi_wrappers=(${${(M)${(f)out}:#[A-Za-z0-9._-]##}:#(.|..)})
+fi
 
 normalize() {
   local p=$1
@@ -238,6 +264,28 @@ for a in $cache_given; do
     a=${a:h}
   done
 done
+# Pi's guard files, once Pi is installed (docs/DESIGN.md section 11, What changes
+# for OpenCode sessions): the launchers, profile, preamble and recorded wrappers,
+# which run outside the sandbox at the next Pi start, the extension folder and the
+# bindings, and pi-sandbox-guard-extension, the extension folder the launcher loads
+# instead when it exists beside it; that one is usually absent and must stay so.
+# Each is denied as named, with its folder resolved, and at its target.
+# Each folder on the way from home, as named, and the folders above each of those
+# and above the target are pinned, so no link on the way can be moved or removed.
+typeset -aU pi_guard
+(( ${installed[(Ie)pi]} )) &&
+  pi_guard=("$home"/.local/bin/{pi,omp,pi-sandbox.sb,pi-sandbox-preamble.zsh,pi-sandbox-guard-extension} "${(@)pi_wrappers/#/$home/.local/bin/}"
+            "$home/.pi/agent/extensions/pi-sandbox-guard" "$home/.config/pi-sandbox-guard/executables.conf")
+for p in $pi_guard; do
+  for q in "${${p:h:A}%/}/${p:t}" "${p:A}"; do sbpl_path "$q"; state_rules+=("  (subpath $REPLY)"); pin_above "$q"; done
+  a=${p:h}
+  while [[ $a != / && $a != "$home" ]]; do
+    q="${${a:h:A}%/}/${a:t}"
+    state_pins+=("$q")
+    pin_above "$q"
+    a=${a:h}
+  done
+done
 for p in $state_pins; do sbpl_path "$p"; state_rules+=("  (literal $REPLY)"); done
 
 note "allow: ${(j:, :)allow:-none}"
@@ -246,6 +294,7 @@ note "deny: ${(j:, :)deny:-none}"
 note "always writable for OpenCode itself: ~/.local/share/opencode, ~/.local/state/opencode, ~/.cache, ~/Library/Caches, ~/.npm, ~/.bun/install/cache, /private/tmp, per-user temp and cache"
 cache_dirs=(${^cache_roots}/opencode)
 note "write-protected in ${(j: and :)cache_dirs}, maintained outside the guard: packages, node_modules with its package metadata, bin, models.json and models-*.json"
+(( $#pi_guard )) && note "write-protected for Pi, maintained outside the guard: ${(j:, :)pi_guard}"
 
 profile=$(<"$here/profile.sb")
 profile=${profile/';;@USER_RULES@'/${(F)rules}}
