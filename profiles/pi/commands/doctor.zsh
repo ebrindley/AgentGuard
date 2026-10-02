@@ -271,14 +271,18 @@ pi_doctor_bind() {
     /bin/bash "$scripts/bind-executable.sh" "$@"
 }
 
-# pi_doctor_bounded SECONDS CMD...: CMD's status, or 124 when it runs longer.
+# pi_doctor_bounded SECONDS CMD...: CMD's status, or 124 when it runs longer. The
+# limit is measured on the clock: on a loaded Mac each poll takes longer than its
+# sleep, so a count of polls would allow far more than SECONDS.
 pi_doctor_bounded() {
-  integer limit=$(( $1 * 10 )) i=0 pid
+  zmodload zsh/datetime || return 1
+  float end=$(( EPOCHREALTIME + $1 ))
+  integer pid
   shift
   "$@" </dev/null &
   pid=$!
   while kill -0 $pid 2>/dev/null; do
-    if (( ++i > limit )); then
+    if (( EPOCHREALTIME > end )); then
       /usr/bin/pkill -KILL -P $pid 2>/dev/null
       kill -KILL $pid 2>/dev/null
       wait $pid 2>/dev/null
