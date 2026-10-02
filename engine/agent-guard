@@ -29,6 +29,8 @@ load_installer() {
 # while it installs this release (its gate runs before the stamp), else the stamp's.
 # --json prints one object instead: the fields each harness's checks add (the Pi
 # checks: status.sh --json's), each check line as {harness, result, check}, and ok.
+# A result is ok, FAIL, skip or warn (OpenCode's warnings, such as no ripgrep), or
+# note for any other line.
 doctor() {
   local h l fields='{}' more
   local -a tagged
@@ -57,7 +59,7 @@ doctor() {
   done
   if (( json )); then
     /usr/bin/jq -cn --argjson f "$fields" --argjson ok $(( bad == 0 )) '$f + {checks: [$ARGS.positional[]
-        | index("\t") as $i | .[$i + 1:] as $l | ($l | capture("^(?<r>ok|FAIL|skip) +(?<c>.*)$") // {r: "note", c: $l}) as $m
+        | index("\t") as $i | .[$i + 1:] as $l | ($l | capture("^(?<r>ok|FAIL|skip|warn) +(?<c>.*)$") // {r: "note", c: $l}) as $m
         | {harness: .[:$i], result: $m.r, check: $m.c}], ok: ($ok == 1)}' --args "${tagged[@]}"
   fi
   exit $bad
