@@ -467,6 +467,16 @@ kill $session_pid; wait $session_pid 2>/dev/null
 (( rc != 0 )) && /usr/bin/grep -qF "a running process runs $ext/index.ts. Quit every Pi and OMP session" "$out" &&
   pass "exit $rc, the guard's extension named" || { fail "exit $rc"; show }
 same 'nothing changed' "$run/psg.files" pi_files
+# The extension's index.ts counts only as --extension's argument: a pager that has
+# it open does not refuse the migration.
+label='a pager has the extension open'
+restore psg
+/usr/bin/tail -f "$ext/index.ts" >/dev/null 2>&1 &
+pager_pid=$!
+pgrep_status=real boot
+rc=$?
+kill $pager_pid; wait $pager_pid 2>/dev/null
+(( rc == 0 )) && /usr/bin/grep -qF 'migrating from pi-sandbox-guard' "$out" && pass 'migrated (exit 0)' || { fail "exit $rc"; show }
 label='kill:pi-launcher-omp, then a Pi session runs'
 restore psg
 point=kill:pi-launcher-omp boot
