@@ -8,14 +8,14 @@ A bug report needs:
 - the steps that reproduce it;
 - what you expected and what happened instead, with the exact message;
 - the macOS version and chip (`sw_vers -productVersion` and `uname -m`);
-- the harness and its version (`opencode --version`);
+- the harness and its version (`opencode --version`, `pi --version` or `omp --version`);
 - the Agent Guard version (`agent-guard version`);
-- the launch route: `opencode` in a terminal, or the Agent Guard app;
+- the launch route: `opencode` in a terminal, the Agent Guard app, `pi`, `omp` or a custom wrapper;
 - the output of `agent-guard doctor`.
 
 Remove credentials, tokens and private paths before you post.
 
-Check the [known limitations](SECURITY.md#known-limitations-in-012) first. They are
+Check the [known limitations](SECURITY.md#known-limitations-in-020) first. They are
 documented, not unnoticed.
 
 ## Pull requests are not accepted
@@ -37,13 +37,14 @@ Do not open a public issue for a vulnerability. Use the
 [private security advisory form](https://github.com/ebrindley/AgentGuard/security/advisories/new);
 see [SECURITY.md](SECURITY.md).
 
-A vulnerability is a reliable way for an agent under the guard to write outside
-ALLOW and the folders the harness needs, read a DENY entry, change the guard, the
-Guard List or the harness's config and plugins, or start the harness unguarded
-through an Agent Guard entry point without the plugin's refusal. A wrong refusal,
-a destructive command cc-safety-net misses while Seatbelt still holds, an
-install, update or uninstall failure, and the documented limitations are bugs.
-When unsure, use the advisory form.
+A vulnerability is a reliable way for an agent under the guard to do what its
+harness's profile should stop: write where the harness may not, read a denied
+path, change the guard or the harness's config and plugins, or start the harness
+unguarded through an Agent Guard entry point. SECURITY.md lists these
+[for each harness](SECURITY.md#bug-or-vulnerability). A wrong refusal, a
+destructive command cc-safety-net or Pi's analyzer misses while Seatbelt still
+holds, an install, update or uninstall failure, and the documented limitations
+are bugs. When unsure, use the advisory form.
 
 ## If you fork
 
