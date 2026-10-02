@@ -173,9 +173,10 @@ Guard's `OPENCODE_GUARD_BYPASS` is no longer honored.
 ## Limitations
 
 Agent Guard limits writes. It does not limit network access, reads outside DENY
-entries or what the agent does inside ALLOW folders. OpenCode's package store
-under `~/.cache/opencode` is writable, concurrent launches share one rules file,
-and a symlinked project config name has its target protected only when OpenCode
+entries or what the agent does inside ALLOW folders. OpenCode's package store,
+`bin` folder and model catalog under `~/.cache/opencode` are writable, and so is
+its `auth.json`, whose `wellknown` entries load remote configuration. Concurrent
+launches share one rules file, and a symlinked project config name has its target protected only when OpenCode
 starts from that folder in a terminal. Each limitation, and what is planned for
 it, is in [SECURITY.md](SECURITY.md#known-limitations-in-011).
 

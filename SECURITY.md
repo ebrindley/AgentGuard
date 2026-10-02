@@ -31,8 +31,9 @@ agent can write only to ALLOW folders and the data, cache and temp folders
 OpenCode needs, cannot read or write DENY entries, and cannot change the guard,
 the list, OpenCode's global config and plugin folder (`~/.config/opencode`), the
 shell startup files or `~/Library/LaunchAgents`. The exceptions are under
-[Known limitations](#known-limitations-in-011): OpenCode's cached plugin packages
-under `~/.cache`, and the targets of symlinked project config names.
+[Known limitations](#known-limitations-in-011): OpenCode's cached plugin packages,
+downloaded tools and model catalog under `~/.cache`, remote-configuration entries
+in OpenCode's `auth.json`, and the targets of symlinked project config names.
 
 The OpenCode plugin and cc-safety-net are advisory. They refuse tool calls with
 a clear message, but nothing depends on them for safety. The Seatbelt profile is
@@ -49,12 +50,30 @@ the boundary.
 
 ## Known limitations in 0.1.1
 
-- **OpenCode's package store is writable.** All of `~/.cache` is writable,
-  including OpenCode's npm plugin store under `~/.cache/opencode`. An agent can
-  change cached plugin code that OpenCode imports at its next start, and an
-  OpenCode started later without the guard runs that code with full authority.
-  Planned: step 7 of the plan in [docs/DESIGN.md](docs/DESIGN.md#12-plan)
-  write-protects the package store.
+- **OpenCode's package store, `bin` folder and model catalog are writable.** All
+  of `~/.cache` is writable, including three parts of `~/.cache/opencode` that
+  OpenCode runs or trusts (OpenCode 1.18.34):
+  - the npm plugin store, whose code OpenCode imports at its next start;
+  - `bin`, where OpenCode keeps the ripgrep and language-server binaries it
+    downloads and runs them from;
+  - the model catalog, `models.json` or `models-<hash>.json`, which sets each
+    provider's API address and package.
+
+  An agent can change any of them. A guarded restart runs changed code under
+  the guard, and an OpenCode started later without the guard runs it with full
+  authority. A rewritten catalog can also send a provider's API key to another
+  host, with or without the guard, because outbound connections are not
+  restricted. Planned: step 7 of the plan in
+  [docs/DESIGN.md](docs/DESIGN.md#12-plan) write-protects all three.
+- **OpenCode's `auth.json` can add remote configuration.** OpenCode's data
+  folder, `~/.local/share/opencode`, is writable, including `auth.json`. A
+  `wellknown` entry there makes OpenCode fetch configuration from the entry's URL
+  at every start and merge it as global configuration, plugins and MCP commands
+  included (OpenCode 1.18.34). An agent can add an entry for a server it
+  controls. The next OpenCode start runs what that server names, under the guard
+  for a guarded start and with full authority otherwise. Planned: before the
+  composition release (step 10e of the plan), this is protected, checked at
+  launch or accepted in writing ([docs/DESIGN.md](docs/DESIGN.md#9-code-in-writable-folders), section 9).
 - **Concurrent launches share `state/rules.json`.** Each launch writes the
   resolved ALLOW, READ ONLY and DENY paths to one file in the engine folder, and
   each plugin reads it once at start. When two launches start close together, or
