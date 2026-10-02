@@ -17,7 +17,12 @@ disposable home; both take home from `$HOME`. MIT licensed; see each `LICENSE`.
 `7ad441f51c249eafe6f92d16e92d2fbf37622d67`, unmodified: `launchers/pi`,
 `launchers/example-custom`, `sandbox/`, `src/index.mjs`, `src/guard-core.mjs`,
 `src/validate-bash-command.sh`, `scripts/extension-entry.ts`,
-`scripts/check-launchers.mjs` and `scripts/test-sandbox-profile.sh`. Its `LICENSE`
-is from the next commit, `b60240a30713e434f049d2f06ffedb0dfc60128d`, which changed
-only the copyright line of that file. `test/pi-commands.sh` installs the files as
-the release's Pi files and as the installed copies. MIT licensed; see its `LICENSE`.
+`scripts/check-launchers.mjs`, `scripts/test-sandbox-profile.sh` and the deploy
+scripts `scripts/deploy-local.sh`, `scripts/deploy-launchers.sh`,
+`scripts/bind-executable.sh` and `scripts/lib-ops.sh`, which they source. Its
+`LICENSE` is from the next commit, `b60240a30713e434f049d2f06ffedb0dfc60128d`, which
+changed only the copyright line of that file. `test/pi-commands.sh` installs the
+files as the release's Pi files and as the installed copies. `test/migrate-pi.sh`
+makes a pi-sandbox-guard install with the deploy scripts, run from a copy whose
+preamble takes the disposable home from a fake directory service. MIT licensed;
+see its `LICENSE`.

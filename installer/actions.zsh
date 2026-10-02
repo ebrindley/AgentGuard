@@ -52,7 +52,16 @@
 #   volume          optional: reply = paths that must be on the engine's volume.
 #   bundle          optional: reply = tree-relative files that recovery reads,
 #                   copied into state/txn (OpenCode: harness.zsh).
+#   assemble DIR    optional: adds the harness's files to the release folder DIR
+#                   being assembled (P4; Pi: profiles/pi and bin/pi, bin/omp).
 #   links           optional: reply = link and target pairs for the stamp.
+#   files           optional: reply = installed files outside the release folder
+#                   whose hashes the stamp records (Pi: its copies in ~/.local/bin
+#                   and the extension folder).
+#   keep            optional: after the stamp, before the cleanup deletes
+#                   txn/backup, moves what must outlive the transaction into
+#                   state/ (Pi: replaced entries into state/legacy/replaced); fails
+#                   to keep the transaction open for the next run's recovery.
 #   procs           optional: reply = process names, REPLY = how to quit them, for
 #                   a migration's process check (ag_proc_check).
 #   uninstall_restore DIR  optional: U2, puts back the values the harness changed,
@@ -82,12 +91,16 @@
 #   gate            optional: extra checks after its switch; adds FAIL lines to
 #                   ag_failed.
 #   links           optional: reply = link and target pairs for the stamp.
+#   keep            optional: as the harness hook, for its own files in the
+#                   backup, after the harnesses' and before retire.
 #   recover_check   optional: before recovery finishes or undoes its switch.
 #   after_install   optional: after each committed transaction's cleanup.
 #   maintenance     optional: after every install and update and in agent-guard
 #                   update.
 #   report          optional: lines after an install that migrated it.
-#   uninstall       optional: U6; reply = what it could not remove.
+#   uninstall       optional: U6; reply = what it could not remove. Fails, naming
+#                   it, when what it must save could not be copied: the engine
+#                   folder is then kept and uninstall exits 1.
 #   save PARTIAL    optional: U7, when values were not restored, copies its
 #                   records into ~/Agent Guard through PARTIAL; reply = lines to
 #                   print.
@@ -95,38 +108,46 @@
 # actions are rows with owner migrate:<name>. One transaction migrates one source;
 # with several pending, ag_install_main runs one transaction per source in
 # ag_migration_modules order.
-
 # The modules, in order. ag_harness_modules: every harness this release installs.
 # ag_migration_modules: every older install it migrates from, in migration order;
 # OpenCode Guard is first.
 ag_modules() {
   typeset -ga ag_harness_modules ag_migration_modules
-  ag_harness_modules=(opencode)
-  ag_migration_modules=(opencode-guard)
+  ag_harness_modules=(opencode pi)
+  ag_migration_modules=(opencode-guard pi-sandbox-guard)
 }
-
+# The Pi files come first, in the order of design section 11 (The adoption, item
+# 5), so the current step that adds bin/pi and bin/omp never links to a missing
+# launcher.
 ag_registry() {
   typeset -ga ag_actions
   ag_actions=(
-    # phase  name         owner                   kinds    run                 back
-    staged   import       migrate:opencode-guard  migrate  do_import           undo_import
-    switch   rulebook     engine                  all      do_rulebook         undo_rulebook
-    switch   rulejson     engine                  all      do_rulejson         undo_rulejson
-    switch   app          engine                  plain    do_app              undo_app
-    switch   current      engine                  all      do_current          undo_current
-    switch   fwd-cli      migrate:opencode-guard  migrate  do_fwd_cli          undo_fwd_cli
-    switch   fwd-gui      migrate:opencode-guard  migrate  do_fwd_gui          undo_fwd_gui
-    switch   plugin-take  migrate:opencode-guard  migrate  do_ocg_plugin_take  undo_plugin_take
-    switch   plugin-name  migrate:opencode-guard  migrate  do_ocg_plugin_name  undo_plugin_name
-    switch   plugin       harness:opencode        all      do_plugin           undo_plugin
-    switch   permissions  harness:opencode        plain    do_permissions      undo_permissions
-    switch   rc           engine                  all      do_rc               undo_rc
-    switch   app          engine                  migrate  do_app              undo_app
-    switch   app-old      migrate:opencode-guard  migrate  do_app_old          undo_app_old
-    switch   switch-time  migrate:opencode-guard  migrate  do_switch_time      undo_switch_time
+    # phase  name             owner                     kinds    run                   back
+    staged   import           migrate:opencode-guard    migrate  do_import             undo_import
+    staged   psg-wrappers     migrate:pi-sandbox-guard  migrate  do_psg_wrappers       undo_psg_wrappers
+    switch   pi-bindings      harness:pi                all      do_pi_bindings        undo_pi_bindings
+    switch   pi-preamble      harness:pi                all      do_pi_preamble        undo_pi_preamble
+    switch   pi-profile       harness:pi                all      do_pi_profile         undo_pi_profile
+    switch   pi-launcher-pi   harness:pi                all      do_pi_launcher_pi     undo_pi_launcher_pi
+    switch   pi-launcher-omp  harness:pi                all      do_pi_launcher_omp    undo_pi_launcher_omp
+    switch   pi-extension     harness:pi                all      do_pi_extension       undo_pi_extension
+    switch   rulebook         engine                    all      do_rulebook           undo_rulebook
+    switch   rulejson         engine                    all      do_rulejson           undo_rulejson
+    switch   app              engine                    plain    do_app                undo_app
+    switch   current          engine                    all      do_current            undo_current
+    switch   fwd-cli          migrate:opencode-guard    migrate  do_fwd_cli            undo_fwd_cli
+    switch   fwd-gui          migrate:opencode-guard    migrate  do_fwd_gui            undo_fwd_gui
+    switch   plugin-take      migrate:opencode-guard    migrate  do_ocg_plugin_take    undo_plugin_take
+    switch   plugin-name      migrate:opencode-guard    migrate  do_ocg_plugin_name    undo_plugin_name
+    switch   plugin           harness:opencode          all      do_plugin             undo_plugin
+    switch   permissions      harness:opencode          plain    do_permissions        undo_permissions
+    switch   rc               engine                    all      do_rc                 undo_rc
+    switch   app              engine                    migrate  do_app                undo_app
+    switch   app-old          migrate:opencode-guard    migrate  do_app_old            undo_app_old
+    switch   switch-time      migrate:opencode-guard    migrate  do_switch_time        undo_switch_time
+    switch   psg-switch-time  migrate:pi-sandbox-guard  migrate  do_psg_switch_time    undo_psg_switch_time
   )
 }
-
 # ag_actions_for PHASE: reply = the run and back handlers, in pairs and in registry
 # order, of the PHASE actions this transaction selects: the engine's, those of the
 # harnesses it installs (ag_harnesses) and of the source it migrates (ag_source),
@@ -152,7 +173,6 @@ ag_actions_for() {
   done
   return 0
 }
-
 # ag_action_names PHASE: reply = every registered name of PHASE, whatever its owner
 # and kinds.
 ag_action_names() {
@@ -163,7 +183,6 @@ ag_action_names() {
   done
   reply=(${(u)reply})
 }
-
 # ag_do_actions PHASE: runs each selected action of PHASE in order and stops at
 # the first that fails.
 ag_do_actions() {
@@ -172,7 +191,6 @@ ag_do_actions() {
   for run back in $reply; do $run || return 1; done
   return 0
 }
-
 # ag_undo_actions PHASE: undoes each selected action of PHASE in reverse order,
 # all of them even after a failure; fails when any failed.
 ag_undo_actions() {

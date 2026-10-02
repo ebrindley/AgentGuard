@@ -268,19 +268,28 @@ boot_time() {
   REPLY=$match[1]
 }
 
-# ag_proc_check HINT NAME...: fails while a process named NAME runs (pgrep -x),
-# saying HINT, and when processes cannot be listed. A migration runs only while
+# ag_proc_check [-f] HINT NAME...: fails while a process named NAME runs (pgrep -x),
+# saying HINT, and when processes cannot be listed. With -f each NAME is a path
+# matched as a word of a process's argument list (pgrep -f), for a harness whose
+# process has another name: a Pi session's is node. A migration runs only while
 # the harness it hands over does not run (design section 8.2).
 ag_proc_check() {
-  local hint=$1 n
+  local hint n mode=-x what cls='[][\\^$.|?*+(){}]'
   local pgrep=/usr/bin/pgrep
   integer rc
+  [[ $1 == -f ]] && { mode=-f; shift }
+  hint=$1
   shift
   for n in ${(u)@}; do
-    $pgrep -x -- "$n" >/dev/null 2>&1
+    what=$n
+    [[ $mode == -f ]] && what="(^|[[:space:]])${n//(#m)$~cls/\\$MATCH}([[:space:]]|\$)"
+    $pgrep $mode -- "$what" >/dev/null 2>&1
     rc=$?
     case $rc in
-      (0) ag_err "$n is running. $hint, then run this command again."; return 1 ;;
+      (0)
+        if [[ $mode == -f ]]; then ag_err "a running process runs $n. $hint, then run this command again."
+        else ag_err "$n is running. $hint, then run this command again."; fi
+        return 1 ;;
       (1) ;;
       (*) ag_err "cannot list processes (pgrep exited $rc); run this from Terminal, outside any sandbox."; return 1 ;;
     esac
@@ -714,6 +723,7 @@ ag_assemble() {
   /bin/ln -s ../../../plugin.js "$r/profiles/opencode/check-config/opencode/plugins/agent-guard.js" || return 1
   print -l node_modules package.json package-lock.json bun.lock .gitignore > "$r/profiles/opencode/check-config/opencode/.gitignore" || return 1
   /bin/chmod 755 "$r/launch" "$r/install.sh" "$r/uninstall.sh" "$r/bin/opencode" "$r/bin/opencode-gui" "$r/bin/agent-guard" || return 1
+  for f in $ag_harnesses; do ag_hook_opt h $f assemble "$r" || return 1; done
   /usr/bin/xattr -dr com.apple.quarantine "$r" 2>/dev/null
   [[ $(<"$r/VERSION") == "$ag_version" ]] || { ag_err "VERSION in the release does not match $ag_version"; return 1 }
   for f in "$r"/installer/**/*.zsh(.N); do zsh_files+=("${f#$r/}"); done
@@ -1104,12 +1114,14 @@ ag_gate() {
 
 # K1: the stamp is the commit point, written only after the checks passed. It
 # records the harnesses the transaction installed (design section 6, Candidate
-# inventory).
+# inventory), and hashes the release folder, the rulebook, the app and each
+# harness's installed files outside them (files hook).
 ag_stamp_write() {
   local out="$ag_tstage/stamp.json" rel="$engine/releases/$ag_rid_new" sums links harnesses h m
   local -a files kv
   test_point stamp || return 1
   files=("$rel"/**/*(.DN) "$cc/agent-guard/rulebook.json"(N) "$app"/**/*(.DN))
+  for h in $ag_harnesses; do reply=(); ag_hook_opt h $h files; files+=("${reply[@]}"); done
   sums=$(/usr/bin/shasum -a 256 -- $files) || return 1
   kv=("$engine/current" "$(/usr/bin/readlink -- "$engine/current")" "$engine/bin" "$(/usr/bin/readlink -- "$engine/bin")")
   for h in $ag_harnesses; do reply=(); ag_hook_opt h $h links; kv+=("${reply[@]}"); done
@@ -1145,6 +1157,16 @@ ag_cleanup() {
     /bin/rmdir -- "$engine/stage" 2>/dev/null
   fi
   ag_drop_txn
+}
+
+# After the stamp and before the cleanup deletes txn/backup: each installed
+# harness's keep, then the migrated source's, move what must outlive the
+# transaction into state/ (design section 6, Frozen recovery bundle). A failure
+# leaves the transaction open; the next run's recovery repeats it.
+ag_keep() {
+  local h
+  for h in $ag_harnesses; do ag_hook_opt h $h keep || return 1; done
+  [[ -z $ag_source ]] || ag_hook_opt m $ag_source keep || return 1
 }
 
 # Before the switch: undoes the staged actions (the imported records this
@@ -1307,6 +1329,11 @@ ag_txn_run() {
   ag_gate || ag_abort 'the checks after the switch failed'
   ag_stamp_write || ag_abort "cannot write $stamp"
   ag_phase=committed
+  if ! ag_keep; then
+    ag_err "cannot keep what the transaction replaced; $txn_dir is kept and the next run finishes it"
+    ag_unlock
+    exit 1
+  fi
   if [[ -n $ag_source ]] && ! ag_hook m $ag_source retire; then
     ag_unlock
     exit 1
@@ -1417,6 +1444,7 @@ ag_recover_main() {
   [[ -f $stamp ]] && rel=$(/usr/bin/jq -r '.release // empty' "$stamp" 2>/dev/null)
   if [[ $rel == "$ag_rid_new" ]]; then
     ag_say "finishing the cleanup after release $ag_rid_new"
+    ag_keep || exit 1
     # Uninstall goes on without it and repeats retirement itself (U6).
     if [[ -n $ag_source ]] && ! ag_hook m $ag_source retire && [[ $caller != uninstall ]]; then exit 1; fi
     ag_cleanup
@@ -1446,6 +1474,7 @@ ag_recover_main() {
   ag_say "resuming the unfinished switch to release $ag_rid_new"
   if ag_switch && ag_gate && ag_stamp_write; then
     ag_say "Agent Guard $ag_version is installed (release $ag_rid_new)."
+    ag_keep || exit 1
     if [[ -n $ag_source ]]; then ag_hook m $ag_source retire || exit 1; fi
     ag_cleanup || ag_warn 'cleanup is unfinished; the next run finishes it'
     exit 0

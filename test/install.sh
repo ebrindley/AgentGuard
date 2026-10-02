@@ -151,6 +151,9 @@ boot v0.0.1 --projects "$home/Projects"
 rc=$?
 if (( rc == 0 )); then pass 'v0.0.1 bootstrap installs while v0.0.2 is latest'; else fail "install v0.0.1 (exit $rc)"; show; finish; fi
 [[ $(stamp_version) == 0.0.1 && $(<"$engine/current/VERSION") == 0.0.1 ]] && pass 'stamp and current name 0.0.1' || fail 'stamp and current name 0.0.1'
+# No Pi, OMP or pi-sandbox-guard in the home: the Pi harness is not installed.
+/usr/bin/jq -e '.harnesses == ["opencode"]' "$state/stamp.json" >/dev/null && [[ ! -e $home/.local/bin && ! -e $home/.pi && ! -e $engine/current/bin/pi ]] &&
+  pass 'without Pi or OMP the stamp lists OpenCode alone and no Pi file is placed' || fail 'without Pi or OMP the stamp lists OpenCode alone and no Pi file is placed'
 rid_a=$(current_rid)
 label=S4
 [[ -L $home/.zshrc && $(/usr/bin/readlink "$home/.zshrc") == "$home/dotfiles/zshrc" ]] && pass '.zshrc is still a link to its target' || fail '.zshrc is still a link'
@@ -588,10 +591,11 @@ rc=$?
   pass 'opening a transaction while one is open fails and leaves the open one as it was' || { fail "ag_txn_open (exit $rc)"; show }
 
 # Every test point in the shipped scripts is exercised: here, in test/bootstrap.sh
-# (after-download, after-verify) or in test/migrate.sh ($migrate_points, test/lib.zsh,
-# whose own check fails for any it does not exercise).
+# (after-download, after-verify), in test/migrate.sh ($migrate_points, test/lib.zsh)
+# or in test/migrate-pi.sh ($pi_points); each of those fails for any it does not
+# exercise.
 label=coverage
-covered=($update_points $uninstall_points rollback after-unpack after-download after-verify $migrate_points)
+covered=($update_points $uninstall_points rollback after-unpack after-download after-verify $migrate_points $pi_points)
 points=(${(f)"$(/usr/bin/grep -ohE 'test_point [a-z0-9-]+' "$source_root"/profiles/opencode/{install,uninstall}.sh "$source_root"/installer/**/*.zsh "$source_root"/scripts/bootstrap.zsh "$source_root"/engine/agent-guard | /usr/bin/sort -u)"})
 missing=()
 for p in ${points#test_point }; do (( ${covered[(Ie)$p]} )) || missing+=("$p"); done

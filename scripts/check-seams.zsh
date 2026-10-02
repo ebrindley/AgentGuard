@@ -41,6 +41,11 @@ once "$tree/engine/agent-guard" "$download_base"
 once "$tree/profiles/opencode/harness.zsh" 'cli_search=(/opt/homebrew/bin/opencode /usr/local/bin/opencode "$home/.opencode/bin/opencode")'
 once "$tree/profiles/opencode/harness.zsh" 'app_paths=(/Applications/OpenCode.app "$home/Applications/OpenCode.app")'
 once "$tree/profiles/opencode/harness.zsh" 'app_bundle_id=ai.opencode.desktop'
+# Where the Pi harness looks for a Pi or OMP CLI, and the Pi preamble's account
+# lookup and pinned PATH.
+once "$tree/installer/harness/pi.zsh" 'pi_roots=(/opt/homebrew /usr/local) pi_path=$PATH'
+once "$tree/profiles/pi/sandbox/pi-sandbox-preamble.zsh" 'typeset -r DSCL_BIN="/usr/bin/dscl"'
+once "$tree/profiles/pi/sandbox/pi-sandbox-preamble.zsh" 'PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"'
 
 found=(${(f)"$(/usr/bin/grep -rl -- AG_TEST_ "$tree" "$bootstrap")"})
 if (( $#found )); then
