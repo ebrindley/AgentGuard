@@ -1023,14 +1023,20 @@ esac
 # the resolved target of each one that is a symlink at launch, as Agent Guard's
 # engine/launch does for its protected list. The targets travel as AG_LINK_*
 # parameters, with an inert path when there is no link, so the profile stays one
-# static file. A PROJECT that is, contains or is inside one of the folders, or is
-# or is inside a folder's link target, would launch partly or wholly read-only, so
-# refuse it. A PROJECT that contains a link target launches with the target denied.
+# static file. Every folder above a target, up to and not including /, is pinned
+# against rename and removal, as engine/launch pins them, through a fixed set of
+# AG_PIN_* slots; a launch that needs more than the profile has is refused. A
+# PROJECT that is, contains or is inside one of the folders, or is or is inside a
+# folder's link target, would launch partly or wholly read-only, so refuse it. A
+# PROJECT that contains a link target launches with the target denied.
 typeset -ga AG_SANDBOX_PARAMS
 AG_SANDBOX_PARAMS=()
 agent_guard_protected() {
   emulate -L zsh
-  local kind param p target folder
+  local kind param p target folder a i
+  local inert="/private/tmp/pi-sandbox-guard-unused/agent-guard-no-link"
+  local -i slots=32
+  local -aU pins
   for kind param p in \
     folder AG_LINK_ENGINE "$HOME/Library/Application Support/AgentGuard" \
     folder AG_LINK_OPENCODEGUARD "$HOME/Library/Application Support/OpenCodeGuard" \
@@ -1049,8 +1055,12 @@ agent_guard_protected() {
     file AG_LINK_BASH_LOGIN "$HOME/.bash_login" \
     file AG_LINK_BASHRC "$HOME/.bashrc"
   do
-    target="/private/tmp/pi-sandbox-guard-unused/agent-guard-no-link"
-    [[ -e $p && ${p:A} != "$p" ]] && target=${p:A}
+    target=$inert
+    if [[ -e $p && ${p:A} != "$p" ]]; then
+      target=${p:A}
+      a=${target:h}
+      while [[ $a != / ]]; do pins+=("$a"); a=${a:h}; done
+    fi
     AG_SANDBOX_PARAMS+=(-D "$param=$target")
     [[ $kind == folder ]] || continue
     for folder in "$p" "$HOME_CANON${p#"$HOME"}"; do
@@ -1060,11 +1070,19 @@ agent_guard_protected() {
         return 1
       fi
     done
-    if [[ $target == "${p:A}" && ( $PROJECT == "$target" || $PROJECT == "$target"/* ) ]]; then
+    if [[ $target != "$inert" && ( $PROJECT == "$target" || $PROJECT == "$target"/* ) ]]; then
       emit "refusing boundary '$PROJECT': it is or is inside '$target', the link target of Agent Guard's protected folder '$p', which the sandbox write-protects."
       emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."
       return 1
     fi
+  done
+  if (( ${#pins} > slots )); then
+    emit "refusing to launch: the symlinked Agent Guard paths have ${#pins} parent folders to protect, more than the profile's $slots."
+    emit "  Replace some of the links with real files or folders, or point them into fewer folders."
+    return 1
+  fi
+  for (( i = 1; i <= slots; i++ )); do
+    AG_SANDBOX_PARAMS+=(-D "AG_PIN_$i=${pins[i]:-$inert}")
   done
 }
 agent_guard_protected || exit 1
@@ -1185,6 +1203,8 @@ export PI_SANDBOX_ACTIVE_HOOKS_BOUNDARY PI_SANDBOX_AGENT_STATE_BOUNDARY
 # Agent Guard difference 4. OpenCode creates a missing <cache>/opencode/bin at every
 # start and stops when it cannot; the profile denies that create, so make the
 # folder here for an OpenCode started inside the session, at both cache roots.
+# Seatbelt checks resolved paths, so the default root also travels canonicalized,
+# as AG_CACHE_HOME, once it exists.
 for _ag_cache in "$HOME/.cache" "$AG_XDG_CACHE_HOME"; do
   /bin/mkdir -p "$_ag_cache/opencode/bin" 2>/dev/null || {
     emit "cannot create '$_ag_cache/opencode/bin'; refusing to launch."
@@ -1192,6 +1212,11 @@ for _ag_cache in "$HOME/.cache" "$AG_XDG_CACHE_HOME"; do
   }
 done
 unset _ag_cache
+AG_CACHE_HOME="$(cd -P "$HOME/.cache" 2>/dev/null && pwd -P)" || {
+  emit "cannot resolve '$HOME/.cache'; refusing to launch."
+  exit 1
+}
+AG_SANDBOX_PARAMS+=(-D "AG_CACHE_HOME=$AG_CACHE_HOME")
 
 PI_SANDBOX_CMD=(
   "$SANDBOX_EXEC"

@@ -105,7 +105,7 @@ for (const name of recorded) {
 
 check('the profile names every recorded parameter, and only those', () => {
   const profile = readFileSync(join(vendored, 'sandbox/pi-sandbox.sb'), 'utf8');
-  const used = new Set([...profile.matchAll(/\(param "(AG_[A-Z_]+)"\)/g)].map((m) => m[1]));
+  const used = new Set([...profile.matchAll(/\(param "(AG_[A-Z0-9_]+)"\)/g)].map((m) => m[1]));
   assert.deepEqual([...used].sort(), record.differences.flatMap((d) => d.parameters ?? []).sort());
 });
 
