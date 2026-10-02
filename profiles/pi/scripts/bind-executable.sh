@@ -25,12 +25,19 @@
 #
 # Pi is required by setup; OMP is optional.
 #
-# Usage:
-#   bind-executable.sh --detect            propose an install, confirm, then record
-#   bind-executable.sh --pi <abs-path> [--omp <abs-path>] [--node <abs-path>]
-#   bind-executable.sh --show              print the current binding
-#   bind-executable.sh --check             verify the binding still resolves (exit 3 if not)
-#   bind-executable.sh --detect --yes      non-interactive (CI/scripted setup)
+# The checker Node is the Node the guard extension's analyzer runs (OMP's release
+# binary is not Node). It is recorded in the extension's .guard-node, only by
+# --checker-node.
+#
+# Usage (agent-guard bind runs this script with HOME set to the account home):
+#   agent-guard bind --detect            propose an install, confirm, then record
+#   agent-guard bind --pi <abs-path> [--omp <abs-path>] [--node <abs-path>]
+#   agent-guard bind --show              print the current binding
+#   agent-guard bind --check             verify the binding still resolves (exit 3 if not)
+#   agent-guard bind --detect --yes      non-interactive (CI/scripted setup)
+#   agent-guard bind --checker-node [<abs-path>]
+#                                        record the checker Node; without a path,
+#                                        the node on PATH
 #
 # Exit codes: 0 ok; 2 usage/validation failure; 3 binding missing or stale (--check).
 
@@ -42,11 +49,15 @@ CONFIG_DIR="${PI_SANDBOX_CONFIG_DIR:-$HOME/.config/pi-sandbox-guard}"
 CONFIG="$CONFIG_DIR/executables.conf"
 SHIM="${PI_SANDBOX_SHIM:-$HOME/.local/bin/pi}"
 OMP_SHIM="${OMP_SANDBOX_SHIM:-$HOME/.local/bin/omp}"
+GUARD_DIR="$HOME/.pi/agent/extensions/pi-sandbox-guard"
+GUARD_NODE_FILE="$GUARD_DIR/.guard-node"
 
 MODE=""
 PI_PATH=""
 OMP_PATH=""
 NODE_PATH=""
+CHECKER=0
+CHECKER_NODE_PATH=""
 ASSUME_YES=0
 
 die() { printf 'bind: %s\n' "$*" >&2; exit 2; }
@@ -61,16 +72,29 @@ while [ $# -gt 0 ]; do
     --pi)   [ $# -ge 2 ] || die "--pi needs an absolute path";   PI_PATH="$2";   MODE="${MODE:-explicit}"; shift 2 ;;
     --omp)  [ $# -ge 2 ] || die "--omp needs an absolute path";  OMP_PATH="$2";  MODE="${MODE:-explicit}"; shift 2 ;;
     --node) [ $# -ge 2 ] || die "--node needs an absolute path"; NODE_PATH="$2"; MODE="${MODE:-explicit}"; shift 2 ;;
+    # The path is optional: an absolute path never starts with "-".
+    --checker-node)
+      CHECKER=1
+      case "${2:-}" in
+        ""|-*) shift ;;
+        *) CHECKER_NODE_PATH="$2"; shift 2 ;;
+      esac ;;
     --yes|-y) ASSUME_YES=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) die "unknown argument: $1" ;;
   esac
 done
-# Bare invocation means --detect. `npm run bind` must stay a one-word command, and it
-# cannot bake --detect into the npm script: `npm run bind -- --check` would then expand
-# to `--detect --check` and die on the one-mode rule, so the documented --show/--check
-# verbs would be unreachable through npm.
+if [ "$CHECKER" -eq 1 ]; then
+  [ -z "$MODE" ] || die "--checker-node cannot be combined with --detect, --show, --check, --pi, --omp or --node"
+  MODE="checker-node"
+fi
+# Bare invocation means --detect, so `agent-guard bind` alone detects and records.
 [ -n "$MODE" ] || MODE="detect"
+# Every path is resolved with node (canonicalize, ops_stable_node_path). npm run
+# guaranteed one on PATH; agent-guard runs this script from any shell.
+if [ "$MODE" != "show" ] && ! command -v node >/dev/null 2>&1; then
+  die "node is not on PATH; agent-guard bind runs it to resolve paths"
+fi
 
 # canonicalize <path> — absolute, symlinks resolved. Empty on failure.
 #
@@ -78,7 +102,7 @@ done
 # is a Command Line Tools shim that can be absent on a clean macOS host, and failing
 # here is not a no-op — every path in this script routes through canonicalize(), so an
 # absent python3 made `npm run bind` die with "cannot be canonicalized" and no hint.
-# node is already required to reach this script at all (it runs via `npm run bind`).
+# node is checked on PATH above, before any path is resolved.
 # Must match os.path.realpath on MISSING paths too, and that is not the same as
 # "realpathSync, else path.resolve". realpathSync throws if any component is absent,
 # and a lexical fallback then discards symlinks already resolved in the surviving
@@ -293,12 +317,13 @@ case "$MODE" in
     printf 'pi   = %s\n' "$(read_key pi || echo '(unset)')"
     printf 'omp  = %s\n' "$(read_key omp || echo '(unset)')"
     printf 'node = %s\n' "$(read_key node || echo '(unset — shebang resolves via sanitized PATH)')"
+    printf 'checker node = %s\n' "$(head -1 "$GUARD_NODE_FILE" 2>/dev/null || echo "(unset — no $GUARD_NODE_FILE)")"
     exit 0 ;;
   check)
     pi_rec="$(read_key pi || true)"
     if [ -z "$pi_rec" ]; then
       echo "no pi= binding recorded in $CONFIG"
-      echo "  auto-resolution only covers fixed trusted prefixes; run: bind-executable.sh --detect"
+      echo "  auto-resolution only covers fixed trusted prefixes; run: agent-guard bind --detect"
       exit 3
     fi
     ok=1
@@ -325,9 +350,38 @@ case "$MODE" in
       [ -n "$node_rec" ] && echo "interpreter: $node_rec"
       exit 0
     fi
-    echo "  re-record: bind-executable.sh --detect"
+    echo "  re-record: agent-guard bind --detect"
     exit 3 ;;
 esac
+
+# --- checker node ------------------------------------------------------------
+# Recorded as deploy-local.sh records it: an absolute executable file outside every
+# sandbox-writable root, a Homebrew Cellar path kept as its stable opt link, mode
+# 0600. Without a path, the node on PATH, as deploy-local.sh pins the node it runs.
+if [ "$MODE" = "checker-node" ]; then
+  { [ -d "$GUARD_DIR" ] && [ ! -L "$GUARD_DIR" ]; } || die "the guard extension is not installed at $GUARD_DIR"
+  if [ -z "$CHECKER_NODE_PATH" ]; then
+    CHECKER_NODE_PATH="$(node -p 'process.execPath' 2>/dev/null || true)"
+    [ -n "$CHECKER_NODE_PATH" ] || die "cannot run the node on PATH; pass --checker-node <abs-path>"
+  fi
+  CHECKER_CANON="$(validate_target "$CHECKER_NODE_PATH" "checker node")"
+  CHECKER_CANON="$(ops_stable_node_path "$CHECKER_CANON")"
+  echo "About to record:"
+  printf '  checker node = %s\n' "$CHECKER_CANON"
+  printf '  file         = %s\n' "$GUARD_NODE_FILE"
+  echo "The guard's analyzer runs this program to check every bash command."
+  if [ "$ASSUME_YES" -eq 0 ]; then
+    printf 'Record it? [y/N] '
+    read -r ans </dev/tty || die "no tty to confirm; re-run with --yes to accept non-interactively"
+    case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "aborted; nothing written"; exit 0 ;; esac
+  fi
+  tmp="$(mktemp "$GUARD_DIR/.guard-node.XXXXXX")"
+  printf '%s\n' "$CHECKER_CANON" >"$tmp"
+  chmod 600 "$tmp"
+  mv -f "$tmp" "$GUARD_NODE_FILE"
+  echo "recorded in $GUARD_NODE_FILE"
+  exit 0
+fi
 
 # --- detect / explicit -------------------------------------------------------
 if [ "$MODE" = "detect" ] && [ -z "$PI_PATH" ]; then
@@ -343,8 +397,8 @@ if [ "$MODE" = "detect" ] && [ -z "$PI_PATH" ]; then
   # present. Name that case: the fix is one flag, not a reinstall.
   [ "${#found[@]}" -gt 0 ] || die "no Pi install found in the layouts this script knows.
   If Pi IS installed (Nix or another custom prefix), record it explicitly:
-    npm run bind -- --pi \"\$(command -v pi)\"   # from a shell where that is the REAL pi
-  or pass the absolute path directly: npm run bind -- --pi /abs/path/to/pi"
+    agent-guard bind --pi \"\$(command -v pi)\"   # from a shell where that is the REAL pi
+  or pass the absolute path directly: agent-guard bind --pi /abs/path/to/pi"
   if [ "${#found[@]}" -gt 1 ] && [ "$ASSUME_YES" -eq 0 ]; then
     echo "Multiple Pi installs found:"
     i=1; for f in "${found[@]}"; do printf '  %d) %s\n' "$i" "$f"; i=$((i+1)); done
@@ -431,10 +485,10 @@ if [ -f "$CONFIG" ]; then
       print }' "$CONFIG" >>"$tmp"
 else
   {
-    echo "# pi-sandbox-guard executable binding — written by bind-executable.sh."
+    echo "# pi-sandbox-guard executable binding — written by agent-guard bind."
     echo "# Recorded absolute paths are exempt from the shim's trusted-prefix list;"
     echo "# the shim still refuses a non-executable, the shim itself, or anything"
-    echo "# inside a Seatbelt write root. Re-run bind-executable.sh after an upgrade"
+    echo "# inside a Seatbelt write root. Re-run agent-guard bind after an upgrade"
     echo "# that moves these paths (nvm/volta/mise version bumps, brew upgrades)."
   } >>"$tmp"
 fi
