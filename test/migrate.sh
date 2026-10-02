@@ -381,13 +381,13 @@ rc=$?
 (( rc == 0 )) && /usr/bin/grep -q 'Agent Guard 0.0.1 is current.' "$out" && pass 'the next update finds nothing pending' || { fail "second update (exit $rc)"; show }
 
 # --- M17: two sources, and the first transaction's cleanup fails. A test release
-# registers a second source, Dummy Guard (the folder ~/Dummy Guard), after
-# OpenCode Guard. Its transaction must not start while the first one is open; the
+# registers another source, Dummy Guard (the folder ~/Dummy Guard), after
+# OpenCode Guard and pi-sandbox-guard. Its transaction must not start while the first one is open; the
 # next run finishes the cleanup, then migrates it.
 label=M17
 /bin/mkdir -p "$run/src-two"
 /bin/cp -R "$source_root"/{engine,profiles,installer,scripts,install.sh,LICENSE} "$run/src-two/"
-/usr/bin/sed -i '' 's/^  ag_migration_modules=(opencode-guard)$/  ag_migration_modules=(opencode-guard dummy)/' "$run/src-two/installer/actions.zsh"
+/usr/bin/sed -i '' 's/^  ag_migration_modules=(opencode-guard pi-sandbox-guard)$/  ag_migration_modules=(opencode-guard pi-sandbox-guard dummy)/' "$run/src-two/installer/actions.zsh"
 /usr/bin/sed -i '' 's|^  installer/migrate/opencode-guard.zsh$|&\
   installer/migrate/dummy.zsh|' "$run/src-two/scripts/release.sh"
 print -r -- 'ag_m_dummy_title() { REPLY="Dummy Guard" }
@@ -395,7 +395,7 @@ ag_m_dummy_harness() { REPLY=opencode }
 ag_m_dummy_detect() { if [[ -d $home/Dummy\ Guard ]]; then REPLY=migrate; else REPLY=none; fi }
 ag_m_dummy_begin() { ag_say "migrating from Dummy Guard" }
 ag_m_dummy_retire() { /bin/rm -rf -- "$home/Dummy Guard" }' > "$run/src-two/installer/migrate/dummy.zsh"
-if /usr/bin/grep -q 'opencode-guard dummy' "$run/src-two/installer/actions.zsh" && /usr/bin/grep -q 'migrate/dummy.zsh' "$run/src-two/scripts/release.sh" &&
+if /usr/bin/grep -q 'pi-sandbox-guard dummy' "$run/src-two/installer/actions.zsh" && /usr/bin/grep -q 'migrate/dummy.zsh' "$run/src-two/scripts/release.sh" &&
    build "$run/src-two" 0.0.6; then
   restore ocg-1.0.4
   /bin/mkdir -p "$home/Dummy Guard"

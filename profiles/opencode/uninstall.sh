@@ -2,13 +2,15 @@
 # usage: uninstall.sh   (agent-guard uninstall runs it)
 # Removes Agent Guard in this order (docs/DESIGN.md section 6): PATH blocks, the
 # values each harness set, the app, the rulebook, after a migration what the
-# migration left (OpenCode Guard's forwarders), then each harness's entry (the
-# OpenCode plugin) and last the engine folder. The harnesses are those the stamp
-# lists, the migrations those installer/actions.zsh registers. Until the plugin
-# goes, a start without a PATH block meets the plugin's unguarded refusal, and an
-# old terminal still reaches working shims. Each step can be repeated, so a rerun
-# after a failed or interrupted run finishes the job. Everything runs from main on
-# the last line, so the file is read in full before its release folder is deleted.
+# migration left (OpenCode Guard's forwarders, a copy of pi-sandbox-guard's legacy
+# bundle), then each harness's entry (the OpenCode plugin; Pi's launchers,
+# extension, profile and preamble) and last the engine folder. The harnesses are
+# those the stamp lists, the migrations those installer/actions.zsh registers.
+# Until the plugin goes, a start without a PATH block meets the plugin's unguarded
+# refusal, and an old terminal still reaches working shims. Each step can be
+# repeated, so a rerun after a failed or interrupted run finishes the job.
+# Everything runs from main on the last line, so the file is read in full before
+# its release folder is deleted.
 main() {
   emulate -L zsh
   setopt no_unset pipe_fail extended_glob
@@ -73,11 +75,12 @@ main() {
 
   # U6: after a migration, what it left: OpenCode Guard's retirement if it is
   # unfinished, then the forwarders at its old command paths and its engine
-  # folder, whatever the boot time. ~/OpenCode Guard stays.
+  # folder, whatever the boot time; ~/OpenCode Guard stays. pi-sandbox-guard's
+  # legacy bundle is copied to ~/Agent Guard; when that copy fails the engine stays.
   test_point uninstall-forwarders || stop uninstall-forwarders
   for m in $ag_migration_modules; do
     reply=()
-    ag_hook_opt m $m uninstall
+    if ! ag_hook_opt m $m uninstall; then /bin/rm -rf -- "$scratch"; ag_unlock; exit 1; fi
     kept+=("${reply[@]}")
   done
 
@@ -100,8 +103,9 @@ main() {
   fi
 
   # U3: each harness's entry (OpenCode: the plugin, a link into the engine or a
-  # regular file). This ends guarding. If it cannot be removed, the engine stays,
-  # so agent-guard uninstall can run again.
+  # regular file; Pi: the launchers, extension folder, profile and preamble, with
+  # an entry the launchers replaced put back). This ends guarding. If it cannot be
+  # removed, the engine stays, so agent-guard uninstall can run again.
   test_point uninstall-plugin || stop uninstall-plugin
   for h in $harnesses; do
     ag_hook h $h uninstall_remove || { /bin/rm -rf -- "$scratch"; ag_unlock; exit 1 }
