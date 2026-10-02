@@ -1,4 +1,4 @@
-# The eight test suites on a standard GitHub-hosted macOS runner, which is free for
+# The nine test suites on a standard GitHub-hosted macOS runner, which is free for
 # public repositories. Larger runners are billed even then; do not switch to one.
 name: Tests
 
@@ -47,3 +47,5 @@ jobs:
       # finds no such key in the app osacompile builds there.
       - if: matrix.os != 'macos-15'
         run: zsh test/migrate.sh
+      # Its case with both old guards needs that installer too and is skipped on macOS 15.
+      - run: zsh test/migrate-pi.sh
