@@ -109,10 +109,10 @@ check('the profile names every recorded parameter, and only those', () => {
   assert.deepEqual([...used].sort(), record.differences.flatMap((d) => d.parameters ?? []).sort());
 });
 
-check('no message in the launcher or preamble names npm run bind', () => {
-  for (const f of ['launchers/pi', 'sandbox/pi-sandbox-preamble.zsh']) {
-    const messages = readFileSync(join(vendored, f), 'utf8').split('\n').filter((l) => /^\s*(emit|print)\b/.test(l));
-    assert.deepEqual(messages.filter((l) => l.includes('npm run bind')), [], f);
+check('no user-facing text in the launchers, preamble or extension names an npm command', () => {
+  for (const f of ['launchers/pi', 'launchers/example-custom', 'sandbox/pi-sandbox-preamble.zsh', 'src/index.mjs']) {
+    const lines = readFileSync(join(vendored, f), 'utf8').split('\n').filter((l) => l.includes('npm run'));
+    assert.deepEqual(lines.filter((l) => !/^\s*(#|\*|\/\/)/.test(l)), [], f);
   }
 });
 

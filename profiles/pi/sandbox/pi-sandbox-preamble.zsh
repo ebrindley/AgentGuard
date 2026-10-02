@@ -547,7 +547,7 @@ resolve_configured_executable() {
 }
 
 # Operator-recorded binding: an absolute path written to the pinned config by a
-# deliberate `npm run bind` run. EXEMPT from trusted_executable_prefix, because
+# deliberate `agent-guard bind` run. EXEMPT from trusted_executable_prefix, because
 # no fixed path shape can describe the real install surface — Homebrew's Cellar,
 # npm user prefixes, nvm/fnm/volta/asdf/mise version dirs, pnpm/bun/yarn global
 # roots, and Nix store paths are all legitimate and all differently shaped.
@@ -1023,14 +1023,14 @@ esac
 # the resolved target of each one that is a symlink at launch, as Agent Guard's
 # engine/launch does for its protected list. The targets travel as AG_LINK_*
 # parameters, with an inert path when there is no link, so the profile stays one
-# static file. A PROJECT that is, contains or is inside one of the folders or a
-# folder's link target would launch partly or wholly read-only, so refuse it.
+# static file. A PROJECT that is, contains or is inside one of the folders, or is
+# or is inside a folder's link target, would launch partly or wholly read-only, so
+# refuse it. A PROJECT that contains a link target launches with the target denied.
 typeset -ga AG_SANDBOX_PARAMS
 AG_SANDBOX_PARAMS=()
 agent_guard_protected() {
   emulate -L zsh
   local kind param p target folder
-  local -a folders
   for kind param p in \
     folder AG_LINK_ENGINE "$HOME/Library/Application Support/AgentGuard" \
     folder AG_LINK_OPENCODEGUARD "$HOME/Library/Application Support/OpenCodeGuard" \
@@ -1053,15 +1053,18 @@ agent_guard_protected() {
     [[ -e $p && ${p:A} != "$p" ]] && target=${p:A}
     AG_SANDBOX_PARAMS+=(-D "$param=$target")
     [[ $kind == folder ]] || continue
-    folders=("$p")
-    [[ $target == "${p:A}" ]] && folders+=("$target")
-    for folder in $folders; do
+    for folder in "$p" "$HOME_CANON${p#"$HOME"}"; do
       if [[ $PROJECT == "$folder" || $PROJECT == "$folder"/* || $folder == "$PROJECT"/* ]]; then
         emit "refusing boundary '$PROJECT': it is, contains or is inside Agent Guard's protected folder '$folder', which the sandbox write-protects."
         emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."
         return 1
       fi
     done
+    if [[ $target == "${p:A}" && ( $PROJECT == "$target" || $PROJECT == "$target"/* ) ]]; then
+      emit "refusing boundary '$PROJECT': it is or is inside '$target', the link target of Agent Guard's protected folder '$p', which the sandbox write-protects."
+      emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."
+      return 1
+    fi
   done
 }
 agent_guard_protected || exit 1
@@ -1178,6 +1181,17 @@ else
 fi
 export PI_SANDBOX_PROFILE_DIGEST PI_SANDBOX_PROJECT_BOUNDARY
 export PI_SANDBOX_ACTIVE_HOOKS_BOUNDARY PI_SANDBOX_AGENT_STATE_BOUNDARY
+
+# Agent Guard difference 4. OpenCode creates a missing <cache>/opencode/bin at every
+# start and stops when it cannot; the profile denies that create, so make the
+# folder here for an OpenCode started inside the session, at both cache roots.
+for _ag_cache in "$HOME/.cache" "$AG_XDG_CACHE_HOME"; do
+  /bin/mkdir -p "$_ag_cache/opencode/bin" 2>/dev/null || {
+    emit "cannot create '$_ag_cache/opencode/bin'; refusing to launch."
+    exit 1
+  }
+done
+unset _ag_cache
 
 PI_SANDBOX_CMD=(
   "$SANDBOX_EXEC"
