@@ -573,6 +573,20 @@ rc=$?
   pass 'the rerun rolls back from the copies, then updates' || { fail "rerun (exit $rc)"; show }
 same_snapshot 'final state equals an uninterrupted update' "$run/update-ref.snapshot"
 
+# --- R3: no transaction opens over an open one, where mv would put the new
+# transaction inside it. ag_txn_open, from the installed release, refuses and
+# leaves the open transaction as it was.
+label=R3
+restore A
+/bin/mkdir -p "$state/txn/backup/rc" && print -r -- 'rc begun' > "$state/txn/journal" && print -r -- x > "$state/txn/backup/rc/file"
+txn_files() { local f; for f in "$state"/txn/**/*(DN); do print -r -- "${f#$state/} $(sha "$f")"; done }
+txn_before=$(txn_files)
+run_timeout 60 /usr/bin/env -i HOME="$home" PATH="$tpath" /bin/zsh -fc 'emulate zsh; setopt no_unset pipe_fail extended_glob
+  source "$1/install.sh" --lib && ag_init && ag_txn_open' R3 "$engine/current" < /dev/null > "$out" 2>&1
+rc=$?
+(( rc == 1 )) && /usr/bin/grep -qF "$state/txn is still open" "$out" && [[ $(txn_files) == "$txn_before" && ! -e $state/txn.new ]] &&
+  pass 'opening a transaction while one is open fails and leaves the open one as it was' || { fail "ag_txn_open (exit $rc)"; show }
+
 # Every test point in the shipped scripts is exercised: here, in test/bootstrap.sh
 # (after-download, after-verify) or in test/migrate.sh ($migrate_points, test/lib.zsh,
 # whose own check fails for any it does not exercise).

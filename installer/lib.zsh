@@ -408,10 +408,16 @@ ag_txn_load() {
 
 # Opens the transaction with the frozen copies recovery runs: install.sh, every
 # installer module, account.zsh, uninstall.sh and each harness's bundle files, so
-# recovery never reads the new release folder's code.
+# recovery never reads the new release folder's code. Refuses while a transaction
+# is open: mv would put the new one inside it, and recovery would read the old
+# journal and backups for the new transaction.
 ag_txn_open() {
   local n="$state/txn.new" h f
   local -a extra
+  if [[ -e $txn_dir || -L $txn_dir ]]; then
+    ag_err "$txn_dir is still open; the next run finishes it before opening another"
+    return 1
+  fi
   /bin/rm -rf -- "$n"
   for h in $ag_harnesses; do reply=(); ag_hook_opt h $h bundle || return 1; extra+=("${reply[@]}"); done
   /bin/mkdir -p -- "$n/backup" &&
@@ -1359,6 +1365,17 @@ ag_install_main() {
     (( $#ag_migrated > 1 )) || ag_keep=(${ag_rid_old:+$ag_rid_old})
     ag_rid_old=$ag_rid_new
     ag_detect || ag_abort
+    # A failed cleanup leaves the committed transaction open. The next run finishes
+    # it, then migrates the sources still pending; none starts in this run.
+    if [[ -e $txn_dir ]]; then
+      for m in $ag_migration_modules; do
+        [[ ${ag_mig_state[$m]:-} == migrate ]] || continue
+        REPLY=$m
+        ag_hook_opt m $m title
+        ag_warnings+=("the move from $REPLY has not started; the next run finishes the cleanup, then continues with it")
+      done
+      break
+    fi
     ag_txn_plan
     [[ -n $ag_source ]] || break
   done
