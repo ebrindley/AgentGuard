@@ -274,11 +274,13 @@ try {
     const populate = (c) => {
       for (const d of ['opencode/packages/plugin', 'opencode/node_modules', 'opencode/bin', 'other'])
         mkdirSync(join(c, d), { recursive: true });
-      writeFileSync(join(c, 'opencode/models.json'), '{}\n');
+      for (const f of ['models.json', 'package.json', 'package-lock.json', 'bun.lock'])
+        writeFileSync(join(c, 'opencode', f), '{}\n');
     };
     const deniedIn = (c, options) => {
       for (const p of ['opencode/packages/plugin/index.js', 'opencode/node_modules/x.js', 'opencode/bin/opencode',
-        'opencode/models.json', 'opencode/models-dev.json'])
+        'opencode/models.json', 'opencode/models-dev.json', 'opencode/package.json', 'opencode/package-lock.json',
+        'opencode/bun.lock'])
         denied(write(a, join(c, p), options), p);
       // Both destinations are writable, so only the pins stop these.
       denied(session(a, ['/bin/mv', join(c, 'opencode'), join(c, 'moved')], options), 'rename opencode');
@@ -288,7 +290,7 @@ try {
     };
     const cache = join(a.home, '.cache');
     populate(cache);
-    check('difference 4: OpenCode\'s package store, bin and model catalog under ~/.cache are write-denied and pinned', () => {
+    check('difference 4: OpenCode\'s package store, install metadata, bin and model catalog under ~/.cache are write-denied and pinned', () => {
       deniedIn(cache);
     });
     check('difference 4: the rest of ~/.cache, and of its opencode folder, stays writable', () => {
@@ -307,6 +309,15 @@ try {
     symlinkSync(real, join(scratch, 'xdg-link'));
     check('difference 4: a linked XDG_CACHE_HOME is protected at its canonical path', () => {
       denied(write(a, join(real, 'opencode/bin/opencode'), { env: { XDG_CACHE_HOME: join(scratch, 'xdg-link') } }), 'bin');
+    });
+    const inProject = join(a.project, 'build/cache');
+    populate(inProject);
+    mkdirSync(join(a.project, 'docs'));
+    check('difference 4: the folder above an XDG_CACHE_HOME inside the project cannot be renamed away', () => {
+      const env = { XDG_CACHE_HOME: inProject };
+      denied(session(a, ['/bin/mv', join(a.project, 'build'), join(a.project, 'build-old')], { env }), 'rename the parent');
+      assert.ok(existsSync(join(inProject, 'opencode/packages/plugin')), 'cache root moved');
+      allowed(session(a, ['/bin/mv', join(a.project, 'docs'), join(a.project, 'docs-old')], { env }), 'rename another folder');
     });
     check('difference 4: an XDG_CACHE_HOME that is missing or relative refuses the launch', () => {
       for (const value of [join(scratch, 'missing'), 'relative/cache'])

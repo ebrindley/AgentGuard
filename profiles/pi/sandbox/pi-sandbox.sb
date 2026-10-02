@@ -332,7 +332,8 @@
 ;; Params (supplied via sandbox-exec -D by Agent Guard's part of the preamble):
 ;;   AG_LINK_*          resolved target of the protected path of the same name
 ;;                      when it is a symlink at launch, or an inert unused path
-;;   AG_PIN_1..32       the folders above those targets, or an inert unused path
+;;   AG_PIN_1..32       the folders above those targets and above the cache
+;;                      roots below, or an inert unused path
 ;;   AG_CACHE_HOME      canonical HOME/.cache
 ;;   AG_XDG_CACHE_HOME  canonical XDG_CACHE_HOME, or HOME/.cache when it is unset
 ;; ---------------------------------------------------------------------------
@@ -426,20 +427,24 @@
   (literal "/bin/launchctl")
   (literal "/usr/bin/sudo"))
 
-;; Difference 4: OpenCode's package store, bin folder and model catalog under
-;; Pi's ~/.cache grant, at the default cache root, lexical and canonical (Seatbelt
-;; checks resolved paths, so a linked ~/.cache needs the canonical form), and at
-;; XDG_CACHE_HOME, so a Pi session cannot plant code or models that OpenCode
-;; loads later. The cache root and its opencode folder are pinned against rename
-;; and removal. Extend the set in opencode-cache.
+;; Difference 4: OpenCode's package store, its legacy install metadata, bin folder
+;; and model catalog under Pi's ~/.cache grant, at the default cache root, lexical
+;; and canonical (Seatbelt checks resolved paths, so a linked ~/.cache needs the
+;; canonical form), and at XDG_CACHE_HOME, so a Pi session cannot plant code or
+;; models that OpenCode loads later. The cache root and its opencode folder are
+;; pinned against rename and removal here, and every folder above each cache root
+;; through the AG_PIN_* slots. Extend the set in opencode-cache.
 (define (opencode-cache c)
   (require-any
     (literal c)
     (literal (string-append c "/opencode"))
     (subpath (string-append c "/opencode/packages"))
     (subpath (string-append c "/opencode/node_modules"))
+    (subpath (string-append c "/opencode/package.json"))
+    (subpath (string-append c "/opencode/package-lock.json"))
+    (subpath (string-append c "/opencode/bun.lock"))
     (subpath (string-append c "/opencode/bin"))
-    (literal (string-append c "/opencode/models.json"))
+    (subpath (string-append c "/opencode/models.json"))
     (require-all
       (subpath (string-append c "/opencode"))
       (regex #"/opencode/models-[^/]*\.json$"))))
