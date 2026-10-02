@@ -40,7 +40,9 @@
 #                   results, adds FAIL lines to ag_failed and fails.
 #   gate            after the live doctor (design section 6, Gate); adds FAIL lines
 #                   to ag_failed.
-#   doctor RELEASE  this harness's part of agent-guard doctor, from RELEASE.
+#   doctor RELEASE [--json]  this harness's part of agent-guard doctor, from
+#                   RELEASE. With --json it prints nothing and sets reply to its
+#                   check lines and REPLY to the JSON object of fields it adds.
 #   uninstall_remove  U3: removes what keeps an unguarded start refused (OpenCode:
 #                   the plugin); fails, naming it, to keep the engine folder.
 #   init            optional: sets the harness's paths (ag_init calls it).

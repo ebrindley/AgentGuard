@@ -99,8 +99,16 @@ ag_launch_check() {  # COMMAND LABEL
 
 ag_h_opencode_links() { reply=("$plugin" "$(/usr/bin/readlink -- "$plugin")") }
 
-# The launcher's check (design section 8).
-ag_h_opencode_doctor() { "$1/launch" check }
+# The launcher's check (design section 8). With --json: reply = its lines.
+ag_h_opencode_doctor() {
+  local out
+  integer rc
+  [[ ${2:-} == --json ]] || { "$1/launch" check; return }
+  out=$("$1/launch" check 2>&1)
+  rc=$?
+  reply=("${(@f)out}") REPLY='{}'
+  return $rc
+}
 
 ag_h_opencode_report() {
   ag_say 'PATH: new terminal windows run opencode inside the guard'

@@ -1,10 +1,10 @@
 #!/bin/zsh
-# usage: agent-guard doctor|version|update|uninstall
+# usage: agent-guard doctor [--json]|version|update|uninstall|bind [OPTIONS]|wrapper add|remove|list
 emulate -L zsh
 setopt no_unset pipe_fail extended_glob
 
 die() { print -ru2 -- "agent-guard: $*"; exit 1 }
-usage() { print -ru2 -- 'usage: agent-guard doctor|version|update|uninstall'; exit 2 }
+usage() { print -ru2 -- 'usage: agent-guard doctor [--json]|version|update|uninstall|bind [OPTIONS]|wrapper add|remove|list'; exit 2 }
 
 # This file is bin/agent-guard inside a release folder. Only a folder shaped like
 # one is trusted to supply the account lookup; after it, the release must be a
@@ -27,19 +27,39 @@ load_installer() {
 
 # Each harness's checks: those of the harnesses the open transaction installs
 # while it installs this release (its gate runs before the stamp), else the stamp's.
+# --json prints one object instead: the fields each harness's checks add (the Pi
+# checks: status.sh --json's), each check line as {harness, result, check}, and ok.
 doctor() {
-  local h
-  integer bad=0
+  local h l fields='{}' more
+  local -a tagged
+  integer bad=0 json=0
+  [[ ${1:-} == --json ]] && json=1
   load_installer
   ag_doctor_harnesses "${release:t}"
   for h in $reply; do
     if (( ! ${ag_harness_modules[(Ie)$h]} )); then
-      print -r -- "FAIL release ${release:t} has no checks for harness $h"
+      l="FAIL release ${release:t} has no checks for harness $h"
+      if (( json )); then tagged+=("$h"$'\t'"$l"); else print -r -- "$l"; fi
       bad=1
       continue
     fi
-    ag_hook h $h doctor "$release" || bad=1
+    if (( ! json )); then
+      ag_hook h $h doctor "$release" || bad=1
+      continue
+    fi
+    # With --json a harness's doctor prints nothing: reply = its check lines,
+    # REPLY = the fields it adds, an object.
+    reply=() REPLY='{}'
+    ag_hook h $h doctor "$release" --json || bad=1
+    more=${REPLY:-'{}'}
+    fields=$(/usr/bin/jq -cn --argjson a "$fields" --argjson b "$more" '$a + $b') || die 'cannot combine the checks'
+    for l in $reply; do [[ -n $l ]] && tagged+=("$h"$'\t'"$l"); done
   done
+  if (( json )); then
+    /usr/bin/jq -cn --argjson f "$fields" --argjson ok $(( bad == 0 )) '$f + {checks: [$ARGS.positional[]
+        | index("\t") as $i | .[$i + 1:] as $l | ($l | capture("^(?<r>ok|FAIL|skip) +(?<c>.*)$") // {r: "note", c: $l}) as $m
+        | {harness: .[:$i], result: $m.r, check: $m.c}], ok: ($ok == 1)}' --args "${tagged[@]}"
+  fi
   exit $bad
 }
 
@@ -174,9 +194,34 @@ uninstall() {
   exec /bin/zsh -f "$u"
 }
 
-(( $# == 1 )) || usage
+# Pi is installed when the stamp's harnesses list names it; stamps before 0.2.0 have none.
+pi_installed() { /usr/bin/jq -e 'any(.harnesses[]?; . == "pi")' "$engine/state/stamp.json" >/dev/null 2>&1 }
+
+# The caller's environment, a project's .envrc for example, can make bash, zsh, node
+# or perl (shasum) load or run code before the script they are given, or write to a
+# file it names. The Pi commands clear these first (the Pi doctor checks through
+# the Pi harness's doctor hook); every program they start inherits that. zsh does
+# not pass on bash's exported functions (BASH_FUNC_*), which are not valid
+# parameter names.
+pi_clean_env() {
+  unset BASH_ENV ENV SHELLOPTS BASHOPTS CDPATH GLOBIGNORE ZDOTDIR \
+    NODE_OPTIONS NODE_PATH NODE_PRESERVE_SYMLINKS NODE_PRESERVE_SYMLINKS_MAIN NODE_REPL_EXTERNAL_MODULE \
+    NODE_REDIRECT_WARNINGS NODE_V8_COVERAGE NODE_COMPILE_CACHE NODE_ICU_DATA OPENSSL_CONF OPENSSL_MODULES \
+    PERL5OPT PERL5LIB PERLLIB PERL5DB
+}
+
+# Pi's commands take their own arguments (profiles/pi/commands).
+if [[ ${1:-} == (bind|wrapper) ]]; then
+  pi_command=$1
+  shift
+  pi_clean_env
+  source "$release/profiles/pi/commands/$pi_command.zsh" || die "cannot load the $pi_command command"
+  pi_$pi_command "$@"
+  exit
+fi
+(( $# == 1 )) || [[ $# == 2 && $1 == doctor && $2 == --json ]] || usage
 case $1 in
-  (doctor) doctor ;;
+  (doctor) doctor ${2:-} ;;
   (version) version ;;
   (update) update ;;
   (uninstall) uninstall ;;
