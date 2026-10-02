@@ -1,4 +1,19 @@
 # OpenCode-specific setup and the plugin-load check.
+
+# State roots: OpenCode's cache root, XDG_CACHE_HOME, else ~/.cache. OpenCode
+# (xdg-basedir) treats an empty XDG_CACHE_HOME as unset. A value that is not an
+# existing folder named by its full path refuses the launch, so a relocated
+# package store is never left unprotected. The default root follows the launch's
+# own, because ~/.cache is writable in every launch. cache_given holds the roots as
+# named, cache_roots their canonical forms, the launch's first.
+opencode_state_roots() {
+  local given=${XDG_CACHE_HOME:-}
+  [[ -z $given || ( $given == /* && -d $given ) ]] ||
+    fail "XDG_CACHE_HOME must name an existing folder by its full path, or be unset: $given"
+  cache_given=(${given:+${given:a}} "$home/.cache")
+  cache_roots=(${cache_given:A})
+}
+
 opencode_prepare() {
 oc="$home/.config/opencode"
 /bin/mkdir -p "$oc"
@@ -18,22 +33,48 @@ opencode_check() {
       label=' (staged)'
     fi
     if next_cli; then
-      out="$engine/state/.serve.$$"
-      AGENT_GUARD_SANDBOXED=1 AGENT_GUARD_RELEASE=${release:t} $scope $sandbox -D GUI=0 "$REPLY" serve --hostname 127.0.0.1 --port $(( 20000 + RANDOM % 30000 )) > "$out" 2>&1 &
+      # OpenCode loads the configured plugins at the first request for a folder.
+      # It reports a plugin that fails to install, resolve or import as an event,
+      # and one whose init fails only in its log, so the check listens to both.
+      out="$engine/state/.serve.$$" events="$engine/state/.events.$$"
+      AGENT_GUARD_SANDBOXED=1 AGENT_GUARD_RELEASE=${release:t} $scope $sandbox -D GUI=0 "$REPLY" serve --print-logs --log-level ERROR --hostname 127.0.0.1 --port $(( 20000 + RANDOM % 30000 )) > "$out" 2>&1 &
       pid=$!
       print -r -- $pid > "$engine/state/.serve.pid"
-      ids=
+      ids= epid= listening=0
+      local -a failed
       for i in {1..40}; do
         kill -0 $pid 2>/dev/null || break
         url=$(/usr/bin/grep -o 'http://127\.0\.0\.1:[0-9]*' "$out" 2>/dev/null | head -1) || true
+        if [[ -n $url && -z $epid ]]; then
+          /usr/bin/curl -sN "$url/global/event" > "$events" 2>/dev/null &
+          epid=$!
+          for j in {1..20}; do /usr/bin/grep -q '"server.connected"' "$events" 2>/dev/null && { listening=1; break }; sleep 0.1; done
+          sleep 0.2
+        fi
         [[ -n $url ]] && ids=$(/usr/bin/curl -sf --max-time 5 "$url/experimental/tool/ids?directory=${darwin_temp// /%20}" 2>/dev/null) &&
           [[ $ids == *'"agent_guard_status"'* ]] && break
         sleep 0.5
       done
+      # Plugin errors are published in the background; give them a moment.
+      [[ $ids == *'"agent_guard_status"'* ]] && sleep 1
+      if [[ -n $epid ]]; then kill $epid 2>/dev/null || true; wait $epid 2>/dev/null || true; fi
       kill $pid 2>/dev/null || true
       wait $pid 2>/dev/null || true
-      /bin/rm -f "$out" "$engine/state/.serve.pid"
-      [[ $ids == *'"agent_guard_status"'* ]] && print "ok   plugins loaded in OpenCode$label" || { print "FAIL plugins not loaded in OpenCode$label"; ok=0 }
+      msgs=$(/usr/bin/sed -n 's/^data: //p' "$events" 2>/dev/null |
+        /usr/bin/jq -rR 'fromjson? | select(.payload.type == "session.error") | .payload.properties.error.data.message // empty' 2>/dev/null) || true
+      logs=$(<"$out") || true
+      failed=(${(M)${(f)msgs}:#(Failed to install plugin |Failed to load plugin |Plugin )*}
+              ${${(M)${(f)logs}:#*message=\"failed to load plugin\" *}#*message=\"failed to load plugin\" })
+      /bin/rm -f "$out" "$events" "$engine/state/.serve.pid"
+      if [[ $ids != *'"agent_guard_status"'* ]]; then print "FAIL plugins not loaded in OpenCode$label"; ok=0
+      elif (( ! listening )); then print "FAIL cannot read OpenCode's events to check its plugins$label"; ok=0
+      elif (( ! $#failed )); then print "ok   plugins loaded in OpenCode$label"
+      fi
+      for f in $failed; do
+        [[ $f == 'Failed to install plugin '* ]] && f+="; install it outside the guard (Agent Guard's README, Maintenance outside the guard)"
+        print -r -- "FAIL plugin not loaded in OpenCode$label: $f"
+        ok=0
+      done
     else
       print "skip plugin check (opencode CLI not found)"
     fi
@@ -45,6 +86,13 @@ opencode_check() {
       else
         print "FAIL OpenCode Guard's plugin is also in ~/.config/opencode/plugins"
         ok=0
+      fi
+      # OpenCode's grep and glob tools need ripgrep, and cannot download it into
+      # the write-protected bin.
+      if whence -p rg >/dev/null || [[ -x ${cache_prefix}opencode/bin/rg ]]; then
+        print "ok   ripgrep found"
+      else
+        print -r -- "warn ripgrep is not on PATH or in ${cache_prefix}opencode/bin, so OpenCode's grep and glob tools fail; install it outside the guard (Agent Guard's README, Maintenance outside the guard)"
       fi
       # After a migration: OpenCode Guard's shim paths, while present, link to Agent Guard's shims.
       if [[ -f $engine/state/migration.json ]]; then

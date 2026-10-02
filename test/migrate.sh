@@ -12,7 +12,7 @@
 # checkout; needs Node.
 emulate -L zsh
 setopt no_unset pipe_fail extended_glob
-unset AGENT_GUARD_RELEASE AGENT_GUARD_SANDBOXED OPENCODE_SANDBOXED
+unset AGENT_GUARD_RELEASE AGENT_GUARD_SANDBOXED OPENCODE_SANDBOXED XDG_CACHE_HOME
 command -v node >/dev/null || { print -ru2 'Node is required for the release server and the fake CLI'; exit 1 }
 
 source_root=${0:A:h:h}

@@ -4,6 +4,8 @@ emulate -L zsh
 setopt no_unset pipe_fail
 # Set inside an Agent Guard session; it would choose the plugin's release.
 unset AGENT_GUARD_RELEASE
+# A relocated cache root would take the launches' cache rules and bin folder out of the test home.
+unset XDG_CACHE_HOME
 command -v node >/dev/null || { print -ru2 'Node is required for fixture isolation'; exit 1 }
 
 source_root=${0:A:h:h}
@@ -245,6 +247,77 @@ expect ok "write temp"                    sb /usr/bin/touch "$temp/.agent-guard-
 expect no "write other per-user dirs"     sb /usr/bin/touch "${temp:h}/0/.agent-guard-test"
 /bin/rm -f "$temp/.agent-guard-test"
 
+# OpenCode's package stores, bin and model catalog are write-protected inside the
+# writable cache (docs/DESIGN.md section 9), at the default root and at a root
+# relocated by XDG_CACHE_HOME into ALLOW. That root is named through a link and
+# its bin is a link into ALLOW, so the denies must hold against the list and at
+# link targets.
+oc="$home/.cache/opencode" xdg="$home/Projects/xdg cache" xdg_link="$home/Projects/xdg-link" linked_bin="$home/Projects/linked-bin"
+/bin/mkdir -p "$xdg/opencode" "$linked_bin"
+/bin/ln -s "$xdg" "$xdg_link"
+/bin/ln -s "$linked_bin" "$xdg/opencode/bin"
+for o in "$oc" "$xdg/opencode"; do
+  /bin/mkdir -p "$o/packages/probe@1.0.0/node_modules/probe" "$o/bin/"
+  print '// probe' > "$o/packages/probe@1.0.0/node_modules/probe/index.js"
+  for f in package.json package-lock.json bun.lock models-0a1b2c.json; do print '{}' > "$o/$f"; done
+  print '#!/bin/sh' > "$o/bin/rg"
+done
+# The legacy store and models.json exist at the default root only; the relocated
+# root checks that they cannot be created.
+/bin/mkdir -p "$oc/node_modules/probe"
+print '// probe' > "$oc/node_modules/probe/index.js"
+print '{}' > "$oc/models.json"
+xdg_profile=$(cd "$home/Projects/app" && XDG_CACHE_HOME=$xdg_link "${launcher[@]}" profile 2>/dev/null) || fail "profile with XDG_CACHE_HOME"
+check "launch log names both write-protected cache folders" /usr/bin/grep -Fq "write-protected in $xdg/opencode and $oc, maintained outside the guard" "$log"
+xsb() { local profile=$xdg_profile; sb "$@" }
+# cache_denied LABEL SANDBOX FOLDER: in FOLDER, a cache root's opencode folder, the
+# store, bin and catalog cannot be written, created, removed, renamed or replaced,
+# and neither can FOLDER or the root; other files there stay writable.
+cache_denied() {
+  local l=$1 s=$2 o=$3 f
+  expect no "$l: write a stored package"           $s /bin/sh -c "echo x >> '$o/packages/probe@1.0.0/node_modules/probe/index.js'"
+  expect no "$l: add a package"                    $s /bin/mkdir -p "$o/packages/new@1.0.0/node_modules/new"
+  expect no "$l: plant a link in the store"        $s /bin/ln -s /private/tmp "$o/packages/link"
+  expect no "$l: delete a stored package"          $s /bin/rm -rf "$o/packages/probe@1.0.0"
+  expect no "$l: rename the store"                 $s /bin/mv "$o/packages" "$o/packages.old"
+  for f in package.json package-lock.json bun.lock; do
+    expect no "$l: write $f"                       $s /bin/sh -c "echo x >> '$o/$f'"
+    expect no "$l: delete $f"                      $s /bin/rm -f "$o/$f"
+  done
+  expect no "$l: write a tool in bin"              $s /bin/sh -c "echo x >> '$o/bin/rg'"
+  expect no "$l: add a tool to bin"                $s /usr/bin/touch "$o/bin/gopls"
+  expect no "$l: delete a tool from bin"           $s /bin/rm -f "$o/bin/rg"
+  expect no "$l: rename bin"                       $s /bin/mv "$o/bin" "$o/bin.old"
+  expect no "$l: replace bin with a link"          $s /bin/ln -sfh /private/tmp "$o/bin"
+  expect no "$l: write models-<hash>.json"         $s /bin/sh -c "echo x >> '$o/models-0a1b2c.json'"
+  expect no "$l: create a new models-<hash>.json"  $s /usr/bin/touch "$o/models-ffff.json"
+  expect ok "$l: write the catalog's temporary file" $s /usr/bin/touch "$o/models-0a1b2c.json.1.2.tmp"
+  expect no "$l: rename it over the catalog"       $s /bin/mv "$o/models-0a1b2c.json.1.2.tmp" "$o/models-0a1b2c.json"
+  expect no "$l: delete models-<hash>.json"        $s /bin/rm -f "$o/models-0a1b2c.json"
+  expect no "$l: rename the opencode folder"       $s /bin/mv "$o" "$o.old"
+  expect no "$l: rename the cache root"            $s /bin/mv "${o:h}" "${o:h}.old"
+  expect ok "$l: write another file in the opencode folder" $s /usr/bin/touch "$o/version"
+  expect ok "$l: write elsewhere in the cache root" $s /bin/mkdir -p "${o:h}/other-tool/x"
+}
+cache_denied "default cache" sb "$oc"
+expect no "default cache: write models.json"       sb /bin/sh -c "echo x >> '$oc/models.json'"
+expect no "default cache: rename a file over models.json" sb /bin/mv "$oc/models-0a1b2c.json.1.2.tmp" "$oc/models.json"
+expect no "default cache: write the legacy store"  sb /bin/sh -c "echo x >> '$oc/node_modules/probe/index.js'"
+expect no "default cache: rename the legacy store" sb /bin/mv "$oc/node_modules" "$oc/node_modules.old"
+cache_denied "relocated cache inside ALLOW" xsb "$xdg/opencode"
+expect no "relocated cache: create models.json where none exists" xsb /usr/bin/touch "$xdg/opencode/models.json"
+expect no "relocated cache: create the legacy store as a link" xsb /bin/ln -s "$linked_bin" "$xdg/opencode/node_modules"
+expect no "relocated cache: write in bin's link target"  xsb /usr/bin/touch "$linked_bin/gopls"
+expect no "relocated cache: delete the link that names the root" xsb /bin/rm -f "$xdg_link"
+expect no "relocated cache: rename the link that names the root" xsb /bin/mv "$xdg_link" "$xdg_link.old"
+expect no "relocated cache: the default store stays protected" xsb /usr/bin/touch "$oc/packages/new"
+for value in cache "$home/missing-cache" "$home/Projects/dotfiles/zshrc"; do
+  refuses "XDG_CACHE_HOME=$value refused" "XDG_CACHE_HOME must name an existing folder by its full path" \
+    /usr/bin/env XDG_CACHE_HOME=$value "${launcher[@]}" profile
+done
+refuses "terminal launch with an unresolvable XDG_CACHE_HOME refused" "XDG_CACHE_HOME must name" \
+  /usr/bin/env XDG_CACHE_HOME=cache "$engine/bin/opencode" --version
+
 /bin/mkdir -p "$home/fakebin"
 child_home="$home/Projects/nested-home"
 /bin/mkdir -p "$child_home"
@@ -368,6 +441,85 @@ refuses "check staged fails when the staged plugin lacks the status tool" "FAIL 
 out=$("$engine/bin/agent-guard" doctor 2>&1) && [[ $out == *"ok   plugins loaded in OpenCode"* ]] &&
   pass "doctor passes with the live plugin meanwhile" || { fail "doctor passes with the live plugin meanwhile"; print -r -- "$out" }
 /bin/rm -rf "$next"
+
+# Configured plugins with the store write-protected, through the real OpenCode CLI.
+# A package already in the store loads without writing. Once its folder is gone,
+# doctor fails, naming it and the maintenance procedure; a plugin whose init throws
+# is named too. OpenCode starts with bin missing, because the launch creates it.
+probe_pkg="$oc/packages/guard-probe-plugin@latest/node_modules/guard-probe-plugin"
+/bin/mkdir -p "$probe_pkg"
+print -r -- '{"name":"guard-probe-plugin","version":"1.0.0","type":"module","main":"index.js"}' > "$probe_pkg/package.json"
+print -r -- "import { appendFileSync } from 'node:fs'
+export const GuardProbe = async () => { appendFileSync('$home/Projects/app/probe-plugin-loaded', 'loaded\\n'); return {} }" > "$probe_pkg/index.js"
+print -r -- 'export const ThrowsProbe = async () => { throw new Error("probe init failure") }' > "$home/Projects/throws-plugin.js"
+/bin/cp "$cfg" "$run/cfg.saved"
+/usr/bin/jq '.plugin = ["guard-probe-plugin"]' "$run/cfg.saved" > "$cfg"
+/bin/rm -rf "$oc/bin"
+out=$("$engine/bin/agent-guard" doctor 2>&1) && [[ $out == *"ok   plugins loaded in OpenCode"* && -s $home/Projects/app/probe-plugin-loaded ]] &&
+  pass "an npm plugin in the write-protected store loads and doctor passes" || { fail "an npm plugin in the write-protected store loads and doctor passes"; print -r -- "$out" }
+check "the launch created the missing bin folder" test -d "$oc/bin"
+check "doctor leaves no server output, events or pid" test -z "$(print -l "$engine"/state/.(serve|events).*(N))"
+/bin/rm -rf "${probe_pkg:h:h}"
+/usr/bin/jq --arg f "file://$home/Projects/throws-plugin.js" '.plugin = ["guard-probe-plugin", $f]' "$run/cfg.saved" > "$cfg"
+out=$("$engine/bin/agent-guard" doctor 2>&1) && rc=0 || rc=$?
+(( rc )) && [[ $out == *"FAIL plugin not loaded in OpenCode: Failed to install plugin guard-probe-plugin@latest: "*"install it outside the guard (Agent Guard's README, Maintenance outside the guard)"* ]] &&
+  pass "doctor fails and names a plugin missing from the store" || { fail "doctor fails and names a plugin missing from the store"; print -r -- "$out" }
+[[ $out == *"FAIL plugin not loaded in OpenCode: path=file://$home/Projects/throws-plugin.js"*"probe init failure"* ]] &&
+  pass "doctor names a plugin whose init fails" || { fail "doctor names a plugin whose init fails"; print -r -- "$out" }
+/bin/cp "$run/cfg.saved" "$cfg"
+
+# ripgrep: with none on PATH, OpenCode runs the one in bin; with none in either,
+# doctor names it. The fake rg from the deny checks is replaced first.
+ocbin="$run/ocbin"
+/bin/mkdir -p "$ocbin"
+/bin/ln -s "${$(command -v opencode):A}" "$ocbin/opencode"
+/bin/ln -s "$(command -v node)" "$ocbin/node"
+/bin/rm -f "$oc/bin/rg"
+out=$(PATH="$ocbin:/usr/bin:/bin" "$engine/bin/agent-guard" doctor 2>&1)
+[[ $out == *"warn ripgrep is not on PATH or in $oc/bin"*"Maintenance outside the guard"* ]] &&
+  pass "doctor names ripgrep when it is neither on PATH nor in bin" || { fail "doctor names ripgrep when it is neither on PATH nor in bin"; print -r -- "$out" }
+if rg=$(command -v rg); then
+  /bin/cp "$rg" "$oc/bin/rg"
+  print -r -- 'guard-rg-needle' > "$home/Projects/app/rg-probe.txt"
+  out=$(cd "$home/Projects/app" && PATH="$ocbin:/usr/bin:/bin" "$engine/bin/opencode" debug rg search guard-rg-needle 2>&1)
+  [[ $out == *rg-probe.txt* ]] && pass "OpenCode runs ripgrep from the write-protected bin" || { fail "OpenCode runs ripgrep from the write-protected bin"; print -r -- "$out" }
+else
+  print -r -- "skip ripgrep from bin (no rg on this Mac to copy)"
+fi
+
+# The model catalog under the deny, with a local catalog source (OPENCODE_MODELS_URL),
+# so no network is needed. The catalog is older than OpenCode's 5-minute refresh
+# interval. OpenCode fetches the refresh, cannot rename it over the catalog, logs
+# and ignores that, and lists the catalog on disk; with no catalog it lists its
+# bundled snapshot and creates none.
+served="$run/served"
+/bin/mkdir -p "$served/catalog"
+catalog() {
+  print -r -- "{\"guardprobe\":{\"id\":\"guardprobe\",\"name\":\"Guard probe\",\"env\":[\"GUARD_PROBE_API_KEY\"],\"npm\":\"@ai-sdk/openai-compatible\",\"api\":\"http://127.0.0.1:9/v1\",\"models\":{\"$1\":{\"id\":\"$1\",\"name\":\"$1\",\"release_date\":\"2026-01-01\",\"attachment\":false,\"reasoning\":false,\"temperature\":true,\"tool_call\":true,\"limit\":{\"context\":1000,\"output\":100}}}}}"
+}
+catalog served-model > "$served/catalog/api.json"
+node "$source_root/test/release-server.mjs" "$served" > "$run/catalog-port" 2>/dev/null &
+catalog_server=$!
+for i in {1..100}; do [[ -s $run/catalog-port ]] && break; sleep 0.05; done
+models_url="http://127.0.0.1:$(<"$run/catalog-port")/assets/catalog"
+models_file="$oc/models-$(print -rn -- "$models_url" | /usr/bin/shasum -a 1 | /usr/bin/cut -c1-40).json"
+catalog disk-model > "$models_file"
+/usr/bin/touch -t 202601010000 "$models_file"
+catalog_state() { /usr/bin/stat -f '%m %z' "$models_file" && /usr/bin/shasum -a 256 < "$models_file" }
+before=$(catalog_state)
+models() { (cd "$home/Projects/app" && OPENCODE_MODELS_URL=$models_url GUARD_PROBE_API_KEY=x "$engine/bin/opencode" models "$@" --print-logs --log-level ERROR 2>&1) }
+out=$(models --refresh guardprobe)
+[[ $out == *"Models cache refreshed"* && $out == *guardprobe/disk-model* && $out != *served-model* ]] &&
+  pass "models --refresh inside the guard still lists the catalog on disk" || { fail "models --refresh inside the guard still lists the catalog on disk"; print -r -- "$out" }
+[[ $out == *'"Failed to fetch models.dev"'*'FileSystem.rename'* ]] &&
+  pass "the refresh is fetched, fails at the rename and is logged" || { fail "the refresh is fetched, fails at the rename and is logged"; print -r -- "$out" }
+[[ $(catalog_state) == "$before" ]] && pass "the catalog's content and modification time are unchanged" || fail "the catalog's content and modification time are unchanged"
+check "no temporary catalog file is left" test -z "$(print -l "$models_file".*.tmp(N))"
+/bin/rm -f "$models_file"
+out=$(models)
+[[ $out == *$'\n'opencode/* && ! -e $models_file ]] &&
+  pass "with no catalog OpenCode lists its bundled snapshot and creates none" || { fail "with no catalog OpenCode lists its bundled snapshot and creates none"; print -r -- "$out" }
+kill $catalog_server 2>/dev/null
 
 # OpenCode Guard's plugin next to Agent Guard's: doctor names it; uninstall leaves it.
 add_old_parts

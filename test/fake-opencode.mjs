@@ -3,7 +3,8 @@
 //
 // `serve [--hostname H] [--port P]` prints "opencode server listening on http://H:P" and answers
 // GET /experimental/tool/ids with a JSON array: a few built-in ids plus every tool registered by
-// the *.js plugins in $XDG_CONFIG_HOME/opencode/{plugin,plugins} (default ~/.config).
+// the *.js plugins in $XDG_CONFIG_HOME/opencode/{plugin,plugins} (default ~/.config), and
+// GET /global/event with OpenCode's first event, server.connected, on a stream it keeps open.
 //
 // `--version` prints a version. `status` loads those plugins as serve does and prints one line
 // per plugin with a status tool: "launcher=<AGENT_GUARD_RELEASE> status=<its text>".
@@ -62,6 +63,10 @@ if (args[0] === '--version') {
   const port = Number(option('--port', '4096'));
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, `http://${host}`);
+    if (url.pathname === '/global/event') {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      return res.write(`data: ${JSON.stringify({ payload: { type: 'server.connected', properties: {} } })}\n\n`);
+    }
     if (url.pathname !== '/experimental/tool/ids') {
       res.writeHead(404);
       return res.end();

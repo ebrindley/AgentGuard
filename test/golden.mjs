@@ -55,7 +55,8 @@ try {
     ['nested', `ALLOW -\n${home}/Projects\n${home}/Projects/archive/live\n/\nREAD ONLY -\n${home}/Projects/archive\nDENY -\n${home}/Projects/app/secret\n${home}/missing\n`],
   ]) {
     for (const folder of ['Agent Guard', 'OpenCode Guard']) writeFileSync(join(home, folder, 'Guard List.txt'), list);
-    const options = { cwd: join(home, 'Projects/app'), env: { ...process.env, HOME: home, OPENCODE_SANDBOXED: '', AGENT_GUARD_SANDBOXED: '' } };
+    // An empty XDG_CACHE_HOME counts as unset, so the cache rules use the default root.
+    const options = { cwd: join(home, 'Projects/app'), env: { ...process.env, HOME: home, OPENCODE_SANDBOXED: '', AGENT_GUARD_SANDBOXED: '', XDG_CACHE_HOME: '' } };
     // v1.0.3 takes its home from $HOME, so the reference runs unmodified.
     const old = exec(['/bin/zsh', join(reference, 'launch'), 'profile'], options);
     const current = exec([...adapter.launcher(engine), 'profile'], options);
