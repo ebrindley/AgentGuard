@@ -504,8 +504,12 @@ back in `~/.local/bin` in place of the launcher; `pi` then starts Pi unguarded.
   there is none. What it leaves on purpose, the wrappers, a `pi` or `omp` that is
   not the guard's and the copied entries, is reported as a warning and does not
   change the exit status. It exits 1 when a step fails, a PATH block or file
-  cannot be removed or a permission value cannot be restored, and names it; each
-  step can be repeated, so running it again finishes the job.
+  cannot be removed or a permission value cannot be restored, and names it. A
+  failed step keeps the engine folder, so `agent-guard uninstall` can run again.
+  The other three are reported after the engine folder is removed, so finish
+  them by hand: remove the named PATH blocks and files, and restore the named
+  permission values from `~/Agent Guard/permissions-backup.json`, where the
+  original settings are saved.
 - `agent-guard bind` records the Pi, OMP and Node executables the Pi launcher
   runs, in `~/.config/pi-sandbox-guard/executables.conf`, the file the launcher
   reads; no environment variable selects another. It has `npm run bind`'s
@@ -520,9 +524,12 @@ back in `~/.local/bin` in place of the launcher; `pi` then starts Pi unguarded.
   it finds no Pi, and `--omp` stops with `no Pi path supplied or previously
   recorded`. There, the install records OMP when it replaces an `omp` in
   `~/.local/bin`; otherwise the launcher looks for `omp` on its own PATH. To
-  clear a stale OMP binding on such a Mac, delete the `omp=` line from
-  `executables.conf` in Terminal; the launcher then looks for `omp` on its PATH
-  again.
+  fix a stale OMP binding on such a Mac, set the `omp=` line in
+  `executables.conf` to the OMP executable's full path in Terminal, then run
+  `agent-guard doctor`, which reports a binding the launcher refuses. Deleting
+  the line instead works only for an `omp` in `/opt/homebrew/bin`,
+  `/usr/local/bin` or the system folders, which make up the launcher's PATH; it
+  does not find one in `~/.local/lib/omp` or `~/.bun/bin`.
 - `agent-guard wrapper add FILE|FOLDER...` installs custom wrappers into
   `~/.local/bin`, `agent-guard wrapper remove NAME...` removes them, and
   `agent-guard wrapper list` shows the recorded and earlier names and whether
@@ -559,7 +566,8 @@ From Terminal:
 
 - `state/stamp.json`: run the one-line install again; it writes a new stamp.
   `agent-guard update` may report the release as current and leave the stamp
-  as it is.
+  as it is. A stamp the install cannot read, or one that is a link to a missing
+  file, stops the install too; report it in an issue.
 - `state/wrappers.json`: install and update do not rewrite it. Remove it, then
   record each wrapper again with `agent-guard wrapper add ~/.local/bin/NAME`.
 - `state/txn/plan.json`: nothing in Agent Guard repairs it. Install, update and
