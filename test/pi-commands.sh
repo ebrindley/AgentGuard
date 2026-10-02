@@ -572,7 +572,7 @@ doctor_fails 'an extension without its analyzer' '~/.pi/agent/extensions/pi-sand
 /bin/mv "$run/analyzer" "$ext/src/validate-bash-command.sh"
 
 runtime "$fake_pi" 'print -ru2 -- boom; exit 3'
-runtime "$fake_omp" '/bin/sleep 30'
+runtime "$fake_omp" '/bin/sleep 90'
 doctor_fails 'a runtime that fails and one that hangs' 'pi --version through ~/.local/bin/pi exited 3: boom' \
   'omp --version through ~/.local/bin/omp did not finish within 20 seconds'
 runtime "$fake_pi" 'print -r -- "fake pi 1.0.0"'
