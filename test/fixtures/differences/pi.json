@@ -47,7 +47,7 @@
     },
     {
       "id": 2,
-      "change": "A project that is, contains or is inside one of difference 1's folders, or the link target of one, is refused before launch, beside the preamble's existing boundary and agent-config refusals. The shell startup files are files, so their link targets are protected but not refused. All of ~/.cc-safety-net is refused, its logs included.",
+      "change": "A project that is, contains or is inside one of difference 1's folders is refused before launch, beside the preamble's existing boundary and agent-config refusals; all of ~/.cc-safety-net is refused, its logs included. For a folder that is a symlink, a project that is or is inside its resolved target is refused too, since the session would be wholly read-only; a project that only contains the target launches with the target write-denied, as for the shell startup files, whose targets are never refused.",
       "files": ["sandbox/pi-sandbox-preamble.zsh"]
     },
     {
@@ -57,14 +57,14 @@
     },
     {
       "id": 4,
-      "change": "Step 7's protections under Pi's ~/.cache grant, for C = ~/.cache and C = the canonical XDG_CACHE_HOME: writes to C/opencode/packages, C/opencode/node_modules, C/opencode/bin, C/opencode/models.json and C/opencode/models-*.json are denied, and C and C/opencode are pinned with literal denies. XDG_CACHE_HOME travels as AG_XDG_CACHE_HOME, ~/.cache when unset; a value that is not an existing absolute folder refuses the launch.",
+      "change": "Step 7's protections under Pi's ~/.cache grant, for C = ~/.cache and C = the canonical XDG_CACHE_HOME: writes to C/opencode/packages, C/opencode/node_modules, C/opencode/bin, C/opencode/models.json and C/opencode/models-*.json are denied, and C and C/opencode are pinned with literal denies. XDG_CACHE_HOME travels as AG_XDG_CACHE_HOME, ~/.cache when unset; a value that is not an existing absolute folder refuses the launch. Before sandbox-exec the preamble creates C/opencode/bin at both roots (mkdir -p, so also C and C/opencode on a fresh account), because OpenCode creates a missing bin at every start and the profile denies that create (docs/DESIGN.md section 9).",
       "files": ["sandbox/pi-sandbox.sb", "sandbox/pi-sandbox-preamble.zsh"],
       "parameters": ["AG_XDG_CACHE_HOME"]
     },
     {
       "id": 5,
-      "change": "The preamble's repair messages name agent-guard bind instead of npm run bind, and drop 'from the repo checkout'.",
-      "files": ["sandbox/pi-sandbox-preamble.zsh"]
+      "change": "User-facing repair text names Agent Guard's commands instead of pi-sandbox-guard's npm commands, which no longer exist after the adoption: the preamble's messages and its binding comment say agent-guard bind instead of npm run bind and drop 'from the repo checkout'; src/index.mjs's FILTER-ONLY warning says to install Agent Guard (agent-guard update, or the one-line installer) and run agent-guard bind instead of npm run deploy:launchers and npm run bind from a checkout; launchers/example-custom's missing-shim message says to install Agent Guard first (agent-guard update, or the one-line installer) instead of npm run deploy:launchers.",
+      "files": ["sandbox/pi-sandbox-preamble.zsh", "src/index.mjs", "launchers/example-custom"]
     }
   ],
   "test_edits": [
