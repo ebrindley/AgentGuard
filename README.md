@@ -505,11 +505,13 @@ back in `~/.local/bin` in place of the launcher; `pi` then starts Pi unguarded.
   not the guard's and the copied entries, is reported as a warning and does not
   change the exit status. It exits 1 when a step fails, a PATH block or file
   cannot be removed or a permission value cannot be restored, and names it. A
-  failed step keeps the engine folder, so `agent-guard uninstall` can run again.
-  The other three are reported after the engine folder is removed, so finish
-  them by hand: remove the named PATH blocks and files, and restore the named
-  permission values from `~/Agent Guard/permissions-backup.json`, where the
-  original settings are saved.
+  step that fails before the engine folder is removed keeps it, so `agent-guard
+  uninstall` can run again. If removing the engine folder itself fails, what is
+  left is `~/Library/Application Support/.AgentGuard.removing`, which you delete
+  by hand. The other three are reported after the engine folder is removed, so
+  finish them by hand: remove the named PATH blocks and files, and restore the
+  named permission values from `~/Agent Guard/permissions-backup.json`, where
+  the original settings are saved.
 - `agent-guard bind` records the Pi, OMP and Node executables the Pi launcher
   runs, in `~/.config/pi-sandbox-guard/executables.conf`, the file the launcher
   reads; no environment variable selects another. It has `npm run bind`'s
