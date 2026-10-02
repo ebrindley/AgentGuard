@@ -24,16 +24,18 @@ Fixes go into the latest release only. `agent-guard update` installs it.
 ## What Agent Guard is
 
 Agent Guard is a macOS Seatbelt write-containment boundary for terminal coding
-agents. Release 0.1.1 supports OpenCode. The launcher runs OpenCode and every
+agents. Release 0.1.2 supports OpenCode. The launcher runs OpenCode and every
 process it starts under `/usr/bin/sandbox-exec` with a profile generated from the
 Guard List (`~/Agent Guard/Guard List.txt`) at each launch. Under that profile the
 agent can write only to ALLOW folders and the data, cache and temp folders
 OpenCode needs, cannot read or write DENY entries, and cannot change the guard,
-the list, OpenCode's global config and plugin folder (`~/.config/opencode`), the
-shell startup files or `~/Library/LaunchAgents`. The exceptions are under
-[Known limitations](#known-limitations-in-011): OpenCode's cached plugin packages,
-downloaded tools and model catalog under `~/.cache`, remote-configuration entries
-in OpenCode's `auth.json`, and the targets of symlinked project config names.
+the list, OpenCode's global config and plugin folder (`~/.config/opencode`),
+OpenCode's package stores, `bin` folder and model catalog in its cache (also
+under `XDG_CACHE_HOME`, even inside ALLOW), the shell startup files or
+`~/Library/LaunchAgents`. The exceptions are under
+[Known limitations](#known-limitations-in-012): npm configuration in the cache
+that steers installs made outside the guard, remote-configuration entries in
+OpenCode's `auth.json`, and the targets of symlinked project config names.
 
 The OpenCode plugin and cc-safety-net are advisory. They refuse tool calls with
 a clear message, but nothing depends on them for safety. The Seatbelt profile is
@@ -48,23 +50,15 @@ the boundary.
 - Provider tokens and other secrets the harness itself uses.
 - A VM, container or separate user identity.
 
-## Known limitations in 0.1.1
+## Known limitations in 0.1.2
 
-- **OpenCode's package store, `bin` folder and model catalog are writable.** All
-  of `~/.cache` is writable, including three parts of `~/.cache/opencode` that
-  OpenCode runs or trusts (OpenCode 1.18.34):
-  - the npm plugin store, whose code OpenCode imports at its next start;
-  - `bin`, where OpenCode keeps the ripgrep and language-server binaries it
-    downloads and runs them from;
-  - the model catalog, `models.json` or `models-<hash>.json`, which sets each
-    provider's API address and package.
-
-  An agent can change any of them. A guarded restart runs changed code under
-  the guard, and an OpenCode started later without the guard runs it with full
-  authority. A rewritten catalog can also send a provider's API key to another
-  host, with or without the guard, because outbound connections are not
-  restricted. Planned: step 7 of the plan in
-  [docs/DESIGN.md](docs/DESIGN.md#12-plan) write-protects all three.
+- **npm configuration in the cache steers installs made outside the guard.**
+  Apart from OpenCode's package stores, `bin` and model catalog, `~/.cache` is
+  writable. An agent can create `~/.cache/node_modules` and `~/.cache/.npmrc`; a
+  later install of a new plugin or npm language server outside the guard then
+  fetches it from the registry that `.npmrc` names (OpenCode 1.18.33), and the
+  installed code runs in every later OpenCode session. Check `~/.cache` before
+  installing ([README](README.md#maintenance-outside-the-guard)). Not yet planned.
 - **OpenCode's `auth.json` can add remote configuration.** OpenCode's data
   folder, `~/.local/share/opencode`, is writable, including `auth.json`. A
   `wellknown` entry there makes OpenCode fetch configuration from the entry's URL
@@ -110,8 +104,8 @@ what the profile should stop:
 
 - write outside ALLOW and the folders OpenCode needs;
 - read a DENY entry;
-- change the guard, the Guard List, OpenCode's config or plugins, or another
-  protected path or name;
+- change the guard, the Guard List, OpenCode's config or plugins, its package
+  stores, `bin` folder or model catalog, or another protected path or name;
 - start OpenCode unguarded through an Agent Guard entry point (the `opencode`
   command, the app, or a forwarder left after the move from OpenCode Guard)
   without the plugin's refusal.
