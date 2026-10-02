@@ -2,6 +2,10 @@
 # Runs the Pi profile's suites: pi-sandbox-guard's vendored suites in profiles/pi,
 # the file comparison against pi-sandbox-guard 7ad441f, and the tests of Agent
 # Guard's recorded differences. Runs outside any sandbox; requires node.
+# profiles/pi/test/shim.mjs runs unchanged: its launch cases run the preamble
+# against the account's real home (its fixtures keep the real directory-service
+# lookup), so they create ~/.cache/opencode/bin there when it is missing, as they
+# create and remove ~/.local/share/pi-sandbox-bindable-* folders.
 emulate -L zsh
 setopt no_unset pipe_fail
 command -v node >/dev/null || { print -ru2 'Node is required'; exit 1 }

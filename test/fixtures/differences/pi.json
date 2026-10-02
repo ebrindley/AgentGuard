@@ -36,13 +36,17 @@
   "differences": [
     {
       "id": 1,
-      "change": "Agent Guard's base write protections, appended after pi-sandbox-guard's rules: the engine folder, OpenCode Guard's engine folder, ~/Agent Guard, ~/Applications/Agent Guard.app, ~/.config/opencode, ~/.opencode, ~/.cc-safety-net except its logs, ~/Library/LaunchAgents and the eight shell startup files, plus the resolved target of each one that is a symlink at launch (engine/launch's rule: it exists and resolves elsewhere), passed as AG_LINK_* parameters with an inert path when there is no link.",
+      "change": "Agent Guard's base write protections, appended after pi-sandbox-guard's rules: the engine folder, OpenCode Guard's engine folder, ~/Agent Guard, ~/Applications/Agent Guard.app, ~/.config/opencode, ~/.opencode, ~/.cc-safety-net except its logs, ~/Library/LaunchAgents and the eight shell startup files, plus the resolved target of each one that is a symlink at launch (engine/launch's rule: it exists and resolves elsewhere), passed as AG_LINK_* parameters with an inert path when there is no link. Every folder above a resolved target, up to and not including /, is pinned with a literal deny, as engine/launch pins them, through 32 fixed AG_PIN_* slots (unused slots inert); a launch that needs more slots is refused. Fixed slots keep the profile one static file passed with -f, with the paths as parameters rather than generated SBPL text.",
       "files": ["sandbox/pi-sandbox.sb", "sandbox/pi-sandbox-preamble.zsh"],
       "parameters": [
         "AG_LINK_ENGINE", "AG_LINK_OPENCODEGUARD", "AG_LINK_GUARD_LIST", "AG_LINK_APP",
         "AG_LINK_OPENCODE_CONFIG", "AG_LINK_OPENCODE", "AG_LINK_CC_SAFETY_NET", "AG_LINK_LAUNCH_AGENTS",
         "AG_LINK_ZSHENV", "AG_LINK_ZPROFILE", "AG_LINK_ZSHRC", "AG_LINK_ZLOGIN",
-        "AG_LINK_PROFILE", "AG_LINK_BASH_PROFILE", "AG_LINK_BASH_LOGIN", "AG_LINK_BASHRC"
+        "AG_LINK_PROFILE", "AG_LINK_BASH_PROFILE", "AG_LINK_BASH_LOGIN", "AG_LINK_BASHRC",
+        "AG_PIN_1", "AG_PIN_2", "AG_PIN_3", "AG_PIN_4", "AG_PIN_5", "AG_PIN_6", "AG_PIN_7", "AG_PIN_8",
+        "AG_PIN_9", "AG_PIN_10", "AG_PIN_11", "AG_PIN_12", "AG_PIN_13", "AG_PIN_14", "AG_PIN_15", "AG_PIN_16",
+        "AG_PIN_17", "AG_PIN_18", "AG_PIN_19", "AG_PIN_20", "AG_PIN_21", "AG_PIN_22", "AG_PIN_23", "AG_PIN_24",
+        "AG_PIN_25", "AG_PIN_26", "AG_PIN_27", "AG_PIN_28", "AG_PIN_29", "AG_PIN_30", "AG_PIN_31", "AG_PIN_32"
       ]
     },
     {
@@ -57,9 +61,9 @@
     },
     {
       "id": 4,
-      "change": "Step 7's protections under Pi's ~/.cache grant, for C = ~/.cache and C = the canonical XDG_CACHE_HOME: writes to C/opencode/packages, C/opencode/node_modules, C/opencode/bin, C/opencode/models.json and C/opencode/models-*.json are denied, and C and C/opencode are pinned with literal denies. XDG_CACHE_HOME travels as AG_XDG_CACHE_HOME, ~/.cache when unset; a value that is not an existing absolute folder refuses the launch. Before sandbox-exec the preamble creates C/opencode/bin at both roots (mkdir -p, so also C and C/opencode on a fresh account), because OpenCode creates a missing bin at every start and the profile denies that create (docs/DESIGN.md section 9).",
+      "change": "Step 7's protections under Pi's ~/.cache grant, for C = ~/.cache as written, C = its canonical path (AG_CACHE_HOME, resolved after the folders below are created, since Seatbelt checks resolved paths and ~/.cache may be a link) and C = the canonical XDG_CACHE_HOME: writes to C/opencode/packages, C/opencode/node_modules, C/opencode/bin, C/opencode/models.json and C/opencode/models-*.json are denied, and C and C/opencode are pinned with literal denies. XDG_CACHE_HOME travels as AG_XDG_CACHE_HOME, ~/.cache when unset; a value that is not an existing absolute folder refuses the launch. Before sandbox-exec the preamble creates C/opencode/bin at both roots (mkdir -p, so also C and C/opencode on a fresh account), because OpenCode creates a missing bin at every start and the profile denies that create (docs/DESIGN.md section 9).",
       "files": ["sandbox/pi-sandbox.sb", "sandbox/pi-sandbox-preamble.zsh"],
-      "parameters": ["AG_XDG_CACHE_HOME"]
+      "parameters": ["AG_CACHE_HOME", "AG_XDG_CACHE_HOME"]
     },
     {
       "id": 5,
@@ -67,16 +71,20 @@
       "files": ["sandbox/pi-sandbox-preamble.zsh", "src/index.mjs", "launchers/example-custom"]
     }
   ],
+  "test_notes": [
+    "test/pi.sh runs profiles/pi/test/shim.mjs unchanged: its launch cases run the preamble against the account's real home, because its fixtures keep the real directory-service lookup. Since difference 4 they create ~/.cache/opencode/bin in that account when it is missing, as they already create and remove ~/.local/share/pi-sandbox-bindable-* folders.",
+    "test/pi.sh runs the analyzer suites (smoke, corpus, adapter, degraded) with the account's home, which corpus.mjs needs, under a Seatbelt profile that denies writes to ~/.pi, so the analyzer's security log is not appended to."
+  ],
   "test_edits": [
     {
       "file": "scripts/test-sandbox-profile.sh",
       "differences": [1, 4],
-      "change": "sb, sb_omp and sb_pi_relocated pass the profile's AG_* parameters with inert values, read from the profile, since a missing parameter stops the profile from compiling."
+      "change": "sb, sb_omp and sb_pi_relocated pass the profile's AG_* parameters with inert values (the cache roots as HOME/.cache), read from the profile, since a missing parameter stops the profile from compiling."
     },
     {
       "file": "test/shim.mjs",
       "differences": [1, 4, 5],
-      "change": "runNestedShim passes the profile's AG_* parameters with inert values, read from the profile; the ambient-override refusal case expects agent-guard bind instead of npm run bind."
+      "change": "runNestedShim passes the profile's AG_* parameters with inert values (the cache roots as HOME/.cache), read from the profile; the ambient-override refusal case expects agent-guard bind instead of npm run bind."
     }
   ]
 }
