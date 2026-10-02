@@ -332,6 +332,8 @@
 ;; Params (supplied via sandbox-exec -D by Agent Guard's part of the preamble):
 ;;   AG_LINK_*          resolved target of the protected path of the same name
 ;;                      when it is a symlink at launch, or an inert unused path
+;;   AG_PIN_1..32       the folders above those targets, or an inert unused path
+;;   AG_CACHE_HOME      canonical HOME/.cache
 ;;   AG_XDG_CACHE_HOME  canonical XDG_CACHE_HOME, or HOME/.cache when it is unset
 ;; ---------------------------------------------------------------------------
 
@@ -340,7 +342,9 @@
 ;; configuration, cc-safety-net's configuration (its logs excepted), LaunchAgents
 ;; and the shell startup files. Seatbelt checks resolved paths, so the target of
 ;; each one that is a symlink, such as a ~/.zshrc linked into a dotfiles project,
-;; is denied through its AG_LINK_* parameter.
+;; is denied through its AG_LINK_* parameter, and every folder above such a target
+;; is pinned against rename and removal through an AG_PIN_* slot, as engine/launch
+;; pins them, so the target cannot be swapped out with a folder above it.
 (deny file-write*
   (subpath (string-append (param "HOME") "/Library/Application Support/AgentGuard"))
   (subpath (string-append (param "HOME") "/Library/Application Support/OpenCodeGuard"))
@@ -375,7 +379,39 @@
   (subpath (param "AG_LINK_PROFILE"))
   (subpath (param "AG_LINK_BASH_PROFILE"))
   (subpath (param "AG_LINK_BASH_LOGIN"))
-  (subpath (param "AG_LINK_BASHRC")))
+  (subpath (param "AG_LINK_BASHRC"))
+  (literal (param "AG_PIN_1"))
+  (literal (param "AG_PIN_2"))
+  (literal (param "AG_PIN_3"))
+  (literal (param "AG_PIN_4"))
+  (literal (param "AG_PIN_5"))
+  (literal (param "AG_PIN_6"))
+  (literal (param "AG_PIN_7"))
+  (literal (param "AG_PIN_8"))
+  (literal (param "AG_PIN_9"))
+  (literal (param "AG_PIN_10"))
+  (literal (param "AG_PIN_11"))
+  (literal (param "AG_PIN_12"))
+  (literal (param "AG_PIN_13"))
+  (literal (param "AG_PIN_14"))
+  (literal (param "AG_PIN_15"))
+  (literal (param "AG_PIN_16"))
+  (literal (param "AG_PIN_17"))
+  (literal (param "AG_PIN_18"))
+  (literal (param "AG_PIN_19"))
+  (literal (param "AG_PIN_20"))
+  (literal (param "AG_PIN_21"))
+  (literal (param "AG_PIN_22"))
+  (literal (param "AG_PIN_23"))
+  (literal (param "AG_PIN_24"))
+  (literal (param "AG_PIN_25"))
+  (literal (param "AG_PIN_26"))
+  (literal (param "AG_PIN_27"))
+  (literal (param "AG_PIN_28"))
+  (literal (param "AG_PIN_29"))
+  (literal (param "AG_PIN_30"))
+  (literal (param "AG_PIN_31"))
+  (literal (param "AG_PIN_32")))
 
 ;; Difference 3: decision D7 (engine/profile.sb). Launch Services, launchd jobs
 ;; and these programs can start code outside the sandbox.
@@ -391,10 +427,11 @@
   (literal "/usr/bin/sudo"))
 
 ;; Difference 4: OpenCode's package store, bin folder and model catalog under
-;; Pi's ~/.cache grant, at the default cache root and at XDG_CACHE_HOME, so a Pi
-;; session cannot plant code or models that OpenCode loads later. The cache root
-;; and its opencode folder are pinned against rename and removal. Extend the set
-;; in opencode-cache.
+;; Pi's ~/.cache grant, at the default cache root, lexical and canonical (Seatbelt
+;; checks resolved paths, so a linked ~/.cache needs the canonical form), and at
+;; XDG_CACHE_HOME, so a Pi session cannot plant code or models that OpenCode
+;; loads later. The cache root and its opencode folder are pinned against rename
+;; and removal. Extend the set in opencode-cache.
 (define (opencode-cache c)
   (require-any
     (literal c)
@@ -408,4 +445,5 @@
       (regex #"/opencode/models-[^/]*\.json$"))))
 (deny file-write*
   (opencode-cache (string-append (param "HOME") "/.cache"))
+  (opencode-cache (param "AG_CACHE_HOME"))
   (opencode-cache (param "AG_XDG_CACHE_HOME")))

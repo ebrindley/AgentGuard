@@ -12,7 +12,7 @@ index 2f94258..5b380df 100755
  fi
  
 diff --git a/sandbox/pi-sandbox-preamble.zsh b/sandbox/pi-sandbox-preamble.zsh
-index 9b7c788..2ff491d 100644
+index 9b7c788..e3c1569 100644
 --- a/sandbox/pi-sandbox-preamble.zsh
 +++ b/sandbox/pi-sandbox-preamble.zsh
 @@ -547,7 +547,7 @@ resolve_configured_executable() {
@@ -60,7 +60,7 @@ index 9b7c788..2ff491d 100644
          exit 1
        }
      fi
-@@ -1018,6 +1018,76 @@ case "$PROJECT" in
+@@ -1018,6 +1018,94 @@ case "$PROJECT" in
      emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."; exit 1 ;;
  esac
  
@@ -69,14 +69,20 @@ index 9b7c788..2ff491d 100644
 +# the resolved target of each one that is a symlink at launch, as Agent Guard's
 +# engine/launch does for its protected list. The targets travel as AG_LINK_*
 +# parameters, with an inert path when there is no link, so the profile stays one
-+# static file. A PROJECT that is, contains or is inside one of the folders, or is
-+# or is inside a folder's link target, would launch partly or wholly read-only, so
-+# refuse it. A PROJECT that contains a link target launches with the target denied.
++# static file. Every folder above a target, up to and not including /, is pinned
++# against rename and removal, as engine/launch pins them, through a fixed set of
++# AG_PIN_* slots; a launch that needs more than the profile has is refused. A
++# PROJECT that is, contains or is inside one of the folders, or is or is inside a
++# folder's link target, would launch partly or wholly read-only, so refuse it. A
++# PROJECT that contains a link target launches with the target denied.
 +typeset -ga AG_SANDBOX_PARAMS
 +AG_SANDBOX_PARAMS=()
 +agent_guard_protected() {
 +  emulate -L zsh
-+  local kind param p target folder
++  local kind param p target folder a i
++  local inert="/private/tmp/pi-sandbox-guard-unused/agent-guard-no-link"
++  local -i slots=32
++  local -aU pins
 +  for kind param p in \
 +    folder AG_LINK_ENGINE "$HOME/Library/Application Support/AgentGuard" \
 +    folder AG_LINK_OPENCODEGUARD "$HOME/Library/Application Support/OpenCodeGuard" \
@@ -95,8 +101,12 @@ index 9b7c788..2ff491d 100644
 +    file AG_LINK_BASH_LOGIN "$HOME/.bash_login" \
 +    file AG_LINK_BASHRC "$HOME/.bashrc"
 +  do
-+    target="/private/tmp/pi-sandbox-guard-unused/agent-guard-no-link"
-+    [[ -e $p && ${p:A} != "$p" ]] && target=${p:A}
++    target=$inert
++    if [[ -e $p && ${p:A} != "$p" ]]; then
++      target=${p:A}
++      a=${target:h}
++      while [[ $a != / ]]; do pins+=("$a"); a=${a:h}; done
++    fi
 +    AG_SANDBOX_PARAMS+=(-D "$param=$target")
 +    [[ $kind == folder ]] || continue
 +    for folder in "$p" "$HOME_CANON${p#"$HOME"}"; do
@@ -106,11 +116,19 @@ index 9b7c788..2ff491d 100644
 +        return 1
 +      fi
 +    done
-+    if [[ $target == "${p:A}" && ( $PROJECT == "$target" || $PROJECT == "$target"/* ) ]]; then
++    if [[ $target != "$inert" && ( $PROJECT == "$target" || $PROJECT == "$target"/* ) ]]; then
 +      emit "refusing boundary '$PROJECT': it is or is inside '$target', the link target of Agent Guard's protected folder '$p', which the sandbox write-protects."
 +      emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."
 +      return 1
 +    fi
++  done
++  if (( ${#pins} > slots )); then
++    emit "refusing to launch: the symlinked Agent Guard paths have ${#pins} parent folders to protect, more than the profile's $slots."
++    emit "  Replace some of the links with real files or folders, or point them into fewer folders."
++    return 1
++  fi
++  for (( i = 1; i <= slots; i++ )); do
++    AG_SANDBOX_PARAMS+=(-D "AG_PIN_$i=${pins[i]:-$inert}")
 +  done
 +}
 +agent_guard_protected || exit 1
@@ -137,7 +155,7 @@ index 9b7c788..2ff491d 100644
  ACTIVE_HOOKS="$(resolve_active_hooks "$PROJECT")" || exit 1
  TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
  
-@@ -1084,7 +1154,7 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
+@@ -1084,7 +1172,7 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
      # the recorded interpreter, and both --detect and a bare --pi re-derive node via
      # detect_node, which takes the first PATH hit with no write-root filter — so
      # either would re-record the same unsafe path and fail identically next launch.
@@ -146,13 +164,15 @@ index 9b7c788..2ff491d 100644
      exit 1
    fi
  done
-@@ -1112,6 +1182,17 @@ fi
+@@ -1112,6 +1200,24 @@ fi
  export PI_SANDBOX_PROFILE_DIGEST PI_SANDBOX_PROJECT_BOUNDARY
  export PI_SANDBOX_ACTIVE_HOOKS_BOUNDARY PI_SANDBOX_AGENT_STATE_BOUNDARY
  
 +# Agent Guard difference 4. OpenCode creates a missing <cache>/opencode/bin at every
 +# start and stops when it cannot; the profile denies that create, so make the
 +# folder here for an OpenCode started inside the session, at both cache roots.
++# Seatbelt checks resolved paths, so the default root also travels canonicalized,
++# as AG_CACHE_HOME, once it exists.
 +for _ag_cache in "$HOME/.cache" "$AG_XDG_CACHE_HOME"; do
 +  /bin/mkdir -p "$_ag_cache/opencode/bin" 2>/dev/null || {
 +    emit "cannot create '$_ag_cache/opencode/bin'; refusing to launch."
@@ -160,11 +180,16 @@ index 9b7c788..2ff491d 100644
 +  }
 +done
 +unset _ag_cache
++AG_CACHE_HOME="$(cd -P "$HOME/.cache" 2>/dev/null && pwd -P)" || {
++  emit "cannot resolve '$HOME/.cache'; refusing to launch."
++  exit 1
++}
++AG_SANDBOX_PARAMS+=(-D "AG_CACHE_HOME=$AG_CACHE_HOME")
 +
  PI_SANDBOX_CMD=(
    "$SANDBOX_EXEC"
    -D "PROJECT=$PROJECT"
-@@ -1122,5 +1203,6 @@ PI_SANDBOX_CMD=(
+@@ -1122,5 +1228,6 @@ PI_SANDBOX_CMD=(
    -D "OMP_AGENT_STATE=$OMP_AGENT_STATE"
    -D "OMP_STATE_ROOT=$OMP_STATE_ROOT"
    -D "OMP_BASE_ROOT=$OMP_BASE_ROOT"
@@ -172,10 +197,10 @@ index 9b7c788..2ff491d 100644
    -f "$PROFILE"
  )
 diff --git a/sandbox/pi-sandbox.sb b/sandbox/pi-sandbox.sb
-index f560a31..7a71ea5 100644
+index f560a31..1df05ca 100644
 --- a/sandbox/pi-sandbox.sb
 +++ b/sandbox/pi-sandbox.sb
-@@ -323,3 +323,89 @@
+@@ -323,3 +323,127 @@
    (literal (string-append (param "HOME") "/.pi/agent/security-events.log"))
    ;; .env files anywhere (incl. project) — the one project-wide secret deny.
    (regex #"/\.env($|\.)"))
@@ -188,6 +213,8 @@ index f560a31..7a71ea5 100644
 +;; Params (supplied via sandbox-exec -D by Agent Guard's part of the preamble):
 +;;   AG_LINK_*          resolved target of the protected path of the same name
 +;;                      when it is a symlink at launch, or an inert unused path
++;;   AG_PIN_1..32       the folders above those targets, or an inert unused path
++;;   AG_CACHE_HOME      canonical HOME/.cache
 +;;   AG_XDG_CACHE_HOME  canonical XDG_CACHE_HOME, or HOME/.cache when it is unset
 +;; ---------------------------------------------------------------------------
 +
@@ -196,7 +223,9 @@ index f560a31..7a71ea5 100644
 +;; configuration, cc-safety-net's configuration (its logs excepted), LaunchAgents
 +;; and the shell startup files. Seatbelt checks resolved paths, so the target of
 +;; each one that is a symlink, such as a ~/.zshrc linked into a dotfiles project,
-+;; is denied through its AG_LINK_* parameter.
++;; is denied through its AG_LINK_* parameter, and every folder above such a target
++;; is pinned against rename and removal through an AG_PIN_* slot, as engine/launch
++;; pins them, so the target cannot be swapped out with a folder above it.
 +(deny file-write*
 +  (subpath (string-append (param "HOME") "/Library/Application Support/AgentGuard"))
 +  (subpath (string-append (param "HOME") "/Library/Application Support/OpenCodeGuard"))
@@ -231,7 +260,39 @@ index f560a31..7a71ea5 100644
 +  (subpath (param "AG_LINK_PROFILE"))
 +  (subpath (param "AG_LINK_BASH_PROFILE"))
 +  (subpath (param "AG_LINK_BASH_LOGIN"))
-+  (subpath (param "AG_LINK_BASHRC")))
++  (subpath (param "AG_LINK_BASHRC"))
++  (literal (param "AG_PIN_1"))
++  (literal (param "AG_PIN_2"))
++  (literal (param "AG_PIN_3"))
++  (literal (param "AG_PIN_4"))
++  (literal (param "AG_PIN_5"))
++  (literal (param "AG_PIN_6"))
++  (literal (param "AG_PIN_7"))
++  (literal (param "AG_PIN_8"))
++  (literal (param "AG_PIN_9"))
++  (literal (param "AG_PIN_10"))
++  (literal (param "AG_PIN_11"))
++  (literal (param "AG_PIN_12"))
++  (literal (param "AG_PIN_13"))
++  (literal (param "AG_PIN_14"))
++  (literal (param "AG_PIN_15"))
++  (literal (param "AG_PIN_16"))
++  (literal (param "AG_PIN_17"))
++  (literal (param "AG_PIN_18"))
++  (literal (param "AG_PIN_19"))
++  (literal (param "AG_PIN_20"))
++  (literal (param "AG_PIN_21"))
++  (literal (param "AG_PIN_22"))
++  (literal (param "AG_PIN_23"))
++  (literal (param "AG_PIN_24"))
++  (literal (param "AG_PIN_25"))
++  (literal (param "AG_PIN_26"))
++  (literal (param "AG_PIN_27"))
++  (literal (param "AG_PIN_28"))
++  (literal (param "AG_PIN_29"))
++  (literal (param "AG_PIN_30"))
++  (literal (param "AG_PIN_31"))
++  (literal (param "AG_PIN_32")))
 +
 +;; Difference 3: decision D7 (engine/profile.sb). Launch Services, launchd jobs
 +;; and these programs can start code outside the sandbox.
@@ -247,10 +308,11 @@ index f560a31..7a71ea5 100644
 +  (literal "/usr/bin/sudo"))
 +
 +;; Difference 4: OpenCode's package store, bin folder and model catalog under
-+;; Pi's ~/.cache grant, at the default cache root and at XDG_CACHE_HOME, so a Pi
-+;; session cannot plant code or models that OpenCode loads later. The cache root
-+;; and its opencode folder are pinned against rename and removal. Extend the set
-+;; in opencode-cache.
++;; Pi's ~/.cache grant, at the default cache root, lexical and canonical (Seatbelt
++;; checks resolved paths, so a linked ~/.cache needs the canonical form), and at
++;; XDG_CACHE_HOME, so a Pi session cannot plant code or models that OpenCode
++;; loads later. The cache root and its opencode folder are pinned against rename
++;; and removal. Extend the set in opencode-cache.
 +(define (opencode-cache c)
 +  (require-any
 +    (literal c)
@@ -264,9 +326,10 @@ index f560a31..7a71ea5 100644
 +      (regex #"/opencode/models-[^/]*\.json$"))))
 +(deny file-write*
 +  (opencode-cache (string-append (param "HOME") "/.cache"))
++  (opencode-cache (param "AG_CACHE_HOME"))
 +  (opencode-cache (param "AG_XDG_CACHE_HOME")))
 diff --git a/scripts/test-sandbox-profile.sh b/scripts/test-sandbox-profile.sh
-index 4dcdf9c..c20909c 100755
+index 4dcdf9c..fd4e3f5 100755
 --- a/scripts/test-sandbox-profile.sh
 +++ b/scripts/test-sandbox-profile.sh
 @@ -99,6 +99,17 @@ printf 'omp-hook\n' > "$FAKEHOME/.omp/agent/hooks/pre-tool.sh"
@@ -277,9 +340,9 @@ index 4dcdf9c..c20909c 100755
 +# test/fixtures/differences/pi.json), inert as the launcher passes them when no
 +# protected path is a symlink and XDG_CACHE_HOME is unset.
 +AG_PARAMS=()
-+for ag_param in $(/usr/bin/grep -o '(param "AG_[A-Z_]*")' "$PROFILE_SRC" | /usr/bin/sed 's/^(param "//; s/")$//' | /usr/bin/sort -u); do
++for ag_param in $(/usr/bin/grep -o '(param "AG_[A-Z0-9_]*")' "$PROFILE_SRC" | /usr/bin/sed 's/^(param "//; s/")$//' | /usr/bin/sort -u); do
 +  case "$ag_param" in
-+    AG_XDG_CACHE_HOME) AG_PARAMS+=(-D "$ag_param=$FAKEHOME/.cache") ;;
++    AG_CACHE_HOME|AG_XDG_CACHE_HOME) AG_PARAMS+=(-D "$ag_param=$FAKEHOME/.cache") ;;
 +    *) AG_PARAMS+=(-D "$ag_param=$FAKEHOME/.unused/agent-guard-no-link") ;;
 +  esac
 +done
@@ -327,7 +390,7 @@ index d997be1..93f8d29 100644
    );
  }
 diff --git a/test/shim.mjs b/test/shim.mjs
-index 98d10e2..a8dd459 100644
+index 98d10e2..bd11001 100644
 --- a/test/shim.mjs
 +++ b/test/shim.mjs
 @@ -237,6 +237,16 @@ function runOmpShim(fx, extraEnv = {}, args = ['hello']) {
@@ -338,8 +401,8 @@ index 98d10e2..a8dd459 100644
 +// test/fixtures/differences/pi.json), inert as the launcher passes them when no
 +// protected path is a symlink and XDG_CACHE_HOME is unset.
 +function agentGuardParams(profilePath, home) {
-+  const names = new Set([...readFileSync(profilePath, 'utf8').matchAll(/\(param "(AG_[A-Z_]+)"\)/g)].map((m) => m[1]));
-+  return [...names].flatMap((name) => ['-D', name === 'AG_XDG_CACHE_HOME'
++  const names = new Set([...readFileSync(profilePath, 'utf8').matchAll(/\(param "(AG_[A-Z0-9_]+)"\)/g)].map((m) => m[1]));
++  return [...names].flatMap((name) => ['-D', /^AG_(XDG_)?CACHE_HOME$/.test(name)
 +    ? `${name}=${home}/.cache`
 +    : `${name}=/private/tmp/pi-sandbox-guard-unused/agent-guard-no-link`]);
 +}

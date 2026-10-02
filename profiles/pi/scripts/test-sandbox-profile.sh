@@ -103,9 +103,9 @@ printf 'omp-plugin\n' > "$FAKEHOME/.omp/plugins/package.json"
 # test/fixtures/differences/pi.json), inert as the launcher passes them when no
 # protected path is a symlink and XDG_CACHE_HOME is unset.
 AG_PARAMS=()
-for ag_param in $(/usr/bin/grep -o '(param "AG_[A-Z_]*")' "$PROFILE_SRC" | /usr/bin/sed 's/^(param "//; s/")$//' | /usr/bin/sort -u); do
+for ag_param in $(/usr/bin/grep -o '(param "AG_[A-Z0-9_]*")' "$PROFILE_SRC" | /usr/bin/sed 's/^(param "//; s/")$//' | /usr/bin/sort -u); do
   case "$ag_param" in
-    AG_XDG_CACHE_HOME) AG_PARAMS+=(-D "$ag_param=$FAKEHOME/.cache") ;;
+    AG_CACHE_HOME|AG_XDG_CACHE_HOME) AG_PARAMS+=(-D "$ag_param=$FAKEHOME/.cache") ;;
     *) AG_PARAMS+=(-D "$ag_param=$FAKEHOME/.unused/agent-guard-no-link") ;;
   esac
 done
