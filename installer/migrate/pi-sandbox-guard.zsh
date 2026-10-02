@@ -61,11 +61,7 @@ ag_psg_trusted() {
 # The paths whose appearance in a process's argument list means Pi or OMP runs: a
 # Pi session's process is node, not pi. For each runtime its launcher in
 # ~/.local/bin and its bound executable, or without a binding the one the launcher
-# resolves on its pinned PATH, each as recorded and resolved. Then the guard
-# extension's entry, which the launcher passes to every agent session with
-# --extension, so a session started with another accepted executable
-# (PI_EXECUTABLE or OMP_EXECUTABLE) is found too: the extension folder's index.ts,
-# or the one in ~/.local/bin/pi-sandbox-guard-extension that the launcher prefers.
+# resolves on its pinned PATH, each as recorded and resolved.
 ag_psg_proc_paths() {
   local rt d c
   local -a paths
@@ -79,8 +75,19 @@ ag_psg_proc_paths() {
       break
     done
   done
-  for c in "$pi_ext/index.ts" "$pi_bin/pi-sandbox-guard-extension/index.ts"; do paths+=("$c" "${c:A}"); done
   reply=(${(u)paths})
+}
+
+# The guard extension's entry, which the launcher passes to every agent session as
+# --extension PATH, so a session started with another accepted executable
+# (PI_EXECUTABLE or OMP_EXECUTABLE) is found too: the extension folder's index.ts,
+# or the one in ~/.local/bin/pi-sandbox-guard-extension that the launcher prefers,
+# each as recorded and resolved. They count only as --extension's argument.
+ag_psg_ext_paths() {
+  local c
+  reply=()
+  for c in "$pi_ext/index.ts" "$pi_bin/pi-sandbox-guard-extension/index.ts"; do reply+=("$c" "${c:A}"); done
+  reply=(${(u)reply})
 }
 
 # A session started before the switch keeps 7ad441f's profile, without Agent
@@ -88,7 +95,9 @@ ag_psg_proc_paths() {
 # Pi or OMP runs. Updates do not refuse.
 ag_psg_procs() {
   ag_psg_proc_paths
-  ag_proc_check -f 'Quit every Pi and OMP session' $reply
+  ag_proc_check -f 'Quit every Pi and OMP session' $reply || return 1
+  ag_psg_ext_paths
+  ag_proc_check -f -a --extension 'Quit every Pi and OMP session' $reply
 }
 
 ag_m_pi_sandbox_guard_checks() {

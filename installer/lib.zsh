@@ -268,21 +268,24 @@ boot_time() {
   REPLY=$match[1]
 }
 
-# ag_proc_check [-f] HINT NAME...: fails while a process named NAME runs (pgrep -x),
-# saying HINT, and when processes cannot be listed. With -f each NAME is a path
-# matched as a word of a process's argument list (pgrep -f), for a harness whose
-# process has another name: a Pi session's is node. A migration runs only while
-# the harness it hands over does not run (design section 8.2).
+# ag_proc_check [-f [-a FLAG]] HINT NAME...: fails while a process named NAME runs
+# (pgrep -x), saying HINT, and when processes cannot be listed. With -f each NAME is
+# a path matched as a word of a process's argument list (pgrep -f), for a harness
+# whose process has another name: a Pi session's is node. With -a it matches only
+# as FLAG's argument, FLAG NAME or FLAG=NAME, so a pager or editor that has the
+# file open does not count. A migration runs only while the harness it hands over
+# does not run (design section 8.2).
 ag_proc_check() {
-  local hint n mode=-x what cls='[][\\^$.|?*+(){}]'
+  local hint n mode=-x what flag= cls='[][\\^$.|?*+(){}]'
   local pgrep=/usr/bin/pgrep
   integer rc
   [[ $1 == -f ]] && { mode=-f; shift }
+  [[ $mode == -f && $1 == -a ]] && { flag="${2//(#m)$~cls/\\$MATCH}([[:space:]]+|=)"; shift 2 }
   hint=$1
   shift
   for n in ${(u)@}; do
     what=$n
-    [[ $mode == -f ]] && what="(^|[[:space:]])${n//(#m)$~cls/\\$MATCH}([[:space:]]|\$)"
+    [[ $mode == -f ]] && what="(^|[[:space:]])$flag${n//(#m)$~cls/\\$MATCH}([[:space:]]|\$)"
     $pgrep $mode -- "$what" >/dev/null 2>&1
     rc=$?
     case $rc in
