@@ -26,6 +26,7 @@
   (subpath (h "/Library/Application Support/OpenCodeGuard"))
   (subpath (h "/Agent Guard"))
 ;;@PROTECTED@
+;;@STATE_PROTECTED@
   (subpath (h "/Library/LaunchAgents"))
   (subpath (h "/Applications/Agent Guard.app"))
   (literal (h "/.zshenv"))

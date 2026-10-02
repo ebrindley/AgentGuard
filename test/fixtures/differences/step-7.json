@@ -1,0 +1,6 @@
+{
+  "step": 7,
+  "reason": "Write-protect OpenCode's package stores with their install metadata, its bin folder and its model catalog inside the writable cache, and pin the folders above them (docs/DESIGN.md section 9).",
+  "after": "  (subpath (h \"/.opencode\"))\n",
+  "insert": "  (subpath (h \"/.cache/opencode/packages\"))\n  (subpath (h \"/.cache/opencode/node_modules\"))\n  (subpath (h \"/.cache/opencode/package.json\"))\n  (subpath (h \"/.cache/opencode/package-lock.json\"))\n  (subpath (h \"/.cache/opencode/bun.lock\"))\n  (subpath (h \"/.cache/opencode/bin\"))\n  (subpath (h \"/.cache/opencode/models.json\"))\n  (require-all (subpath (h \"/.cache/opencode\")) (regex #\"/opencode/models-[^/]*\\.json$\"))\n  (literal (h \"/.cache/opencode\"))\n  (literal (h \"/.cache\"))\n"
+}

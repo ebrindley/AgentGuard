@@ -2,8 +2,10 @@
 
 Guardrails for terminal coding agents on macOS. One engine runs each agent under a macOS Seatbelt sandbox built from one allow and deny list, with a small profile and plugin per agent. It replaces OpenCode Guard and, later, pi-sandbox-guard.
 
-Release 0.1.1 supports OpenCode only. It is the OpenCode Guard v1.0.3 port,
-including the v1.0.4 fixes, under Agent Guard's own names, and replaces an
+Release 0.1.2 supports OpenCode only. It is the OpenCode Guard v1.0.3 port,
+including the v1.0.4 fixes, under Agent Guard's own names, with OpenCode's
+package stores, `bin` folder and model catalog write-protected (see
+[Maintenance outside the guard](#maintenance-outside-the-guard)). It replaces an
 existing OpenCode Guard install (see
 [Moving from OpenCode Guard](#moving-from-opencode-guard)). The design is in
 [docs/DESIGN.md](docs/DESIGN.md).
@@ -38,7 +40,7 @@ In Terminal, outside any agent session, on macOS 15 or later:
 
 To allow a projects folder without the prompt, add `install.sh --projects ~/Projects`
 after the closing quote. For a particular release, replace
-`latest/download` with `download/v0.1.1`. From a checkout or an unpacked
+`latest/download` with `download/v0.1.2`. From a checkout or an unpacked
 archive, `zsh install.sh [--projects DIR] [--gui]` installs that tree the same
 way.
 
@@ -61,7 +63,9 @@ rulebook, the app, `current`, the plugin link, the OpenCode permission values
 and the PATH blocks, and runs the gate: `agent-guard doctor` and a launch of
 `opencode --version` through the new PATH shim. If any check fails, it puts
 everything back, exits non-zero and names the failed checks; the previous
-version keeps working. Only after the gate passes does it write the version
+version keeps working. A configured plugin other than the guard's that fails to
+load is a warning in these checks, not a failure
+([Maintenance outside the guard](#maintenance-outside-the-guard)). Only after the gate passes does it write the version
 stamp and remove release folders older than the previous one, which stays for
 OpenCode sessions started from it.
 
@@ -171,15 +175,86 @@ not touch files ([docs/DESIGN.md](docs/DESIGN.md#5-inner-layer)). Set
 `AGENT_GUARD_BYPASS=1` in OpenCode's environment to lift that refusal. OpenCode
 Guard's `OPENCODE_GUARD_BYPASS` is no longer honored.
 
+## Maintenance outside the guard
+
+Inside the guard, OpenCode can read and run the code and configuration it keeps
+in its cache, but cannot write, create, remove, rename or replace them:
+
+- the npm package store, `~/.cache/opencode/packages`, which holds configured
+  plugins and npm language servers such as TypeScript's;
+- the legacy store, `~/.cache/opencode/node_modules`, with `package.json`,
+  `package-lock.json` and `bun.lock` beside it;
+- `~/.cache/opencode/bin`, where OpenCode keeps ripgrep and the language servers
+  it downloads;
+- the model catalog, `~/.cache/opencode/models.json`, or `models-<hash>.json`
+  when `OPENCODE_MODELS_URL` names another source.
+
+When `XDG_CACHE_HOME` is set, the same paths under `$XDG_CACHE_HOME/opencode` are
+protected too. A launch refuses when `XDG_CACHE_HOME` is set but is not an
+existing folder named by its full path. The rest of `~/.cache` stays writable.
+OpenCode creates `bin` at every start and stops when it cannot, so the launch
+creates it when it is missing.
+
+Installing, updating and repairing these happens outside the guard, by running
+OpenCode's real executable directly. That runs with your account's full
+authority, and what it installs runs in every later OpenCode session, guarded or
+not, so install only what you trust. `which -a opencode` lists the real
+executable after Agent Guard's own `opencode` (for example
+`/opt/homebrew/bin/opencode`); `<opencode>` below stands for it.
+
+- **Plugins.** `<opencode> plugin <package> --global` installs a plugin into the
+  store and adds it to the global config; `--force` replaces the installed
+  version. Inside the guard, a configured plugin missing from the store cannot be
+  installed: OpenCode reports "Failed to install plugin <package>@<version>", and
+  `agent-guard doctor` fails and names it. The installer's checks, which also run
+  in `agent-guard update`, report a configured plugin that fails to install, load
+  or start as a warning and pass, so a broken plugin in your configuration does
+  not roll back an install or block an update. They still fail when the guard's
+  own plugin does not load.
+- **npm language servers** (TypeScript, Pyright, Vue, Svelte, Astro, Bash, YAML,
+  Dockerfile, PHP Intelephense and Biome in OpenCode 1.18.34). OpenCode starts
+  language servers only when `lsp` is enabled in its config. Run
+  `<opencode> debug lsp diagnostics <file>` on a file of that language inside a
+  project; OpenCode installs the server into the store. Inside the guard a server
+  missing from the store is skipped without a message.
+- **ripgrep.** OpenCode's grep and glob tools run `rg` from PATH, else `bin/rg`,
+  else download it into `bin`, which fails inside the guard. Install ripgrep on
+  PATH, for example with `brew install ripgrep`. `agent-guard doctor` warns when
+  `rg` is in neither place.
+- **Language servers OpenCode downloads into `bin`** (gopls, RuboCop, ElixirLS,
+  ESLint's server, zls, clangd, F# `fsautocomplete`, JDT LS, the Kotlin and Lua
+  servers, terraform-ls, TexLab and Tinymist in OpenCode 1.18.34): run
+  `<opencode> debug lsp diagnostics <file>` as above, or install the server on
+  PATH. Inside the guard such a server is skipped without a message, so it is
+  unavailable until it is installed outside the guard.
+- **Model catalog.** `<opencode> models --refresh`. Inside the guard, OpenCode
+  still fetches a new catalog at start when the one on disk is older than five
+  minutes, and on `opencode models --refresh`, but cannot rename it into place.
+  It logs the failure and keeps using the catalog on disk, or its bundled list
+  when there is none; `opencode models --refresh` still prints "Models cache
+  refreshed". The catalog changes only when OpenCode runs outside the guard.
+
+Not covered: a catalog named by `OPENCODE_MODELS_PATH`, which OpenCode reads in
+place of the protected one, and anything written to the store, `bin` or the
+catalog before 0.1.2, which is not checked. npm configuration in the cache is
+writable too: with `~/.cache/node_modules` or `~/.cache/package.json` present,
+an install of a new plugin or npm language server reads `~/.cache/.npmrc`, which
+can name another registry. Before installing, check that `~/.cache` (and the
+folders above a relocated cache) hold no `.npmrc`, `node_modules` or
+`package.json` you did not put there. `agent-guard doctor` checks the
+plugins OpenCode loads outside any project, that is, from the global config and
+`~/.opencode`; plugins named only in a project's config are not checked.
+
 ## Limitations
 
 Agent Guard limits writes. It does not limit network access, reads outside DENY
-entries or what the agent does inside ALLOW folders. OpenCode's package store,
-`bin` folder and model catalog under `~/.cache/opencode` are writable, and so is
-its `auth.json`, whose `wellknown` entries load remote configuration. Concurrent
+entries or what the agent does inside ALLOW folders. OpenCode's `auth.json` is
+writable, and its `wellknown` entries load remote configuration. Concurrent
 launches share one rules file, and a symlinked project config name has its target protected only when OpenCode
 starts from that folder in a terminal. Each limitation, and what is planned for
-it, is in [SECURITY.md](SECURITY.md#known-limitations-in-011).
+it, is in [SECURITY.md](SECURITY.md#known-limitations-in-012). What the cache
+protections leave out is under
+[Maintenance outside the guard](#maintenance-outside-the-guard).
 
 ## Tests
 
@@ -204,14 +279,21 @@ uninstall in a disposable home. It also checks both nesting markers, both
 bypass variables, PATH holding both guards' shim folders (with the unmodified
 v1.0.3 launcher as OpenCode Guard), that OpenCode Guard's engine folder stays
 write-protected when listed under ALLOW, and that uninstall leaves OpenCode
-Guard's PATH blocks, rulebook and plugin file unchanged. Only its copied launcher has the
+Guard's PATH blocks, rulebook and plugin file unchanged. For OpenCode's cache it
+checks writes, creation, removal, renames and link replacement of the stores,
+`bin` and the catalog at the default root and at an `XDG_CACHE_HOME` root inside
+ALLOW, the refusal of an unusable `XDG_CACHE_HOME`, and, with the real CLI, a
+plugin loading from the write-protected store, `doctor` naming a missing or
+failing plugin, ripgrep from `bin`, and the catalog refresh against a local
+catalog source. Only its copied launcher has the
 account-home lookup replaced; production has no test override. The golden test checks the
 real account lookup under spoofed environment values, then compares complete
 generated profiles against unmodified v1.0.3 fixtures for empty and nested lists.
 The v1.0.3 reference runs unmodified, without the adapter.
 Only the two product path names are normalized, and the recorded differences in
 `test/fixtures/differences/` are applied: step 5 adds the rule that protects
-OpenCode Guard's engine folder. The original source commit is
+OpenCode Guard's engine folder, and step 7 the rules for OpenCode's package
+stores, `bin` folder and model catalog. The original source commit is
 `9242c1ad45c895efd63e903e1b27d7bab53620ad`; bundled cc-safety-net is 2.4.14.
 
 `test/golden.mjs`, `test/test.sh`, `test/release.sh`, `test/bootstrap.sh`, `test/install.sh`, `test/migrate.sh` and `test/plugin.mjs` are development tests.
@@ -219,8 +301,12 @@ They run in a disposable home, are not installed, and the installer does not run
 them. The installed check is `agent-guard doctor` (the release's
 `launch check`), which the installer runs as its self-test: a protected write is
 denied, a temp write is allowed, `open` is denied, then the profile's
-`check_hook`. For OpenCode that hook confirms the `agent_guard_status` tool is
-visible through `opencode serve`. `launch check staged` runs the same checks on
+`check_hook`. For OpenCode that hook confirms through `opencode serve` that the
+`agent_guard_status` tool is visible and that no configured plugin failed to
+install, load or start, as OpenCode reports it in its events and its log, naming
+each that failed; the installer runs it with `AGENT_GUARD_GATE=1`, which reports
+plugins other than the guard's that failed as warnings. It also warns when ripgrep is neither on PATH nor in OpenCode's
+`bin`. `launch check staged` runs the same checks on
 a release that is not current, loading that release's plugin through a config
 folder inside it. The development tests may read its output; it never depends
 on `test/`.
@@ -228,23 +314,23 @@ on `test/`.
 ## Building a release
 
 ```sh
-scripts/release.sh [--dev] [--out DIR] 0.1.1
+scripts/release.sh [--dev] [--out DIR] 0.1.2
 ```
 
 This writes three release assets to `dist/` (or `DIR`):
-`agent-guard-0.1.1.tar.gz`, `agent-guard-0.1.1.tar.gz.sha256` and
-`install.sh`. The archive holds one `agent-guard-0.1.1/` folder with the files
+`agent-guard-0.1.2.tar.gz`, `agent-guard-0.1.2.tar.gz.sha256` and
+`install.sh`. The archive holds one `agent-guard-0.1.2/` folder with the files
 listed in the script, the whole of `engine/vendor/cc-safety-net` and
 `profiles/opencode/templates`, a `VERSION` file and a `COMMIT` file. The script
 stops if a listed file is missing. It uses only tools that ship with macOS. The
 checksum file names the archive without a folder, so check it from `dist/`:
 
 ```sh
-cd dist && shasum -a 256 -c agent-guard-0.1.1.tar.gz.sha256
+cd dist && shasum -a 256 -c agent-guard-0.1.2.tar.gz.sha256
 ```
 
 `install.sh` is the bootstrap for the one-line install, filled in from
-`scripts/bootstrap.zsh` with the tag `v0.1.1`, the version and the launcher's
+`scripts/bootstrap.zsh` with the tag `v0.1.2`, the version and the launcher's
 account lookup. It downloads that tag's archive and checksum into the engine
 folder's `stage/`, verifies them, then runs the archive's installer with
 `--stage <id>` and its own arguments. It refuses inside a guard or another
