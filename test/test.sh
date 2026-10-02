@@ -154,7 +154,7 @@ version_line() {
     [[ $out == "Agent Guard $version ("(v$version|checkout)", commit "[0-9A-Za-z]##"), release $rid, installed "[0-9-]##" "[0-9:]##" UTC" ]]
 }
 check "agent-guard version names the version and release and reports no drift" version_line
-refuses "agent-guard lists its commands" "usage: agent-guard doctor|version|update|uninstall" "$engine/bin/agent-guard"
+refuses "agent-guard lists its commands" "usage: agent-guard doctor [--json]|version|update|uninstall|bind [OPTIONS]|wrapper add|remove|list" "$engine/bin/agent-guard"
 check "rulebook agent-guard" /usr/bin/jq -e '.name == "agent-guard"' "$cc/agent-guard/rulebook.json"
 check "rule.json lists agent-guard and keeps the other rule" /usr/bin/jq -e '.rules == ["agent-guard", "custom"]' "$cc/rule.json"
 new_blocks() {

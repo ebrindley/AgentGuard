@@ -62,6 +62,16 @@ ASSUME_YES=0
 
 die() { printf 'bind: %s\n' "$*" >&2; exit 2; }
 
+# regular_or_absent <path> [<temp file>]: mv onto a link to a folder, or onto a
+# folder, would move the new file into that folder, so a record must be absent or a
+# regular file. On refusal the temp file is removed.
+regular_or_absent() {
+  if [ -L "$1" ] || { [ -e "$1" ] && [ ! -f "$1" ]; }; then
+    [ -z "${2:-}" ] || rm -f "$2"
+    die "$1 is a symbolic link or not a regular file; remove it, then re-run agent-guard bind"
+  fi
+}
+
 usage() { sed -n '2,/^set -euo pipefail$/s/^# \{0,1\}//p' "$0"; }
 
 while [ $# -gt 0 ]; do
@@ -360,6 +370,7 @@ esac
 # 0600. Without a path, the node on PATH, as deploy-local.sh pins the node it runs.
 if [ "$MODE" = "checker-node" ]; then
   { [ -d "$GUARD_DIR" ] && [ ! -L "$GUARD_DIR" ]; } || die "the guard extension is not installed at $GUARD_DIR"
+  regular_or_absent "$GUARD_NODE_FILE"
   if [ -z "$CHECKER_NODE_PATH" ]; then
     CHECKER_NODE_PATH="$(node -p 'process.execPath' 2>/dev/null || true)"
     [ -n "$CHECKER_NODE_PATH" ] || die "cannot run the node on PATH; pass --checker-node <abs-path>"
@@ -378,6 +389,7 @@ if [ "$MODE" = "checker-node" ]; then
   tmp="$(mktemp "$GUARD_DIR/.guard-node.XXXXXX")"
   printf '%s\n' "$CHECKER_CANON" >"$tmp"
   chmod 600 "$tmp"
+  regular_or_absent "$GUARD_NODE_FILE" "$tmp"
   mv -f "$tmp" "$GUARD_NODE_FILE"
   echo "recorded in $GUARD_NODE_FILE"
   exit 0
@@ -453,6 +465,7 @@ if [ -n "$NODE_CANON" ]; then
   NODE_CANON="$(ops_stable_node_path "$NODE_CANON")"
 fi
 
+regular_or_absent "$CONFIG"
 echo "About to record:"
 printf '  pi   = %s\n' "$PI_CANON"
 if [ -n "$OMP_CANON" ]; then
@@ -496,5 +509,6 @@ printf 'pi=%s\n' "$PI_CANON" >>"$tmp"
 [ -n "$OMP_CANON" ] && printf 'omp=%s\n' "$OMP_CANON" >>"$tmp"
 [ -n "$NODE_CANON" ] && printf 'node=%s\n' "$NODE_CANON" >>"$tmp"
 chmod 600 "$tmp"
+regular_or_absent "$CONFIG" "$tmp"
 mv -f "$tmp" "$CONFIG"
 echo "recorded in $CONFIG"
