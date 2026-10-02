@@ -391,17 +391,24 @@ try {
   {
     const a = account('nested');
     const home = a.home;
-    // macOS refuses a nested sandbox_apply under any profile with a deny rule, so
-    // only an allow-everything sandbox lets the launcher apply its own profile.
+    // macOS refuses a nested sandbox_apply under any profile with a deny rule, and on
+    // some releases (macOS 15 on CI) under an allow-everything one too, so only an
+    // allow-everything sandbox may let the launcher apply its own profile.
     check('nesting: Pi under a foreign enclosing sandbox refuses', () => {
       const foreign = `(version 1)(allow default)(deny file-write*)(allow file-write* (subpath "/private/tmp") (subpath "${temp}") (literal "/dev/null"))`;
       const r = session(a, ['/bin/echo', 'started'], { wrap: ['/usr/bin/sandbox-exec', '-p', foreign] });
       refused(r, `foreign sandbox: ${r.stderr}`, /sandbox_apply unavailable and no verified own-shim confinement; refusing/);
     });
-    check('nesting: Pi under an allow-everything sandbox applies its own profile', () => {
-      const r = session(a, ['/bin/sh', '-c', 'printf x > "$1"', 'sh', join(home, '.zshrc')],
-        { wrap: ['/usr/bin/sandbox-exec', '-p', '(version 1)(allow default)'] });
-      denied(r, '~/.zshrc');
+    // The launcher's own sandbox_apply probe, run under the same enclosing sandbox.
+    const allowAll = ['/usr/bin/sandbox-exec', '-p', '(version 1)(allow default)'];
+    const nests = spawnSync(allowAll[0], [...allowAll.slice(1), ...allowAll, '/usr/bin/true']).status === 0;
+    check(`nesting: Pi under an allow-everything sandbox ${nests ? 'applies its own profile' : 'refuses, as this macOS refuses nesting there'}`, () => {
+      const zshrc = join(home, '.zshrc');
+      assert.ok(!existsSync(zshrc), '~/.zshrc exists before the launch');
+      const r = session(a, ['/bin/sh', '-c', 'printf x > "$1" && echo ran', 'sh', zshrc], { wrap: allowAll });
+      if (nests) denied(r, '~/.zshrc');
+      else refused(r, `allow-everything sandbox: ${r.stderr}`, /sandbox_apply unavailable and no verified own-shim confinement; refusing/);
+      assert.ok(!existsSync(zshrc), '~/.zshrc written');
     });
     check('nesting: Pi under Agent Guard\'s OpenCode base template refuses', () => {
       // engine/profile.sb with the harness data left out, as an OpenCode session
