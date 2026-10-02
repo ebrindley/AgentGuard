@@ -353,7 +353,7 @@ pi_stamped '.harnesses = ["opencode", "pi"]'
 print -r -- '{"wrappers":{"pi-work":{"sha256":"00"},".":{"sha256":"00"},"..":{"sha256":"00"},"../escape":{"sha256":"00"}},"historical":["pi-old"]}' > "$pi_wrappers"
 pi_profile=$(pi_launch) || fail "profile with Pi installed"
 check "launch log names Pi's write-protected files" /usr/bin/grep -Fxq \
-  "write-protected for Pi, maintained outside the guard: $pi_bin/pi, $pi_bin/omp, $pi_bin/pi-sandbox.sb, $pi_bin/pi-sandbox-preamble.zsh, $pi_bin/pi-work, $pi_ext, $pi_conf" "$log"
+  "write-protected for Pi, maintained outside the guard: $pi_bin/pi, $pi_bin/omp, $pi_bin/pi-sandbox.sb, $pi_bin/pi-sandbox-preamble.zsh, $pi_bin/pi-sandbox-guard-extension, $pi_bin/pi-work, $pi_ext, $pi_conf" "$log"
 ignored_keys() {
   local l
   for l in "${(@f)pi_profile}"; do
@@ -388,6 +388,26 @@ expect no "Pi installed: rename the extensions folder"       psb /bin/mv "${pi_e
 expect no "Pi installed: rename the target of ~/.pi/agent"   psb /bin/mv "$pi_agent" "$pi_agent.old"
 expect no "Pi installed: rename the link ~/.pi/agent"        psb /bin/mv "$home/.pi/agent" "$home/.pi/agent.old"
 expect no "Pi installed: delete the link ~/.pi/agent"        psb /bin/rm -f "$home/.pi/agent"
+# The launcher loads ~/.local/bin/pi-sandbox-guard-extension/index.ts, when it exists,
+# instead of the installed extension. Absent, it cannot be created, by any route;
+# present, nothing can be added, and it cannot be replaced, moved or removed. Each
+# case starts from the state it names, so one that is not denied does not decide the next.
+pi_lext="$pi_bin/pi-sandbox-guard-extension" pi_planted="$home/Projects/planted"
+lext_reset() {
+  /bin/rm -rf "$pi_lext" "$pi_lext.old" "$pi_planted"
+  /bin/mkdir -p "$pi_planted"
+  print '// planted' > "$pi_planted/index.ts"
+  [[ $1 == absent ]] || /bin/mkdir "$pi_lext"
+}
+lext_reset absent; expect no "Pi installed: create pi-sandbox-guard-extension"              psb /bin/mkdir "$pi_lext"
+lext_reset absent; expect no "Pi installed: create pi-sandbox-guard-extension as a link"    psb /bin/ln -s "$pi_planted" "$pi_lext"
+lext_reset absent; expect no "Pi installed: move a folder in as pi-sandbox-guard-extension" psb /bin/mv "$pi_planted" "$pi_lext"
+lext_reset present; expect no "Pi installed: add a file to pi-sandbox-guard-extension"      psb /usr/bin/touch "$pi_lext/index.ts"
+lext_reset present; expect no "Pi installed: move a file into pi-sandbox-guard-extension"   psb /bin/mv "$pi_planted/index.ts" "$pi_lext/index.ts"
+lext_reset present; expect no "Pi installed: replace pi-sandbox-guard-extension by a rename" psb /usr/bin/perl -e 'rename($ARGV[0], $ARGV[1]) or exit 1' "$pi_planted" "$pi_lext"
+lext_reset present; expect no "Pi installed: rename pi-sandbox-guard-extension"             psb /bin/mv "$pi_lext" "$pi_lext.old"
+lext_reset present; expect no "Pi installed: delete pi-sandbox-guard-extension"             psb /bin/rmdir "$pi_lext"
+/bin/rm -rf "$pi_lext" "$pi_planted"
 # An open transaction's candidate inventory counts while it is open.
 pi_stamped '.'
 /bin/mkdir -p "$pi_txn"

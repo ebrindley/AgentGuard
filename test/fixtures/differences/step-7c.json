@@ -1,10 +1,10 @@
 {
   "step": "7c",
-  "reason": "Once Pi is installed, write-protect Pi's guard files in OpenCode sessions: the launchers, profile, preamble and recorded wrappers in ~/.local/bin, the extension folder and the bindings, and pin the folders above them (docs/DESIGN.md section 11, What changes for OpenCode sessions). Applies only with Pi installed; in test/golden.mjs the stamp lists pi and state/wrappers.json records the wrapper pi-work.",
+  "reason": "Once Pi is installed, write-protect Pi's guard files in OpenCode sessions: the launchers, profile, preamble, recorded wrappers and pi-sandbox-guard-extension folder in ~/.local/bin, the extension folder and the bindings, and pin the folders above them (docs/DESIGN.md section 11, What changes for OpenCode sessions). Applies only with Pi installed; in test/golden.mjs the stamp lists pi and state/wrappers.json records the wrapper pi-work.",
   "inserts": [
     {
       "after": "  (require-all (subpath (h \"/.cache/opencode\")) (regex #\"/opencode/models-[^/]*\\.json$\"))\n",
-      "insert": "  (subpath (h \"/.local/bin/pi\"))\n  (subpath (h \"/.local/bin/omp\"))\n  (subpath (h \"/.local/bin/pi-sandbox.sb\"))\n  (subpath (h \"/.local/bin/pi-sandbox-preamble.zsh\"))\n  (subpath (h \"/.local/bin/pi-work\"))\n  (subpath (h \"/.pi/agent/extensions/pi-sandbox-guard\"))\n  (subpath (h \"/.config/pi-sandbox-guard/executables.conf\"))\n"
+      "insert": "  (subpath (h \"/.local/bin/pi\"))\n  (subpath (h \"/.local/bin/omp\"))\n  (subpath (h \"/.local/bin/pi-sandbox.sb\"))\n  (subpath (h \"/.local/bin/pi-sandbox-preamble.zsh\"))\n  (subpath (h \"/.local/bin/pi-sandbox-guard-extension\"))\n  (subpath (h \"/.local/bin/pi-work\"))\n  (subpath (h \"/.pi/agent/extensions/pi-sandbox-guard\"))\n  (subpath (h \"/.config/pi-sandbox-guard/executables.conf\"))\n"
     },
     {
       "after": "  (literal (h \"/.cache\"))\n",

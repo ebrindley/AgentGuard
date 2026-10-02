@@ -265,12 +265,14 @@ done
 # Pi's guard files, once Pi is installed (docs/DESIGN.md section 11, What changes
 # for OpenCode sessions): the launchers, profile, preamble and recorded wrappers,
 # which run outside the sandbox at the next Pi start, the extension folder and the
-# bindings. Each is denied as named, with its folder resolved, and at its target.
+# bindings, and pi-sandbox-guard-extension, the extension folder the launcher loads
+# instead when it exists beside it; that one is usually absent and must stay so.
+# Each is denied as named, with its folder resolved, and at its target.
 # Each folder on the way from home, as named, and the folders above each of those
 # and above the target are pinned, so no link on the way can be moved or removed.
 typeset -aU pi_guard
 (( ${installed[(Ie)pi]} )) &&
-  pi_guard=("$home"/.local/bin/{pi,omp,pi-sandbox.sb,pi-sandbox-preamble.zsh} "${(@)pi_wrappers/#/$home/.local/bin/}"
+  pi_guard=("$home"/.local/bin/{pi,omp,pi-sandbox.sb,pi-sandbox-preamble.zsh,pi-sandbox-guard-extension} "${(@)pi_wrappers/#/$home/.local/bin/}"
             "$home/.pi/agent/extensions/pi-sandbox-guard" "$home/.config/pi-sandbox-guard/executables.conf")
 for p in $pi_guard; do
   for q in "${${p:h:A}%/}/${p:t}" "${p:A}"; do sbpl_path "$q"; state_rules+=("  (subpath $REPLY)"); pin_above "$q"; done
