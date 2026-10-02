@@ -103,13 +103,15 @@ build "$run/src-c" 0.0.3 || { print -ru2 'cannot build v0.0.3'; finish }
 print -r -- v0.0.1 > "$served/latest.txt"
 
 point= pgrep_status= pi_path=
+typeset -a extra_env
 # note_point: records the test points named in $point as exercised.
 note_point() { local p; for p in ${=point}; do exercised+=("${p#*:}"); done }
-# envv: the environment of a run, from point, pgrep_status and pi_path.
+# envv: the environment of a run, from point, pgrep_status, pi_path and extra_env.
 envv() {
   reply=(/usr/bin/env -i HOME="$home" PATH="$base" TMPDIR="$darwin_temp/" AG_TEST_POINT="$point")
   [[ -n $pgrep_status ]] && reply+=(AG_TEST_PGREP="$pgrep_status")
   [[ -n $pi_path ]] && reply+=(AG_TEST_PI_PATH="$pi_path")
+  reply+=($extra_env)
   return 0
 }
 # boot [TAG]: the one-liner of TAG (v0.0.1), without a terminal.
@@ -597,9 +599,25 @@ fake_pi "$home/.local/$pkg"
 /bin/ln -s "../$pkg" "$lb/pi"
 save npm
 pi_files > "$run/npm.files"
+# The install inherits BASH_ENV and NODE_OPTIONS=--require naming files that log
+# each bash and node that loads them. No bash or node the Pi harness starts loads
+# them; OpenCode's fake CLI, a Node script, may.
+hooks="$run/hooks"
+/bin/mkdir -p "$hooks"
+print -r -- "printf 'bash %s\n' \"\$0 \${BASH_EXECUTION_STRING:-}\" >> '$hooks/ran' 2>/dev/null" > "$hooks/bash-env.sh"
+print -r -- "try { require('fs').appendFileSync('$hooks/ran', 'node ' + process.argv.slice(1).concat(process.execArgv).join(' ') + '\n'); } catch {}" > "$hooks/require.cjs"
+extra_env=(BASH_ENV="$hooks/bash-env.sh" NODE_OPTIONS="--require \"$hooks/require.cjs\"")
+/usr/bin/env -i PATH="$base" $extra_env /bin/bash -c : && /usr/bin/env -i PATH="$base" $extra_env "$node_bin" -e 0
+ran=(${(f)"$(<"$hooks/ran")"})
+(( $#ran == 2 )) && pass 'a bash and a node started with these variables run the files' || fail "the files ran: ${(j:; :)ran}"
+: > "$hooks/ran"
 point= boot
 rc=$?
+extra_env=()
 (( rc == 0 )) && /usr/bin/jq -e '.harnesses == ["opencode", "pi"]' "$state/stamp.json" >/dev/null && pass 'installed with Pi (exit 0)' || { fail "install (exit $rc)"; show; }
+ran=(${(f)"$(<"$hooks/ran")"})
+ran=(${ran:#node $source_root/test/fake-opencode.mjs*})
+(( $#ran == 0 )) && pass "no bash or node the Pi harness started ran them" || fail "they ran in: ${(j:; :)ran}"
 [[ -f $lb/pi && ! -L $lb/pi && -f $lb/omp ]] && /usr/bin/cmp -s "$lb/pi" "$engine/current/profiles/pi/launchers/pi" && pass "the guard's launchers in ~/.local/bin" || fail 'launchers'
 [[ $(/usr/bin/grep -v '^#' "$conf") == "pi=$home/.local/$pkg"$'\n'"node=$want_node" && $(/usr/bin/stat -f %Lp "$conf") == 600 ]] &&
   pass 'executables.conf records pi= and the node its shebang needs, mode 600' || { fail 'executables.conf'; /bin/cat "$conf" 2>&1 | /usr/bin/sed 's/^/    /' }
