@@ -12,6 +12,11 @@ rid_pattern='[0-9A-Za-z.+-]+-[0-9]{8}T[0-9]{6}Z'
 # for any it does not exercise.
 migrate_points=(list-import import discard fwd-cli fwd-gui plugin-take plugin-name app-old switch-time
                 retire-rulejson retire-rulebook retire-compare retire-engine retire-note uninstall-forwarders)
+# The same for the Pi harness and the move from pi-sandbox-guard, which only
+# test/migrate-pi.sh exercises; it fails for any it does not exercise. ag_pi_put
+# names the points of the copies in ~/.local/bin by variable.
+pi_points=(psg-wrappers pi-bindings pi-preamble pi-profile pi-launcher-pi pi-launcher-omp pi-extension pi-extension-gap
+           psg-switch-time pi-keep psg-keep psg-retire-launchers psg-retire-backups psg-uninstall-copy)
 
 # new_home DIR: replaces DIR with an empty disposable home. REPLY is its real path.
 new_home() {

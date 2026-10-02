@@ -10,14 +10,15 @@ import { fixtureAccount, fixtureHome } from '../fixture-home.mjs';
 export const name = 'zsh';
 
 // Copies engine/, profiles/, installer/, install.sh, LICENSE and VERSION (when present) from
-// source into dest, then points the copied account lookups at home. The source
-// tree is not touched.
+// source into dest, then points the copied account lookups at home, the Pi
+// preamble's among them (piSeams). The source tree is not touched.
 export function stage(source, dest, home) {
   const files = ['engine', 'profiles', 'installer', 'install.sh', 'LICENSE', 'VERSION'].filter((f) => f !== 'VERSION' || existsSync(join(source, f)));
   const copy = spawnSync('/bin/cp', ['-R', ...files.map((f) => join(source, f)), dest + '/'], { encoding: 'utf8' });
   assert.equal(copy.status, 0, copy.stderr);
   fixtureHome(join(dest, 'engine/launch'), home);
   fixtureAccount(join(dest, 'engine/account.zsh'), home);
+  piSeams(dest, home);
 }
 
 // Lays out a staged tree as the release folder releases/<rid> in engine, with
@@ -69,6 +70,9 @@ const seams = {
   appBundleId: 'app_bundle_id=ai.opencode.desktop',
   bootTime: 'boot_time() {',
   pgrep: 'local pgrep=/usr/bin/pgrep',
+  piSearch: 'pi_roots=(/opt/homebrew /usr/local) pi_path=$PATH',
+  dscl: 'typeset -r DSCL_BIN="/usr/bin/dscl"',
+  piPath: 'PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"',
 };
 // The test harness looks for the CLI on PATH and in the disposable home only, and
 // for the app only at ~/Applications/OpenCode.app (a fake bundle in the tests).
@@ -83,8 +87,14 @@ const testPoint = 'test_point() { case " ${AG_TEST_POINT:-} " in (*" kill:$1 "*)
 // production body, which follows under another name.
 const bootTime = 'boot_time() { if (( ${+AG_TEST_BOOT_TIME} )); then [[ $AG_TEST_BOOT_TIME == <-> ]] || return 1; REPLY=$AG_TEST_BOOT_TIME; return 0; fi; ag_test_real_boot_time; }; ag_test_real_boot_time() {';
 // The process check's pgrep: exits AG_TEST_PGREP, default 1 (no such process), so a
-// real OpenCode on the test Mac does not matter.
-const pgrep = 'local pgrep=ag_test_pgrep; ag_test_pgrep() { return ${AG_TEST_PGREP:-1} }';
+// real OpenCode on the test Mac does not matter; AG_TEST_PGREP=real runs pgrep.
+const pgrep = 'local pgrep=ag_test_pgrep; ag_test_pgrep() { [[ ${AG_TEST_PGREP:-1} == real ]] && { /usr/bin/pgrep "$@"; return }; return ${AG_TEST_PGREP:-1} }';
+// The Pi harness looks for a Pi or OMP CLI only in the folders AG_TEST_PI_ROOTS
+// names and on AG_TEST_PI_PATH, none by default, besides the disposable home. The
+// preamble's directory-service lookup names home, and its pinned PATH has only the
+// system folders, so the launcher never finds a Pi or OMP of the test Mac.
+const piSearch = 'pi_roots=(${=AG_TEST_PI_ROOTS:-}) pi_path=${AG_TEST_PI_PATH:-}';
+const piPath = 'PATH="/usr/bin:/bin:/usr/sbin:/sbin"';
 const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 
 function replaceOnce(file, from, to) {
@@ -93,11 +103,20 @@ function replaceOnce(file, from, to) {
   writeFileSync(file, text.replace(from, () => to));
 }
 
+// The Pi seams of a tree: the harness's CLI search and the preamble's home and PATH.
+function piSeams(tree, home) {
+  replaceOnce(join(tree, 'installer/harness/pi.zsh'), seams.piSearch, piSearch);
+  const preamble = join(tree, 'profiles/pi/sandbox/pi-sandbox-preamble.zsh');
+  replaceOnce(preamble, seams.dscl, `ag_test_dscl() { print -r -- ${quote(`NFSHomeDirectory: ${home}`)} }; typeset -r DSCL_BIN=ag_test_dscl`);
+  replaceOnce(preamble, seams.piPath, piPath);
+}
+
 // Builds a test release of source into out/<tag>. scripts/release.sh --dev builds
 // from the unmodified source, so its seam check sees the production forms; then the
 // archive is unpacked and the seams are applied: the installer's test points, the
 // home of the launcher and of account.zsh, agent-guard's download base and the
-// harness's CLI and app lookup, and the installer's boot time and process check.
+// harness's CLI and app lookup, the installer's boot time and process check, and
+// the Pi seams (piSeams).
 // It is repacked with release.sh's tar options and a new .sha256. The bootstrap is
 // pointed at url and at home, with its test point enabled. No test release's
 // installer or uninstaller runs before the account.zsh seam is applied: both take
@@ -127,6 +146,7 @@ export function release(source, out, { home, tag, version, url }) {
   fixtureAccount(join(tree, 'engine/account.zsh'), home);
   replaceOnce(join(tree, 'engine/agent-guard'), seams.downloadBase, `local repo=${quote(url)}; local -a curl_proto=()`);
   for (const key of Object.keys(harness)) replaceOnce(join(tree, 'profiles/opencode/harness.zsh'), seams[key], harness[key]);
+  piSeams(tree, home);
   rmSync(archive);
   run(['/usr/bin/tar', '-czf', archive, '--no-xattrs', '--no-acls', '--no-fflags', '--uid', '0', '--gid', '0', '--uname', 'root', '--gname', 'wheel', '-C', unpacked, ...entries],
     { env: { ...process.env, COPYFILE_DISABLE: '1' } });

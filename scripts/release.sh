@@ -47,7 +47,27 @@ files=(
   installer/lib.zsh
   installer/actions.zsh
   installer/harness/opencode.zsh
+  installer/harness/pi.zsh
   installer/migrate/opencode-guard.zsh
+  installer/migrate/pi-sandbox-guard.zsh
+  # Pi's runtime files, which the installer copies into place, and those bind,
+  # wrapper and doctor run; not pi-sandbox-guard's tests.
+  profiles/pi/LICENSE
+  profiles/pi/launchers/pi
+  profiles/pi/launchers/example-custom
+  profiles/pi/sandbox/pi-sandbox.sb
+  profiles/pi/sandbox/pi-sandbox-preamble.zsh
+  profiles/pi/src/index.mjs
+  profiles/pi/src/guard-core.mjs
+  profiles/pi/src/validate-bash-command.sh
+  profiles/pi/scripts/extension-entry.ts
+  profiles/pi/scripts/test-sandbox-profile.sh
+  profiles/pi/scripts/check-launchers.mjs
+  profiles/pi/scripts/bind-executable.sh
+  profiles/pi/scripts/lib-ops.sh
+  profiles/pi/commands/bind.zsh
+  profiles/pi/commands/doctor.zsh
+  profiles/pi/commands/wrapper.zsh
 )
 # Folders shipped whole, apart from Finder and AppleDouble files.
 trees=(
