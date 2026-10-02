@@ -640,11 +640,32 @@ ran=(${ran:#node $source_root/test/fake-opencode.mjs*})
 /usr/bin/grep -qF 'ok   pi --version through bin/pi: fake pi 0.70.0' "$out" && /usr/bin/grep -qF 'skip omp --version through bin/omp' "$out" &&
   pass 'the gate runs Pi and skips OMP, which has no binding and no CLI' || { fail 'gate'; show }
 pi_state > "$run/npm.state"
+save npm-installed
 pi_probe '~/.local/bin/pi' "$lb/pi"
 point= ag uninstall
 rc=$?
 (( rc == 0 )) && [[ -L $lb/pi && $(/usr/bin/readlink "$lb/pi") == "../$pkg" && ! -e $lb/omp && ! -e $engine ]] &&
   pass "uninstall puts npm's link back and removes omp" || { fail "uninstall (exit $rc)"; show }
+# An entry uninstall does not put back, because ~/.local/bin/pi is no longer the
+# guard's launcher or because an earlier install replaced it, is copied to ~/Agent
+# Guard before the engine folder goes, links as links; a failed copy keeps the engine.
+label='uninstall, entries not put back'
+restore npm-installed
+/bin/rm "$lb/pi"
+/bin/ln -s /usr/bin/true "$lb/pi"
+/bin/ln -s ../old/cli.js "$replaced/pi.1700000000"
+/bin/chmod 555 "$home/Agent Guard"
+point= ag uninstall
+rc=$?
+/bin/chmod 755 "$home/Agent Guard"
+(( rc == 1 )) && [[ -d $engine && -L $replaced/pi && -L $replaced/pi.1700000000 ]] && /usr/bin/grep -qF 'could not copy the entries Agent Guard replaced' "$out" &&
+  pass 'the copy fails: exit 1, the engine and the entries kept' || { fail "uninstall (exit $rc)"; show }
+point= ag uninstall
+rc=$?
+kept=("$home/Agent Guard"/pi-replaced-*(N))
+(( rc == 0 && $#kept == 1 )) && [[ ! -e $engine && $(/usr/bin/readlink "$kept[1]/pi") == "../$pkg" && $(/usr/bin/readlink "$kept[1]/pi.1700000000") == ../old/cli.js ]] &&
+  [[ $(/usr/bin/readlink "$lb/pi") == /usr/bin/true ]] && /usr/bin/grep -qF "are copied to ${kept[1]/#$home/~}" "$out" &&
+  pass "the rerun copies both as links to the folder it names; ~/.local/bin/pi is left" || { fail "rerun (exit $rc)"; show; listing "$home/Agent Guard" | /usr/bin/sed 's/^/    /' }
 # A failure in the switch puts the link back and removes what the install added,
 # folders included; a kill between the bindings and the launcher leaves the link or
 # the guard at ~/.local/bin/pi, and the rerun ends as the uninterrupted install.

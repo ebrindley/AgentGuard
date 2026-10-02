@@ -606,10 +606,14 @@ ag_h_pi_doctor() {  # RELEASE [--json]
 # U3: the launchers, the extension folder, the profile and the preamble. An entry
 # the launchers replaced is put back in the launcher's place by one rename, a link
 # with its original target text. A pi or omp that is no longer the guard's is
-# left. Names the custom wrappers it leaves.
+# left. An entry in state/legacy/replaced that is not put back, because its place
+# holds something else or because an earlier install replaced it (a time suffix),
+# would go with the engine folder: it is copied to ~/Agent Guard/pi-replaced-<time>
+# first, links as links, and fails the step when it cannot be. Names the custom
+# wrappers it leaves.
 ag_h_pi_uninstall_remove() {
-  local rt f
-  local -a left
+  local rt f dest partial="$list_dir/.pi-replaced.partial"
+  local -a left kept
   for rt in pi omp; do
     f="$pi_bin/$rt"
     /bin/rm -f -- "$pi_bin/.$rt.partial"
@@ -625,6 +629,20 @@ ag_h_pi_uninstall_remove() {
       /bin/rm -f -- "$f" || { ag_err "cannot remove ${f/#$home/~}; $engine is kept, so agent-guard uninstall can run again"; return 1 }
     fi
   done
+  kept=("$pi_replaced"/*(DN))
+  if (( $#kept )); then
+    dest="$list_dir/pi-replaced-$(/bin/date -u +%Y%m%dT%H%M%SZ)"
+    [[ -e $dest || -L $dest ]] && dest+="-$$"
+    /bin/rm -rf -- "$partial"
+    if ! { /bin/mkdir -p -- "$partial" && /bin/cp -Rp -- $kept "$partial/" && /bin/mv -- "$partial" "$dest" }; then
+      /bin/rm -rf -- "$partial"
+      ag_err "could not copy the entries Agent Guard replaced in ${pi_bin/#$home/~} from $pi_replaced to $dest, so $engine is kept. Run agent-guard uninstall again."
+      return 1
+    fi
+    # Copied: a rerun after a later failure does not copy them again.
+    /bin/rm -rf -- $kept
+    ag_warn "entries Agent Guard replaced in ${pi_bin/#$home/~} and did not put back (${(j:, :)${kept:t}}) are copied to ${dest/#$home/~}"
+  fi
   /bin/rm -rf -- "$pi_ext" || { ag_err "cannot remove ${pi_ext/#$home/~}; $engine is kept, so agent-guard uninstall can run again"; return 1 }
   /bin/rm -f -- "$pi_bin/pi-sandbox.sb" "$pi_bin/pi-sandbox-preamble.zsh" "$pi_bin/.pi-sandbox.sb.partial" "$pi_bin/.pi-sandbox-preamble.zsh.partial" ||
     { ag_err "cannot remove the profile and preamble in ${pi_bin/#$home/~}; $engine is kept, so agent-guard uninstall can run again"; return 1 }
