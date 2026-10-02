@@ -1,0 +1,312 @@
+diff --git a/sandbox/pi-sandbox-preamble.zsh b/sandbox/pi-sandbox-preamble.zsh
+index 9b7c788..fcd3127 100644
+--- a/sandbox/pi-sandbox-preamble.zsh
++++ b/sandbox/pi-sandbox-preamble.zsh
+@@ -664,7 +664,7 @@ resolve_agent_executable() {
+       resolved="$(resolve_configured_executable "$configured" || true)"
+       if [ -z "$resolved" ]; then
+         emit "$ambient_name='$configured' is not an accepted ambient override."
+-        emit "  Record non-standard installs with: npm run bind"
++        emit "  Record non-standard installs with: agent-guard bind"
+         exit 1
+       fi
+       ;;
+@@ -672,7 +672,7 @@ resolve_agent_executable() {
+       resolved="$(resolve_bound_executable "$bound" || true)"
+       if [ -z "$resolved" ]; then
+         emit "recorded $runtime_label binding is no longer usable: '$bound'"
+-        emit "  Re-record it from the repo checkout: npm run bind"
++        emit "  Re-record it: agent-guard bind"
+         exit 1
+       fi
+       ;;
+@@ -680,7 +680,7 @@ resolve_agent_executable() {
+       resolved="$(resolve_command_outside_shim_dir "$PI_SANDBOX_RUNTIME" || true)"
+       if [ -z "$resolved" ]; then
+         emit "cannot auto-resolve the real $runtime_label executable outside the shim path."
+-        emit "  Record the install once from the repo checkout: npm run bind"
++        emit "  Record the install once: agent-guard bind"
+         exit 1
+       fi
+       ;;
+@@ -705,7 +705,7 @@ resolve_agent_executable() {
+       interpreter="$(resolve_bound_interpreter "$bound_interpreter" || true)"
+       [ -n "$interpreter" ] || {
+         emit "recorded Node interpreter is no longer usable: '$bound_interpreter'"
+-        emit "  Re-record it from the repo checkout: npm run bind"
++        emit "  Re-record it: agent-guard bind"
+         exit 1
+       }
+     fi
+@@ -1018,6 +1018,73 @@ case "$PROJECT" in
+     emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."; exit 1 ;;
+ esac
+ 
++# Agent Guard differences 1 and 2 (Agent Guard's test/fixtures/differences/pi.json).
++# The profile write-denies Agent Guard's folders and the shell startup files, and
++# the resolved target of each one that is a symlink at launch, as Agent Guard's
++# engine/launch does for its protected list. The targets travel as AG_LINK_*
++# parameters, with an inert path when there is no link, so the profile stays one
++# static file. A PROJECT that is, contains or is inside one of the folders or a
++# folder's link target would launch partly or wholly read-only, so refuse it.
++typeset -ga AG_SANDBOX_PARAMS
++AG_SANDBOX_PARAMS=()
++agent_guard_protected() {
++  emulate -L zsh
++  local kind param p target folder
++  local -a folders
++  for kind param p in \
++    folder AG_LINK_ENGINE "$HOME/Library/Application Support/AgentGuard" \
++    folder AG_LINK_OPENCODEGUARD "$HOME/Library/Application Support/OpenCodeGuard" \
++    folder AG_LINK_GUARD_LIST "$HOME/Agent Guard" \
++    folder AG_LINK_APP "$HOME/Applications/Agent Guard.app" \
++    folder AG_LINK_OPENCODE_CONFIG "$HOME/.config/opencode" \
++    folder AG_LINK_OPENCODE "$HOME/.opencode" \
++    folder AG_LINK_CC_SAFETY_NET "$HOME/.cc-safety-net" \
++    folder AG_LINK_LAUNCH_AGENTS "$HOME/Library/LaunchAgents" \
++    file AG_LINK_ZSHENV "$HOME/.zshenv" \
++    file AG_LINK_ZPROFILE "$HOME/.zprofile" \
++    file AG_LINK_ZSHRC "$HOME/.zshrc" \
++    file AG_LINK_ZLOGIN "$HOME/.zlogin" \
++    file AG_LINK_PROFILE "$HOME/.profile" \
++    file AG_LINK_BASH_PROFILE "$HOME/.bash_profile" \
++    file AG_LINK_BASH_LOGIN "$HOME/.bash_login" \
++    file AG_LINK_BASHRC "$HOME/.bashrc"
++  do
++    target="/private/tmp/pi-sandbox-guard-unused/agent-guard-no-link"
++    [[ -e $p && ${p:A} != "$p" ]] && target=${p:A}
++    AG_SANDBOX_PARAMS+=(-D "$param=$target")
++    [[ $kind == folder ]] || continue
++    folders=("$p")
++    [[ $target == "${p:A}" ]] && folders+=("$target")
++    for folder in $folders; do
++      if [[ $PROJECT == "$folder" || $PROJECT == "$folder"/* || $folder == "$PROJECT"/* ]]; then
++        emit "refusing boundary '$PROJECT': it is, contains or is inside Agent Guard's protected folder '$folder', which the sandbox write-protects."
++        emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."
++        return 1
++      fi
++    done
++  done
++}
++agent_guard_protected || exit 1
++
++# Agent Guard difference 4. The profile denies writes to OpenCode's package store,
++# bin folder and model catalog under ~/.cache and under XDG_CACHE_HOME, passed
++# canonicalized as AG_XDG_CACHE_HOME (~/.cache when unset). A value that is not an
++# existing absolute folder cannot be canonicalized, so refuse it.
++if [ -n "${XDG_CACHE_HOME:-}" ]; then
++  AG_XDG_CACHE_HOME=""
++  case "$XDG_CACHE_HOME" in
++    /*) AG_XDG_CACHE_HOME="$(cd -P "$XDG_CACHE_HOME" 2>/dev/null && pwd -P)" || AG_XDG_CACHE_HOME="" ;;
++  esac
++  if [ -z "$AG_XDG_CACHE_HOME" ]; then
++    emit "refusing to launch: XDG_CACHE_HOME '$XDG_CACHE_HOME' is not an existing absolute folder."
++    emit "  The sandbox protects OpenCode's cache there; create the folder or unset XDG_CACHE_HOME."
++    exit 1
++  fi
++else
++  AG_XDG_CACHE_HOME="$HOME/.cache"
++fi
++AG_SANDBOX_PARAMS+=(-D "AG_XDG_CACHE_HOME=$AG_XDG_CACHE_HOME")
++
+ ACTIVE_HOOKS="$(resolve_active_hooks "$PROJECT")" || exit 1
+ TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
+ 
+@@ -1084,7 +1151,7 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
+     # the recorded interpreter, and both --detect and a bare --pi re-derive node via
+     # detect_node, which takes the first PATH hit with no write-root filter — so
+     # either would re-record the same unsafe path and fail identically next launch.
+-    emit "  the project: npm run bind -- --pi <abs-path> --node <abs-path>"
++    emit "  the project: agent-guard bind --pi <abs-path> --node <abs-path>"
+     exit 1
+   fi
+ done
+@@ -1122,5 +1189,6 @@ PI_SANDBOX_CMD=(
+   -D "OMP_AGENT_STATE=$OMP_AGENT_STATE"
+   -D "OMP_STATE_ROOT=$OMP_STATE_ROOT"
+   -D "OMP_BASE_ROOT=$OMP_BASE_ROOT"
++  "${AG_SANDBOX_PARAMS[@]}"
+   -f "$PROFILE"
+ )
+diff --git a/sandbox/pi-sandbox.sb b/sandbox/pi-sandbox.sb
+index f560a31..7a71ea5 100644
+--- a/sandbox/pi-sandbox.sb
++++ b/sandbox/pi-sandbox.sb
+@@ -323,3 +323,89 @@
+   (literal (string-append (param "HOME") "/.pi/agent/security-events.log"))
+   ;; .env files anywhere (incl. project) — the one project-wide secret deny.
+   (regex #"/\.env($|\.)"))
++
++;; ---------------------------------------------------------------------------
++;; AGENT GUARD: protections Agent Guard adds to pi-sandbox-guard 7ad441f's policy,
++;; recorded in Agent Guard's test/fixtures/differences/pi.json. They come last so
++;; they win over every allow above (last match wins).
++;;
++;; Params (supplied via sandbox-exec -D by Agent Guard's part of the preamble):
++;;   AG_LINK_*          resolved target of the protected path of the same name
++;;                      when it is a symlink at launch, or an inert unused path
++;;   AG_XDG_CACHE_HOME  canonical XDG_CACHE_HOME, or HOME/.cache when it is unset
++;; ---------------------------------------------------------------------------
++
++;; Difference 1: Agent Guard's base write protections (engine/profile.sb): its
++;; engine folder and OpenCode Guard's, the Guard List folder, the app, OpenCode's
++;; configuration, cc-safety-net's configuration (its logs excepted), LaunchAgents
++;; and the shell startup files. Seatbelt checks resolved paths, so the target of
++;; each one that is a symlink, such as a ~/.zshrc linked into a dotfiles project,
++;; is denied through its AG_LINK_* parameter.
++(deny file-write*
++  (subpath (string-append (param "HOME") "/Library/Application Support/AgentGuard"))
++  (subpath (string-append (param "HOME") "/Library/Application Support/OpenCodeGuard"))
++  (subpath (string-append (param "HOME") "/Agent Guard"))
++  (subpath (string-append (param "HOME") "/Applications/Agent Guard.app"))
++  (subpath (string-append (param "HOME") "/.config/opencode"))
++  (subpath (string-append (param "HOME") "/.opencode"))
++  (require-all
++    (subpath (string-append (param "HOME") "/.cc-safety-net"))
++    (require-not (subpath (string-append (param "HOME") "/.cc-safety-net/logs"))))
++  (subpath (string-append (param "HOME") "/Library/LaunchAgents"))
++  (literal (string-append (param "HOME") "/.zshenv"))
++  (literal (string-append (param "HOME") "/.zprofile"))
++  (literal (string-append (param "HOME") "/.zshrc"))
++  (literal (string-append (param "HOME") "/.zlogin"))
++  (literal (string-append (param "HOME") "/.profile"))
++  (literal (string-append (param "HOME") "/.bash_profile"))
++  (literal (string-append (param "HOME") "/.bash_login"))
++  (literal (string-append (param "HOME") "/.bashrc"))
++  (subpath (param "AG_LINK_ENGINE"))
++  (subpath (param "AG_LINK_OPENCODEGUARD"))
++  (subpath (param "AG_LINK_GUARD_LIST"))
++  (subpath (param "AG_LINK_APP"))
++  (subpath (param "AG_LINK_OPENCODE_CONFIG"))
++  (subpath (param "AG_LINK_OPENCODE"))
++  (subpath (param "AG_LINK_CC_SAFETY_NET"))
++  (subpath (param "AG_LINK_LAUNCH_AGENTS"))
++  (subpath (param "AG_LINK_ZSHENV"))
++  (subpath (param "AG_LINK_ZPROFILE"))
++  (subpath (param "AG_LINK_ZSHRC"))
++  (subpath (param "AG_LINK_ZLOGIN"))
++  (subpath (param "AG_LINK_PROFILE"))
++  (subpath (param "AG_LINK_BASH_PROFILE"))
++  (subpath (param "AG_LINK_BASH_LOGIN"))
++  (subpath (param "AG_LINK_BASHRC")))
++
++;; Difference 3: decision D7 (engine/profile.sb). Launch Services, launchd jobs
++;; and these programs can start code outside the sandbox.
++(deny lsopen)
++(deny job-creation)
++(deny process-exec
++  (literal "/usr/bin/open")
++  (literal "/usr/bin/osascript")
++  (literal "/usr/bin/osacompile")
++  (literal "/usr/bin/codesign")
++  (literal "/usr/sbin/diskutil")
++  (literal "/bin/launchctl")
++  (literal "/usr/bin/sudo"))
++
++;; Difference 4: OpenCode's package store, bin folder and model catalog under
++;; Pi's ~/.cache grant, at the default cache root and at XDG_CACHE_HOME, so a Pi
++;; session cannot plant code or models that OpenCode loads later. The cache root
++;; and its opencode folder are pinned against rename and removal. Extend the set
++;; in opencode-cache.
++(define (opencode-cache c)
++  (require-any
++    (literal c)
++    (literal (string-append c "/opencode"))
++    (subpath (string-append c "/opencode/packages"))
++    (subpath (string-append c "/opencode/node_modules"))
++    (subpath (string-append c "/opencode/bin"))
++    (literal (string-append c "/opencode/models.json"))
++    (require-all
++      (subpath (string-append c "/opencode"))
++      (regex #"/opencode/models-[^/]*\.json$"))))
++(deny file-write*
++  (opencode-cache (string-append (param "HOME") "/.cache"))
++  (opencode-cache (param "AG_XDG_CACHE_HOME")))
+diff --git a/scripts/test-sandbox-profile.sh b/scripts/test-sandbox-profile.sh
+index 4dcdf9c..c20909c 100755
+--- a/scripts/test-sandbox-profile.sh
++++ b/scripts/test-sandbox-profile.sh
+@@ -99,6 +99,17 @@ printf 'omp-hook\n' > "$FAKEHOME/.omp/agent/hooks/pre-tool.sh"
+ printf 'omp-tool\n' > "$FAKEHOME/.omp/agent/tools/custom.ts"
+ printf 'omp-plugin\n' > "$FAKEHOME/.omp/plugins/package.json"
+ 
++# Agent Guard: the profile's AG_* parameters (Agent Guard's
++# test/fixtures/differences/pi.json), inert as the launcher passes them when no
++# protected path is a symlink and XDG_CACHE_HOME is unset.
++AG_PARAMS=()
++for ag_param in $(/usr/bin/grep -o '(param "AG_[A-Z_]*")' "$PROFILE_SRC" | /usr/bin/sed 's/^(param "//; s/")$//' | /usr/bin/sort -u); do
++  case "$ag_param" in
++    AG_XDG_CACHE_HOME) AG_PARAMS+=(-D "$ag_param=$FAKEHOME/.cache") ;;
++    *) AG_PARAMS+=(-D "$ag_param=$FAKEHOME/.unused/agent-guard-no-link") ;;
++  esac
++done
++
+ # Always pass ACTIVE_HOOKS (required profile param; the launcher supplies it at runtime).
+ sb() {
+   "$SBX" -D PROJECT="$PROJ" -D HOME="$FAKEHOME" -D TMPDIR="$FAKETMP" \
+@@ -107,6 +118,7 @@ sb() {
+     -D OMP_AGENT_STATE="$FAKEHOME/.unused/omp-agent" \
+     -D OMP_STATE_ROOT="$FAKEHOME/.unused/omp-state" \
+     -D OMP_BASE_ROOT="$FAKEHOME/.unused/omp-base" \
++    "${AG_PARAMS[@]}" \
+     -f "$PROFILE_SRC" "$@"
+ }
+ sb_omp() {
+@@ -116,6 +128,7 @@ sb_omp() {
+     -D OMP_AGENT_STATE="$FAKEHOME/.omp/agent" \
+     -D OMP_STATE_ROOT="$FAKEHOME/.omp" \
+     -D OMP_BASE_ROOT="$FAKEHOME/.omp" \
++    "${AG_PARAMS[@]}" \
+     -f "$PROFILE_SRC" "$@"
+ }
+ sb_pi_relocated() {
+@@ -125,6 +138,7 @@ sb_pi_relocated() {
+     -D OMP_AGENT_STATE="$FAKEHOME/.unused/omp-agent" \
+     -D OMP_STATE_ROOT="$FAKEHOME/.unused/omp-state" \
+     -D OMP_BASE_ROOT="$FAKEHOME/.unused/omp-base" \
++    "${AG_PARAMS[@]}" \
+     -f "$PROFILE_SRC" "$@"
+ }
+ 
+diff --git a/test/shim.mjs b/test/shim.mjs
+index 98d10e2..a8dd459 100644
+--- a/test/shim.mjs
++++ b/test/shim.mjs
+@@ -237,6 +237,16 @@ function runOmpShim(fx, extraEnv = {}, args = ['hello']) {
+   });
+ }
+ 
++// Agent Guard: the profile's AG_* parameters (Agent Guard's
++// test/fixtures/differences/pi.json), inert as the launcher passes them when no
++// protected path is a symlink and XDG_CACHE_HOME is unset.
++function agentGuardParams(profilePath, home) {
++  const names = new Set([...readFileSync(profilePath, 'utf8').matchAll(/\(param "(AG_[A-Z_]+)"\)/g)].map((m) => m[1]));
++  return [...names].flatMap((name) => ['-D', name === 'AG_XDG_CACHE_HOME'
++    ? `${name}=${home}/.cache`
++    : `${name}=/private/tmp/pi-sandbox-guard-unused/agent-guard-no-link`]);
++}
++
+ function runNestedShim(fx, extraEnv = {}, args = ['nested-ok']) {
+   const activeHooks = join(repo, '.githooks');
+   return spawnSync(
+@@ -250,6 +260,7 @@ function runNestedShim(fx, extraEnv = {}, args = ['nested-ok']) {
+       '-D', `OMP_AGENT_STATE=${process.env.HOME}/.pi-sandbox-guard-unused/omp-agent`,
+       '-D', `OMP_STATE_ROOT=${process.env.HOME}/.pi-sandbox-guard-unused/omp-state`,
+       '-D', `OMP_BASE_ROOT=${process.env.HOME}/.pi-sandbox-guard-unused/omp-base`,
++      ...agentGuardParams(fx.profileCopy, process.env.HOME),
+       '-f', fx.profileCopy,
+       fx.shim,
+       ...args,
+@@ -455,9 +466,9 @@ check('env absolute target outside trusted prefixes is STILL refused', () => {
+   assert.notEqual(r.status, 0);
+   assert.match(r.stderr, /not an accepted ambient override/);
+   // The remedy must be named, or the user's next move is to weaken something —
+-  // and it must be a command that actually exists (there is no `pi-sandbox-bind`
+-  // binary; binding runs from the checkout).
+-  assert.match(r.stderr, /npm run bind/);
++  // and it must be a command that actually exists (Agent Guard: `agent-guard bind`
++  // replaces `npm run bind`).
++  assert.match(r.stderr, /agent-guard bind/);
+ });
+ 
+ check('env cannot borrow the exemption granted to a recorded binding', () => {

@@ -323,3 +323,89 @@
   (literal (string-append (param "HOME") "/.pi/agent/security-events.log"))
   ;; .env files anywhere (incl. project) — the one project-wide secret deny.
   (regex #"/\.env($|\.)"))
+
+;; ---------------------------------------------------------------------------
+;; AGENT GUARD: protections Agent Guard adds to pi-sandbox-guard 7ad441f's policy,
+;; recorded in Agent Guard's test/fixtures/differences/pi.json. They come last so
+;; they win over every allow above (last match wins).
+;;
+;; Params (supplied via sandbox-exec -D by Agent Guard's part of the preamble):
+;;   AG_LINK_*          resolved target of the protected path of the same name
+;;                      when it is a symlink at launch, or an inert unused path
+;;   AG_XDG_CACHE_HOME  canonical XDG_CACHE_HOME, or HOME/.cache when it is unset
+;; ---------------------------------------------------------------------------
+
+;; Difference 1: Agent Guard's base write protections (engine/profile.sb): its
+;; engine folder and OpenCode Guard's, the Guard List folder, the app, OpenCode's
+;; configuration, cc-safety-net's configuration (its logs excepted), LaunchAgents
+;; and the shell startup files. Seatbelt checks resolved paths, so the target of
+;; each one that is a symlink, such as a ~/.zshrc linked into a dotfiles project,
+;; is denied through its AG_LINK_* parameter.
+(deny file-write*
+  (subpath (string-append (param "HOME") "/Library/Application Support/AgentGuard"))
+  (subpath (string-append (param "HOME") "/Library/Application Support/OpenCodeGuard"))
+  (subpath (string-append (param "HOME") "/Agent Guard"))
+  (subpath (string-append (param "HOME") "/Applications/Agent Guard.app"))
+  (subpath (string-append (param "HOME") "/.config/opencode"))
+  (subpath (string-append (param "HOME") "/.opencode"))
+  (require-all
+    (subpath (string-append (param "HOME") "/.cc-safety-net"))
+    (require-not (subpath (string-append (param "HOME") "/.cc-safety-net/logs"))))
+  (subpath (string-append (param "HOME") "/Library/LaunchAgents"))
+  (literal (string-append (param "HOME") "/.zshenv"))
+  (literal (string-append (param "HOME") "/.zprofile"))
+  (literal (string-append (param "HOME") "/.zshrc"))
+  (literal (string-append (param "HOME") "/.zlogin"))
+  (literal (string-append (param "HOME") "/.profile"))
+  (literal (string-append (param "HOME") "/.bash_profile"))
+  (literal (string-append (param "HOME") "/.bash_login"))
+  (literal (string-append (param "HOME") "/.bashrc"))
+  (subpath (param "AG_LINK_ENGINE"))
+  (subpath (param "AG_LINK_OPENCODEGUARD"))
+  (subpath (param "AG_LINK_GUARD_LIST"))
+  (subpath (param "AG_LINK_APP"))
+  (subpath (param "AG_LINK_OPENCODE_CONFIG"))
+  (subpath (param "AG_LINK_OPENCODE"))
+  (subpath (param "AG_LINK_CC_SAFETY_NET"))
+  (subpath (param "AG_LINK_LAUNCH_AGENTS"))
+  (subpath (param "AG_LINK_ZSHENV"))
+  (subpath (param "AG_LINK_ZPROFILE"))
+  (subpath (param "AG_LINK_ZSHRC"))
+  (subpath (param "AG_LINK_ZLOGIN"))
+  (subpath (param "AG_LINK_PROFILE"))
+  (subpath (param "AG_LINK_BASH_PROFILE"))
+  (subpath (param "AG_LINK_BASH_LOGIN"))
+  (subpath (param "AG_LINK_BASHRC")))
+
+;; Difference 3: decision D7 (engine/profile.sb). Launch Services, launchd jobs
+;; and these programs can start code outside the sandbox.
+(deny lsopen)
+(deny job-creation)
+(deny process-exec
+  (literal "/usr/bin/open")
+  (literal "/usr/bin/osascript")
+  (literal "/usr/bin/osacompile")
+  (literal "/usr/bin/codesign")
+  (literal "/usr/sbin/diskutil")
+  (literal "/bin/launchctl")
+  (literal "/usr/bin/sudo"))
+
+;; Difference 4: OpenCode's package store, bin folder and model catalog under
+;; Pi's ~/.cache grant, at the default cache root and at XDG_CACHE_HOME, so a Pi
+;; session cannot plant code or models that OpenCode loads later. The cache root
+;; and its opencode folder are pinned against rename and removal. Extend the set
+;; in opencode-cache.
+(define (opencode-cache c)
+  (require-any
+    (literal c)
+    (literal (string-append c "/opencode"))
+    (subpath (string-append c "/opencode/packages"))
+    (subpath (string-append c "/opencode/node_modules"))
+    (subpath (string-append c "/opencode/bin"))
+    (literal (string-append c "/opencode/models.json"))
+    (require-all
+      (subpath (string-append c "/opencode"))
+      (regex #"/opencode/models-[^/]*\.json$"))))
+(deny file-write*
+  (opencode-cache (string-append (param "HOME") "/.cache"))
+  (opencode-cache (param "AG_XDG_CACHE_HOME")))
