@@ -506,9 +506,11 @@ back in `~/.local/bin` in place of the launcher; `pi` then starts Pi unguarded.
   change the exit status. It exits 1 when a step fails, a PATH block or file
   cannot be removed or a permission value cannot be restored, and names it. A
   step that fails before the engine folder is removed keeps it, so `agent-guard
-  uninstall` can run again. If removing the engine folder itself fails, what is
-  left is `~/Library/Application Support/.AgentGuard.removing`, which you delete
-  by hand. The other three are reported after the engine folder is removed, so
+  uninstall` can run again. Uninstall removes the engine folder by renaming it
+  to `~/Library/Application Support/.AgentGuard.removing` and then deleting
+  that. If the rename fails, the engine folder stays and `agent-guard uninstall`
+  can run again; if the deletion fails, delete `.AgentGuard.removing` by hand.
+  The other three are reported after the engine folder is removed, so
   finish them by hand: remove the named PATH blocks and files, and restore the
   named permission values from `~/Agent Guard/permissions-backup.json`, where
   the original settings are saved.
