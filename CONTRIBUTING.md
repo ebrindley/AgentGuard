@@ -15,7 +15,7 @@ A bug report needs:
 
 Remove credentials, tokens and private paths before you post.
 
-Check the [known limitations](SECURITY.md#known-limitations-in-020) first. They are
+Check the [known limitations](SECURITY.md#known-limitations-in-021) first. They are
 documented, not unnoticed.
 
 ## Pull requests are not accepted

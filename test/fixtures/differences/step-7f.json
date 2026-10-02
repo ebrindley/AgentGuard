@@ -1,0 +1,10 @@
+{
+  "step": "7f",
+  "reason": "Once Pi is installed, write-deny Pi's and OMP's project config names, .pi and .omp, anywhere in OpenCode sessions, in the final deny block after Pi's guard files, so no ALLOW entry reopens them: Pi loads a trusted project's .pi, and OMP loads .omp from the project and its parents without asking (docs/DESIGN.md section 12, step 7f). Applies only with Pi installed, after step-7c.json.",
+  "inserts": [
+    {
+      "after": "  (subpath (h \"/.config/pi-sandbox-guard/executables.conf\"))\n",
+      "insert": "  (regex #\"/\\.pi(/|$)\")\n  (regex #\"/\\.omp(/|$)\")\n"
+    }
+  ]
+}

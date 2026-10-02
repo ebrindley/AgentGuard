@@ -1,7 +1,7 @@
 {
   "source": "pi-sandbox-guard",
   "commit": "7ad441f",
-  "reason": "profiles/pi carries pi-sandbox-guard 7ad441f's Pi profile with the protections Agent Guard adds to Pi sessions (docs/DESIGN.md section 11). Every change to a vendored file is in the patch and listed here; test/pi-files.mjs checks both, test/pi-launch.mjs tests differences 1 to 5 and test/pi-commands.sh difference 6.",
+  "reason": "profiles/pi carries pi-sandbox-guard 7ad441f's Pi profile with the protections Agent Guard adds to Pi sessions (docs/DESIGN.md section 11). Every change to a vendored file is in the patch and listed here; test/pi-files.mjs checks both, test/pi-launch.mjs tests differences 1 to 5 and 7, test/pi-commands.sh difference 6 and the corpus difference 8.",
   "patch": "pi.patch",
   "files": {
     "LICENSE": { "mode": "644", "blob": "18a32b25985be476250a26c9e8c47f823ae92172", "commit": "b60240a", "note": "From b60240a, the pi-sandbox-guard commit after 7ad441f that changed only LICENSE's copyright line, to name pi-sandbox-guard contributors." },
@@ -79,6 +79,16 @@
       "id": 6,
       "change": "scripts/bind-executable.sh runs as agent-guard bind (commands/bind.zsh) instead of npm run bind: its usage, hints and executables.conf header name agent-guard bind; every mode but --show stops when node is not on PATH, which npm run guaranteed; --show also prints the checker Node; --checker-node [PATH] records the analyzer's Node in the extension's .guard-node as deploy-local.sh did (validated outside every sandbox-writable root, a Homebrew Cellar path kept as its opt link, mode 0600; without a path, the node on PATH) and cannot be combined with another mode; an executables.conf or .guard-node that is a symbolic link or not a regular file is refused before it is written. scripts/lib-ops.sh is unchanged.",
       "files": ["scripts/bind-executable.sh"]
+    },
+    {
+      "id": 7,
+      "change": "Step 7f (docs/DESIGN.md section 12): the project agent config deny write-denies all of .opencode instead of .opencode/plugins, OpenCode's config file names (opencode.json, opencode.jsonc, tui.json, tui.jsonc) and .cc-safety-net, anywhere under the project. Without it a Pi session could plant an OpenCode plugin or config that a later OpenCode session in the project loads, or a .cc-safety-net/policy.json that switches off cc-safety-net's built-in rules there. The preamble's PROJECT refusal patterns, kept in step with the folder rules, refuse a project inside .opencode or .cc-safety-net; the file-name rules match only the file itself and need no refusal.",
+      "files": ["sandbox/pi-sandbox.sb", "sandbox/pi-sandbox-preamble.zsh"]
+    },
+    {
+      "id": 8,
+      "change": "Step 7f: the analyzer asks before a git push that rewrites or deletes remote refs: --force and its variants (--force-with-lease, --force-if-includes), --mirror, --prune, --delete, a short option cluster containing f or d, or a refspec starting with + or :, with global options such as -C <dir> allowed before push. Seatbelt cannot stop a push, and pi-sandbox-guard allowed all of these. A plain push, long options such as --follow-tags and a refspec such as main:main stay allowed.",
+      "files": ["src/validate-bash-command.sh"]
     }
   ],
   "test_notes": [
@@ -95,6 +105,11 @@
       "file": "test/shim.mjs",
       "differences": [1, 4, 5],
       "change": "runNestedShim passes the profile's AG_* parameters with inert values (the cache roots as HOME/.cache), read from the profile; the ambient-override refusal case expects agent-guard bind instead of npm run bind."
+    },
+    {
+      "file": "test/corpus/corpus.json",
+      "differences": [8],
+      "change": "Ten cases after git clean -fdx: eight push forms that ask (--force, -uf, --force-with-lease=..., a + refspec, a : refspec, -d, --mirror, git -C repo push --force) and two that stay allowed (git push -u origin feature, git push --follow-tags origin main:main)."
     }
   ]
 }

@@ -23,12 +23,14 @@ const engine = join(home, 'Library/Application Support/AgentGuard');
 const reference = join(root, 'test/fixtures/opencode-guard-1.0.3');
 // Recorded, reviewed changes to the generated profile since v1.0.3, applied in step
 // order to the renamed v1.0.3 output: each inserts lines right after an anchor line,
-// or after each of its anchors in order. step-7c.json applies only with Pi installed.
+// or after each of its anchors in order. step-7c.json and then step-7f.json apply only
+// with Pi installed.
 const differences = readdirSync(join(root, 'test/fixtures/differences'))
   .filter((f) => /^step-\d+\.json$/.test(f))
   .map((f) => JSON.parse(readFileSync(join(root, 'test/fixtures/differences', f), 'utf8')))
   .sort((a, b) => a.step - b.step);
-const piInstalled = JSON.parse(readFileSync(join(root, 'test/fixtures/differences/step-7c.json'), 'utf8'));
+const piInstalled = ['step-7c.json', 'step-7f.json']
+  .map((f) => JSON.parse(readFileSync(join(root, 'test/fixtures/differences', f), 'utf8')));
 function applyDifferences(text, records) {
   for (const { step, after, insert, inserts = [{ after, insert }] } of records) {
     for (const d of inserts) {
@@ -71,7 +73,7 @@ try {
   mkdirSync(join(engine, 'state'), { recursive: true });
   writeFileSync(join(engine, 'state/stamp.json'), JSON.stringify({ harnesses: ['opencode', 'pi'] }));
   writeFileSync(join(engine, 'state/wrappers.json'), JSON.stringify({ wrappers: { 'pi-work': { sha256: '0'.repeat(64) } }, historical: ['pi-old'] }));
-  compare('pi-installed', `ALLOW -\n${home}/.local/bin\nREAD ONLY -\nDENY -\n`, [...differences, piInstalled]);
+  compare('pi-installed', `ALLOW -\n${home}/.local/bin\nREAD ONLY -\nDENY -\n`, [...differences, ...piInstalled]);
 } finally {
   rmSync(run, { recursive: true, force: true });
 }

@@ -12,7 +12,7 @@ index 2f94258..5b380df 100755
  fi
  
 diff --git a/sandbox/pi-sandbox-preamble.zsh b/sandbox/pi-sandbox-preamble.zsh
-index 9b7c788..5d275e8 100644
+index 9b7c788..28feaec 100644
 --- a/sandbox/pi-sandbox-preamble.zsh
 +++ b/sandbox/pi-sandbox-preamble.zsh
 @@ -547,7 +547,7 @@ resolve_configured_executable() {
@@ -60,7 +60,18 @@ index 9b7c788..5d275e8 100644
          exit 1
        }
      fi
-@@ -1018,6 +1018,90 @@ case "$PROJECT" in
+@@ -1009,15 +1009,100 @@ esac
+ # worktree under ~/.omp/wt) would be denied wholesale, so refuse it clearly
+ # instead of launching into a read-only project.
+ # Keep these patterns in step with the project agent config regexes in pi-sandbox.sb.
++# Agent Guard difference 7 widens .opencode/plugins to .opencode and adds .cc-safety-net.
+ case "$PROJECT" in
+   */.pi|*/.pi/*|*/.omp|*/.omp/* \
+   |*/.(claude|codex)/(extensions|hooks|tools)|*/.(claude|codex)/(extensions|hooks|tools)/* \
+   |*/.gemini/extensions|*/.gemini/extensions/* \
+-  |*/.opencode/plugins|*/.opencode/plugins/*)
++  |*/.opencode|*/.opencode/*|*/.cc-safety-net|*/.cc-safety-net/*)
+     emit "refusing boundary '$PROJECT': it is inside a protected agent config folder, which the sandbox write-protects."
      emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."; exit 1 ;;
  esac
  
@@ -151,7 +162,7 @@ index 9b7c788..5d275e8 100644
  ACTIVE_HOOKS="$(resolve_active_hooks "$PROJECT")" || exit 1
  TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
  
-@@ -1084,12 +1168,51 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
+@@ -1084,12 +1169,51 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
      # the recorded interpreter, and both --detect and a bare --pi re-derive node via
      # detect_node, which takes the first PATH hit with no write-root filter — so
      # either would re-record the same unsafe path and fail identically next launch.
@@ -204,7 +215,7 @@ index 9b7c788..5d275e8 100644
  emit "OS sandbox ON. Runtime [$PI_SANDBOX_RUNTIME]. Project [$PROJECT_VIA]: $PROJECT"
  emit "  active Git hooks denied: $ACTIVE_HOOKS"
  if [ "$PI_SANDBOX_RUNTIME" = "pi" ]; then
-@@ -1122,5 +1245,6 @@ PI_SANDBOX_CMD=(
+@@ -1122,5 +1246,6 @@ PI_SANDBOX_CMD=(
    -D "OMP_AGENT_STATE=$OMP_AGENT_STATE"
    -D "OMP_STATE_ROOT=$OMP_STATE_ROOT"
    -D "OMP_BASE_ROOT=$OMP_BASE_ROOT"
@@ -212,10 +223,36 @@ index 9b7c788..5d275e8 100644
    -f "$PROFILE"
  )
 diff --git a/sandbox/pi-sandbox.sb b/sandbox/pi-sandbox.sb
-index f560a31..356a0a0 100644
+index f560a31..64dee5c 100644
 --- a/sandbox/pi-sandbox.sb
 +++ b/sandbox/pi-sandbox.sb
-@@ -323,3 +323,132 @@
+@@ -160,6 +160,12 @@
+   ;; refuses a PROJECT whose own path has any of these components, which these
+   ;; regexes would otherwise match wholesale, and symlinked .pi/.omp layouts.
+   ;; Keep these regexes in step with the PROJECT refusal patterns in pi-sandbox-preamble.zsh.
++  ;; Agent Guard difference 7 (Agent Guard's test/fixtures/differences/pi.json):
++  ;; all of .opencode, not only its plugins, OpenCode's config file names, and
++  ;; .cc-safety-net, whose policy.json can switch off cc-safety-net's built-in
++  ;; rules for later OpenCode sessions in that folder. The file names match only
++  ;; the file itself, so they need no PROJECT refusal. cc-safety-net's logs stay
++  ;; writable, as in OpenCode's rule and difference 1.
+   (require-all
+     (subpath (param "PROJECT"))
+     (require-any
+@@ -167,7 +173,11 @@
+       (regex #"/\.omp(/|$)")
+       (regex #"/\.(claude|codex)/(extensions|hooks|tools)(/|$)")
+       (regex #"/\.gemini/extensions(/|$)")
+-      (regex #"/\.opencode/plugins(/|$)")))
++      (regex #"/\.opencode(/|$)")
++      (regex #"/(opencode|tui)\.jsonc?$")
++      (require-all
++        (regex #"/\.cc-safety-net(/|$)")
++        (require-not (subpath (string-append (param "HOME") "/.cc-safety-net/logs"))))))
+   (subpath (string-append (param "PI_AGENT_STATE") "/extensions"))
+   (literal (string-append (param "PI_AGENT_STATE") "/settings.json"))
+   (literal (string-append (param "PI_AGENT_STATE") "/auth.json"))
+@@ -323,3 +333,132 @@
    (literal (string-append (param "HOME") "/.pi/agent/security-events.log"))
    ;; .env files anywhere (incl. project) — the one project-wide secret deny.
    (regex #"/\.env($|\.)"))
@@ -409,6 +446,44 @@ index d997be1..93f8d29 100644
        '`pi` or `omp` shim on PATH (startup prints "OS sandbox ON").',
    );
  }
+diff --git a/src/validate-bash-command.sh b/src/validate-bash-command.sh
+index 5c20996..2161877 100755
+--- a/src/validate-bash-command.sh
++++ b/src/validate-bash-command.sh
+@@ -3792,6 +3792,12 @@ warning_patterns=(
+     # Git destructive operations
+     "git[[:space:]]+reset[[:space:]]+--hard"
+     "git[[:space:]]+clean[[:space:]]+-[a-zA-Z]*f"
++    # Agent Guard difference 8 (Agent Guard's test/fixtures/differences/pi.json):
++    # pushes that rewrite or delete remote refs, which Seatbelt cannot stop:
++    # --force and its variants, --mirror, --prune, --delete, a short option
++    # cluster with f or d, and a refspec starting with + or :. Global options
++    # such as -C <dir> may come before push.
++    "(^|[^[:alnum:]_.-])git([[:space:]]+[^[:space:]]+)*[[:space:]]+push([[:space:]]+[^[:space:]]+)*[[:space:]]+(--force([=-][^[:space:]]*)?|--mirror|--prune|--delete|-[a-zA-Z]*[fd][a-zA-Z]*|[+:][^[:space:]]+)([[:space:]]|$)"
+     # core.hooksPath repointing is handled by the option-aware token scan below:
+     # git config keys are CASE-INSENSITIVE and the key can be quote-split
+     # (core."hooksPath"), neither of which a flat ERE handles.
+diff --git a/test/corpus/corpus.json b/test/corpus/corpus.json
+index 53ef527..bc9e0dd 100644
+--- a/test/corpus/corpus.json
++++ b/test/corpus/corpus.json
+@@ -112,6 +112,16 @@
+     { "command": "rm -rf ${DIR}", "expect": "ask", "note": "unknown variable target" },
+     { "command": "rm -rf /*", "expect": "ask", "note": "root glob is confirm tier in current analyzer (glob expansion unresolvable statically)" },
+     { "command": "git clean -fdx", "expect": "ask", "note": "destructive but repo-scoped -> confirm" },
++    { "command": "git push --force origin main", "expect": "ask", "note": "Agent Guard difference 8: rewrites remote history, which Seatbelt cannot stop" },
++    { "command": "git push -uf origin main", "expect": "ask", "note": "Agent Guard difference 8: f inside a short option cluster" },
++    { "command": "git push --force-with-lease=main:abc123 origin main", "expect": "ask", "note": "Agent Guard difference 8" },
++    { "command": "git push origin +main", "expect": "ask", "note": "Agent Guard difference 8: a + refspec forces" },
++    { "command": "git push origin :old-branch", "expect": "ask", "note": "Agent Guard difference 8: an empty source deletes the remote branch" },
++    { "command": "git push -d origin old-branch", "expect": "ask", "note": "Agent Guard difference 8" },
++    { "command": "git push --mirror backup", "expect": "ask", "note": "Agent Guard difference 8: --mirror overwrites and deletes remote refs" },
++    { "command": "git -C repo push --force", "expect": "ask", "note": "Agent Guard difference 8: global options before push" },
++    { "command": "git push -u origin feature", "expect": "allow", "note": "Agent Guard difference 8: a plain push stays allowed" },
++    { "command": "git push --follow-tags origin main:main", "expect": "allow", "note": "Agent Guard difference 8: long options and a plain refspec stay allowed" },
+     { "command": "find . -name \"*.tmp\" -delete", "expect": "ask" },
+     { "command": "export PATH=/tmp/bin:$PATH", "expect": "ask", "note": "critical env manipulation -> warn tier (exit 1)" },
+     { "command": "unset DYLD_LIBRARY_PATH", "expect": "ask" },
 diff --git a/test/shim.mjs b/test/shim.mjs
 index 98d10e2..bd11001 100644
 --- a/test/shim.mjs

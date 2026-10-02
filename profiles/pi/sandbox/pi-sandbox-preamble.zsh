@@ -1009,11 +1009,12 @@ esac
 # worktree under ~/.omp/wt) would be denied wholesale, so refuse it clearly
 # instead of launching into a read-only project.
 # Keep these patterns in step with the project agent config regexes in pi-sandbox.sb.
+# Agent Guard difference 7 widens .opencode/plugins to .opencode and adds .cc-safety-net.
 case "$PROJECT" in
   */.pi|*/.pi/*|*/.omp|*/.omp/* \
   |*/.(claude|codex)/(extensions|hooks|tools)|*/.(claude|codex)/(extensions|hooks|tools)/* \
   |*/.gemini/extensions|*/.gemini/extensions/* \
-  |*/.opencode/plugins|*/.opencode/plugins/*)
+  |*/.opencode|*/.opencode/*|*/.cc-safety-net|*/.cc-safety-net/*)
     emit "refusing boundary '$PROJECT': it is inside a protected agent config folder, which the sandbox write-protects."
     emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."; exit 1 ;;
 esac
