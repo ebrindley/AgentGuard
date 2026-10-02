@@ -87,7 +87,7 @@
     },
     {
       "id": 8,
-      "change": "Step 7f: the analyzer asks before a git push that rewrites or deletes remote refs: --force and its variants (--force-with-lease, --force-if-includes), --mirror, --prune, --delete, a short option cluster containing f or d, or a refspec starting with + or :, with only Git's global options (such as -C <dir> or --no-pager) allowed before push; quoted words count as one, redirections are skipped, and no word crosses a shell separator, which can also end the option. Seatbelt cannot stop a push, and pi-sandbox-guard allowed all of these. A plain push, long options such as --follow-tags and a refspec such as main:main stay allowed.",
+      "change": "Step 7f: the analyzer asks before a git push that rewrites or deletes remote refs: --force and its variants (--force-with-lease, --force-if-includes), --mirror, --prune, --delete, a short option cluster containing f or d, or a refspec starting with + or :, with only Git's global options (such as -C <dir> or --no-pager) allowed before push; quoted and backslash-escaped words count as one, redirections are skipped, and no word crosses a shell separator, which can also end the option. Seatbelt cannot stop a push, and pi-sandbox-guard allowed all of these. A plain push, long options such as --follow-tags and a refspec such as main:main stay allowed.",
       "files": ["src/validate-bash-command.sh"]
     }
   ],

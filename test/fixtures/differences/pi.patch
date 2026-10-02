@@ -496,7 +496,7 @@ index d997be1..93f8d29 100644
    );
  }
 diff --git a/src/validate-bash-command.sh b/src/validate-bash-command.sh
-index 5c20996..07f0c04 100755
+index 5c20996..6dfe2e9 100755
 --- a/src/validate-bash-command.sh
 +++ b/src/validate-bash-command.sh
 @@ -3792,6 +3792,15 @@ warning_patterns=(
@@ -508,18 +508,18 @@ index 5c20996..07f0c04 100755
 +    # --force and its variants, --mirror, --prune, --delete, a short option
 +    # cluster with f or d, and a refspec starting with + or :. Only Git's global
 +    # options may come before push, such as -C <dir> or --no-pager, so a pathspec
-+    # or another command's words named push do not match. Words may be quoted,
-+    # redirections are skipped, and no word crosses a shell separator, which can
-+    # also end the option.
-+    "(^|[^[:alnum:]_.-])git([[:space:]]+(-[cC]|--(git-dir|work-tree|namespace|config-env))[[:space:]]+([^[:space:];&|()<>\"']|\"[^\"]*\"|'[^']*')+|[[:space:]]+-([^[:space:];&|()<>\"']|\"[^\"]*\"|'[^']*')*)*[[:space:]]+push([[:space:]]+(([^[:space:];&|()<>\"']|\"[^\"]*\"|'[^']*')+|[0-9]*(>>?|<|>&|&>>?)[[:space:]]*([^[:space:];&|()<>\"']|\"[^\"]*\"|'[^']*')+))*[[:space:]]+(--force([=-][^[:space:];&|()<>]*)?|--mirror|--prune|--delete|-[a-zA-Z]*[fd][a-zA-Z]*|[+:][^[:space:];&|()<>]+)([[:space:];&|()<>]|$)"
++    # or another command's words named push do not match. Words may be quoted or
++    # hold backslash escapes, redirections are skipped, and no word crosses a shell
++    # separator, which can also end the option.
++    "(^|[^[:alnum:]_.-])git([[:space:]]+(-[cC]|--(git-dir|work-tree|namespace|config-env))[[:space:]]+([^[:space:];&|()<>\"'\\\\]|\\\\.|\"([^\"\\\\]|\\\\.)*\"|'[^']*')+|[[:space:]]+-([^[:space:];&|()<>\"'\\\\]|\\\\.|\"([^\"\\\\]|\\\\.)*\"|'[^']*')*)*[[:space:]]+push([[:space:]]+(([^[:space:];&|()<>\"'\\\\]|\\\\.|\"([^\"\\\\]|\\\\.)*\"|'[^']*')+|[0-9]*(>>?|<|>&|&>>?)[[:space:]]*([^[:space:];&|()<>\"'\\\\]|\\\\.|\"([^\"\\\\]|\\\\.)*\"|'[^']*')+))*[[:space:]]+(--force([=-][^[:space:];&|()<>]*)?|--mirror|--prune|--delete|-[a-zA-Z]*[fd][a-zA-Z]*|[+:][^[:space:];&|()<>]+)([[:space:];&|()<>]|$)"
      # core.hooksPath repointing is handled by the option-aware token scan below:
      # git config keys are CASE-INSENSITIVE and the key can be quote-split
      # (core."hooksPath"), neither of which a flat ERE handles.
 diff --git a/test/corpus/corpus.json b/test/corpus/corpus.json
-index 53ef527..eb974b2 100644
+index 53ef527..c6a96a9 100644
 --- a/test/corpus/corpus.json
 +++ b/test/corpus/corpus.json
-@@ -112,6 +112,23 @@
+@@ -112,6 +112,24 @@
      { "command": "rm -rf ${DIR}", "expect": "ask", "note": "unknown variable target" },
      { "command": "rm -rf /*", "expect": "ask", "note": "root glob is confirm tier in current analyzer (glob expansion unresolvable statically)" },
      { "command": "git clean -fdx", "expect": "ask", "note": "destructive but repo-scoped -> confirm" },
@@ -538,6 +538,7 @@ index 53ef527..eb974b2 100644
 +    { "command": "git --git-dir .git push --force", "expect": "ask", "note": "Agent Guard difference 8: a global option with its argument before push" },
 +    { "command": "git -C \"release repo\" push origin main --force", "expect": "ask", "note": "Agent Guard difference 8: a quoted argument with a space" },
 +    { "command": "git push >push.log origin main --force", "expect": "ask", "note": "Agent Guard difference 8: a redirection before the option" },
++    { "command": "git -C O\\'Reilly push origin main --force", "expect": "ask", "note": "Agent Guard difference 8: a backslash-escaped quote is part of the word" },
 +    { "command": "git push origin main && ls -d /tmp", "expect": "allow", "note": "Agent Guard difference 8: another command's options do not count" },
 +    { "command": "git diff -- push -d", "expect": "allow", "note": "Agent Guard difference 8: a pathspec named push is not the subcommand" },
      { "command": "find . -name \"*.tmp\" -delete", "expect": "ask" },
