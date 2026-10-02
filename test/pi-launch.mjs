@@ -95,9 +95,9 @@ function sb(params, argv) {
   const all = {
     TMPDIR: temp, ACTIVE_HOOKS: join(params.PROJECT, '.git/hooks'), PI_AGENT_STATE: join(params.HOME, '.pi/agent'),
     OMP_AGENT_STATE: `${inert}/omp-agent`, OMP_STATE_ROOT: `${inert}/omp-state`, OMP_BASE_ROOT: `${inert}/omp-base`,
-    AG_XDG_CACHE_HOME: join(params.HOME, '.cache'), ...params,
+    AG_CACHE_HOME: join(params.HOME, '.cache'), AG_XDG_CACHE_HOME: join(params.HOME, '.cache'), ...params,
   };
-  for (const [, name] of readFileSync(profile, 'utf8').matchAll(/\(param "(AG_LINK_[A-Z_]+)"\)/g)) all[name] ??= inert;
+  for (const [, name] of readFileSync(profile, 'utf8').matchAll(/\(param "(AG_(?:LINK|PIN)_[A-Z0-9_]+)"\)/g)) all[name] ??= inert;
   const defines = Object.entries(all).flatMap(([k, v]) => ['-D', `${k}=${v}`]);
   return spawnSync('/usr/bin/sandbox-exec', [...defines, '-f', profile, ...argv], { encoding: 'utf8' });
 }
@@ -174,6 +174,33 @@ try {
     check('difference 1: a ~/.opencode linked into the temp folder is write-denied; the temp folder is not', () => {
       denied(write(a, join(linkedFolder, 'opencode.json')), 'link target');
       allowed(write(a, join(scratch, 'other.txt')), 'temp folder');
+    });
+    check('difference 1: the folder holding a linked ~/.zshrc\'s target can be neither renamed away nor swapped for a replacement', () => {
+      const replacement = join(a.project, 'replacement');
+      mkdirSync(replacement);
+      writeFileSync(join(replacement, 'zshrc'), 'export EVIL=1\n');
+      denied(session(a, ['/bin/mv', dotfiles, join(a.project, 'dotfiles-old')]), 'rename away');
+      // An atomic exchange of the two folders: renamex_np with RENAME_SWAP.
+      const swap = 'import ctypes, errno, sys\nlibc = ctypes.CDLL(None, use_errno=True)\n' +
+        'ok = libc.renamex_np(sys.argv[1].encode(), sys.argv[2].encode(), 2) == 0\n' +
+        'print("swapped" if ok else errno.errorcode[ctypes.get_errno()])\n';
+      const r = session(a, ['/usr/bin/python3', '-c', swap, replacement, dotfiles]);
+      assert.ok(started(r), r.stderr);
+      assert.equal(r.stdout.trim(), 'EPERM', `swap: ${r.stdout}${r.stderr}`);
+      assert.equal(readFileSync(join(a.home, '.zshrc'), 'utf8'), 'export X=1\n');
+    });
+  }
+  {
+    // Eight startup files linked four folders deep apiece: more folders to pin than slots.
+    const a = account('many-links');
+    for (const [i, f] of Object.values(protectedFiles).entries()) {
+      const dir = join(scratch, 'many links', `${i}`, 'b', 'c', 'd');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, 'rc'), '\n');
+      symlinkSync(join(dir, 'rc'), join(a.home, f));
+    }
+    check('difference 1: a launch with more folders to pin than the profile has slots is refused', () => {
+      refused(session(a, ['/bin/echo', 'started']), 'too many pins', /parent folders to protect, more than the profile's 32/);
     });
   }
 
@@ -287,6 +314,18 @@ try {
     });
     check('differences 1 and 4 apply to OMP sessions too', () => {
       denied(write(a, join(cache, 'opencode/packages/plugin/index.js'), { runtime: 'omp' }), 'OMP');
+    });
+  }
+  {
+    const a = account('linked-cache');
+    const target = join(a.project, 'cache');
+    mkdirSync(join(target, 'opencode/packages/plugin'), { recursive: true });
+    symlinkSync(target, join(a.home, '.cache'));
+    check('difference 4: a ~/.cache linked into the project keeps OpenCode\'s cache protected at the link target', () => {
+      for (const p of ['opencode/packages/plugin/index.js', 'opencode/bin/opencode', 'opencode/models.json'])
+        denied(write(a, join(target, p)), p);
+      denied(write(a, join(a.home, '.cache/opencode/packages/plugin/index.js')), 'through the link');
+      allowed(write(a, join(target, 'other.txt')), 'the rest of the cache');
     });
   }
   {

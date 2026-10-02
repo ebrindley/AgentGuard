@@ -241,8 +241,8 @@ function runOmpShim(fx, extraEnv = {}, args = ['hello']) {
 // test/fixtures/differences/pi.json), inert as the launcher passes them when no
 // protected path is a symlink and XDG_CACHE_HOME is unset.
 function agentGuardParams(profilePath, home) {
-  const names = new Set([...readFileSync(profilePath, 'utf8').matchAll(/\(param "(AG_[A-Z_]+)"\)/g)].map((m) => m[1]));
-  return [...names].flatMap((name) => ['-D', name === 'AG_XDG_CACHE_HOME'
+  const names = new Set([...readFileSync(profilePath, 'utf8').matchAll(/\(param "(AG_[A-Z0-9_]+)"\)/g)].map((m) => m[1]));
+  return [...names].flatMap((name) => ['-D', /^AG_(XDG_)?CACHE_HOME$/.test(name)
     ? `${name}=${home}/.cache`
     : `${name}=/private/tmp/pi-sandbox-guard-unused/agent-guard-no-link`]);
 }
