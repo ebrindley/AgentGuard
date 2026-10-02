@@ -65,7 +65,7 @@ fi
 PI_SHIM="${0:A:h}/pi"
 if [ ! -x "$PI_SHIM" ]; then
   print -u2 "Protected pi shim not found at $PI_SHIM."
-  print -u2 "Install it first: npm run deploy:launchers"
+  print -u2 "Install Agent Guard first (agent-guard update, or the one-line installer)."
   exit 1
 fi
 

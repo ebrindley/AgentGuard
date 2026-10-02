@@ -191,9 +191,15 @@ try {
         '.opencode/sub', '.cc-safety-net', '.cc-safety-net/logs'])
         refused(session(a, ['/bin/echo', 'started'], { env: { PI_PROJECT: join(a.home, p) } }), p, refusal);
     });
-    check('difference 2: a project that is or contains the target of a linked Agent Guard folder is refused', () => {
-      refused(session(a, ['/bin/echo', 'started'], { env: { PI_PROJECT: join(dotfiles, 'opencode') } }), 'link target', refusal);
-      refused(session(a, ['/bin/echo', 'started'], { env: { PI_PROJECT: dotfiles } }), 'folder holding the link target', refusal);
+    check('difference 2: a project that is or is inside the target of a linked Agent Guard folder is refused', () => {
+      mkdirSync(join(dotfiles, 'opencode/sub'));
+      for (const p of [join(dotfiles, 'opencode'), join(dotfiles, 'opencode/sub')])
+        refused(session(a, ['/bin/echo', 'started'], { env: { PI_PROJECT: p } }), p, /it is or is inside '.*', the link target of Agent Guard's protected folder/);
+    });
+    check('difference 2: a project that contains such a link target starts, with the target write-denied', () => {
+      const env = { PI_PROJECT: dotfiles };
+      denied(write(a, join(dotfiles, 'opencode/opencode.json'), { env }), 'link target');
+      allowed(write(a, join(dotfiles, 'gitconfig'), { env }), 'the rest of the project');
     });
     check('difference 2: the engine folder is still refused by pi-sandbox-guard\'s ~/Library refusal', () => {
       refused(session(a, ['/bin/echo', 'started'], { env: { PI_PROJECT: join(a.home, 'Library/Application Support/AgentGuard') } }),
@@ -283,6 +289,22 @@ try {
       denied(write(a, join(cache, 'opencode/packages/plugin/index.js'), { runtime: 'omp' }), 'OMP');
     });
   }
+  {
+    const a = account('fresh-cache');
+    const cache = join(a.home, '.cache');
+    const xdg = join(scratch, 'fresh xdg cache');
+    mkdirSync(xdg);
+    check('difference 4: a launch on an account without ~/.cache creates a write-denied opencode/bin', () => {
+      assert.ok(!existsSync(cache), '~/.cache exists before the launch');
+      denied(write(a, join(cache, 'opencode/bin/opencode')), 'bin');
+      assert.ok(existsSync(join(cache, 'opencode/bin')), 'opencode/bin not created');
+      allowed(write(a, join(cache, 'notes.txt')), 'a file in ~/.cache');
+    });
+    check('difference 4: the launch also creates opencode/bin under XDG_CACHE_HOME', () => {
+      denied(write(a, join(xdg, 'opencode/bin/opencode'), { env: { XDG_CACHE_HOME: xdg } }), 'bin');
+      assert.ok(existsSync(join(xdg, 'opencode/bin')), 'opencode/bin not created');
+    });
+  }
 
   // Difference 5.
   {
@@ -303,6 +325,15 @@ try {
       r = session(a, ['/bin/echo', 'started']);
       refused(r, 'binding inside the project', /agent-guard bind --pi <abs-path> --node <abs-path>/);
       assert.doesNotMatch(r.stderr, /npm run/);
+    });
+    check('difference 5: the extension\'s FILTER-ONLY warning names agent-guard update and agent-guard bind', () => {
+      const index = JSON.stringify(join(pi, 'src/index.mjs'));
+      const r = spawnSync(process.execPath, ['--input-type=module', '-e', `(await import(${index})).default({ on() {} })`],
+        { encoding: 'utf8', env: { PATH: '/usr/bin:/bin', HOME: a.home, TMPDIR: temp } });
+      assert.equal(r.status, 0, r.stderr);
+      const warning = r.stderr.split('\n').find((l) => l.includes('FILTER-ONLY')) ?? '';
+      assert.match(warning, /install Agent Guard \(`agent-guard update`, or the one-line installer\) and run `agent-guard bind`/);
+      assert.doesNotMatch(warning, /npm run/);
     });
   }
 
