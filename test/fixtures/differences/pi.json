@@ -1,0 +1,82 @@
+{
+  "source": "pi-sandbox-guard",
+  "commit": "7ad441f",
+  "reason": "profiles/pi carries pi-sandbox-guard 7ad441f's Pi profile with the protections Agent Guard adds to Pi sessions (docs/DESIGN.md section 11). Every change to a vendored file is in the patch and listed here; test/pi-files.mjs checks both, and test/pi-launch.mjs tests each difference.",
+  "patch": "pi.patch",
+  "files": {
+    "LICENSE": { "mode": "644", "blob": "18a32b25985be476250a26c9e8c47f823ae92172", "commit": "b60240a", "note": "From b60240a, the pi-sandbox-guard commit after 7ad441f that changed only LICENSE's copyright line, to name pi-sandbox-guard contributors." },
+    "launchers/example-custom": { "mode": "755", "blob": "2f942582100886b8d692c9dd30279203df6d0226" },
+    "launchers/pi": { "mode": "755", "blob": "f5e94c2190a90829f670d6740282ac479f12228a" },
+    "sandbox/pi-sandbox-preamble.zsh": { "mode": "644", "blob": "9b7c7885c787dc911ee2592d7d075f16c553df9f" },
+    "sandbox/pi-sandbox.sb": { "mode": "644", "blob": "f560a319d701e3381238010dc185749499e502ed" },
+    "scripts/check-launchers.mjs": { "mode": "644", "blob": "e69270f00af20d12ff24a4f78ecaefcfe30bc9f1" },
+    "scripts/extension-entry.ts": { "mode": "644", "blob": "28af70dc91218de34d442b6d09287e2d0033331c" },
+    "scripts/test-sandbox-profile.sh": { "mode": "755", "blob": "4dcdf9c919b45acd4afbf41844c147d8846be627" },
+    "src/guard-core.mjs": { "mode": "644", "blob": "8969f00f5d6cde5a5a44d7a328cc78e83421b7e0" },
+    "src/index.mjs": { "mode": "644", "blob": "d997be1bc417effcf0c0318cdc2e3bafb542b342" },
+    "src/pi-types.d.ts": { "mode": "644", "blob": "8a88e39d7dd5f5a2609914ed22eda0d57716655d" },
+    "src/validate-bash-command.sh": { "mode": "755", "blob": "5c2099698cecb8289853a960fca38177e512b84f" },
+    "test/adapter.mjs": { "mode": "644", "blob": "e26069bf3d38e0139422ae848b7b72057cdc5b13" },
+    "test/corpus.mjs": { "mode": "644", "blob": "ca5197ce6a8de824d2a0e7362713718d309761b3" },
+    "test/corpus/corpus.json": { "mode": "644", "blob": "53ef5270cc221964207f493b819717ba934a913f" },
+    "test/degraded.mjs": { "mode": "644", "blob": "6762c27dc3f52549c9d1156424c3bb01e9316f28" },
+    "test/shim.mjs": { "mode": "644", "blob": "98d10e2434e169a416f0b2b1472714beca978de2" },
+    "test/smoke.mjs": { "mode": "644", "blob": "c31f80d4745fc151903f3f8a1cdae9293995a619" }
+  },
+  "added": {
+    "package.json": "Replaces 7ad441f's package.json, whose scripts run the npm deploy, bind and status commands that Agent Guard replaces; keeps the module fields."
+  },
+  "not_vendored": {
+    "scripts/test-ops.sh": "Tests pi-sandbox-guard's npm deploy, status and bind scripts, which Agent Guard replaces.",
+    "scripts/deploy-all.sh, scripts/deploy-launchers.sh, scripts/deploy-local.sh, scripts/setup-hooks.sh, .githooks/pre-push": "Replaced by Agent Guard's installer and CI.",
+    "scripts/bind-executable.sh, scripts/lib-ops.sh, scripts/status.sh, scripts/check-path.sh": "Replaced by agent-guard bind and doctor; the vendored suites do not need them.",
+    "test/e2e-demo.mjs": "A manual demonstration, not a suite.",
+    "config/, docs/, README.md, SECURITY.md, CONTRIBUTING.md, .github/": "pi-sandbox-guard's own documentation and repository files."
+  },
+  "differences": [
+    {
+      "id": 1,
+      "change": "Agent Guard's base write protections, appended after pi-sandbox-guard's rules: the engine folder, OpenCode Guard's engine folder, ~/Agent Guard, ~/Applications/Agent Guard.app, ~/.config/opencode, ~/.opencode, ~/.cc-safety-net except its logs, ~/Library/LaunchAgents and the eight shell startup files, plus the resolved target of each one that is a symlink at launch (engine/launch's rule: it exists and resolves elsewhere), passed as AG_LINK_* parameters with an inert path when there is no link.",
+      "files": ["sandbox/pi-sandbox.sb", "sandbox/pi-sandbox-preamble.zsh"],
+      "parameters": [
+        "AG_LINK_ENGINE", "AG_LINK_OPENCODEGUARD", "AG_LINK_GUARD_LIST", "AG_LINK_APP",
+        "AG_LINK_OPENCODE_CONFIG", "AG_LINK_OPENCODE", "AG_LINK_CC_SAFETY_NET", "AG_LINK_LAUNCH_AGENTS",
+        "AG_LINK_ZSHENV", "AG_LINK_ZPROFILE", "AG_LINK_ZSHRC", "AG_LINK_ZLOGIN",
+        "AG_LINK_PROFILE", "AG_LINK_BASH_PROFILE", "AG_LINK_BASH_LOGIN", "AG_LINK_BASHRC"
+      ]
+    },
+    {
+      "id": 2,
+      "change": "A project that is, contains or is inside one of difference 1's folders, or the link target of one, is refused before launch, beside the preamble's existing boundary and agent-config refusals. The shell startup files are files, so their link targets are protected but not refused. All of ~/.cc-safety-net is refused, its logs included.",
+      "files": ["sandbox/pi-sandbox-preamble.zsh"]
+    },
+    {
+      "id": 3,
+      "change": "Decision D7, as in engine/profile.sb: (deny lsopen), (deny job-creation) and (deny process-exec) of /usr/bin/open, /usr/bin/osascript, /usr/bin/osacompile, /usr/bin/codesign, /usr/sbin/diskutil, /bin/launchctl and /usr/bin/sudo.",
+      "files": ["sandbox/pi-sandbox.sb"]
+    },
+    {
+      "id": 4,
+      "change": "Step 7's protections under Pi's ~/.cache grant, for C = ~/.cache and C = the canonical XDG_CACHE_HOME: writes to C/opencode/packages, C/opencode/node_modules, C/opencode/bin, C/opencode/models.json and C/opencode/models-*.json are denied, and C and C/opencode are pinned with literal denies. XDG_CACHE_HOME travels as AG_XDG_CACHE_HOME, ~/.cache when unset; a value that is not an existing absolute folder refuses the launch.",
+      "files": ["sandbox/pi-sandbox.sb", "sandbox/pi-sandbox-preamble.zsh"],
+      "parameters": ["AG_XDG_CACHE_HOME"]
+    },
+    {
+      "id": 5,
+      "change": "The preamble's repair messages name agent-guard bind instead of npm run bind, and drop 'from the repo checkout'.",
+      "files": ["sandbox/pi-sandbox-preamble.zsh"]
+    }
+  ],
+  "test_edits": [
+    {
+      "file": "scripts/test-sandbox-profile.sh",
+      "differences": [1, 4],
+      "change": "sb, sb_omp and sb_pi_relocated pass the profile's AG_* parameters with inert values, read from the profile, since a missing parameter stops the profile from compiling."
+    },
+    {
+      "file": "test/shim.mjs",
+      "differences": [1, 4, 5],
+      "change": "runNestedShim passes the profile's AG_* parameters with inert values, read from the profile; the ambient-override refusal case expects agent-guard bind instead of npm run bind."
+    }
+  ]
+}
