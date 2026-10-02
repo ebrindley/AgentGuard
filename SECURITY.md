@@ -25,7 +25,7 @@ Fixes go into the latest release only. `agent-guard update` installs it.
 ## What Agent Guard is
 
 Agent Guard is a macOS Seatbelt write-containment boundary for terminal coding
-agents. Release 0.2.1 guards OpenCode, Pi and Oh My Pi (OMP). Each harness, and
+agents. Release 0.2.0 guards OpenCode, Pi and Oh My Pi (OMP). Each harness, and
 every process it starts, runs under `/usr/bin/sandbox-exec`, but OpenCode and Pi
 are guarded by different code with different rules until Pi moves onto Agent
 Guard's engine (step 10d of the plan in [docs/DESIGN.md](docs/DESIGN.md#12-plan)).
@@ -54,7 +54,7 @@ the target of a link inside the extension folder can be written where an ALLOW
 entry covers it, and a protected path that is a link to a missing target is
 protected at its name only, so the missing target can be created where an ALLOW
 entry covers it. The other exceptions are under
-[Known limitations](#known-limitations-in-021): npm configuration in the cache
+[Known limitations](#known-limitations-in-020): npm configuration in the cache
 that steers installs made outside the guard, remote-configuration entries in
 OpenCode's `auth.json`, the targets of symlinked project config names, and Pi's
 and OMP's other configuration under ALLOW.
@@ -85,7 +85,7 @@ that is too broad or sensitive, or that contains its own folder,
 and
 [ARCHITECTURE.md](https://github.com/ebrindley/pi-sandbox-guard/blob/7ad441f51c249eafe6f92d16e92d2fbf37622d67/docs/ARCHITECTURE.md).
 
-Agent Guard 0.2.1 differs from pi-sandbox-guard 7ad441f in seven ways, recorded
+Agent Guard 0.2.0 differs from pi-sandbox-guard 7ad441f in seven ways, recorded
 in `test/fixtures/differences/pi.json`, the last two as differences 7 and 8:
 
 1. Pi and OMP sessions cannot change Agent Guard's engine folder, `~/Agent Guard`,
@@ -136,7 +136,7 @@ Seatbelt profile is the boundary.
 - Provider tokens and other secrets the harness itself uses.
 - A VM, container or separate user identity.
 
-## Known limitations in 0.2.1
+## Known limitations in 0.2.0
 
 ### OpenCode
 

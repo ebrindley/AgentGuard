@@ -2,7 +2,7 @@
 
 Guardrails for terminal coding agents on macOS. Each agent runs under a macOS Seatbelt sandbox, with a small profile and plugin per agent; the design moves every agent onto one engine and one allow and deny list. It replaces OpenCode Guard and pi-sandbox-guard.
 
-Release 0.2.1 guards OpenCode, Pi and Oh My Pi (OMP), each in its own way until
+Release 0.2.0 guards OpenCode, Pi and Oh My Pi (OMP), each in its own way until
 Pi moves onto Agent Guard's engine (step 10d of the plan in
 [docs/DESIGN.md](docs/DESIGN.md#12-plan)):
 
@@ -277,7 +277,7 @@ The full policy is in pi-sandbox-guard's
 and
 [ARCHITECTURE.md](https://github.com/ebrindley/pi-sandbox-guard/blob/7ad441f51c249eafe6f92d16e92d2fbf37622d67/docs/ARCHITECTURE.md).
 
-Agent Guard 0.2.1 changes seven things in Pi and OMP sessions. Each is recorded
+Agent Guard 0.2.0 changes seven things in Pi and OMP sessions. Each is recorded
 in `test/fixtures/differences/pi.json`, the last two as differences 7 and 8, and
 has a test:
 
@@ -370,11 +370,11 @@ the launchers, profile, preamble, recorded wrappers, extension folder or
 outside the sandbox at the next Pi start. Nor can they create or change
 `~/.local/bin/pi-sandbox-guard-extension`: the launcher loads the `index.ts` in
 that folder in place of the installed extension whenever it exists. Two link
-cases are not covered; see [SECURITY.md](SECURITY.md#opencode). From 0.2.1 they
-also cannot create or change a `.pi` or `.omp` folder anywhere, even under an
-ALLOW entry: Pi loads a trusted project's `.pi`, and OMP loads `.omp` from the
-project and its parents without asking. Where either name in the launch folder
-is a link, its target is protected too.
+cases are not covered; see [SECURITY.md](SECURITY.md#opencode). OpenCode
+sessions also cannot create or change a `.pi` or `.omp` folder anywhere, even
+under an ALLOW entry: Pi loads a trusted project's `.pi`, and OMP loads `.omp`
+from the project and its parents without asking. Where either name in the
+launch folder is a link, its target is protected too.
 
 On a Mac without pi-sandbox-guard, the installer places these files when it finds
 Pi or OMP. The analyzer's Node is the `node` on PATH, refused when it lies in a
@@ -692,7 +692,7 @@ outside pi-sandbox-guard's credential paths and `.env` files, or what the agent
 does inside the project, and until step 10d it does not apply the Guard List,
 refuse tools in a session started outside the guard or check file tools
 ([Pi and OMP](#pi-and-omp)). Each limitation, per harness, and what is planned
-for it, is in [SECURITY.md](SECURITY.md#known-limitations-in-021). What the cache
+for it, is in [SECURITY.md](SECURITY.md#known-limitations-in-020). What the cache
 protections leave out is under
 [Maintenance outside the guard](#maintenance-outside-the-guard).
 
