@@ -37,8 +37,24 @@ suite() {
 # against it), so they run with writes to ~/.pi denied: the appends fail, which the
 # analyzer ignores, and the account's log is left alone.
 no_pi_writes=(/usr/bin/sandbox-exec -D "PI_HOME=${HOME:A}/.pi" -p '(version 1)(allow default)(deny file-write* (subpath (param "PI_HOME")))')
+# Four corpus cases must finish within the analyzer's production time limit of 2
+# seconds. That depends on the host: an eight-operand rm -rf takes about 1.3 seconds
+# on a developer Mac and more than 2 on some GitHub-hosted macOS 26 runners. On
+# GitHub Actions the corpus therefore runs from a copy of src and test with each
+# case's time limit tripled.
+corpus=$pi/test/corpus.mjs
+if [[ -n ${GITHUB_ACTIONS:-} ]]; then
+  copy=$(/usr/bin/mktemp -d "$TMPDIR/pi-corpus.XXXXXX") &&
+    /bin/cp -R "$pi/src" "$pi/test" "$copy/" &&
+    /usr/bin/jq '(.. | objects | select(has("timeoutMs")) | .timeoutMs) |= . * 3' \
+      "$pi/test/corpus/corpus.json" > "$copy/test/corpus/corpus.json" || { print -ru2 'cannot copy the corpus'; exit 1 }
+  corpus=$copy/test/corpus.mjs
+  print -r -- "note profiles/pi/test/corpus.mjs runs from $copy with time limits tripled"
+fi
 for t in smoke corpus adapter degraded; do
-  suite "profiles/pi/test/$t.mjs" $no_pi_writes node "$pi/test/$t.mjs"
+  f=$pi/test/$t.mjs
+  [[ $t == corpus ]] && f=$corpus
+  suite "profiles/pi/test/$t.mjs" $no_pi_writes node "$f"
 done
 suite profiles/pi/test/shim.mjs node "$pi/test/shim.mjs"
 suite profiles/pi/scripts/check-launchers.mjs node "$pi/scripts/check-launchers.mjs"
