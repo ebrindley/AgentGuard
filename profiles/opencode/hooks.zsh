@@ -66,14 +66,21 @@ opencode_check() {
       failed=(${(M)${(f)msgs}:#(Failed to install plugin |Failed to load plugin |Plugin )*}
               ${${(M)${(f)logs}:#*message=\"failed to load plugin\" *}#*message=\"failed to load plugin\" })
       /bin/rm -f "$out" "$events" "$engine/state/.serve.pid"
+      # The installer's checks set AGENT_GUARD_GATE=1. There the other plugins are
+      # the user's configuration: their failures are warnings, so they cannot roll
+      # back an install or update. The guard's own plugin must load in every mode.
+      local sev=FAIL
+      [[ ${AGENT_GUARD_GATE:-} == 1 && $ids == *'"agent_guard_status"'* ]] && sev=warn
       if [[ $ids != *'"agent_guard_status"'* ]]; then print "FAIL plugins not loaded in OpenCode$label"; ok=0
-      elif (( ! listening )); then print "FAIL cannot read OpenCode's events to check its plugins$label"; ok=0
-      elif (( ! $#failed )); then print "ok   plugins loaded in OpenCode$label"
+      elif (( listening && ! $#failed )); then print "ok   plugins loaded in OpenCode$label"
+      else
+        print "ok   guard plugin loaded in OpenCode$label"
+        (( listening )) || { print "$sev cannot read OpenCode's events to check its plugins$label"; [[ $sev == warn ]] || ok=0 }
       fi
       for f in $failed; do
         [[ $f == 'Failed to install plugin '* ]] && f+="; install it outside the guard (Agent Guard's README, Maintenance outside the guard)"
-        print -r -- "FAIL plugin not loaded in OpenCode$label: $f"
-        ok=0
+        print -r -- "$sev plugin not loaded in OpenCode$label: $f"
+        [[ $sev == warn ]] || ok=0
       done
     else
       print "skip plugin check (opencode CLI not found)"

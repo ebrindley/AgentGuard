@@ -63,7 +63,9 @@ rulebook, the app, `current`, the plugin link, the OpenCode permission values
 and the PATH blocks, and runs the gate: `agent-guard doctor` and a launch of
 `opencode --version` through the new PATH shim. If any check fails, it puts
 everything back, exits non-zero and names the failed checks; the previous
-version keeps working. Only after the gate passes does it write the version
+version keeps working. A configured plugin other than the guard's that fails to
+load is a warning in these checks, not a failure
+([Maintenance outside the guard](#maintenance-outside-the-guard)). Only after the gate passes does it write the version
 stamp and remove release folders older than the previous one, which stays for
 OpenCode sessions started from it.
 
@@ -204,7 +206,11 @@ executable after Agent Guard's own `opencode` (for example
   store and adds it to the global config; `--force` replaces the installed
   version. Inside the guard, a configured plugin missing from the store cannot be
   installed: OpenCode reports "Failed to install plugin <package>@<version>", and
-  `agent-guard doctor` fails and names it.
+  `agent-guard doctor` fails and names it. The installer's checks, which also run
+  in `agent-guard update`, report a configured plugin that fails to install, load
+  or start as a warning and pass, so a broken plugin in your configuration does
+  not roll back an install or block an update. They still fail when the guard's
+  own plugin does not load.
 - **npm language servers** (TypeScript, Pyright, Vue, Svelte, Astro, Bash, YAML,
   Dockerfile, PHP Intelephense and Biome in OpenCode 1.18.34). OpenCode starts
   language servers only when `lsp` is enabled in its config. Run
@@ -298,7 +304,8 @@ denied, a temp write is allowed, `open` is denied, then the profile's
 `check_hook`. For OpenCode that hook confirms through `opencode serve` that the
 `agent_guard_status` tool is visible and that no configured plugin failed to
 install, load or start, as OpenCode reports it in its events and its log, naming
-each that failed. It also warns when ripgrep is neither on PATH nor in OpenCode's
+each that failed; the installer runs it with `AGENT_GUARD_GATE=1`, which reports
+plugins other than the guard's that failed as warnings. It also warns when ripgrep is neither on PATH nor in OpenCode's
 `bin`. `launch check staged` runs the same checks on
 a release that is not current, loading that release's plugin through a config
 folder inside it. The development tests may read its output; it never depends

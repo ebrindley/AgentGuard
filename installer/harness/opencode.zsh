@@ -65,7 +65,7 @@ ag_h_opencode_procs() {
 ag_h_opencode_staged() {
   local out rc
   local -a found
-  out=$("$engine/releases/$ag_rid_new/launch" check staged 2>&1)
+  out=$(AGENT_GUARD_GATE=1 "$engine/releases/$ag_rid_new/launch" check staged 2>&1)
   rc=$?
   ag_say "$out"
   (( rc == 0 )) && return 0

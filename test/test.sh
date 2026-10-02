@@ -461,6 +461,17 @@ check "the launch created the missing bin folder" test -d "$oc/bin"
 check "doctor leaves no server output, events or pid" test -z "$(print -l "$engine"/state/.(serve|events).*(N))"
 /bin/rm -rf "${probe_pkg:h:h}"
 /usr/bin/jq --arg f "file://$home/Projects/throws-plugin.js" '.plugin = ["guard-probe-plugin", $f]' "$run/cfg.saved" > "$cfg"
+# The installer's checks treat plugins other than the guard's as the user's
+# configuration: an update with these configured passes with warnings, and doctor
+# on the release it installed still fails.
+gate_from=$(<"$engine/current/RELEASE")
+/bin/zsh "$root/install.sh" </dev/null > "$home/gate.log" 2>&1 && rc=0 || rc=$?
+out=$(<"$home/gate.log")
+(( rc == 0 )) && [[ $(<"$engine/current/RELEASE") != "$gate_from" && $out == *"ok   guard plugin loaded in OpenCode"* &&
+  $out == *"warn plugin not loaded in OpenCode: Failed to install plugin guard-probe-plugin@latest: "* &&
+  $out == *"warn plugin not loaded in OpenCode: path=file://$home/Projects/throws-plugin.js"* && $out != *FAIL* ]] &&
+  pass "an update with broken plugins configured passes the installer's checks with warnings" ||
+  { fail "an update with broken plugins configured passes the installer's checks with warnings (rc $rc)"; print -r -- "$out" }
 out=$("$engine/bin/agent-guard" doctor 2>&1) && rc=0 || rc=$?
 (( rc )) && [[ $out == *"FAIL plugin not loaded in OpenCode: Failed to install plugin guard-probe-plugin@latest: "*"install it outside the guard (Agent Guard's README, Maintenance outside the guard)"* ]] &&
   pass "doctor fails and names a plugin missing from the store" || { fail "doctor fails and names a plugin missing from the store"; print -r -- "$out" }
