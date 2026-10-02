@@ -215,8 +215,9 @@ pi-sandbox-guard 7ad441f's with the seven differences above, so:
 - **The analyzer does not check local Git discards.** It allows `git checkout --
   .`, `git restore .`, `git stash drop` and `git branch -D`, which cc-safety-net
   blocks in OpenCode sessions. It checks `git reset --hard` and `git clean`, and
-  asks before pushes that rewrite or delete remote branches. Planned:
-  cc-safety-net for Pi at step 10d.
+  asks before the common spellings of pushes that rewrite or delete remote
+  branches; as a pattern match it can miss some quoted or wrapped forms, such as
+  escaped quotes inside `bash -c`. Planned: cc-safety-net for Pi at step 10d.
 - **The launcher trusts its own folder.** It reads its profile and preamble from
   `~/.local/bin`, beside itself, not from a release folder in the write-protected
   engine folder. Pi sessions cannot write `~/.local/bin`, the launcher refuses a
