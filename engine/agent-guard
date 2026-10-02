@@ -197,24 +197,14 @@ uninstall() {
 # Pi is installed when the stamp's harnesses list names it; stamps before 0.2.0 have none.
 pi_installed() { /usr/bin/jq -e 'any(.harnesses[]?; . == "pi")' "$engine/state/stamp.json" >/dev/null 2>&1 }
 
-# The caller's environment, a project's .envrc for example, can make bash, zsh, node
-# or perl (shasum) load or run code before the script they are given, or write to a
-# file it names. The Pi commands clear these first (the Pi doctor checks through
-# the Pi harness's doctor hook); every program they start inherits that. zsh does
-# not pass on bash's exported functions (BASH_FUNC_*), which are not valid
-# parameter names.
-pi_clean_env() {
-  unset BASH_ENV ENV SHELLOPTS BASHOPTS CDPATH GLOBIGNORE ZDOTDIR \
-    NODE_OPTIONS NODE_PATH NODE_PRESERVE_SYMLINKS NODE_PRESERVE_SYMLINKS_MAIN NODE_REPL_EXTERNAL_MODULE \
-    NODE_REDIRECT_WARNINGS NODE_V8_COVERAGE NODE_COMPILE_CACHE NODE_ICU_DATA OPENSSL_CONF OPENSSL_MODULES \
-    PERL5OPT PERL5LIB PERLLIB PERL5DB
-}
-
-# Pi's commands take their own arguments (profiles/pi/commands).
+# Pi's commands take their own arguments (profiles/pi/commands). They clear the
+# caller's startup and preload variables first (ag_pi_clean_env in the Pi harness,
+# installer/harness/pi.zsh); every program they start inherits that.
 if [[ ${1:-} == (bind|wrapper) ]]; then
   pi_command=$1
   shift
-  pi_clean_env
+  source "$release/installer/harness/pi.zsh" || die 'cannot load the Pi harness'
+  ag_pi_clean_env
   source "$release/profiles/pi/commands/$pi_command.zsh" || die "cannot load the $pi_command command"
   pi_$pi_command "$@"
   exit
