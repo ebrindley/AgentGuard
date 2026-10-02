@@ -85,7 +85,7 @@ old_path="$ocg/bin:$base"
 build() { node "$adapter" release "$1" "$served" "$home" "v$2" "$2" "$url" >/dev/null }
 build "$source_root" 0.0.1 || { print -ru2 'cannot build v0.0.1'; finish }
 /bin/mkdir -p "$run/src-broken"
-/bin/cp -R "$source_root"/{engine,profiles,scripts,install.sh,LICENSE} "$run/src-broken/"
+/bin/cp -R "$source_root"/{engine,profiles,installer,scripts,install.sh,LICENSE} "$run/src-broken/"
 /usr/bin/sed -i '' '/^  (subpath (h "\/Library\/Application Support\/AgentGuard"))$/d' "$run/src-broken/engine/profile.sb"
 /usr/bin/sed -i '' 's|^writable=(|writable=("$engine/state" |' "$run/src-broken/profiles/opencode/harness.zsh"
 build "$run/src-broken" 0.0.3-broken || { print -ru2 'cannot build v0.0.3-broken'; finish }
@@ -342,6 +342,43 @@ boot_at=
 point= ag version
 rc=$?
 (( rc == 0 )) && pass 'agent-guard version reports no drift afterwards' || { fail "version (exit $rc)"; show }
+
+# --- M15: a migration record in the 0.1.x form, one object, written as 0.1.1's
+# installer leaves it: an install over it keeps it byte for byte, forwarder
+# removal reads its switch time, and the stamp lists the harnesses.
+label=M15
+restore M1-1.0.4
+sw=$(/usr/bin/jq -r .switched_at "$state/migration.json")
+print -r -- "{\"from\":\"opencode-guard\",\"switched_at\":$sw,\"retired\":true}" > "$state/migration.json"
+mig_hash=$(sha "$state/migration.json")
+point= boot y
+rc=$?
+(( rc == 0 )) && [[ $(sha "$state/migration.json") == "$mig_hash" ]] && pass 'an install over it keeps the record byte for byte' || { fail "install (exit $rc)"; show }
+/usr/bin/jq -e '.harnesses == ["opencode"]' "$state/stamp.json" >/dev/null && pass 'the stamp lists the harnesses it installed' ||
+  fail "stamp harnesses: $(/usr/bin/jq -c .harnesses "$state/stamp.json")"
+point= boot_at=$(( sw + 10 )) ag update
+rc=$?
+boot_at=
+(( rc == 0 )) && [[ ! -e $ocg && $(sha "$state/migration.json") == "$mig_hash" ]] &&
+  pass 'forwarder removal reads its switch time and leaves the record as it is' || { fail "update (exit $rc)"; show }
+
+# --- M16: OpenCode Guard installed again after the migration, while the latest
+# release is installed: agent-guard update finds the migration pending and runs
+# the install instead of saying the release is current.
+label=M16
+restore M1-1.0.4
+ocg_install 1.0.4 || { fail "OpenCode Guard 1.0.4's install.sh over Agent Guard (exit $?)"; show }
+point= ag update
+rc=$?
+(( rc == 0 )) && ! /usr/bin/grep -q 'is current\.' "$out" && /usr/bin/grep -q 'installing it again for the move from OpenCode Guard' "$out" &&
+  /usr/bin/grep -q 'migrating from OpenCode Guard' "$out" && pass 'update at the latest release migrates it' || { fail "update (exit $rc)"; show }
+guard_plugins
+[[ $reply == agent-guard.js ]] && /usr/bin/jq -e '.retired == true' "$state/migration.json" >/dev/null &&
+  [[ $(listing "$ocg") == $'bin\nbin/opencode -> '"$engine/bin/opencode"$'\nbin/opencode-gui -> '"$engine/bin/opencode-gui" ]] &&
+  pass 'agent-guard.js is the only guard plugin; OpenCode Guard is retired again' || { fail "after the update: guard plugins $reply"; listing "$ocg" | /usr/bin/sed 's/^/    /' }
+point= ag update
+rc=$?
+(( rc == 0 )) && /usr/bin/grep -q 'Agent Guard 0.0.1 is current.' "$out" && pass 'the next update finds nothing pending' || { fail "second update (exit $rc)"; show }
 
 # --- M8: a config that cannot be parsed at uninstall: the record is kept.
 label=M8
@@ -683,7 +720,7 @@ rc=$?
 
 # --- The migration never runs OpenCode Guard's uninstaller.
 label=static
-found=$(/usr/bin/grep -rn 'OpenCodeGuard/uninstall.sh' "$source_root/profiles" "$source_root/engine")
-[[ -z $found ]] && pass "no reference to OpenCodeGuard/uninstall.sh in profiles/ or engine/" || fail "found: $found"
+found=$(/usr/bin/grep -rn 'OpenCodeGuard/uninstall.sh' "$source_root/profiles" "$source_root/installer" "$source_root/engine")
+[[ -z $found ]] && pass "no reference to OpenCodeGuard/uninstall.sh in profiles/, installer/ or engine/" || fail "found: $found"
 
 finish

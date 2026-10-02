@@ -31,11 +31,11 @@ once "$bootstrap" "account_home || die 'cannot resolve account home'"
 once "$tree/engine/launch" "account_home || { print -ru2 'agent-guard: cannot resolve account home'; exit 1 }"
 # account.zsh keeps its function; a test copy appends an override after it.
 once "$tree/engine/account.zsh" 'account_home() {'
-# The installer's kill and fail points; uninstall.sh uses the same function.
-once "$tree/profiles/opencode/install.sh" 'test_point() { : }'
+# The installer's kill and fail points, for every module and uninstall.sh.
+once "$tree/installer/lib.zsh" 'test_point() { : }'
 # The boot time that decides forwarder removal, and the running-process check of a migration.
-once "$tree/profiles/opencode/install.sh" 'boot_time() {'
-once "$tree/profiles/opencode/install.sh" 'local pgrep=/usr/bin/pgrep'
+once "$tree/installer/lib.zsh" 'boot_time() {'
+once "$tree/installer/lib.zsh" 'local pgrep=/usr/bin/pgrep'
 once "$tree/engine/agent-guard" "$download_base"
 # Where the launcher looks for the CLI and the app.
 once "$tree/profiles/opencode/harness.zsh" 'cli_search=(/opt/homebrew/bin/opencode /usr/local/bin/opencode "$home/.opencode/bin/opencode")'
