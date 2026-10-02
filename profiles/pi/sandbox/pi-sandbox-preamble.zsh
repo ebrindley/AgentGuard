@@ -664,7 +664,7 @@ resolve_agent_executable() {
       resolved="$(resolve_configured_executable "$configured" || true)"
       if [ -z "$resolved" ]; then
         emit "$ambient_name='$configured' is not an accepted ambient override."
-        emit "  Record non-standard installs with: npm run bind"
+        emit "  Record non-standard installs with: agent-guard bind"
         exit 1
       fi
       ;;
@@ -672,7 +672,7 @@ resolve_agent_executable() {
       resolved="$(resolve_bound_executable "$bound" || true)"
       if [ -z "$resolved" ]; then
         emit "recorded $runtime_label binding is no longer usable: '$bound'"
-        emit "  Re-record it from the repo checkout: npm run bind"
+        emit "  Re-record it: agent-guard bind"
         exit 1
       fi
       ;;
@@ -680,7 +680,7 @@ resolve_agent_executable() {
       resolved="$(resolve_command_outside_shim_dir "$PI_SANDBOX_RUNTIME" || true)"
       if [ -z "$resolved" ]; then
         emit "cannot auto-resolve the real $runtime_label executable outside the shim path."
-        emit "  Record the install once from the repo checkout: npm run bind"
+        emit "  Record the install once: agent-guard bind"
         exit 1
       fi
       ;;
@@ -705,7 +705,7 @@ resolve_agent_executable() {
       interpreter="$(resolve_bound_interpreter "$bound_interpreter" || true)"
       [ -n "$interpreter" ] || {
         emit "recorded Node interpreter is no longer usable: '$bound_interpreter'"
-        emit "  Re-record it from the repo checkout: npm run bind"
+        emit "  Re-record it: agent-guard bind"
         exit 1
       }
     fi
@@ -1018,6 +1018,73 @@ case "$PROJECT" in
     emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."; exit 1 ;;
 esac
 
+# Agent Guard differences 1 and 2 (Agent Guard's test/fixtures/differences/pi.json).
+# The profile write-denies Agent Guard's folders and the shell startup files, and
+# the resolved target of each one that is a symlink at launch, as Agent Guard's
+# engine/launch does for its protected list. The targets travel as AG_LINK_*
+# parameters, with an inert path when there is no link, so the profile stays one
+# static file. A PROJECT that is, contains or is inside one of the folders or a
+# folder's link target would launch partly or wholly read-only, so refuse it.
+typeset -ga AG_SANDBOX_PARAMS
+AG_SANDBOX_PARAMS=()
+agent_guard_protected() {
+  emulate -L zsh
+  local kind param p target folder
+  local -a folders
+  for kind param p in \
+    folder AG_LINK_ENGINE "$HOME/Library/Application Support/AgentGuard" \
+    folder AG_LINK_OPENCODEGUARD "$HOME/Library/Application Support/OpenCodeGuard" \
+    folder AG_LINK_GUARD_LIST "$HOME/Agent Guard" \
+    folder AG_LINK_APP "$HOME/Applications/Agent Guard.app" \
+    folder AG_LINK_OPENCODE_CONFIG "$HOME/.config/opencode" \
+    folder AG_LINK_OPENCODE "$HOME/.opencode" \
+    folder AG_LINK_CC_SAFETY_NET "$HOME/.cc-safety-net" \
+    folder AG_LINK_LAUNCH_AGENTS "$HOME/Library/LaunchAgents" \
+    file AG_LINK_ZSHENV "$HOME/.zshenv" \
+    file AG_LINK_ZPROFILE "$HOME/.zprofile" \
+    file AG_LINK_ZSHRC "$HOME/.zshrc" \
+    file AG_LINK_ZLOGIN "$HOME/.zlogin" \
+    file AG_LINK_PROFILE "$HOME/.profile" \
+    file AG_LINK_BASH_PROFILE "$HOME/.bash_profile" \
+    file AG_LINK_BASH_LOGIN "$HOME/.bash_login" \
+    file AG_LINK_BASHRC "$HOME/.bashrc"
+  do
+    target="/private/tmp/pi-sandbox-guard-unused/agent-guard-no-link"
+    [[ -e $p && ${p:A} != "$p" ]] && target=${p:A}
+    AG_SANDBOX_PARAMS+=(-D "$param=$target")
+    [[ $kind == folder ]] || continue
+    folders=("$p")
+    [[ $target == "${p:A}" ]] && folders+=("$target")
+    for folder in $folders; do
+      if [[ $PROJECT == "$folder" || $PROJECT == "$folder"/* || $folder == "$PROJECT"/* ]]; then
+        emit "refusing boundary '$PROJECT': it is, contains or is inside Agent Guard's protected folder '$folder', which the sandbox write-protects."
+        emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."
+        return 1
+      fi
+    done
+  done
+}
+agent_guard_protected || exit 1
+
+# Agent Guard difference 4. The profile denies writes to OpenCode's package store,
+# bin folder and model catalog under ~/.cache and under XDG_CACHE_HOME, passed
+# canonicalized as AG_XDG_CACHE_HOME (~/.cache when unset). A value that is not an
+# existing absolute folder cannot be canonicalized, so refuse it.
+if [ -n "${XDG_CACHE_HOME:-}" ]; then
+  AG_XDG_CACHE_HOME=""
+  case "$XDG_CACHE_HOME" in
+    /*) AG_XDG_CACHE_HOME="$(cd -P "$XDG_CACHE_HOME" 2>/dev/null && pwd -P)" || AG_XDG_CACHE_HOME="" ;;
+  esac
+  if [ -z "$AG_XDG_CACHE_HOME" ]; then
+    emit "refusing to launch: XDG_CACHE_HOME '$XDG_CACHE_HOME' is not an existing absolute folder."
+    emit "  The sandbox protects OpenCode's cache there; create the folder or unset XDG_CACHE_HOME."
+    exit 1
+  fi
+else
+  AG_XDG_CACHE_HOME="$HOME/.cache"
+fi
+AG_SANDBOX_PARAMS+=(-D "AG_XDG_CACHE_HOME=$AG_XDG_CACHE_HOME")
+
 ACTIVE_HOOKS="$(resolve_active_hooks "$PROJECT")" || exit 1
 TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
 
@@ -1084,7 +1151,7 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
     # the recorded interpreter, and both --detect and a bare --pi re-derive node via
     # detect_node, which takes the first PATH hit with no write-root filter — so
     # either would re-record the same unsafe path and fail identically next launch.
-    emit "  the project: npm run bind -- --pi <abs-path> --node <abs-path>"
+    emit "  the project: agent-guard bind --pi <abs-path> --node <abs-path>"
     exit 1
   fi
 done
@@ -1122,5 +1189,6 @@ PI_SANDBOX_CMD=(
   -D "OMP_AGENT_STATE=$OMP_AGENT_STATE"
   -D "OMP_STATE_ROOT=$OMP_STATE_ROOT"
   -D "OMP_BASE_ROOT=$OMP_BASE_ROOT"
+  "${AG_SANDBOX_PARAMS[@]}"
   -f "$PROFILE"
 )
