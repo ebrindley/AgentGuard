@@ -1025,18 +1025,23 @@ esac
 # parameters, with an inert path when there is no link, so the profile stays one
 # static file. Every folder above a target, up to and not including /, is pinned
 # against rename and removal, as engine/launch pins them, through a fixed set of
-# AG_PIN_* slots; a launch that needs more than the profile has is refused. A
+# AG_PIN_* slots that difference 4 fills once it adds the cache roots' folders. A
 # PROJECT that is, contains or is inside one of the folders, or is or is inside a
 # folder's link target, would launch partly or wholly read-only, so refuse it. A
 # PROJECT that contains a link target launches with the target denied.
 typeset -ga AG_SANDBOX_PARAMS
 AG_SANDBOX_PARAMS=()
+typeset -gaU AG_PINS
+AG_PINS=()
+AG_INERT="/private/tmp/pi-sandbox-guard-unused/agent-guard-no-link"
+agent_guard_pin_above() {
+  emulate -L zsh
+  local a=${1:h}
+  while [[ $a == /?* ]]; do AG_PINS+=("$a"); a=${a:h}; done
+}
 agent_guard_protected() {
   emulate -L zsh
-  local kind param p target folder a i
-  local inert="/private/tmp/pi-sandbox-guard-unused/agent-guard-no-link"
-  local -i slots=32
-  local -aU pins
+  local kind param p target folder
   for kind param p in \
     folder AG_LINK_ENGINE "$HOME/Library/Application Support/AgentGuard" \
     folder AG_LINK_OPENCODEGUARD "$HOME/Library/Application Support/OpenCodeGuard" \
@@ -1055,11 +1060,10 @@ agent_guard_protected() {
     file AG_LINK_BASH_LOGIN "$HOME/.bash_login" \
     file AG_LINK_BASHRC "$HOME/.bashrc"
   do
-    target=$inert
+    target=$AG_INERT
     if [[ -e $p && ${p:A} != "$p" ]]; then
       target=${p:A}
-      a=${target:h}
-      while [[ $a != / ]]; do pins+=("$a"); a=${a:h}; done
+      agent_guard_pin_above "$target"
     fi
     AG_SANDBOX_PARAMS+=(-D "$param=$target")
     [[ $kind == folder ]] || continue
@@ -1070,19 +1074,11 @@ agent_guard_protected() {
         return 1
       fi
     done
-    if [[ $target != "$inert" && ( $PROJECT == "$target" || $PROJECT == "$target"/* ) ]]; then
+    if [[ $target != "$AG_INERT" && ( $PROJECT == "$target" || $PROJECT == "$target"/* ) ]]; then
       emit "refusing boundary '$PROJECT': it is or is inside '$target', the link target of Agent Guard's protected folder '$p', which the sandbox write-protects."
       emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."
       return 1
     fi
-  done
-  if (( ${#pins} > slots )); then
-    emit "refusing to launch: the symlinked Agent Guard paths have ${#pins} parent folders to protect, more than the profile's $slots."
-    emit "  Replace some of the links with real files or folders, or point them into fewer folders."
-    return 1
-  fi
-  for (( i = 1; i <= slots; i++ )); do
-    AG_SANDBOX_PARAMS+=(-D "AG_PIN_$i=${pins[i]:-$inert}")
   done
 }
 agent_guard_protected || exit 1
@@ -1178,6 +1174,45 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
 done
 unset _pi_launch_element
 
+# Agent Guard difference 4. OpenCode creates a missing <cache>/opencode/bin at every
+# start and stops when it cannot; the profile denies that create, so make the
+# folder here for an OpenCode started inside the session, at both cache roots.
+# Seatbelt checks resolved paths, so the default root also travels canonicalized,
+# as AG_CACHE_HOME, once it exists. Every folder above the lexical and canonical
+# default roots and the canonical XDG root, up to and not including /, joins the
+# link targets' folders in the AG_PIN_* slots, so no cache root can be swapped out
+# with a folder above it; a launch that needs more slots than the profile has is
+# refused.
+for _ag_cache in "$HOME/.cache" "$AG_XDG_CACHE_HOME"; do
+  /bin/mkdir -p "$_ag_cache/opencode/bin" 2>/dev/null || {
+    emit "cannot create '$_ag_cache/opencode/bin'; refusing to launch."
+    exit 1
+  }
+done
+unset _ag_cache
+AG_CACHE_HOME="$(cd -P "$HOME/.cache" 2>/dev/null && pwd -P)" || {
+  emit "cannot resolve '$HOME/.cache'; refusing to launch."
+  exit 1
+}
+AG_SANDBOX_PARAMS+=(-D "AG_CACHE_HOME=$AG_CACHE_HOME")
+agent_guard_pin_slots() {
+  emulate -L zsh
+  local root
+  local -i i slots=32
+  for root in "$HOME/.cache" "$AG_CACHE_HOME" "$AG_XDG_CACHE_HOME"; do
+    agent_guard_pin_above "$root"
+  done
+  if (( ${#AG_PINS} > slots )); then
+    emit "refusing to launch: the symlinked Agent Guard paths and the cache roots have ${#AG_PINS} parent folders to protect, more than the profile's $slots."
+    emit "  Replace some of the links with real files or folders, point them into fewer folders, or use a shallower XDG_CACHE_HOME."
+    return 1
+  fi
+  for (( i = 1; i <= slots; i++ )); do
+    AG_SANDBOX_PARAMS+=(-D "AG_PIN_$i=${AG_PINS[i]:-$AG_INERT}")
+  done
+}
+agent_guard_pin_slots || exit 1
+
 emit "OS sandbox ON. Runtime [$PI_SANDBOX_RUNTIME]. Project [$PROJECT_VIA]: $PROJECT"
 emit "  active Git hooks denied: $ACTIVE_HOOKS"
 if [ "$PI_SANDBOX_RUNTIME" = "pi" ]; then
@@ -1199,24 +1234,6 @@ else
 fi
 export PI_SANDBOX_PROFILE_DIGEST PI_SANDBOX_PROJECT_BOUNDARY
 export PI_SANDBOX_ACTIVE_HOOKS_BOUNDARY PI_SANDBOX_AGENT_STATE_BOUNDARY
-
-# Agent Guard difference 4. OpenCode creates a missing <cache>/opencode/bin at every
-# start and stops when it cannot; the profile denies that create, so make the
-# folder here for an OpenCode started inside the session, at both cache roots.
-# Seatbelt checks resolved paths, so the default root also travels canonicalized,
-# as AG_CACHE_HOME, once it exists.
-for _ag_cache in "$HOME/.cache" "$AG_XDG_CACHE_HOME"; do
-  /bin/mkdir -p "$_ag_cache/opencode/bin" 2>/dev/null || {
-    emit "cannot create '$_ag_cache/opencode/bin'; refusing to launch."
-    exit 1
-  }
-done
-unset _ag_cache
-AG_CACHE_HOME="$(cd -P "$HOME/.cache" 2>/dev/null && pwd -P)" || {
-  emit "cannot resolve '$HOME/.cache'; refusing to launch."
-  exit 1
-}
-AG_SANDBOX_PARAMS+=(-D "AG_CACHE_HOME=$AG_CACHE_HOME")
 
 PI_SANDBOX_CMD=(
   "$SANDBOX_EXEC"
