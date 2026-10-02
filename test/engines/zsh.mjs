@@ -9,11 +9,11 @@ import { fixtureAccount, fixtureHome } from '../fixture-home.mjs';
 
 export const name = 'zsh';
 
-// Copies engine/, profiles/, install.sh, LICENSE and VERSION (when present) from
+// Copies engine/, profiles/, installer/, install.sh, LICENSE and VERSION (when present) from
 // source into dest, then points the copied account lookups at home. The source
 // tree is not touched.
 export function stage(source, dest, home) {
-  const files = ['engine', 'profiles', 'install.sh', 'LICENSE', 'VERSION'].filter((f) => f !== 'VERSION' || existsSync(join(source, f)));
+  const files = ['engine', 'profiles', 'installer', 'install.sh', 'LICENSE', 'VERSION'].filter((f) => f !== 'VERSION' || existsSync(join(source, f)));
   const copy = spawnSync('/bin/cp', ['-R', ...files.map((f) => join(source, f)), dest + '/'], { encoding: 'utf8' });
   assert.equal(copy.status, 0, copy.stderr);
   fixtureHome(join(dest, 'engine/launch'), home);
@@ -120,9 +120,9 @@ export function release(source, out, { home, tag, version, url }) {
   const entries = run(['/usr/bin/tar', '-tzf', archive]).split('\n').filter(Boolean);
   run(['/usr/bin/tar', '-xzf', archive, '-C', unpacked]);
   const tree = join(unpacked, name);
-  replaceOnce(join(tree, 'profiles/opencode/install.sh'), seams.testPoint, testPoint);
-  replaceOnce(join(tree, 'profiles/opencode/install.sh'), seams.bootTime, bootTime);
-  replaceOnce(join(tree, 'profiles/opencode/install.sh'), seams.pgrep, pgrep);
+  replaceOnce(join(tree, 'installer/lib.zsh'), seams.testPoint, testPoint);
+  replaceOnce(join(tree, 'installer/lib.zsh'), seams.bootTime, bootTime);
+  replaceOnce(join(tree, 'installer/lib.zsh'), seams.pgrep, pgrep);
   fixtureHome(join(tree, 'engine/launch'), home);
   fixtureAccount(join(tree, 'engine/account.zsh'), home);
   replaceOnce(join(tree, 'engine/agent-guard'), seams.downloadBase, `local repo=${quote(url)}; local -a curl_proto=()`);
