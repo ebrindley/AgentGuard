@@ -1,0 +1,325 @@
+;; pi-sandbox.sb — macOS Seatbelt (SBPL) profile for wrapping the Pi coding agent.
+;;
+;; Defense-in-depth OS layer UNDER the pi-sandbox-guard extension: even if the guard
+;; is bypassed (dynamic exec, mutated event.input, an analyzer gap, a bug), the
+;; kernel still confines WRITES to a small boundary and denies reads of host
+;; credential files.
+;;
+;; Policy shape: allow-by-default, then deny all writes and
+;; re-allow only the boundary, then deny reads of HOME credential locations.
+;; We intentionally do NOT confine reads-in-general, network, or process exec —
+;; that keeps a Node TUI + local model + web_search working without death-by-EPERM.
+;; Filesystem WRITE containment is the high-value layer.
+;;
+;; Params (supplied via sandbox-exec -D):
+;;   PROJECT       canonical project root (git toplevel or explicit PI_PROJECT)
+;;   HOME          user home
+;;   TMPDIR        canonical per-user temp dir
+;;   ACTIVE_HOOKS  absolute path of the effective active git hooks directory
+;;                 (resolved core.hooksPath, or PROJECT/.git/hooks by default;
+;;                 also the shared hooks dir for linked worktrees). The launcher
+;;                 supplies this; the profile denies the whole subtree.
+;;   PI_AGENT_STATE active Pi agent directory, or an inert unused path for OMP
+;;   OMP_AGENT_STATE active OMP agent directory, or an inert unused path for Pi
+;;   OMP_STATE_ROOT active OMP profile/config root, or an inert path for Pi
+;;   OMP_BASE_ROOT base OMP config root (install-id), or an inert path for Pi
+;;
+;; Reviewed decisions:
+;;  - secret-read denies are scoped to specific HOME locations ONLY, never blanket
+;;    extension regexes, so project files (cert fixtures, test keys, k8s/terraform
+;;    fixtures, *.pem under the repo) stay READABLE. (.env is the one project-wide deny.)
+;;  - ~/.npm + ~/.cache are writable so npm/pip/uv/playwright work; the launcher sets
+;;    NPM_CONFIG_USERCONFIG=/dev/null so npm never needs to read ~/.npmrc.
+;;  - Pi extensions, package stores, system prompts, model config and skills are
+;;    read-only. Operational state and theme data remain writable.
+
+(version 1)
+(allow default)
+
+;; ---------------------------------------------------------------------------
+;; WRITES: deny everything, then re-allow only the boundary.
+;; ---------------------------------------------------------------------------
+(deny file-write*)
+(allow file-write*
+  (subpath (param "PROJECT"))                                   ; the project/repo (Pi may edit it)
+  (subpath (param "TMPDIR"))                                    ; canonical per-user temp
+  (subpath "/private/tmp")                                      ; /tmp -> /private/tmp
+  (subpath (param "PI_AGENT_STATE"))                            ; Pi runtime state (see re-denies)
+  ;; OMP 17.2.10 uses mixed config/runtime roots. Keep the executable and
+  ;; steering surfaces read-only by allowing only observed runtime paths.
+  (literal (param "OMP_BASE_ROOT"))
+  (literal (string-append (param "OMP_BASE_ROOT") "/profiles"))
+  (literal (param "OMP_STATE_ROOT"))
+  (literal (param "OMP_AGENT_STATE"))
+  (subpath (string-append (param "OMP_AGENT_STATE") "/sessions"))
+  (subpath (string-append (param "OMP_AGENT_STATE") "/blobs"))
+  (subpath (string-append (param "OMP_AGENT_STATE") "/cache"))
+  (subpath (string-append (param "OMP_AGENT_STATE") "/memories"))
+  (subpath (string-append (param "OMP_AGENT_STATE") "/terminal-sessions"))
+  (subpath (string-append (param "OMP_AGENT_STATE") "/python-gateway"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/agent.db"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/agent.db-wal"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/agent.db-shm"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/agent.db-journal"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/history.db"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/history.db-wal"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/history.db-shm"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/history.db-journal"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/models.db"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/models.db-wal"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/models.db-shm"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/models.db-journal"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/last-changelog-version"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/secret-placeholder.key"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/omp-debug.log"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/omp-crash.log"))
+  (subpath (string-append (param "OMP_STATE_ROOT") "/logs"))
+  (subpath (string-append (param "OMP_STATE_ROOT") "/reports"))
+  (subpath (string-append (param "OMP_STATE_ROOT") "/wt"))
+  (subpath (string-append (param "OMP_STATE_ROOT") "/remote"))
+  (subpath (string-append (param "OMP_STATE_ROOT") "/ssh-control"))
+  (subpath (string-append (param "OMP_STATE_ROOT") "/remote-host"))
+  (subpath (string-append (param "OMP_STATE_ROOT") "/python-env"))
+  (subpath (string-append (param "OMP_STATE_ROOT") "/puppeteer"))
+  (subpath (string-append (param "OMP_STATE_ROOT") "/browser-relay"))
+  (subpath (string-append (param "OMP_STATE_ROOT") "/webcache"))
+  (subpath (string-append (param "OMP_STATE_ROOT") "/cache"))
+  (subpath (string-append (param "OMP_STATE_ROOT") "/natives"))
+  (subpath (string-append (param "OMP_STATE_ROOT") "/autoresearch"))
+  (subpath (string-append (param "OMP_STATE_ROOT") "/security"))
+  (subpath (string-append (param "OMP_STATE_ROOT") "/run"))
+  (subpath (string-append (param "OMP_STATE_ROOT") "/collab"))
+  (literal (string-append (param "OMP_STATE_ROOT") "/stats.db"))
+  (literal (string-append (param "OMP_STATE_ROOT") "/stats.db-wal"))
+  (literal (string-append (param "OMP_STATE_ROOT") "/stats.db-shm"))
+  (literal (string-append (param "OMP_STATE_ROOT") "/stats.db-journal"))
+  (literal (string-append (param "OMP_STATE_ROOT") "/autoqa.db"))
+  (literal (string-append (param "OMP_STATE_ROOT") "/autoqa.db-wal"))
+  (literal (string-append (param "OMP_STATE_ROOT") "/autoqa.db-shm"))
+  (literal (string-append (param "OMP_STATE_ROOT") "/autoqa.db-journal"))
+  (literal (string-append (param "OMP_STATE_ROOT") "/gpu_cache.json"))
+  (literal (string-append (param "OMP_STATE_ROOT") "/snapcompact-savings.jsonl"))
+  (literal (string-append (param "OMP_BASE_ROOT") "/install-id"))
+  ;; The shared analyzer keeps one log independent of the active runtime.
+  (literal (string-append (param "HOME") "/.pi/agent/security-events.log"))
+  (subpath (string-append (param "HOME") "/.npm"))              ; npm cache
+  (subpath (string-append (param "HOME") "/.cache"))            ; generic tool cache (pip/uv/etc.)
+  (subpath (string-append (param "HOME") "/Library/Caches"))    ; macOS tool caches (pip/uv/playwright)
+  (literal "/dev/null")
+  (literal "/dev/tty")
+  (literal "/dev/stdout")
+  (literal "/dev/stderr")
+  (literal "/dev/fd/1")
+  (literal "/dev/fd/2")
+  (regex #"^/dev/ttys[0-9]+$"))                                 ; pty slaves for the TUI
+
+;; Re-protect the sensitive parts of ~/.pi/agent: the sandboxed process may write
+;; its operational state (sessions/locks/history) but must NOT tamper with config,
+;; auth, or the deployed extensions (which would let it DISABLE the guard).
+;; SBPL last-match-wins: these denies override the ~/.pi/agent allow above.
+(deny file-write*
+  ;; Git-hook persistence / escape: the whole PROJECT tree is a writable root
+  ;; (above), so without these denies the sandboxed agent could plant a git hook
+  ;; (pre-commit, post-checkout, …) that later executes OUTSIDE the sandbox on
+  ;; the next unsandboxed `git` — a vector Anthropic's sandbox-runtime and
+  ;; OpenAI Codex both hardcode against.
+  ;;
+  ;; Coverage (metacharacter-safe subpath / require-all; no PROJECT-interpolated
+  ;; regex that would misbehave on paths containing `[`, `+`, `(`, …):
+  ;;   1. PROJECT/.git/hooks — default hooks directory (every hook name: known,
+  ;;      obscure p4-*/post-index-change, or future — not a name allow-list).
+  ;;   2. ACTIVE_HOOKS — the effective active hooks directory resolved by the
+  ;;      launcher (core.hooksPath e.g. PROJECT/.githooks, linked-worktree
+  ;;      shared hooks, or an absolute out-of-project hooksPath that would
+  ;;      otherwise sit under a writable root like /private/tmp).
+  ;;   3. PROJECT/.git/modules/**/hooks — submodule metadata hooks. Scoped with
+  ;;      require-all: (subpath PROJECT/.git/modules) AND a path-component regex
+  ;;      for /hooks. The regex alone would be an unscoped write hole; AND with
+  ;;      the project-scoped subpath keeps it contained.
+  ;; Order: deny-subtrees here, allow-back only the git-init minimum after this
+  ;; block (dir nodes + inert *.sample).
+  (subpath (string-append (param "PROJECT") "/.git/hooks"))
+  (subpath (param "ACTIVE_HOOKS"))
+  (require-all
+    (subpath (string-append (param "PROJECT") "/.git/modules"))
+    (regex #"/hooks(/|$)"))
+  (require-all
+    (subpath (string-append (param "OMP_STATE_ROOT") "/wt"))
+    (regex #"/hooks(/|$)"))
+  ;; Project agent config: same persistence class as git hooks. Pi loads
+  ;; <cwd>/.pi (settings, extensions, packages, SYSTEM.md, …) once a project is
+  ;; trusted; OMP loads <cwd>/.omp and its ancestors with no trust gate, plus
+  ;; in-process extensions/plugins and executed hooks/tools from other harness
+  ;; dirs. A planted entry runs at the next start: it can disable the in-process
+  ;; guard, or run unconfined if the agent is later started without the shim.
+  ;; Any depth under PROJECT, since the launch cwd may be a subdirectory.
+  ;; The folder node itself matches, so creating a MISSING .pi/.omp, renaming
+  ;; into or away from it, and planting a symlink there are all denied.
+  ;; Same technique as the submodule hooks deny: PROJECT-scoped subpath AND a
+  ;; static component regex (never a PROJECT-interpolated regex). The launcher
+  ;; refuses a PROJECT whose own path has any of these components, which these
+  ;; regexes would otherwise match wholesale, and symlinked .pi/.omp layouts.
+  ;; Keep these regexes in step with the PROJECT refusal patterns in pi-sandbox-preamble.zsh.
+  (require-all
+    (subpath (param "PROJECT"))
+    (require-any
+      (regex #"/\.pi(/|$)")
+      (regex #"/\.omp(/|$)")
+      (regex #"/\.(claude|codex)/(extensions|hooks|tools)(/|$)")
+      (regex #"/\.gemini/extensions(/|$)")
+      (regex #"/\.opencode/plugins(/|$)")))
+  (subpath (string-append (param "PI_AGENT_STATE") "/extensions"))
+  (literal (string-append (param "PI_AGENT_STATE") "/settings.json"))
+  (literal (string-append (param "PI_AGENT_STATE") "/auth.json"))
+  (literal (string-append (param "PI_AGENT_STATE") "/trust.json"))
+  ;; User-level code and instructions persist across projects. Cover the active
+  ;; state root, including supported PI_CODING_AGENT_DIR relocation.
+  (subpath (string-append (param "PI_AGENT_STATE") "/npm"))
+  (subpath (string-append (param "PI_AGENT_STATE") "/git"))
+  (subpath (string-append (param "PI_AGENT_STATE") "/skills"))
+  (literal (string-append (param "PI_AGENT_STATE") "/SYSTEM.md"))
+  (literal (string-append (param "PI_AGENT_STATE") "/APPEND_SYSTEM.md"))
+  (literal (string-append (param "PI_AGENT_STATE") "/models.json"))
+  ;; The shared extension remains at the canonical Pi path even when Pi runtime
+  ;; state is relocated. Keep these denies pinned as well as state-relative.
+  (subpath (string-append (param "HOME") "/.pi/agent/extensions"))
+  (literal (string-append (param "HOME") "/.pi/agent/settings.json"))
+  (literal (string-append (param "HOME") "/.pi/agent/auth.json"))
+  (literal (string-append (param "HOME") "/.pi/agent/trust.json"))
+  ;; OMP agent.db is mixed operational/auth storage and must stay writable for
+  ;; normal runtime use. File-backed executable and steering surfaces do not.
+  (subpath (string-append (param "OMP_AGENT_STATE") "/extensions"))
+  (subpath (string-append (param "OMP_AGENT_STATE") "/hooks"))
+  (subpath (string-append (param "OMP_AGENT_STATE") "/tools"))
+  (subpath (string-append (param "OMP_AGENT_STATE") "/commands"))
+  (subpath (string-append (param "OMP_AGENT_STATE") "/skills"))
+  (subpath (string-append (param "OMP_AGENT_STATE") "/agents"))
+  (subpath (string-append (param "OMP_AGENT_STATE") "/prompts"))
+  (subpath (string-append (param "OMP_AGENT_STATE") "/rules"))
+  (subpath (string-append (param "OMP_AGENT_STATE") "/instructions"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/config.yml"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/config.yaml"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/settings.json"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/models.yml"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/mcp.json"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/.mcp.json"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/ssh.json"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/.env"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/SYSTEM.md"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/APPEND_SYSTEM.md"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/AGENTS.md"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/RULES.md"))
+  (literal (string-append (param "OMP_AGENT_STATE") "/TITLE_SYSTEM.md"))
+  (subpath (string-append (param "OMP_STATE_ROOT") "/plugins"))
+  (literal (string-append (param "OMP_STATE_ROOT") "/marketplaces.json"))
+  (literal (string-append (param "OMP_STATE_ROOT") "/auth-broker.token"))
+  (literal (string-append (param "OMP_STATE_ROOT") "/auth-gateway.token"))
+  (literal (string-append (param "OMP_STATE_ROOT") "/.env"))
+  ;; System-prompt files under ~/.pi/agent (installed for --append-system-prompt).
+  ;; An agent that can rewrite its own appended system prompt has a persistent
+  ;; steering-injection vector that survives into the next session, so any
+  ;; *prompt*.md there is write-denied — not just a fixed pair of filenames.
+  ;;
+  ;; Scoped with require-all: the subpath confines the match to ~/.pi/agent while
+  ;; the regex selects the filename. A BARE suffix regex here would be unanchored
+  ;; and match ANY path on the host — verified to deny an unrelated
+  ;; PROJECT/docs/prompt-guide.md, since this deny comes after the PROJECT allow
+  ;; and last-match-wins.
+  ;;
+  ;; `.*` (not `[^/]*`) after the agent dir so nested layouts are covered too:
+  ;; a `[^/]*` form matched only DIRECT children, leaving
+  ;; ~/.pi/agent/prompts/custom-prompt.md agent-writable. Both depths are pinned
+  ;; by probes in scripts/test-sandbox-profile.sh.
+  (require-all
+    (subpath (param "PI_AGENT_STATE"))
+    (regex #"/.*prompt[^/]*\.md$"))
+  (require-all
+    (subpath (string-append (param "HOME") "/.pi/agent"))
+    (regex #"/.*prompt[^/]*\.md$"))
+  ;; These credential/config dirs may be reachable through a malicious project
+  ;; symlink if the project boundary is writable. Deny them after the PROJECT
+  ;; allow so last-match-wins keeps them protected.
+  (subpath (string-append (param "HOME") "/.ssh"))
+  (subpath (string-append (param "HOME") "/.aws"))
+  (subpath (string-append (param "HOME") "/.docker"))
+  (subpath (string-append (param "HOME") "/.gnupg"))
+  (subpath (string-append (param "HOME") "/.kube"))
+  (subpath (string-append (param "HOME") "/.config/gh"))
+  (subpath (string-append (param "HOME") "/.config/gcloud"))
+  (literal (string-append (param "HOME") "/.git-credentials"))
+  (literal (string-append (param "HOME") "/.config/git/credentials"))
+  ;; Write-deny symmetry with the read-deny list below: a poisoned ~/.netrc or
+  ;; ~/.npmrc is a credential-exfil vector on the next unsandboxed run.
+  (literal (string-append (param "HOME") "/.netrc"))
+  (literal (string-append (param "HOME") "/.npmrc"))
+  (subpath (string-append (param "HOME") "/.secrets")))
+
+;; Re-allow the minimum `git init` / submodule-init needs inside the now-denied
+;; hooks subtrees (last-match-wins, so this overrides the subtree denies above
+;; but not for the active hook files it does NOT re-allow):
+;;   - the default hooks DIRECTORY NODE itself, so `git init` can create it;
+;;   - inert *.sample files under PROJECT/.git/hooks (git NEVER executes these);
+;;   - submodule hooks DIRECTORY NODES (…/.git/modules/**/hooks) so submodule
+;;     init can create them;
+;;   - inert *.sample under those submodule hooks dirs.
+;; Each *.sample re-allow uses require-all to AND two conditions:
+;;   (a) a metacharacter-safe (subpath …) scoped to THIS project (or modules
+;;       tree), and
+;;   (b) a suffix regex matching only *.sample (or the bare /hooks dir node).
+;; Without (a) a bare suffix regex is unanchored and would punch a hole in
+;; write-containment for `*.sample` (or anything matching /hooks) in ANY path
+;; on the host. With require-all, out-of-project writes stay
+;; denied. ACTIVE_HOOKS is NOT re-allowed for samples when it points elsewhere
+;; (e.g. .githooks): only the git-init default/modules scaffolding is intended.
+;; An ACTIVE hook (pre-commit, post-checkout, p4-*, post-index-change, any name)
+;; lacks the .sample suffix, so it stays denied in the default, launch-time
+;; ACTIVE_HOOKS, and submodule hook trees. Routine `.git/config` writes remain
+;; allowed, so a mid-session core.hooksPath pivot to a different project path is
+;; a documented residual risk; review changes before the next unsandboxed git.
+(allow file-write*
+  (literal (string-append (param "PROJECT") "/.git/hooks"))
+  (require-all
+    (subpath (string-append (param "PROJECT") "/.git/hooks"))
+    (regex #"/\.git/hooks/[^/]*\.sample$"))
+  (require-all
+    (subpath (string-append (param "PROJECT") "/.git/modules"))
+    (regex #"/hooks$"))
+  (require-all
+    (subpath (string-append (param "PROJECT") "/.git/modules"))
+    (regex #"/hooks/[^/]*\.sample$"))
+  ;; OMP-managed checkouts/worktrees are out-of-PROJECT writable Git trees.
+  ;; Preserve hooks directory nodes and dotted files (Git's executable hook
+  ;; names are extensionless) so source such as src/hooks/useFoo.ts works
+  ;; without reopening normal, bare, or separate-git-dir hook executables.
+  (require-all
+    (subpath (string-append (param "OMP_STATE_ROOT") "/wt"))
+    (regex #"/hooks$"))
+  (require-all
+    (subpath (string-append (param "OMP_STATE_ROOT") "/wt"))
+    (regex #"/hooks/[^/]*\.[^/]+$")))
+
+;; ---------------------------------------------------------------------------
+;; SECRET READS: deny reading host credential material. Scoped to specific HOME
+;; locations so project files are unaffected. (No blanket *.key/*.pem regexes —
+;; those would break legit repos.)
+;; ---------------------------------------------------------------------------
+(deny file-read*
+  (subpath (string-append (param "HOME") "/.ssh"))
+  (literal (string-append (param "HOME") "/.aws/credentials"))
+  (literal (string-append (param "HOME") "/.aws/config"))
+  (literal (string-append (param "HOME") "/.docker/config.json"))
+  (literal (string-append (param "HOME") "/.kube/config"))
+  (subpath (string-append (param "HOME") "/.gnupg"))
+  (subpath (string-append (param "HOME") "/.config/gh"))
+  (literal (string-append (param "HOME") "/.netrc"))
+  (literal (string-append (param "HOME") "/.git-credentials"))
+  (literal (string-append (param "HOME") "/.config/git/credentials"))
+  (literal (string-append (param "HOME") "/.npmrc"))
+  (subpath (string-append (param "HOME") "/.secrets"))
+  (subpath (string-append (param "HOME") "/.config/gcloud"))
+  ;; The analyzer's security event log records the FULL TEXT of every flagged
+  ;; command (which may embed secrets). Appending still works (write is separate
+  ;; from read in SBPL); the sandboxed process just cannot read the history back.
+  (literal (string-append (param "HOME") "/.pi/agent/security-events.log"))
+  ;; .env files anywhere (incl. project) — the one project-wide secret deny.
+  (regex #"/\.env($|\.)"))
