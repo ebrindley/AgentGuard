@@ -44,6 +44,10 @@ files=(
   profiles/opencode/install.sh
   profiles/opencode/uninstall.sh
   profiles/opencode/assets/AgentGuard.icns
+  installer/lib.zsh
+  installer/actions.zsh
+  installer/harness/opencode.zsh
+  installer/migrate/opencode-guard.zsh
 )
 # Folders shipped whole, apart from Finder and AppleDouble files.
 trees=(

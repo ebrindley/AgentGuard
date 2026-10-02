@@ -70,7 +70,7 @@ tpath=$base
 # update rebuilds the app; v0.0.3-broken, B whose profile lets the guard write the
 # engine's state folder (design A14).
 build() { node "$adapter" release "$1" "$served" "$home" "v$2" "$2" "$url" >/dev/null }
-copy_source() { /bin/mkdir -p "$2" && /bin/cp -R "$1"/{engine,profiles,scripts,install.sh,LICENSE} "$2/" }
+copy_source() { /bin/mkdir -p "$2" && /bin/cp -R "$1"/{engine,profiles,installer,scripts,install.sh,LICENSE} "$2/" }
 build "$source_root" 0.0.1 || { print -ru2 'cannot build v0.0.1'; finish }
 copy_source "$source_root" "$run/src-b"
 print -n x >> "$run/src-b/profiles/opencode/assets/AgentGuard.icns"
@@ -515,12 +515,84 @@ rc=$?
 (( rc == 0 )) && [[ ! -e $engine ]] && pass 'uninstall recovers and removes the engine' || { fail "uninstall (exit $rc)"; show }
 [[ $(<"$cfg") == "$original" ]] && pass 'config as before' || fail 'config as before'
 
+# --- R1: a switch action whose name is outside 0.1.x's fixed pattern of action
+# names (a test release registers test-probe as the first switch action). Killed
+# after its begun line, the journal names no other action; recovery must count
+# that as a begun switch and roll it back, not discard the release and leave its
+# change in place.
+label=R1
+copy_source "$source_root" "$run/src-probe"
+probe_actions="$run/src-probe/installer/actions.zsh"
+/usr/bin/sed -i '' 's/^  ag_actions=($/&\
+    switch test-probe engine all do_test_probe undo_test_probe/' "$probe_actions"
+print -r -- '
+do_test_probe() {
+  ag_jlast test-probe
+  [[ $REPLY == done ]] && return 0
+  if [[ -z $REPLY ]]; then ag_jnl test-probe begun || return 1; fi
+  print -r -- probe > "$home/probe-marker" || return 1
+  test_point test-probe || return 1
+  ag_jnl test-probe done
+}
+undo_test_probe() {
+  ag_jlast test-probe
+  [[ $REPLY == (begun|done) ]] || return 0
+  /bin/rm -f -- "$home/probe-marker" && ag_jnl test-probe undone
+}' >> "$probe_actions"
+if /usr/bin/grep -q '^    switch test-probe engine all' "$probe_actions" && build "$run/src-probe" 0.0.4; then
+  restore A
+  point=kill:test-probe boot v0.0.4
+  rc=$?
+  (( rc == 137 )) && [[ -f $home/probe-marker && $(<"$state/txn/journal") == 'test-probe begun' ]] &&
+    pass 'killed with test-probe begun, the only line in the journal' || { fail "kill:test-probe (exit $rc)"; show }
+  point= ag uninstall
+  rc=$?
+  (( rc == 0 )) && /usr/bin/grep -q 'rolling back the unfinished switch' "$out" && [[ ! -e $home/probe-marker && ! -e $engine ]] &&
+    pass 'recovery counts it as a begun switch and rolls it back; uninstall then finishes' || { fail "uninstall after kill:test-probe (exit $rc)"; show }
+else
+  fail 'cannot build the test release with test-probe'
+fi
+
+# --- R2: recovery reads only the transaction's copies. An update killed in its
+# switch, then its new release folder deleted: the next run rolls the switch back
+# from state/txn and updates again.
+label=R2
+restore Aplus
+latest v0.0.2
+point=kill:current ag update
+rc=$?
+copies=("$state"/txn/{install.sh,account.zsh,uninstall.sh,profiles/opencode/harness.zsh}(N) "$state"/txn/installer/{lib,actions,harness/opencode,migrate/opencode-guard}.zsh(N))
+(( rc == 137 && $#copies == 8 )) && pass 'killed in the switch; the transaction holds its installer, modules and harness data' ||
+  { fail "kill:current (exit $rc, $#copies copies)"; show }
+new_rid=$(/usr/bin/jq -r .rid_new "$state/txn/plan.json" 2>/dev/null)
+[[ -n $new_rid ]] && /bin/rm -rf "$engine/releases/$new_rid"
+[[ -n $new_rid && ! -e $engine/releases/$new_rid ]] && pass "release $new_rid deleted" || fail 'release deleted'
+point= ag update
+rc=$?
+(( rc == 0 )) && /usr/bin/grep -qF "release $new_rid is missing; rolling back" "$out" && [[ $(stamp_version) == 0.0.2 ]] &&
+  pass 'the rerun rolls back from the copies, then updates' || { fail "rerun (exit $rc)"; show }
+same_snapshot 'final state equals an uninterrupted update' "$run/update-ref.snapshot"
+
+# --- R3: no transaction opens over an open one, where mv would put the new
+# transaction inside it. ag_txn_open, from the installed release, refuses and
+# leaves the open transaction as it was.
+label=R3
+restore A
+/bin/mkdir -p "$state/txn/backup/rc" && print -r -- 'rc begun' > "$state/txn/journal" && print -r -- x > "$state/txn/backup/rc/file"
+txn_files() { local f; for f in "$state"/txn/**/*(DN); do print -r -- "${f#$state/} $(sha "$f")"; done }
+txn_before=$(txn_files)
+run_timeout 60 /usr/bin/env -i HOME="$home" PATH="$tpath" /bin/zsh -fc 'emulate zsh; setopt no_unset pipe_fail extended_glob
+  source "$1/install.sh" --lib && ag_init && ag_txn_open' R3 "$engine/current" < /dev/null > "$out" 2>&1
+rc=$?
+(( rc == 1 )) && /usr/bin/grep -qF "$state/txn is still open" "$out" && [[ $(txn_files) == "$txn_before" && ! -e $state/txn.new ]] &&
+  pass 'opening a transaction while one is open fails and leaves the open one as it was' || { fail "ag_txn_open (exit $rc)"; show }
+
 # Every test point in the shipped scripts is exercised: here, in test/bootstrap.sh
 # (after-download, after-verify) or in test/migrate.sh ($migrate_points, test/lib.zsh,
 # whose own check fails for any it does not exercise).
 label=coverage
 covered=($update_points $uninstall_points rollback after-unpack after-download after-verify $migrate_points)
-points=(${(f)"$(/usr/bin/grep -ohE 'test_point [a-z0-9-]+' "$source_root"/profiles/opencode/{install,uninstall}.sh "$source_root"/scripts/bootstrap.zsh "$source_root"/engine/agent-guard | /usr/bin/sort -u)"})
+points=(${(f)"$(/usr/bin/grep -ohE 'test_point [a-z0-9-]+' "$source_root"/profiles/opencode/{install,uninstall}.sh "$source_root"/installer/**/*.zsh "$source_root"/scripts/bootstrap.zsh "$source_root"/engine/agent-guard | /usr/bin/sort -u)"})
 missing=()
 for p in ${points#test_point }; do (( ${covered[(Ie)$p]} )) || missing+=("$p"); done
 (( $#points >= 20 && $#missing == 0 )) && pass "all $#points test points are exercised" || fail "test points not exercised: ${missing:-none found}"
