@@ -199,6 +199,12 @@ pi-sandbox-guard 7ad441f's with the five differences above, so:
 - **Only `bash` is checked in-process.** The analyzer sees `bash` commands, not
   file tools such as `read`, `edit` and `write`. Seatbelt still applies to every
   write. Planned: step 10d.
+- **The analyzer does not check Git history commands.** It allows `git push
+  --force` and other pushes that rewrite or delete remote branches, and local
+  discards such as `git checkout -- .`, `git restore .`, `git stash drop` and
+  `git branch -D`; cc-safety-net blocks these in OpenCode sessions. Seatbelt
+  cannot stop a push. It checks `git reset --hard` and `git clean`. Planned: an
+  ask before a force-push in 0.2.1, and cc-safety-net for Pi at step 10d.
 - **The launcher trusts its own folder.** It reads its profile and preamble from
   `~/.local/bin`, beside itself, not from a release folder in the write-protected
   engine folder. Pi sessions cannot write `~/.local/bin`, the launcher refuses a
