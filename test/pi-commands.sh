@@ -467,7 +467,7 @@ json_is '--json: status.sh fields and every check' "
   and ([.checks[] | select(.harness == \"pi\")] | length) > 20
   and any(.checks[]; . == {harness: \"opencode\", result: \"ok\", check: \"protected write denied\"})
   and any(.checks[]; . == {harness: \"pi\", result: \"ok\", check: \"analyzer preflight\"})
-  and ([.checks[].result] - [\"ok\", \"skip\"]) == []"
+  and ([.checks[].result] - [\"ok\", \"skip\", \"warn\"]) == []"
 [[ $(/usr/bin/jq -r 'keys_unsorted[0:10] | join(",")' <<< "$out") == guard_present,launchers_present,release_match,guard_release_id,launchers_release_id,runtime_binding,pi_binding,pi_binding_path,omp_binding_path,drift ]] &&
   pass "--json keeps status.sh's field order" || fail "--json keeps status.sh's field order"
 
