@@ -123,13 +123,15 @@ cache_prefix="${cache_roots[1]%/}/"
 # from before 0.2.0 and means OpenCode alone. With Pi installed, its recorded
 # wrappers are the keys of state/wrappers.json; a key that does not match
 # [A-Za-z0-9._-]+, or is . or .., is ignored. A record that exists but cannot be
-# read refuses the launch, so the denies it adds are never dropped; a transaction
-# that closes between the two reads leaves the stamp to read.
+# read, or does not hold exactly one JSON document, such as an empty file, refuses
+# the launch, so the denies it adds are never dropped; a transaction that closes
+# between the two reads leaves the stamp to read.
 typeset -aU installed pi_wrappers
 installed=(opencode)
+one_doc='[inputs] | if length != 1 then error else .[0] end | '
 for f in "$engine/state/txn/plan.json" "$engine/state/stamp.json"; do
   [[ -e $f || -L $f ]] || continue
-  if out=$(/usr/bin/jq -r 'if type != "object" then error elif has("harnesses") | not then "opencode"
+  if out=$(/usr/bin/jq -rn "$one_doc"'if type != "object" then error elif has("harnesses") | not then "opencode"
       elif (.harnesses | type) == "array" and all(.harnesses[]; type == "string") then .harnesses[] else error end' "$f" 2>/dev/null); then
     installed=(${(f)out})
     break
@@ -138,7 +140,7 @@ for f in "$engine/state/txn/plan.json" "$engine/state/stamp.json"; do
 done
 f="$engine/state/wrappers.json"
 if (( ${installed[(Ie)pi]} )) && [[ -e $f || -L $f ]]; then
-  out=$(/usr/bin/jq -r 'if type == "object" and (.wrappers | type) == "object" then .wrappers | keys[] else error end' "$f" 2>/dev/null) ||
+  out=$(/usr/bin/jq -rn "$one_doc"'if type == "object" and (.wrappers | type) == "object" then .wrappers | keys[] else error end' "$f" 2>/dev/null) ||
     fail "cannot read Pi's recorded wrappers in $f"
   pi_wrappers=(${${(M)${(f)out}:#[A-Za-z0-9._-]##}:#(.|..)})
 fi

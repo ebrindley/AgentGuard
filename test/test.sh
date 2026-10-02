@@ -415,19 +415,28 @@ print -r -- '{"txn":"t","kind":"update","harnesses":["opencode","pi"]}' > "$pi_t
 txn_profile=$(pi_launch)
 [[ $txn_profile == "$pi_profile" ]] && ! no_pi_rules "$txn_profile" &&
   pass "a transaction plan listing Pi protects Pi's files" || fail "a transaction plan listing Pi protects Pi's files"
-# A record that exists but cannot be read refuses the launch.
-print -r -- '{"txn":"t","harnesses":"pi"}' > "$pi_txn/plan.json"
-refuses "malformed transaction plan refused" "cannot read the installed harnesses in $pi_txn/plan.json" "${launcher[@]}" profile
+# A record that exists but cannot be read, or does not hold exactly one JSON
+# document, refuses the launch; an empty one is not a record of OpenCode alone.
+# A valid object with an empty list still launches.
+pi_bad=(empty '' blank $' \n\t\n' 'two-document' '{"harnesses":["opencode","pi"]} {"harnesses":["opencode"]}')
+for label value in malformed '{"txn":"t","harnesses":"pi"}' "${pi_bad[@]}"; do
+  print -rn -- "$value" > "$pi_txn/plan.json"
+  refuses "$label transaction plan refused" "cannot read the installed harnesses in $pi_txn/plan.json" "${launcher[@]}" profile
+done
 /bin/rm -r "$pi_txn"
-for value in 'not json' '{"harnesses":["opencode",1]}' '{"harnesses":null}'; do
-  print -r -- "$value" > "$pi_stamp"
-  refuses "stamp $value refused" "cannot read the installed harnesses in $pi_stamp" "${launcher[@]}" profile
+for label value in non-JSON 'not json' 'number-in-harnesses' '{"harnesses":["opencode",1]}' null-harnesses '{"harnesses":null}' "${pi_bad[@]}"; do
+  print -rn -- "$value" > "$pi_stamp"
+  refuses "$label stamp refused" "cannot read the installed harnesses in $pi_stamp" "${launcher[@]}" profile
 done
 refuses "terminal launch with a malformed stamp refused" "cannot read the installed harnesses" "$engine/bin/opencode" --version
 pi_stamped '.harnesses = ["opencode", "pi"]'
-print -r -- '{"wrappers":["pi-work"]}' > "$pi_wrappers"
-refuses "malformed wrapper record refused" "cannot read Pi's recorded wrappers in $pi_wrappers" "${launcher[@]}" profile
+for label value in malformed '{"wrappers":["pi-work"]}' empty '' blank $' \n' two-document '{"wrappers":{"pi-work":{}}} {"wrappers":{}}'; do
+  print -rn -- "$value" > "$pi_wrappers"
+  refuses "$label wrapper record refused" "cannot read Pi's recorded wrappers in $pi_wrappers" "${launcher[@]}" profile
+done
 print -r -- '{"wrappers":{}}' > "$pi_wrappers"
+empty_wrappers=$(pi_launch) && ! no_pi_rules "$empty_wrappers" && pass "an empty wrappers object launches with Pi's denies" ||
+  fail "an empty wrappers object launches with Pi's denies"
 /bin/chmod 000 "$pi_wrappers"
 refuses "unreadable wrapper record refused" "cannot read Pi's recorded wrappers" "${launcher[@]}" profile
 /bin/rm -f "$pi_wrappers"
