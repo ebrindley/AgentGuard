@@ -12,7 +12,7 @@ index 2f94258..5b380df 100755
  fi
  
 diff --git a/sandbox/pi-sandbox-preamble.zsh b/sandbox/pi-sandbox-preamble.zsh
-index 9b7c788..28feaec 100644
+index 9b7c788..1a5431c 100644
 --- a/sandbox/pi-sandbox-preamble.zsh
 +++ b/sandbox/pi-sandbox-preamble.zsh
 @@ -547,7 +547,7 @@ resolve_configured_executable() {
@@ -162,7 +162,48 @@ index 9b7c788..28feaec 100644
  ACTIVE_HOOKS="$(resolve_active_hooks "$PROJECT")" || exit 1
  TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
  
-@@ -1084,12 +1169,51 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
+@@ -1028,12 +1113,24 @@ TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
+ # PROJECT and the launch cwd (Pi resolves <cwd>/.pi). Links that stay inside the
+ # config folder (npm .bin links) or point to non-writable locations are fine.
+ # Prints the offending path and returns 1 on a refused layout.
++# Agent Guard difference 7 applies the same checks to OpenCode's names, except
++# that a link at one of them is refused only when its target is writable in the
++# session, so a link into a dotfiles folder outside the write roots still launches.
+ project_config_symlink_offender() {
+   emulate -L zsh
+-  local base dir dir_canon link target
++  local base dir dir_canon link target name
+   for base in "$@"; do
+-    for dir in "$base/.pi" "$base/.omp"; do
+-      if [ -L "$dir" ]; then print -r -- "$dir"; return 1; fi
++    for name in .opencode .cc-safety-net opencode.json opencode.jsonc tui.json tui.jsonc; do
++      link="$base/$name"
++      [ -L "$link" ] || continue
++      target="${link:A}"
++      if executable_under_sandbox_write_root \
++           "$target/." "$HOME_CANON" "$PROJECT" "$TMPDIR_CANON"; then
++        print -r -- "$link -> $target"; return 1
++      fi
++    done
++    for dir in "$base/.pi" "$base/.omp" "$base/.opencode" "$base/.cc-safety-net"; do
++      if [[ -L $dir && ${dir:t} == .(pi|omp) ]]; then print -r -- "$dir"; return 1; fi
+       [ -d "$dir" ] || continue
+       dir_canon="${dir:A}"
+       # ** does not descend through symlinked directories.
+@@ -1054,9 +1151,9 @@ _pi_config_bases=("$PROJECT")
+ [ "${PWD:A}" = "$PROJECT" ] || _pi_config_bases+=("${PWD:A}")
+ if ! _pi_config_offender="$(project_config_symlink_offender "${_pi_config_bases[@]}")"; then
+   emit "refusing to launch: symlinked project agent config '$_pi_config_offender'."
+-  emit "  The sandbox write-protects .pi/.omp by path, so a symlinked folder or a link to a"
+-  emit "  writable location outside it would stay agent-writable. Replace the link with a real"
+-  emit "  folder or file; call the real Pi binary directly to bypass."
++  emit "  The sandbox write-protects .pi/.omp and OpenCode's config names by path, so a symlinked"
++  emit "  name or a link to a writable location outside it would stay agent-writable. Replace the"
++  emit "  link with a real folder or file; call the real Pi binary directly to bypass."
+   exit 1
+ fi
+ unset _pi_config_bases _pi_config_offender
+@@ -1084,12 +1181,51 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
      # the recorded interpreter, and both --detect and a bare --pi re-derive node via
      # detect_node, which takes the first PATH hit with no write-root filter — so
      # either would re-record the same unsafe path and fail identically next launch.
@@ -215,7 +256,7 @@ index 9b7c788..28feaec 100644
  emit "OS sandbox ON. Runtime [$PI_SANDBOX_RUNTIME]. Project [$PROJECT_VIA]: $PROJECT"
  emit "  active Git hooks denied: $ACTIVE_HOOKS"
  if [ "$PI_SANDBOX_RUNTIME" = "pi" ]; then
-@@ -1122,5 +1246,6 @@ PI_SANDBOX_CMD=(
+@@ -1122,5 +1258,6 @@ PI_SANDBOX_CMD=(
    -D "OMP_AGENT_STATE=$OMP_AGENT_STATE"
    -D "OMP_STATE_ROOT=$OMP_STATE_ROOT"
    -D "OMP_BASE_ROOT=$OMP_BASE_ROOT"
@@ -447,27 +488,29 @@ index d997be1..93f8d29 100644
    );
  }
 diff --git a/src/validate-bash-command.sh b/src/validate-bash-command.sh
-index 5c20996..2161877 100755
+index 5c20996..a826596 100755
 --- a/src/validate-bash-command.sh
 +++ b/src/validate-bash-command.sh
-@@ -3792,6 +3792,12 @@ warning_patterns=(
+@@ -3792,6 +3792,14 @@ warning_patterns=(
      # Git destructive operations
      "git[[:space:]]+reset[[:space:]]+--hard"
      "git[[:space:]]+clean[[:space:]]+-[a-zA-Z]*f"
 +    # Agent Guard difference 8 (Agent Guard's test/fixtures/differences/pi.json):
 +    # pushes that rewrite or delete remote refs, which Seatbelt cannot stop:
 +    # --force and its variants, --mirror, --prune, --delete, a short option
-+    # cluster with f or d, and a refspec starting with + or :. Global options
-+    # such as -C <dir> may come before push.
-+    "(^|[^[:alnum:]_.-])git([[:space:]]+[^[:space:]]+)*[[:space:]]+push([[:space:]]+[^[:space:]]+)*[[:space:]]+(--force([=-][^[:space:]]*)?|--mirror|--prune|--delete|-[a-zA-Z]*[fd][a-zA-Z]*|[+:][^[:space:]]+)([[:space:]]|$)"
++    # cluster with f or d, and a refspec starting with + or :. Only Git's global
++    # options may come before push, such as -C <dir> or --no-pager, so a pathspec
++    # or another command's words named push do not match. No token crosses a
++    # shell separator, which can also end the option.
++    "(^|[^[:alnum:]_.-])git([[:space:]]+(-[cC]|--(git-dir|work-tree|namespace|config-env))[[:space:]]+[^[:space:];&|()<>]+|[[:space:]]+-[^[:space:];&|()<>]*)*[[:space:]]+push([[:space:]]+[^[:space:];&|()<>]+)*[[:space:]]+(--force([=-][^[:space:];&|()<>]*)?|--mirror|--prune|--delete|-[a-zA-Z]*[fd][a-zA-Z]*|[+:][^[:space:];&|()<>]+)([[:space:];&|()<>]|$)"
      # core.hooksPath repointing is handled by the option-aware token scan below:
      # git config keys are CASE-INSENSITIVE and the key can be quote-split
      # (core."hooksPath"), neither of which a flat ERE handles.
 diff --git a/test/corpus/corpus.json b/test/corpus/corpus.json
-index 53ef527..bc9e0dd 100644
+index 53ef527..130c1f0 100644
 --- a/test/corpus/corpus.json
 +++ b/test/corpus/corpus.json
-@@ -112,6 +112,16 @@
+@@ -112,6 +112,21 @@
      { "command": "rm -rf ${DIR}", "expect": "ask", "note": "unknown variable target" },
      { "command": "rm -rf /*", "expect": "ask", "note": "root glob is confirm tier in current analyzer (glob expansion unresolvable statically)" },
      { "command": "git clean -fdx", "expect": "ask", "note": "destructive but repo-scoped -> confirm" },
@@ -481,6 +524,11 @@ index 53ef527..bc9e0dd 100644
 +    { "command": "git -C repo push --force", "expect": "ask", "note": "Agent Guard difference 8: global options before push" },
 +    { "command": "git push -u origin feature", "expect": "allow", "note": "Agent Guard difference 8: a plain push stays allowed" },
 +    { "command": "git push --follow-tags origin main:main", "expect": "allow", "note": "Agent Guard difference 8: long options and a plain refspec stay allowed" },
++    { "command": "git push origin main --force; git status", "expect": "ask", "note": "Agent Guard difference 8: a shell separator ends the option" },
++    { "command": "(git push -f)", "expect": "ask", "note": "Agent Guard difference 8: in a subshell" },
++    { "command": "git --git-dir .git push --force", "expect": "ask", "note": "Agent Guard difference 8: a global option with its argument before push" },
++    { "command": "git push origin main && ls -d /tmp", "expect": "allow", "note": "Agent Guard difference 8: another command's options do not count" },
++    { "command": "git diff -- push -d", "expect": "allow", "note": "Agent Guard difference 8: a pathspec named push is not the subcommand" },
      { "command": "find . -name \"*.tmp\" -delete", "expect": "ask" },
      { "command": "export PATH=/tmp/bin:$PATH", "expect": "ask", "note": "critical env manipulation -> warn tier (exit 1)" },
      { "command": "unset DYLD_LIBRARY_PATH", "expect": "ask" },

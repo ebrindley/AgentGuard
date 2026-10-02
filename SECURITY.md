@@ -105,8 +105,10 @@ in `test/fixtures/differences/pi.json`, the last two as differences 7 and 8:
    named by its full path refuses the launch.
 5. Repair messages name `agent-guard bind`.
 6. `.opencode`, not only `.opencode/plugins`, `opencode.json`, `opencode.jsonc`,
-   `tui.json`, `tui.jsonc` and `.cc-safety-net` are write-denied in the project,
-   and a project inside `.opencode` or `.cc-safety-net` is refused.
+   `tui.json`, `tui.jsonc` and `.cc-safety-net` are write-denied in the project.
+   A project inside `.opencode` or `.cc-safety-net` is refused, and so is a
+   launch where one of these names is a link to a place the session can write,
+   or holds one.
 7. The analyzer asks before `git push` with `--force` or one of its variants,
    `--mirror`, `--prune`, `--delete`, a short option cluster containing `f` or
    `d`, or a refspec that starts with `+` or `:`.

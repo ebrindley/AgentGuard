@@ -309,7 +309,8 @@ has a test:
    `tui.json`, `tui.jsonc` and `.cc-safety-net`, so a Pi session cannot plant an
    OpenCode plugin or config, or switch off cc-safety-net's built-in rules, for a
    later OpenCode session there. A project inside `.opencode` or
-   `.cc-safety-net` is refused.
+   `.cc-safety-net` is refused, and so is a launch where one of these names is
+   a link to a place the session can write, as for `.pi` and `.omp`.
 7. **The analyzer asks before a push that rewrites or deletes remote branches:**
    `git push` with `--force` or one of its variants, `--mirror`, `--prune`,
    `--delete`, a short option such as `-f` or `-d`, or a refspec that starts with

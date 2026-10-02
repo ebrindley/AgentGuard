@@ -411,6 +411,31 @@ try {
           /inside a protected agent config folder/);
     });
   }
+  // Difference 7: Seatbelt checks the resolved path, so links at OpenCode's names.
+  {
+    const a = account('opencode-links');
+    const dotfiles = join(a.home, 'dotfiles');
+    mkdirSync(join(a.project, 'config'));
+    mkdirSync(join(dotfiles, 'opencode'), { recursive: true });
+    writeFileSync(join(a.project, 'config/open-code.json'), '{}\n');
+    writeFileSync(join(dotfiles, 'tui.json'), '{}\n');
+    check('difference 7: a link at an OpenCode name to a place the session can write is refused', () => {
+      for (const [name, target] of [['opencode.json', 'config/open-code.json'], ['.opencode', 'config'], ['tui.jsonc', 'config/missing.jsonc']]) {
+        symlinkSync(target, join(a.project, name));
+        refused(session(a, ['/bin/echo', 'started']), name, /symlinked project agent config/);
+        rmSync(join(a.project, name));
+      }
+      mkdirSync(join(a.project, '.cc-safety-net'));
+      symlinkSync('../config/open-code.json', join(a.project, '.cc-safety-net/policy.json'));
+      refused(session(a, ['/bin/echo', 'started']), '.cc-safety-net/policy.json', /symlinked project agent config/);
+      rmSync(join(a.project, '.cc-safety-net'), { recursive: true });
+    });
+    check('difference 7: a link at an OpenCode name to a place the session cannot write starts', () => {
+      symlinkSync(join(dotfiles, 'tui.json'), join(a.project, 'tui.json'));
+      symlinkSync(join(dotfiles, 'opencode'), join(a.project, '.opencode'));
+      allowed(session(a, ['/bin/echo', 'started']), 'links into dotfiles');
+    });
+  }
 
   // Nested launches.
   {
