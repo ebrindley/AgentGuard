@@ -1143,6 +1143,10 @@ project_config_symlink_offender() {
       dir_canon="${dir:A}"
       # ** does not descend through symlinked directories.
       for link in "$dir"/**/*(ND@); do
+        # Agent Guard difference 7: in OpenCode's folders a link with a missing
+        # target resolves to itself, inside the folder, and the session could
+        # create the target, so refuse it before the containment check.
+        if [[ ${dir:t} != .(pi|omp) && ! -e $link ]]; then print -r -- "$link -> a missing target"; return 1; fi
         target="${link:A}"
         case "$target" in "$dir_canon"|"$dir_canon"/*) continue ;; esac
         # Probe a child so a link to a write root itself (e.g. PROJECT) matches too.

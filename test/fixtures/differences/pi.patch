@@ -12,7 +12,7 @@ index 2f94258..5b380df 100755
  fi
  
 diff --git a/sandbox/pi-sandbox-preamble.zsh b/sandbox/pi-sandbox-preamble.zsh
-index 9b7c788..5d72e28 100644
+index 9b7c788..864af2b 100644
 --- a/sandbox/pi-sandbox-preamble.zsh
 +++ b/sandbox/pi-sandbox-preamble.zsh
 @@ -547,7 +547,7 @@ resolve_configured_executable() {
@@ -162,7 +162,7 @@ index 9b7c788..5d72e28 100644
  ACTIVE_HOOKS="$(resolve_active_hooks "$PROJECT")" || exit 1
  TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
  
-@@ -1028,12 +1113,32 @@ TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
+@@ -1028,16 +1113,40 @@ TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
  # PROJECT and the launch cwd (Pi resolves <cwd>/.pi). Links that stay inside the
  # config folder (npm .bin links) or point to non-writable locations are fine.
  # Prints the offending path and returns 1 on a refused layout.
@@ -198,7 +198,15 @@ index 9b7c788..5d72e28 100644
        [ -d "$dir" ] || continue
        dir_canon="${dir:A}"
        # ** does not descend through symlinked directories.
-@@ -1054,9 +1159,9 @@ _pi_config_bases=("$PROJECT")
+       for link in "$dir"/**/*(ND@); do
++        # Agent Guard difference 7: in OpenCode's folders a link with a missing
++        # target resolves to itself, inside the folder, and the session could
++        # create the target, so refuse it before the containment check.
++        if [[ ${dir:t} != .(pi|omp) && ! -e $link ]]; then print -r -- "$link -> a missing target"; return 1; fi
+         target="${link:A}"
+         case "$target" in "$dir_canon"|"$dir_canon"/*) continue ;; esac
+         # Probe a child so a link to a write root itself (e.g. PROJECT) matches too.
+@@ -1054,9 +1163,9 @@ _pi_config_bases=("$PROJECT")
  [ "${PWD:A}" = "$PROJECT" ] || _pi_config_bases+=("${PWD:A}")
  if ! _pi_config_offender="$(project_config_symlink_offender "${_pi_config_bases[@]}")"; then
    emit "refusing to launch: symlinked project agent config '$_pi_config_offender'."
@@ -211,7 +219,7 @@ index 9b7c788..5d72e28 100644
    exit 1
  fi
  unset _pi_config_bases _pi_config_offender
-@@ -1084,12 +1189,51 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
+@@ -1084,12 +1193,51 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
      # the recorded interpreter, and both --detect and a bare --pi re-derive node via
      # detect_node, which takes the first PATH hit with no write-root filter — so
      # either would re-record the same unsafe path and fail identically next launch.
@@ -264,7 +272,7 @@ index 9b7c788..5d72e28 100644
  emit "OS sandbox ON. Runtime [$PI_SANDBOX_RUNTIME]. Project [$PROJECT_VIA]: $PROJECT"
  emit "  active Git hooks denied: $ACTIVE_HOOKS"
  if [ "$PI_SANDBOX_RUNTIME" = "pi" ]; then
-@@ -1122,5 +1266,6 @@ PI_SANDBOX_CMD=(
+@@ -1122,5 +1270,6 @@ PI_SANDBOX_CMD=(
    -D "OMP_AGENT_STATE=$OMP_AGENT_STATE"
    -D "OMP_STATE_ROOT=$OMP_STATE_ROOT"
    -D "OMP_BASE_ROOT=$OMP_BASE_ROOT"

@@ -107,8 +107,8 @@ in `test/fixtures/differences/pi.json`, the last two as differences 7 and 8:
 6. `.opencode`, not only `.opencode/plugins`, `opencode.json`, `opencode.jsonc`,
    `tui.json`, `tui.jsonc` and `.cc-safety-net` are write-denied in the project.
    A project inside `.opencode` or `.cc-safety-net` is refused, and so is a
-   launch where one of these names is a link to a place the session can write,
-   or holds one.
+   launch where one of these names in the project or launch folder is a link to
+   a place the session can write, or holds one.
 7. The analyzer asks before `git push` with `--force` or one of its variants,
    `--mirror`, `--prune`, `--delete`, a short option cluster containing `f` or
    `d`, or a refspec that starts with `+` or `:`.
@@ -233,8 +233,10 @@ pi-sandbox-guard 7ad441f's with the seven differences above, so:
   `opencode.jsonc`, `tui.json`, `tui.jsonc` or `.cc-safety-net` in its project,
   but it can build a folder that holds them elsewhere it can write, such as temp,
   and move that folder into the project. An OpenCode started in the moved folder
-  loads them, including the plugins and MCP commands they name. Planned: step
-  10d.
+  loads them, including the plugins and MCP commands they name. Links are checked
+  only in the project and launch folders, so where one of these names in a
+  subfolder is a link, such as `packages/web/opencode.json` to another project
+  file, the target stays writable. Planned: step 10d.
 - **An npm update can put a real `pi` back in `~/.local/bin`.** With npm's
   prefix at `~/.local`, an update of Pi can replace the launcher with npm's link;
   `pi`, and Agent Guard's `bin/pi`, which links to it, then start Pi unguarded.

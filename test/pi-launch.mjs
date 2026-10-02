@@ -429,6 +429,10 @@ try {
       symlinkSync('../config/open-code.json', join(a.project, '.cc-safety-net/policy.json'));
       refused(session(a, ['/bin/echo', 'started']), '.cc-safety-net/policy.json', /symlinked project agent config/);
       rmSync(join(a.project, '.cc-safety-net'), { recursive: true });
+      mkdirSync(join(a.project, '.opencode'));
+      symlinkSync('../config/agent-settings.json', join(a.project, '.opencode/opencode.json'));
+      refused(session(a, ['/bin/echo', 'started']), '.opencode/opencode.json, missing target', /symlinked project agent config/);
+      rmSync(join(a.project, '.opencode'), { recursive: true });
     });
     check('difference 7: a link at an OpenCode name to a place the session cannot write starts', () => {
       symlinkSync(join(dotfiles, 'tui.json'), join(a.project, 'tui.json'));
