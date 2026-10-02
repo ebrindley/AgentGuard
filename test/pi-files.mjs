@@ -4,11 +4,15 @@
 // Reversing the patch must apply exactly, hunk by hunk at its recorded line, and give
 // back those blobs, so a change outside the recorded differences fails here.
 //
-// After a reviewed change to a vendored file, regenerate the patch from the commit
-// that vendored the files unchanged ("Vendor pi-sandbox-guard 7ad441f's Pi profile
-// unchanged"), and record the change in pi.json:
-//   git diff --relative=profiles/pi/ <commit> -- profiles/pi ':!profiles/pi/package.json' \
-//     > test/fixtures/differences/pi.patch
+// After a reviewed change to a vendored file, regenerate the patch from the two
+// commits that vendored the files unchanged, <profile> ("Vendor pi-sandbox-guard
+// 7ad441f's Pi profile unchanged") and <bind> ("Vendor pi-sandbox-guard 7ad441f's
+// bind-executable.sh and lib-ops.sh"), and record the change in pi.json:
+//   git diff --relative=profiles/pi/ <profile> -- profiles/pi ':!profiles/pi/package.json' \
+//     ':!profiles/pi/commands' ':!profiles/pi/scripts/bind-executable.sh' \
+//     ':!profiles/pi/scripts/lib-ops.sh' > test/fixtures/differences/pi.patch
+//   git diff --relative=profiles/pi/ <bind> -- profiles/pi/scripts/bind-executable.sh \
+//     profiles/pi/scripts/lib-ops.sh >> test/fixtures/differences/pi.patch
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
