@@ -44,7 +44,14 @@ package stores, `bin` folder and model catalog in its cache (also under
 Pi's guard files, even inside ALLOW: `pi`, `omp`, `pi-sandbox.sb`,
 `pi-sandbox-preamble.zsh` and the recorded custom wrappers in `~/.local/bin`, the
 extension folder `~/.pi/agent/extensions/pi-sandbox-guard/` and
-`~/.config/pi-sandbox-guard/executables.conf`. The exceptions are under
+`~/.config/pi-sandbox-guard/executables.conf`. Nor can it create or change
+`~/.local/bin/pi-sandbox-guard-extension`, whose `index.ts` the launcher loads
+in place of the installed extension whenever it exists. Each of these paths is
+protected as named and, when it is a link, at its target, with two exceptions:
+the target of a link inside the extension folder can be written where an ALLOW
+entry covers it, and a protected path that is a link to a missing target is
+protected at its name only, so the missing target can be created where an ALLOW
+entry covers it. The other exceptions are under
 [Known limitations](#known-limitations-in-020): npm configuration in the cache
 that steers installs made outside the guard, remote-configuration entries in
 OpenCode's `auth.json`, the targets of symlinked project config names, and Pi's
@@ -273,8 +280,9 @@ For Pi and OMP:
 - change Agent Guard's files, OpenCode's configuration, `~/.cc-safety-net`,
   `~/Library/LaunchAgents`, a shell startup file or its link target, or
   OpenCode's package stores, `bin` folder or model catalog;
-- change Pi's guard files: the launchers, profile, preamble and recorded wrappers
-  in `~/.local/bin`, the extension folder or `executables.conf`;
+- change Pi's guard files: the launchers, profile, preamble, recorded wrappers
+  and `pi-sandbox-guard-extension` in `~/.local/bin`, the extension folder or
+  `executables.conf`;
 - run `open`, `osascript`, `osacompile`, `codesign`, `diskutil`, `launchctl` or
   `sudo`, or start a program through Launch Services or launchd;
 - start Pi or OMP without Seatbelt through an Agent Guard entry point: `pi`,

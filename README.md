@@ -196,9 +196,13 @@ same paths. It does not run pi-sandbox-guard's npm scripts:
    existing `.guard-node`, checks the bindings in `executables.conf` and
    `.guard-node`, and runs the profile's self-test against the staged copies.
 3. It imports your custom wrappers from pi-sandbox-guard's launcher stamp: their
-   names, the names installed before and their hashes. A wrapper whose content no
-   longer matches its recorded hash is reported. The wrappers stay in
-   `~/.local/bin`.
+   names, the names installed before and their hashes. The wrappers stay in
+   `~/.local/bin`. A wrapper whose content no longer matches its recorded hash,
+   or a name installed before that is still an executable file there, stops the
+   install before the switch, with nothing changed, and is named. Restore or
+   remove each file named, or deploy it again with pi-sandbox-guard, then run
+   the install again; after the install, `agent-guard wrapper add` records a
+   wrapper.
 4. It replaces `pi-sandbox-preamble.zsh`, `pi-sandbox.sb`, `pi`, `omp` and the
    extension folder, each by a rename, then switches Agent Guard's own files. At
    every point of the switch, `pi`, `omp` and your wrappers run Pi under at least
@@ -337,19 +341,24 @@ Pi's guard stays where pi-sandbox-guard puts it:
   and `.guard-node`, the path of the Node the analyzer runs on;
 - `~/.config/pi-sandbox-guard/executables.conf`: the Pi, OMP and Node
   executables the launcher runs (`agent-guard bind`);
-- `~/.pi/agent/security-events.log`: the analyzer's log of flagged commands,
-  which Pi sessions can add to but not read.
+- `~/.pi/agent/security-events.log`: the analyzer's log of flagged commands.
+  Pi sessions can write it but not read it, so a session can also empty or
+  overwrite it; it is not an append-only record.
 
-Agent Guard's version stamp records the hashes of these copies;
+Agent Guard's version stamp records the hashes of the launchers, the profile,
+the preamble and the extension's code, not of `.guard-node`;
 pi-sandbox-guard's own stamps, `.pi-sandbox-launchers-version` and
 `.deployed-version`, are not written. In the engine folder, `bin/pi` and
 `bin/omp` link to the launchers, `state/wrappers.json` holds the wrapper records
 and `state/legacy/` holds what a pi-sandbox-guard migration retired and what a
 fresh install replaced in `~/.local/bin`. Pi sessions cannot write any of these
-files apart from adding to the log. With Pi's guard installed, OpenCode sessions
-cannot write the launchers, profile, preamble, recorded wrappers, extension
-folder or `executables.conf`, even under an ALLOW entry that covers them,
-because they run outside the sandbox at the next Pi start.
+files except the log. With Pi's guard installed, OpenCode sessions cannot write
+the launchers, profile, preamble, recorded wrappers, extension folder or
+`executables.conf`, even under an ALLOW entry that covers them, because they run
+outside the sandbox at the next Pi start. Nor can they create or change
+`~/.local/bin/pi-sandbox-guard-extension`: the launcher loads the `index.ts` in
+that folder in place of the installed extension whenever it exists. Two link
+cases are not covered; see [SECURITY.md](SECURITY.md#opencode).
 
 On a Mac without pi-sandbox-guard, the installer places these files when it finds
 Pi or OMP. The analyzer's Node is the `node` on PATH, refused when it lies in a
@@ -456,9 +465,14 @@ back in `~/.local/bin` in place of the launcher; `pi` then starts Pi unguarded.
   installed it keeps the fields of pi-sandbox-guard's `npm run status -- --json`,
   such as `runtime_binding`, `pi_binding` and `drift`, with the same meaning.
 - `agent-guard version` prints the version, tag, commit, release ID and install
-  time from the stamp, then every installed file or link that changed, went
-  missing or was added since, the Pi files outside the engine folder included.
-  It exits 1 if anything drifted.
+  time from the stamp, then each file and link the stamp records that changed or
+  went missing, and each file added to the release folder. With Pi's guard
+  installed, the recorded files include `pi`, `omp`, `pi-sandbox.sb` and
+  `pi-sandbox-preamble.zsh` in `~/.local/bin` and the extension's code. It does
+  not check `.guard-node`, `executables.conf` or the custom wrappers, whose
+  hashes `agent-guard doctor` checks, and it does not notice a file added
+  outside the release folder, such as in the extension folder. It exits 1 if
+  anything drifted.
 - `agent-guard update` installs the latest release the same way as the
   one-liner, with the same checks and rollback. When the installed release is
   the latest, it installs it again only to finish a migration or retirement that
@@ -476,15 +490,22 @@ back in `~/.local/bin` in place of the launcher; `pi` then starts Pi unguarded.
   `~/Agent Guard/opencode-guard-permissions.json`). With Pi's guard installed it
   also removes `pi`, `omp`, `pi-sandbox.sb` and `pi-sandbox-preamble.zsh` from
   `~/.local/bin` and the extension folder, and puts back an entry that a fresh
-  install replaced in `~/.local/bin`, as the link it was. After a
-  pi-sandbox-guard migration it first copies the retired files to
-  `~/Agent Guard/pi-sandbox-guard-legacy/` and prints how to reinstate
+  install replaced in `~/.local/bin`, as the link it was. A `pi` or `omp` there
+  that is no longer the guard's launcher is left as it is, and its replaced entry
+  is not put back. Replaced entries it does not put back, and earlier ones kept
+  under a time suffix, are copied to `~/Agent Guard/pi-replaced-<time>/`, and it
+  prints where. After a pi-sandbox-guard migration it first copies the retired
+  files to `~/Agent Guard/pi-sandbox-guard-legacy/` and prints how to reinstate
   pi-sandbox-guard from there ([Moving from pi-sandbox-guard](#moving-from-pi-sandbox-guard));
-  if the copy fails, it keeps the engine folder and exits 1. It leaves
-  `executables.conf`, the analyzer's log and your custom wrappers, and names the
-  wrappers it leaves. A wrapper then runs whatever `pi` is beside it: Pi
-  unguarded when an npm `pi` was put back, or an error when there is none. It
-  exits 1 when anything was left; running it again finishes the job.
+  if that copy or the copy of replaced entries fails, it keeps the engine folder
+  and exits 1. It leaves `executables.conf`, the analyzer's log and your custom
+  wrappers, and names the wrappers it leaves. A wrapper then runs whatever `pi`
+  is beside it: Pi unguarded when an npm `pi` was put back, or an error when
+  there is none. What it leaves on purpose, the wrappers, a `pi` or `omp` that is
+  not the guard's and the copied entries, is reported as a warning and does not
+  change the exit status. It exits 1 when a step fails, a PATH block or file
+  cannot be removed or a permission value cannot be restored, and names it; each
+  step can be repeated, so running it again finishes the job.
 - `agent-guard bind` records the Pi, OMP and Node executables the Pi launcher
   runs, in `~/.config/pi-sandbox-guard/executables.conf`, the file the launcher
   reads; no environment variable selects another. It has `npm run bind`'s
@@ -495,6 +516,13 @@ back in `~/.local/bin` in place of the launcher; `pi` then starts Pi unguarded.
   Node the analyzer runs on, in the extension's `.guard-node`. The launcher
   refuses a stale binding and names this command. Bind again after an upgrade
   that moves an executable, such as a new Node under a version manager.
+  `bind` needs Pi: on a Mac with OMP and no Pi binding, `--detect` stops because
+  it finds no Pi, and `--omp` stops with `no Pi path supplied or previously
+  recorded`. There, the install records OMP when it replaces an `omp` in
+  `~/.local/bin`; otherwise the launcher looks for `omp` on its own PATH. To
+  clear a stale OMP binding on such a Mac, delete the `omp=` line from
+  `executables.conf` in Terminal; the launcher then looks for `omp` on its PATH
+  again.
 - `agent-guard wrapper add FILE|FOLDER...` installs custom wrappers into
   `~/.local/bin`, `agent-guard wrapper remove NAME...` removes them, and
   `agent-guard wrapper list` shows the recorded and earlier names and whether
@@ -519,6 +547,26 @@ checked (install, update) or rolled back (uninstall, or a rollback that had
 begun); one stopped after the stamp has its cleanup finished. `agent-guard
 doctor` does not recover. "another Agent Guard install is running" means a live
 run holds the lock; a lock left by a process that is gone is taken over.
+
+OpenCode does not start, from the terminal or the app, when one of the records
+it reads in `~/Library/Application Support/AgentGuard` exists but cannot be
+read, is empty, holds more than one JSON document or is malformed:
+`state/txn/plan.json` or `state/stamp.json` (`cannot read the installed
+harnesses in …`), and, with Pi's guard installed, `state/wrappers.json`
+(`cannot read Pi's recorded wrappers in …`). The message names the file. No
+session can write these records, so the file was damaged outside the guard.
+From Terminal:
+
+- `state/stamp.json`: run the one-line install again; it writes a new stamp.
+  `agent-guard update` may report the release as current and leave the stamp
+  as it is.
+- `state/wrappers.json`: install and update do not rewrite it. Remove it, then
+  record each wrapper again with `agent-guard wrapper add ~/.local/bin/NAME`.
+- `state/txn/plan.json`: nothing in Agent Guard repairs it. Install, update and
+  uninstall stop with `the interrupted run in … could not be finished; it is
+  kept for the next run`. Report it in an issue with that output; do not
+  remove `state/txn`, which holds what recovery needs to finish or undo the
+  interrupted run.
 
 Power loss is a limit: macOS shell tools cannot force a write to disk, so after
 a power cut during the switch a change can be lost or reach the disk before the
