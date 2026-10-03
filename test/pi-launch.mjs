@@ -212,7 +212,8 @@ try {
       'Library/Application Support/AgentGuard', 'Projects/dotfiles/opencode', '.config'])
       mkdirSync(join(a.home, d), { recursive: true });
     symlinkSync(join(dotfiles, 'opencode'), join(a.home, '.config/opencode'));
-    const refusal = /Agent Guard's protected folder/;
+    // Difference 7 refuses .opencode and .cc-safety-net as agent config folders first.
+    const refusal = /Agent Guard's protected folder|inside a protected agent config folder/;
     check('difference 2: a project that is, contains or is inside an Agent Guard folder is refused', () => {
       for (const p of ['Agent Guard', 'Agent Guard/sub', 'Applications', 'Applications/Agent Guard.app', '.opencode',
         '.opencode/sub', '.cc-safety-net', '.cc-safety-net/logs'])
@@ -384,6 +385,64 @@ try {
       const warning = r.stderr.split('\n').find((l) => l.includes('FILTER-ONLY')) ?? '';
       assert.match(warning, /install Agent Guard \(`agent-guard update`, or the one-line installer\) and run `agent-guard bind`/);
       assert.doesNotMatch(warning, /npm run/);
+    });
+  }
+
+  // Difference 7.
+  {
+    const a = account('opencode-config');
+    for (const d of ['.opencode/agent', 'sub/.opencode', '.cc-safety-net', 'sub/.cc-safety-net', 'notes'])
+      mkdirSync(join(a.project, d), { recursive: true });
+    check('difference 7: OpenCode\'s project config and .cc-safety-net are write-denied anywhere in the project', () => {
+      for (const p of ['.opencode/opencode.json', '.opencode/agent/review.md', 'sub/.opencode/plugin.js', 'opencode.json',
+        'opencode.jsonc', 'tui.json', 'tui.jsonc', 'sub/opencode.json', '.cc-safety-net/policy.json',
+        'sub/.cc-safety-net/policy.json'])
+        denied(write(a, join(a.project, p)), p);
+      denied(session(a, ['/bin/mkdir', join(a.project, 'notes/.cc-safety-net')]), 'create .cc-safety-net');
+      denied(session(a, ['/bin/mkdir', join(a.project, 'notes/.opencode')]), 'create .opencode');
+    });
+    check('difference 7: other project files with similar names stay writable', () => {
+      for (const p of ['opencode.md', 'notes/tui.json.bak', 'src-opencode.json.txt', '.opencoderc', 'notes/opencode.ts'])
+        allowed(write(a, join(a.project, p)), p);
+    });
+    check('difference 7: a project inside .opencode or .cc-safety-net is refused', () => {
+      for (const p of ['.opencode', '.opencode/agent', '.cc-safety-net'])
+        refused(session(a, ['/bin/echo', 'started'], { env: { PI_PROJECT: join(a.project, p) } }), p,
+          /inside a protected agent config folder/);
+    });
+  }
+  // Difference 7: Seatbelt checks the resolved path, so links at OpenCode's names.
+  {
+    const a = account('opencode-links');
+    const dotfiles = join(a.home, 'dotfiles');
+    mkdirSync(join(a.project, 'config'));
+    mkdirSync(join(dotfiles, 'opencode'), { recursive: true });
+    writeFileSync(join(a.project, 'config/open-code.json'), '{}\n');
+    writeFileSync(join(dotfiles, 'tui.json'), '{}\n');
+    check('difference 7: a link at an OpenCode name to a place the session can write is refused', () => {
+      for (const [name, target] of [['opencode.json', 'config/open-code.json'], ['.opencode', 'config'], ['tui.jsonc', 'config/missing.jsonc']]) {
+        symlinkSync(target, join(a.project, name));
+        refused(session(a, ['/bin/echo', 'started']), name, /symlinked project agent config/);
+        rmSync(join(a.project, name));
+      }
+      mkdirSync(join(a.project, '.cc-safety-net'));
+      symlinkSync('../config/open-code.json', join(a.project, '.cc-safety-net/policy.json'));
+      refused(session(a, ['/bin/echo', 'started']), '.cc-safety-net/policy.json', /symlinked project agent config/);
+      rmSync(join(a.project, '.cc-safety-net'), { recursive: true });
+      mkdirSync(join(a.project, '.opencode'));
+      symlinkSync('../config/agent-settings.json', join(a.project, '.opencode/opencode.json'));
+      refused(session(a, ['/bin/echo', 'started']), '.opencode/opencode.json, missing target', /symlinked project agent config/);
+      rmSync(join(a.project, '.opencode'), { recursive: true });
+    });
+    check('difference 7: a link at an OpenCode name to a place the session cannot write starts', () => {
+      symlinkSync(join(dotfiles, 'tui.json'), join(a.project, 'tui.json'));
+      symlinkSync(join(dotfiles, 'opencode'), join(a.project, '.opencode'));
+      allowed(session(a, ['/bin/echo', 'started']), 'links into dotfiles');
+    });
+    check('difference 7: a link to a project path the profile denies by name starts, with the target write-denied', () => {
+      writeFileSync(join(a.project, 'config/opencode.json'), '{}\n');
+      symlinkSync('config/opencode.json', join(a.project, 'opencode.json'));
+      denied(write(a, join(a.project, 'config/opencode.json')), 'named link target');
     });
   }
 

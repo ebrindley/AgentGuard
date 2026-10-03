@@ -217,9 +217,17 @@ for p in $deny; do
   done
 done
 
+# Pi's and OMP's project config names, once Pi is installed (docs/DESIGN.md
+# section 12, step 7f): Pi loads a trusted project's .pi, and OMP loads .omp from
+# the project and its parents without asking, so a session that writes either
+# plants code for the next Pi or OMP start. Both are write-denied anywhere in the
+# final deny block, and a link at either name in the launch folder has its target
+# write-denied, as OpenCode's own names do.
+typeset -a pi_names
+(( ${installed[(Ie)pi]} )) && pi_names=(.pi .omp)
 protected=("$engine" "$list_dir" $protected
            $home/Library/LaunchAgents $home/.{zshenv,zprofile,zshrc,zlogin,profile,bash_profile,bash_login,bashrc}
-           "${(@)protected_names/#/$PWD/}")
+           "${(@)protected_names/#/$PWD/}" "${(@)pi_names/#/$PWD/}")
 for p in $protected; do
   [[ -e $p && ${p:A} != "$p" ]] || continue
   sbpl "${p:A}"
@@ -286,6 +294,7 @@ for p in $pi_guard; do
     a=${a:h}
   done
 done
+(( $#pi_names )) && state_rules+=('  (regex #"/\.pi(/|$)")' '  (regex #"/\.omp(/|$)")')
 for p in $state_pins; do sbpl_path "$p"; state_rules+=("  (literal $REPLY)"); done
 
 note "allow: ${(j:, :)allow:-none}"
@@ -295,6 +304,7 @@ note "always writable for OpenCode itself: ~/.local/share/opencode, ~/.local/sta
 cache_dirs=(${^cache_roots}/opencode)
 note "write-protected in ${(j: and :)cache_dirs}, maintained outside the guard: packages, node_modules with its package metadata, bin, models.json and models-*.json"
 (( $#pi_guard )) && note "write-protected for Pi, maintained outside the guard: ${(j:, :)pi_guard}"
+(( $#pi_names )) && note "write-protected anywhere, Pi's and OMP's project config: ${(j:, :)pi_names}"
 
 profile=$(<"$here/profile.sb")
 profile=${profile/';;@USER_RULES@'/${(F)rules}}

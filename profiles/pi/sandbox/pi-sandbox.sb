@@ -160,6 +160,12 @@
   ;; refuses a PROJECT whose own path has any of these components, which these
   ;; regexes would otherwise match wholesale, and symlinked .pi/.omp layouts.
   ;; Keep these regexes in step with the PROJECT refusal patterns in pi-sandbox-preamble.zsh.
+  ;; Agent Guard difference 7 (Agent Guard's test/fixtures/differences/pi.json):
+  ;; all of .opencode, not only its plugins, OpenCode's config file names, and
+  ;; .cc-safety-net, whose policy.json can switch off cc-safety-net's built-in
+  ;; rules for later OpenCode sessions in that folder. The file names match only
+  ;; the file itself, so they need no PROJECT refusal. cc-safety-net's logs stay
+  ;; writable, as in OpenCode's rule and difference 1.
   (require-all
     (subpath (param "PROJECT"))
     (require-any
@@ -167,7 +173,11 @@
       (regex #"/\.omp(/|$)")
       (regex #"/\.(claude|codex)/(extensions|hooks|tools)(/|$)")
       (regex #"/\.gemini/extensions(/|$)")
-      (regex #"/\.opencode/plugins(/|$)")))
+      (regex #"/\.opencode(/|$)")
+      (regex #"/(opencode|tui)\.jsonc?$")
+      (require-all
+        (regex #"/\.cc-safety-net(/|$)")
+        (require-not (subpath (string-append (param "HOME") "/.cc-safety-net/logs"))))))
   (subpath (string-append (param "PI_AGENT_STATE") "/extensions"))
   (literal (string-append (param "PI_AGENT_STATE") "/settings.json"))
   (literal (string-append (param "PI_AGENT_STATE") "/auth.json"))

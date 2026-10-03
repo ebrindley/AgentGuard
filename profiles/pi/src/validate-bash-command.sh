@@ -3792,6 +3792,15 @@ warning_patterns=(
     # Git destructive operations
     "git[[:space:]]+reset[[:space:]]+--hard"
     "git[[:space:]]+clean[[:space:]]+-[a-zA-Z]*f"
+    # Agent Guard difference 8 (Agent Guard's test/fixtures/differences/pi.json):
+    # pushes that rewrite or delete remote refs, which Seatbelt cannot stop:
+    # --force and its variants, --mirror, --prune, --delete, a short option
+    # cluster with f or d, and a refspec starting with + or :. Only Git's global
+    # options may come before push, such as -C <dir> or --no-pager, so a pathspec
+    # or another command's words named push do not match. Words may be quoted or
+    # hold backslash escapes, redirections are skipped, and no word crosses a shell
+    # separator, which can also end the option.
+    "(^|[^[:alnum:]_.-])git([[:space:]]+(-[cC]|--(git-dir|work-tree|namespace|config-env))[[:space:]]+([^[:space:];&|()<>\"'\\\\]|\\\\.|\"([^\"\\\\]|\\\\.)*\"|'[^']*')+|[[:space:]]+-([^[:space:];&|()<>\"'\\\\]|\\\\.|\"([^\"\\\\]|\\\\.)*\"|'[^']*')*)*[[:space:]]+push([[:space:]]+(([^[:space:];&|()<>\"'\\\\]|\\\\.|\"([^\"\\\\]|\\\\.)*\"|'[^']*')+|[0-9]*(>>?|<|>&|&>>?)[[:space:]]*([^[:space:];&|()<>\"'\\\\]|\\\\.|\"([^\"\\\\]|\\\\.)*\"|'[^']*')+))*[[:space:]]+(--force([=-][^[:space:];&|()<>]*)?|--mirror|--prune|--delete|-[a-zA-Z]*[fd][a-zA-Z]*|[+:][^[:space:];&|()<>]+)([[:space:];&|()<>]|$)"
     # core.hooksPath repointing is handled by the option-aware token scan below:
     # git config keys are CASE-INSENSITIVE and the key can be quote-split
     # (core."hooksPath"), neither of which a flat ERE handles.

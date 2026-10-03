@@ -14,7 +14,7 @@ Pi moves onto Agent Guard's engine (step 10d of the plan in
   existing OpenCode Guard install (see
   [Moving from OpenCode Guard](#moving-from-opencode-guard)).
 - **Pi and OMP** run under pi-sandbox-guard 7ad441f's launcher, Seatbelt profile
-  and bash analyzer, installed at the paths pi-sandbox-guard uses, with five
+  and bash analyzer, installed at the paths pi-sandbox-guard uses, with seven
   recorded differences (see [Pi and OMP](#pi-and-omp)). They do not read the
   Guard List. The installer replaces an existing pi-sandbox-guard install (see
   [Moving from pi-sandbox-guard](#moving-from-pi-sandbox-guard)).
@@ -277,8 +277,9 @@ The full policy is in pi-sandbox-guard's
 and
 [ARCHITECTURE.md](https://github.com/ebrindley/pi-sandbox-guard/blob/7ad441f51c249eafe6f92d16e92d2fbf37622d67/docs/ARCHITECTURE.md).
 
-Agent Guard 0.2.0 changes five things in Pi and OMP sessions. Each is recorded
-in `test/fixtures/differences/pi.json` and has a test:
+Agent Guard 0.2.0 changes seven things in Pi and OMP sessions. Each is recorded
+in `test/fixtures/differences/pi.json`, the last two as differences 7 and 8, and
+has a test:
 
 1. **Agent Guard's files, OpenCode's configuration and the shell startup files
    are write-protected:** the engine folder, `~/Agent Guard` (the Guard List),
@@ -303,6 +304,18 @@ in `test/fixtures/differences/pi.json` and has a test:
    creates `opencode/bin` at both roots before Pi starts, and refuses an
    `XDG_CACHE_HOME` that is not an existing folder named by its full path.
 5. **Repair messages** name `agent-guard bind` instead of `npm run bind`.
+6. **OpenCode's project config is write-protected in the project:** all of
+   `.opencode`, not only its `plugins` folder, `opencode.json`, `opencode.jsonc`,
+   `tui.json`, `tui.jsonc` and `.cc-safety-net`, so a Pi session cannot plant an
+   OpenCode plugin or config, or switch off cc-safety-net's built-in rules, for a
+   later OpenCode session there. A project inside `.opencode` or
+   `.cc-safety-net` is refused, and so is a launch where one of these names in
+   the project or launch folder is a link to a place the session can write, as
+   for `.pi` and `.omp`.
+7. **The analyzer asks before a push that rewrites or deletes remote branches,**
+   in its common unquoted spellings: `git push` with `--force` or one of its
+   variants, `--mirror`, `--prune`, `--delete`, a short option such as `-f` or
+   `-d`, or a refspec that starts with `+` or `:`. Seatbelt cannot stop a push.
 
 A launch whose link targets and cache roots have more than 32 folders above them
 to pin, for items 1 and 4, is refused with a message.
@@ -323,12 +336,11 @@ Until Pi moves onto Agent Guard's engine (step 10d), Pi's guard:
 - **grants OMP the runtime folders pi-sandbox-guard observed on OMP 17.2.10.**
   They were not rechecked against later OMP versions.
 
-Until step 10d, OpenCode's project config names (`opencode.json`,
-`opencode.jsonc`, `tui.json`, `tui.jsonc` and `.opencode` outside
-`.opencode/plugins`) are also writable in Pi and OMP sessions. Until step 10c, an
-OpenCode session can write Pi's and OMP's configuration and `.pi` and `.omp`
-folders where an ALLOW entry covers them. SECURITY.md lists these limits and the
-pi-sandbox-guard defects kept until step 10d.
+Until step 10d, Pi and OMP sessions protect OpenCode's project config names
+inside the project only. Until step 10c, an OpenCode session can write Pi's and
+OMP's configuration where an ALLOW entry covers it, apart from Pi's guard files
+and `.pi` and `.omp` folders (see [Pi's files](#pis-files)). SECURITY.md lists
+these limits and the pi-sandbox-guard defects kept until step 10d.
 
 ### Pi's files
 
@@ -358,7 +370,11 @@ the launchers, profile, preamble, recorded wrappers, extension folder or
 outside the sandbox at the next Pi start. Nor can they create or change
 `~/.local/bin/pi-sandbox-guard-extension`: the launcher loads the `index.ts` in
 that folder in place of the installed extension whenever it exists. Two link
-cases are not covered; see [SECURITY.md](SECURITY.md#opencode).
+cases are not covered; see [SECURITY.md](SECURITY.md#opencode). OpenCode
+sessions also cannot create or change a `.pi` or `.omp` folder anywhere, even
+under an ALLOW entry: Pi loads a trusted project's `.pi`, and OMP loads `.omp`
+from the project and its parents without asking. Where either name in the
+launch folder is a link, its target is protected too.
 
 On a Mac without pi-sandbox-guard, the installer places these files when it finds
 Pi or OMP. The analyzer's Node is the `node` on PATH, refused when it lies in a
