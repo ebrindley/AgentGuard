@@ -325,7 +325,11 @@ refuses "terminal launch with an unresolvable XDG_CACHE_HOME refused" "XDG_CACHE
 pi_stamp="$engine/state/stamp.json" pi_wrappers="$engine/state/wrappers.json" pi_txn="$engine/state/txn"
 pi_bin="$home/.local/bin" pi_ext="$home/.pi/agent/extensions/pi-sandbox-guard" pi_conf="$home/.config/pi-sandbox-guard/executables.conf"
 pi_agent="$home/Projects/dotfiles/pi-agent" pi_omp="$home/Projects/pi-links/omp" pi_new="$home/Projects/pi-new"
+# The launch folder holds a .pi folder and an .omp link to a folder named otherwise.
+pi_app="$home/Projects/app" omp_target="$home/Projects/dotfiles/omp-config"
 /bin/mkdir -p "$pi_bin" "$home/.pi" "$pi_agent/extensions/pi-sandbox-guard/src" "${pi_conf:h}" "${pi_omp:h}"
+/bin/mkdir -p "$pi_app/.pi/extensions" "$pi_app/built" "$pi_app/sub" "$omp_target" "$temp/agent-guard-test-pi"
+/bin/ln -s "$omp_target" "$pi_app/.omp"
 /bin/ln -s "$pi_agent" "$home/.pi/agent"
 for f in pi pi-sandbox.sb pi-sandbox-preamble.zsh pi-work pi-old other-tool; do print '#!/bin/zsh -f' > "$pi_bin/$f"; done
 print '#!/bin/zsh -f' > "$pi_omp"
@@ -348,6 +352,8 @@ pi_stamped 'del(.harnesses)'
 [[ $(pi_launch) == "$pi_profile" ]] && pass "a stamp from before 0.2.0 means OpenCode alone" || fail "a stamp from before 0.2.0 means OpenCode alone"
 psb() { local profile=$pi_profile; sb "$@" }
 expect ok "without Pi in the stamp: write pi under ALLOW" psb /bin/sh -c "echo x >> '$pi_bin/pi'"
+expect ok "without Pi in the stamp: write in a project .pi" psb /usr/bin/touch "$pi_app/.pi/extensions/a.ts"
+expect ok "without Pi in the stamp: write .omp's link target" psb /usr/bin/touch "$omp_target/a.ts"
 # With Pi in the stamp: one recorded wrapper, one historical name, keys that are ignored.
 pi_stamped '.harnesses = ["opencode", "pi"]'
 print -r -- '{"wrappers":{"pi-work":{"sha256":"00"},".":{"sha256":"00"},"..":{"sha256":"00"},"../escape":{"sha256":"00"}},"historical":["pi-old"]}' > "$pi_wrappers"
@@ -365,8 +371,24 @@ check "ignored wrapper keys get no rule" ignored_keys
 expect ok "Pi installed: write another file in ~/.local/bin" psb /bin/sh -c "echo x >> '$pi_bin/other-tool'"
 expect ok "Pi installed: create a file in ~/.local/bin"      psb /usr/bin/touch "$pi_bin/new-tool"
 expect ok "Pi installed: write a historical wrapper name"    psb /bin/sh -c "echo x >> '$pi_bin/pi-old'"
-expect ok "Pi installed: write another file in ~/.pi/agent"  psb /usr/bin/touch "$home/.pi/agent/settings.json"
 expect ok "Pi installed: write beside the bindings"          psb /usr/bin/touch "${pi_conf:h}/notes"
+# Pi's and OMP's config names (step 7f) are denied anywhere, under ALLOW and in temp,
+# including their creation by a rename, and at the target of the .omp link in the
+# launch folder. A name that only starts with one stays writable. ~/.pi/agent here
+# links to a folder outside any .pi folder, which the names do not match; step 10c
+# protects that root.
+check "launch log names Pi's and OMP's config names" /usr/bin/grep -Fxq \
+  "write-protected anywhere, Pi's and OMP's project config: .pi, .omp" "$log"
+expect no "Pi installed: write in a project .pi"             psb /usr/bin/touch "$pi_app/.pi/extensions/b.ts"
+expect no "Pi installed: write .omp's link target"           psb /usr/bin/touch "$omp_target/b.ts"
+expect no "Pi installed: create .omp in a subfolder"         psb /bin/mkdir "$pi_app/sub/.omp"
+expect no "Pi installed: create .omp in a parent folder"     psb /bin/mkdir "$home/Projects/.omp"
+expect no "Pi installed: rename a folder to .pi"             psb /bin/mv "$pi_app/built" "$pi_app/sub/.pi"
+expect no "Pi installed: create .pi in temp"                 psb /bin/mkdir "$temp/agent-guard-test-pi/.pi"
+expect no "Pi installed: write in ~/.pi"                     psb /usr/bin/touch "$home/.pi/settings.json"
+expect ok "Pi installed: write a name that starts with .pi"  psb /usr/bin/touch "$pi_app/.pids"
+expect ok "Pi installed: write in ~/.pi/agent's link target" psb /usr/bin/touch "$home/.pi/agent/settings.json"
+/bin/rm -rf "$temp/agent-guard-test-pi"
 # pi_denied LABEL FILE: FILE cannot be written, renamed, deleted, or replaced by a
 # rename or by a link. Each check holds whether or not the one before it changed FILE.
 pi_denied() {
@@ -443,6 +465,7 @@ refuses "unreadable wrapper record refused" "cannot read Pi's recorded wrappers"
 /bin/cp "$run/stamp.saved" "$pi_stamp"
 /bin/cp "$run/list.saved" "$list"
 /bin/rm -rf "$pi_bin" "$home/.pi" "${pi_conf:h}" "$pi_agent" "${pi_omp:h}" "$pi_new"
+/bin/rm -rf "$pi_app/.pi" "$pi_app/.omp" "$pi_app/built" "$pi_app/sub" "$pi_app/.pids" "$home/Projects/.omp" "$omp_target"
 
 /bin/mkdir -p "$home/fakebin"
 child_home="$home/Projects/nested-home"
