@@ -1009,11 +1009,12 @@ esac
 # worktree under ~/.omp/wt) would be denied wholesale, so refuse it clearly
 # instead of launching into a read-only project.
 # Keep these patterns in step with the project agent config regexes in pi-sandbox.sb.
+# Agent Guard difference 7 widens .opencode/plugins to .opencode and adds .cc-safety-net.
 case "$PROJECT" in
   */.pi|*/.pi/*|*/.omp|*/.omp/* \
   |*/.(claude|codex)/(extensions|hooks|tools)|*/.(claude|codex)/(extensions|hooks|tools)/* \
   |*/.gemini/extensions|*/.gemini/extensions/* \
-  |*/.opencode/plugins|*/.opencode/plugins/*)
+  |*/.opencode|*/.opencode/*|*/.cc-safety-net|*/.cc-safety-net/*)
     emit "refusing boundary '$PROJECT': it is inside a protected agent config folder, which the sandbox write-protects."
     emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."; exit 1 ;;
 esac
@@ -1112,16 +1113,40 @@ TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
 # PROJECT and the launch cwd (Pi resolves <cwd>/.pi). Links that stay inside the
 # config folder (npm .bin links) or point to non-writable locations are fine.
 # Prints the offending path and returns 1 on a refused layout.
+# Agent Guard difference 7 applies the same checks to OpenCode's names, except
+# that a link at one of them is refused only when its target is writable in the
+# session, so a link into a dotfiles folder outside the write roots still launches,
+# and so does one to a project path whose own name the profile denies. A link
+# whose target is missing resolves to itself and is refused, since the session
+# could create the target.
 project_config_symlink_offender() {
   emulate -L zsh
-  local base dir dir_canon link target
+  local base dir dir_canon link target name
   for base in "$@"; do
-    for dir in "$base/.pi" "$base/.omp"; do
-      if [ -L "$dir" ]; then print -r -- "$dir"; return 1; fi
+    for name in .opencode .cc-safety-net opencode.json opencode.jsonc tui.json tui.jsonc; do
+      link="$base/$name"
+      [ -L "$link" ] || continue
+      target="${link:A}"
+      if [[ -e $link && $target == "$PROJECT"/* ]]; then
+        case "$target" in
+          */.opencode|*/.opencode/*|*/.cc-safety-net|*/.cc-safety-net/*|*/opencode.json|*/opencode.jsonc|*/tui.json|*/tui.jsonc|*/.pi|*/.pi/*|*/.omp|*/.omp/*) continue ;;
+        esac
+      fi
+      if executable_under_sandbox_write_root \
+           "$target/." "$HOME_CANON" "$PROJECT" "$TMPDIR_CANON"; then
+        print -r -- "$link -> $target"; return 1
+      fi
+    done
+    for dir in "$base/.pi" "$base/.omp" "$base/.opencode" "$base/.cc-safety-net"; do
+      if [[ -L $dir && ${dir:t} == .(pi|omp) ]]; then print -r -- "$dir"; return 1; fi
       [ -d "$dir" ] || continue
       dir_canon="${dir:A}"
       # ** does not descend through symlinked directories.
       for link in "$dir"/**/*(ND@); do
+        # Agent Guard difference 7: in OpenCode's folders a link with a missing
+        # target resolves to itself, inside the folder, and the session could
+        # create the target, so refuse it before the containment check.
+        if [[ ${dir:t} != .(pi|omp) && ! -e $link ]]; then print -r -- "$link -> a missing target"; return 1; fi
         target="${link:A}"
         case "$target" in "$dir_canon"|"$dir_canon"/*) continue ;; esac
         # Probe a child so a link to a write root itself (e.g. PROJECT) matches too.
@@ -1138,9 +1163,9 @@ _pi_config_bases=("$PROJECT")
 [ "${PWD:A}" = "$PROJECT" ] || _pi_config_bases+=("${PWD:A}")
 if ! _pi_config_offender="$(project_config_symlink_offender "${_pi_config_bases[@]}")"; then
   emit "refusing to launch: symlinked project agent config '$_pi_config_offender'."
-  emit "  The sandbox write-protects .pi/.omp by path, so a symlinked folder or a link to a"
-  emit "  writable location outside it would stay agent-writable. Replace the link with a real"
-  emit "  folder or file; call the real Pi binary directly to bypass."
+  emit "  The sandbox write-protects .pi/.omp and OpenCode's config names by path, so a symlinked"
+  emit "  name or a link to a writable location outside it would stay agent-writable. Replace the"
+  emit "  link with a real folder or file; call the real Pi binary directly to bypass."
   exit 1
 fi
 unset _pi_config_bases _pi_config_offender
