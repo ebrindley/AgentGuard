@@ -1199,6 +1199,20 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
 done
 unset _pi_launch_element
 
+# Difference 9 pins state nodes, including their creation. Prepare only the active
+# runtime's roots before confinement; mkdir -p also creates a named profile's root.
+if [[ $PI_SANDBOX_RUNTIME == pi ]]; then
+  /bin/mkdir -p "$PI_AGENT_STATE" || {
+    emit "cannot create '$PI_AGENT_STATE'; refusing to launch."
+    exit 1
+  }
+else
+  /bin/mkdir -p "$OMP_AGENT_STATE" "$OMP_BASE_ROOT/profiles" || {
+    emit "cannot create OMP state roots; refusing to launch."
+    exit 1
+  }
+fi
+
 # Agent Guard difference 4. OpenCode creates a missing <cache>/opencode/bin at every
 # start and stops when it cannot; the profile denies that create, so make the
 # folder here for an OpenCode started inside the session, at both cache roots.
