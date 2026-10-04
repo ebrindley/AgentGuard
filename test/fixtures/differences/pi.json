@@ -1,7 +1,7 @@
 {
   "source": "pi-sandbox-guard",
   "commit": "7ad441f",
-  "reason": "profiles/pi carries pi-sandbox-guard 7ad441f's Pi profile with the protections Agent Guard adds to Pi sessions (docs/DESIGN.md section 11). Every change to a vendored file is in the patch and listed here; test/pi-files.mjs checks both, test/pi-launch.mjs tests differences 1 to 5 and 7, test/pi-commands.sh difference 6 and the corpus difference 8.",
+  "reason": "profiles/pi carries pi-sandbox-guard 7ad441f's Pi profile with the protections Agent Guard adds to Pi sessions (docs/DESIGN.md section 11). Every change to a vendored file is in the patch and listed here; test/pi-files.mjs checks both, test/pi-launch.mjs tests differences 1 to 5, 7 and 9, test/pi-commands.sh difference 6 and the corpus difference 8.",
   "patch": "pi.patch",
   "files": {
     "LICENSE": { "mode": "644", "blob": "18a32b25985be476250a26c9e8c47f823ae92172", "commit": "b60240a", "note": "From b60240a, the pi-sandbox-guard commit after 7ad441f that changed only LICENSE's copyright line, to name pi-sandbox-guard contributors." },
@@ -89,17 +89,22 @@
       "id": 8,
       "change": "Step 7f: the analyzer asks before a git push that rewrites or deletes remote refs: --force and its variants (--force-with-lease, --force-if-includes), --mirror, --prune, --delete, a short option cluster containing f or d, or a refspec starting with + or :, with only Git's global options (such as -C <dir> or --no-pager) allowed before push; quoted and backslash-escaped words count as one, redirections are skipped, and no word crosses a shell separator, which can also end the option. Seatbelt cannot stop a push, and pi-sandbox-guard allowed all of these. A plain push, long options such as --follow-tags and a refspec such as main:main stay allowed.",
       "files": ["src/validate-bash-command.sh"]
+    },
+    {
+      "id": 9,
+      "change": "Literal write denies pin PI_AGENT_STATE, OMP_AGENT_STATE, OMP_STATE_ROOT, OMP_BASE_ROOT and OMP_BASE_ROOT/profiles after every allow. The profiles pin prevents moving a named OMP profile through its writable ancestor; identical base/state paths share the same protection. Config denies stay attached to their paths while runtime descendants remain writable. The preamble creates only the active runtime's roots before confinement and refuses on failure, because the pins also deny creating those nodes inside the sandbox.",
+      "files": ["sandbox/pi-sandbox.sb", "sandbox/pi-sandbox-preamble.zsh"]
     }
   ],
   "test_notes": [
-    "test/pi.sh runs profiles/pi/test/shim.mjs unchanged: its launch cases run the preamble against the account's real home, because its fixtures keep the real directory-service lookup. Since difference 4 they create ~/.cache/opencode/bin in that account when it is missing, as they already create and remove ~/.local/share/pi-sandbox-bindable-* folders.",
+    "test/pi.sh runs profiles/pi/test/shim.mjs unchanged: its launch cases run the preamble against the account's real home, because its fixtures keep the real directory-service lookup. Since difference 4 they create ~/.cache/opencode/bin in that account when it is missing, as they already create and remove ~/.local/share/pi-sandbox-bindable-* folders. Difference 9 also prepares active Pi/OMP roots there, including ~/.omp/agent, ~/.omp/profiles and named profiles; run these cases in a disposable account.",
     "test/pi.sh runs the analyzer suites (smoke, corpus, adapter, degraded) with the account's home, which corpus.mjs needs, under a Seatbelt profile that denies writes to ~/.pi, so the analyzer's security log is not appended to."
   ],
   "test_edits": [
     {
       "file": "scripts/test-sandbox-profile.sh",
-      "differences": [1, 4],
-      "change": "sb, sb_omp and sb_pi_relocated pass the profile's AG_* parameters with inert values (the cache roots as HOME/.cache), read from the profile, since a missing parameter stops the profile from compiling."
+      "differences": [1, 4, 9],
+      "change": "sb, sb_omp and sb_pi_relocated pass the profile's AG_* parameters with inert values (the cache roots as HOME/.cache), read from the profile, since a missing parameter stops the profile from compiling. The relocated Pi fixture creates its root before confinement, as the launcher does, so the root pin does not deny first-launch runtime setup."
     },
     {
       "file": "test/shim.mjs",

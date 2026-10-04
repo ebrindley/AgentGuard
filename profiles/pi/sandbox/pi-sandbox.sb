@@ -462,3 +462,13 @@
   (opencode-cache (string-append (param "HOME") "/.cache"))
   (opencode-cache (param "AG_CACHE_HOME"))
   (opencode-cache (param "AG_XDG_CACHE_HOME")))
+
+;; Difference 9: keep config denies attached to their active state paths.
+;; Literal pins protect the nodes without denying writable runtime descendants.
+;; OMP's profiles node can otherwise move a named profile around its root pin.
+(deny file-write*
+  (literal (param "PI_AGENT_STATE"))
+  (literal (param "OMP_AGENT_STATE"))
+  (literal (param "OMP_STATE_ROOT"))
+  (literal (param "OMP_BASE_ROOT"))
+  (literal (string-append (param "OMP_BASE_ROOT") "/profiles")))

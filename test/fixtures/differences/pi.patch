@@ -12,7 +12,7 @@ index 2f94258..5b380df 100755
  fi
  
 diff --git a/sandbox/pi-sandbox-preamble.zsh b/sandbox/pi-sandbox-preamble.zsh
-index 9b7c788..864af2b 100644
+index 9b7c788..4ccf0f0 100644
 --- a/sandbox/pi-sandbox-preamble.zsh
 +++ b/sandbox/pi-sandbox-preamble.zsh
 @@ -547,7 +547,7 @@ resolve_configured_executable() {
@@ -219,7 +219,7 @@ index 9b7c788..864af2b 100644
    exit 1
  fi
  unset _pi_config_bases _pi_config_offender
-@@ -1084,12 +1193,51 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
+@@ -1084,12 +1193,65 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
      # the recorded interpreter, and both --detect and a bare --pi re-derive node via
      # detect_node, which takes the first PATH hit with no write-root filter — so
      # either would re-record the same unsafe path and fail identically next launch.
@@ -230,6 +230,20 @@ index 9b7c788..864af2b 100644
  done
  unset _pi_launch_element
  
++# Difference 9 pins state nodes, including their creation. Prepare only the active
++# runtime's roots before confinement; mkdir -p also creates a named profile's root.
++if [[ $PI_SANDBOX_RUNTIME == pi ]]; then
++  /bin/mkdir -p "$PI_AGENT_STATE" || {
++    emit "cannot create '$PI_AGENT_STATE'; refusing to launch."
++    exit 1
++  }
++else
++  /bin/mkdir -p "$OMP_AGENT_STATE" "$OMP_BASE_ROOT/profiles" || {
++    emit "cannot create OMP state roots; refusing to launch."
++    exit 1
++  }
++fi
++
 +# Agent Guard difference 4. OpenCode creates a missing <cache>/opencode/bin at every
 +# start and stops when it cannot; the profile denies that create, so make the
 +# folder here for an OpenCode started inside the session, at both cache roots.
@@ -272,7 +286,7 @@ index 9b7c788..864af2b 100644
  emit "OS sandbox ON. Runtime [$PI_SANDBOX_RUNTIME]. Project [$PROJECT_VIA]: $PROJECT"
  emit "  active Git hooks denied: $ACTIVE_HOOKS"
  if [ "$PI_SANDBOX_RUNTIME" = "pi" ]; then
-@@ -1122,5 +1270,6 @@ PI_SANDBOX_CMD=(
+@@ -1122,5 +1284,6 @@ PI_SANDBOX_CMD=(
    -D "OMP_AGENT_STATE=$OMP_AGENT_STATE"
    -D "OMP_STATE_ROOT=$OMP_STATE_ROOT"
    -D "OMP_BASE_ROOT=$OMP_BASE_ROOT"
@@ -280,7 +294,7 @@ index 9b7c788..864af2b 100644
    -f "$PROFILE"
  )
 diff --git a/sandbox/pi-sandbox.sb b/sandbox/pi-sandbox.sb
-index f560a31..64dee5c 100644
+index f560a31..4c99070 100644
 --- a/sandbox/pi-sandbox.sb
 +++ b/sandbox/pi-sandbox.sb
 @@ -160,6 +160,12 @@
@@ -309,7 +323,7 @@ index f560a31..64dee5c 100644
    (subpath (string-append (param "PI_AGENT_STATE") "/extensions"))
    (literal (string-append (param "PI_AGENT_STATE") "/settings.json"))
    (literal (string-append (param "PI_AGENT_STATE") "/auth.json"))
-@@ -323,3 +333,132 @@
+@@ -323,3 +333,142 @@
    (literal (string-append (param "HOME") "/.pi/agent/security-events.log"))
    ;; .env files anywhere (incl. project) — the one project-wide secret deny.
    (regex #"/\.env($|\.)"))
@@ -442,8 +456,18 @@ index f560a31..64dee5c 100644
 +  (opencode-cache (string-append (param "HOME") "/.cache"))
 +  (opencode-cache (param "AG_CACHE_HOME"))
 +  (opencode-cache (param "AG_XDG_CACHE_HOME")))
++
++;; Difference 9: keep config denies attached to their active state paths.
++;; Literal pins protect the nodes without denying writable runtime descendants.
++;; OMP's profiles node can otherwise move a named profile around its root pin.
++(deny file-write*
++  (literal (param "PI_AGENT_STATE"))
++  (literal (param "OMP_AGENT_STATE"))
++  (literal (param "OMP_STATE_ROOT"))
++  (literal (param "OMP_BASE_ROOT"))
++  (literal (string-append (param "OMP_BASE_ROOT") "/profiles")))
 diff --git a/scripts/test-sandbox-profile.sh b/scripts/test-sandbox-profile.sh
-index 4dcdf9c..fd4e3f5 100755
+index 4dcdf9c..56fc28d 100755
 --- a/scripts/test-sandbox-profile.sh
 +++ b/scripts/test-sandbox-profile.sh
 @@ -99,6 +99,17 @@ printf 'omp-hook\n' > "$FAKEHOME/.omp/agent/hooks/pre-tool.sh"
@@ -488,6 +512,14 @@ index 4dcdf9c..fd4e3f5 100755
      -f "$PROFILE_SRC" "$@"
  }
  
+@@ -326,6 +340,7 @@ if ! sb /bin/sh -c "echo x >> '$FAKEHOME/.pi/agent/run-history.json'" 2>/dev/nul
+ if sb /bin/sh -c "touch '$FAKEHOME/.pi/agent/extensions/tamper'" 2>/dev/null; then
+   die "SECURITY: ~/.pi/agent/extensions write ALLOWED (guard could be disabled)"; fi
+ # Relocating Pi operational state must not unprotect the canonical shared extension.
++mkdir -p "$FAKEHOME/.pi/alternate-agent"
+ sb_pi_relocated /bin/sh -c "mkdir -p '$FAKEHOME/.pi/alternate-agent/sessions' && echo s > '$FAKEHOME/.pi/alternate-agent/sessions/x'" \
+   || die "relocated Pi session state write denied"
+ if sb_pi_relocated /bin/sh -c "touch '$FAKEHOME/.pi/agent/extensions/relocation-tamper'" 2>/dev/null; then
 diff --git a/src/index.mjs b/src/index.mjs
 index d997be1..93f8d29 100644
 --- a/src/index.mjs
