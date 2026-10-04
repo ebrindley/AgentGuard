@@ -272,6 +272,10 @@ credential paths. It cannot read `~/.ssh`, `~/.aws/credentials`,
 refuses a project that is too broad or sensitive, such as home, `~/Documents` or
 `~/.config`, or that contains its own folder. The extension's bash analyzer
 blocks destructive `bash` commands and asks before risky ones; it is advisory.
+The launcher creates missing active state roots before confinement. Inside the
+sandbox those directory nodes cannot be removed, renamed or replaced; OMP's
+`profiles` directory is pinned too, so a named profile cannot move through it.
+Allowed runtime files and folders below the roots remain writable.
 The full policy is in pi-sandbox-guard's
 [SECURITY.md](https://github.com/ebrindley/pi-sandbox-guard/blob/7ad441f51c249eafe6f92d16e92d2fbf37622d67/SECURITY.md)
 and
@@ -745,7 +749,9 @@ changes in `test/fixtures/differences/pi.json` and `pi.patch`; and
 launches in disposable homes. It needs Node. `profiles/pi/test/shim.mjs` runs
 the launcher's preamble against the account's real home: it creates and removes
 `~/.local/share/pi-sandbox-bindable-*` folders there and creates
-`~/.cache/opencode/bin` when it is missing.
+`~/.cache/opencode/bin` when it is missing. It also prepares active Pi/OMP roots,
+including `~/.omp/agent`, `~/.omp/profiles` and named profiles. Run those shim
+cases in a disposable account.
 
 `test/golden.mjs`, `test/test.sh`, `test/pi.sh`, `test/release.sh`, `test/bootstrap.sh`, `test/install.sh`, `test/migrate.sh` and `test/plugin.mjs` are development tests.
 They run in a disposable home, apart from the `shim.mjs` cases above, are not
