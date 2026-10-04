@@ -229,10 +229,16 @@ protected=("$engine" "$list_dir" $protected
            $home/Library/LaunchAgents $home/.{zshenv,zprofile,zshrc,zlogin,profile,bash_profile,bash_login,bashrc}
            "${(@)protected_names/#/$PWD/}" "${(@)pi_names/#/$PWD/}")
 for p in $protected; do
-  [[ -e $p && ${p:A} != "$p" ]] || continue
-  sbpl "${p:A}"
+  target=${p:A}
+  # prepare creates OpenCode's config after rendering; resolve its parent even
+  # when the final directory is missing, as for the Pi guard paths below.
+  if [[ $p == "$home/.config/opencode" && ! -e $p ]]; then
+    target="${${p:h:A}%/}/${p:t}"
+  fi
+  [[ ( -e $p || $p == "$home/.config/opencode" ) && $target != "$p" ]] || continue
+  sbpl "$target"
   rules+=("(deny file-write* (subpath $REPLY))")
-  readonly+=("${p:A}")
+  readonly+=("$target")
 done
 for p in $deny $readonly; do
   a=${p:h}

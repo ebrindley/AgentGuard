@@ -1042,7 +1042,7 @@ agent_guard_pin_above() {
 }
 agent_guard_protected() {
   emulate -L zsh
-  local kind param p target folder
+  local kind param p target folder resolved
   for kind param p in \
     folder AG_LINK_ENGINE "$HOME/Library/Application Support/AgentGuard" \
     folder AG_LINK_OPENCODEGUARD "$HOME/Library/Application Support/OpenCodeGuard" \
@@ -1062,8 +1062,15 @@ agent_guard_protected() {
     file AG_LINK_BASHRC "$HOME/.bashrc"
   do
     target=$AG_INERT
-    if [[ -e $p && ${p:A} != "$p" ]]; then
-      target=${p:A}
+    resolved=$p
+    if [[ -e $p ]]; then
+      resolved=${p:A}
+    elif [[ $param == AG_LINK_OPENCODE_CONFIG ]]; then
+      # Protect a missing config directory behind linked ancestors before creation.
+      resolved="${${p:h:A}%/}/${p:t}"
+    fi
+    if [[ $resolved != "$p" ]]; then
+      target=$resolved
       agent_guard_pin_above "$target"
     fi
     AG_SANDBOX_PARAMS+=(-D "$param=$target")
