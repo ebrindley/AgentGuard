@@ -5,7 +5,7 @@
 // the disposable home. A stand-in Pi runs the command it is given inside the
 // session. Runs outside any sandbox.
 import assert from 'node:assert/strict';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -169,6 +169,76 @@ try {
       for (const p of roots) assert.ok(existsSync(p), `root moved: ${p}`);
       assert.equal(readFileSync(join(agent, 'sessions/probe'), 'utf8'), 'state');
       assert.ok(!existsSync(`${replacement}-moved`), 'root renamed into writable temp');
+    });
+  }
+
+  // Missing OpenCode config still needs target protection before prepare creates it.
+  for (const existing of [false, true]) {
+    const a = account(`opencode-config-${existing ? 'existing' : 'missing'}`);
+    const target = join(a.project, 'dotconfig');
+    renameSync(join(a.home, '.config'), target);
+    symlinkSync(target, join(a.home, '.config'));
+    const oc = join(target, 'opencode');
+    if (existing) mkdirSync(oc);
+    check(`difference 1: Pi protects OpenCode config behind linked ancestors with a ${existing ? 'present' : 'missing'} leaf`, () => {
+      // Pi does not prepare OpenCode's config: deny even the first create at its target.
+      const probe = '/bin/mkdir -p "$1/plugins" && printf x > "$1/plugins/probe.js"';
+      denied(session(a, ['/bin/sh', '-c', probe, 'sh', oc]), 'plugin create');
+      if (!existing) assert.ok(!existsSync(oc), 'missing config directory was created');
+      mkdirSync(join(oc, 'plugins'), { recursive: true });
+      denied(write(a, join(oc, 'config.json')), 'config target');
+      denied(write(a, join(a.home, '.config/opencode/plugins/probe.js')), 'plugin through link');
+      allowed(write(a, join(target, 'sibling.txt')), 'sibling config');
+    });
+
+    // Reset the missing case so profile rendering must resolve it before prepare.
+    if (!existing) rmSync(oc, { recursive: true });
+    const source = join(run, `opencode-source-${existing}`);
+    mkdirSync(source);
+    stage(root, source, a.home);
+    const engine = join(a.home, 'Library/Application Support/AgentGuard');
+    layout(source, engine);
+    mkdirSync(join(a.home, 'Agent Guard'));
+    writeFileSync(join(a.home, 'Agent Guard/Guard List.txt'), `ALLOW -\n${a.project}\nREAD ONLY -\nDENY -\n`);
+    check(`OpenCode prepares and protects config behind linked ancestors with a ${existing ? 'present' : 'missing'} leaf`, () => {
+      const r = spawnSync('/bin/zsh', [join(engine, 'current/launch'), 'profile'], {
+        cwd: a.project, encoding: 'utf8', env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', HOME: a.home },
+      });
+      assert.equal(r.status, 0, r.stderr);
+      assert.ok(lstatSync(join(a.home, '.config')).isSymbolicLink(), 'config link replaced');
+      assert.ok(existsSync(join(oc, 'opencode.json')), 'first-launch config not prepared');
+      mkdirSync(join(oc, 'plugins'), { recursive: true });
+      const defines = ['HOME=' + a.home, 'DARWIN_TEMP=' + temp, 'DARWIN_CACHE=' + temp, 'GUI=0'];
+      const sandbox = (argv) => spawnSync('/usr/bin/sandbox-exec', [...defines.flatMap((d) => ['-D', d]), '-p', r.stdout, ...argv], { encoding: 'utf8' });
+      for (const p of [join(oc, 'config.json'), join(oc, 'plugins/probe.js'), join(a.home, '.config/opencode/plugins/probe.js')]) {
+        const result = sandbox(['/bin/sh', '-c', 'printf x > "$1"', 'sh', p]);
+        assert.notEqual(result.status, 0, `write allowed: ${p}`);
+        assert.match(result.stderr, /Operation not permitted/);
+      }
+      for (const p of [oc, target]) {
+        const result = sandbox(['/bin/mv', p, `${p}-moved`]);
+        assert.notEqual(result.status, 0, `rename allowed: ${p}`);
+        assert.match(result.stderr, /Operation not permitted/);
+      }
+      assert.equal(sandbox(['/usr/bin/touch', join(target, 'other.txt')]).status, 0, 'sibling denied');
+    });
+  }
+  {
+    const a = account('opencode-first-launch');
+    const source = join(run, 'opencode-fresh-source');
+    mkdirSync(source);
+    stage(root, source, a.home);
+    const engine = join(a.home, 'Library/Application Support/AgentGuard');
+    layout(source, engine);
+    mkdirSync(join(a.home, 'Agent Guard'));
+    writeFileSync(join(a.home, 'Agent Guard/Guard List.txt'), 'ALLOW -\nREAD ONLY -\nDENY -\n');
+    check('OpenCode creates ordinary first-launch config without linked ancestors', () => {
+      assert.ok(!existsSync(join(a.home, '.config/opencode')));
+      const r = spawnSync('/bin/zsh', [join(engine, 'current/launch'), 'profile'], {
+        cwd: a.project, encoding: 'utf8', env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', HOME: a.home },
+      });
+      assert.equal(r.status, 0, r.stderr);
+      assert.ok(existsSync(join(a.home, '.config/opencode/opencode.json')));
     });
   }
 
