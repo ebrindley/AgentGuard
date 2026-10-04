@@ -126,6 +126,52 @@ const protectedFiles = {
 };
 
 try {
+  // Difference 9: node pins keep path-based config denies attached to active state.
+  for (const variant of ['pi', 'pi-relocated', 'omp', 'omp-profile']) {
+    const a = account(`state-${variant}`);
+    const options = variant.startsWith('omp')
+      ? { runtime: 'omp', env: variant === 'omp-profile' ? { OMP_PROFILE: 'work' } : {} }
+      : { env: variant === 'pi-relocated' ? { PI_CODING_AGENT_DIR: join(a.home, '.pi/alternate-agent') } : {} };
+    const base = join(a.home, '.omp');
+    const state = variant === 'omp-profile' ? join(base, 'profiles/work') : base;
+    const agent = variant.startsWith('omp') ? join(state, 'agent')
+      : join(a.home, variant === 'pi-relocated' ? '.pi/alternate-agent' : '.pi/agent');
+    const roots = variant.startsWith('omp') ? [...new Set([base, join(base, 'profiles'), state, agent])] : [agent];
+    check(`difference 9: ${variant} prepares missing roots and preserves runtime writes`, () => {
+      if (variant !== 'pi') assert.ok(!existsSync(agent), 'state root already exists');
+      allowed(session(a, ['/bin/sh', '-c', 'mkdir -p "$1/sessions" && printf state > "$1/sessions/probe"', 'sh', agent], options), 'session state');
+      for (const p of roots) assert.ok(existsSync(p), `root not prepared: ${p}`);
+      allowed(session(a, ['/bin/mkdir', '-p', ...roots], options), 'existing root mkdir');
+      const files = variant.startsWith('omp') ? [join(agent, 'agent.db'), join(state, 'stats.db'), join(base, 'install-id')]
+        : [join(agent, 'run-history.json'), join(agent, 'security-events.log')];
+      for (const p of files) allowed(write(a, p, options), p);
+    });
+    check(`difference 9: ${variant} denies direct config writes`, () => {
+      denied(write(a, join(agent, variant.startsWith('omp') ? 'config.yml' : 'settings.json'), options), 'config');
+      if (variant.startsWith('omp')) {
+        mkdirSync(join(state, 'plugins'), { recursive: true });
+        denied(write(a, join(state, 'plugins/probe.js'), options), 'plugin');
+      }
+    });
+    check(`difference 9: ${variant} roots cannot be removed, moved or replaced`, () => {
+      const replacement = join(scratch, `state-replacement-${variant}`);
+      mkdirSync(replacement);
+      const probe = 'import ctypes, errno, os, sys\n' +
+        'libc = ctypes.CDLL(None, use_errno=True)\n' +
+        'for root in sys.argv[2:]:\n' +
+        '  for operation in (lambda: os.rename(root, sys.argv[1] + "-moved"), lambda: os.rmdir(root), lambda: os.symlink(sys.argv[1], root)):\n' +
+        '    try: operation()\n' +
+        '    except OSError as e: assert e.errno == errno.EPERM, (root, e)\n' +
+        '    else: raise AssertionError("root mutation allowed: " + root)\n' +
+        '  assert libc.renamex_np(root.encode(), sys.argv[1].encode(), 2) == -1\n' +
+        '  assert ctypes.get_errno() == errno.EPERM, root\n';
+      allowed(session(a, ['/usr/bin/python3', '-c', probe, replacement, ...roots], options), 'root mutations denied');
+      for (const p of roots) assert.ok(existsSync(p), `root moved: ${p}`);
+      assert.equal(readFileSync(join(agent, 'sessions/probe'), 'utf8'), 'state');
+      assert.ok(!existsSync(`${replacement}-moved`), 'root renamed into writable temp');
+    });
+  }
+
   // Difference 1, in the profile: a home inside the project, so that only the
   // recorded denies stand between the session and these paths.
   {

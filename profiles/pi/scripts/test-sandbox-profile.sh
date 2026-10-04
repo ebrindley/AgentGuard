@@ -340,6 +340,7 @@ if ! sb /bin/sh -c "echo x >> '$FAKEHOME/.pi/agent/run-history.json'" 2>/dev/nul
 if sb /bin/sh -c "touch '$FAKEHOME/.pi/agent/extensions/tamper'" 2>/dev/null; then
   die "SECURITY: ~/.pi/agent/extensions write ALLOWED (guard could be disabled)"; fi
 # Relocating Pi operational state must not unprotect the canonical shared extension.
+mkdir -p "$FAKEHOME/.pi/alternate-agent"
 sb_pi_relocated /bin/sh -c "mkdir -p '$FAKEHOME/.pi/alternate-agent/sessions' && echo s > '$FAKEHOME/.pi/alternate-agent/sessions/x'" \
   || die "relocated Pi session state write denied"
 if sb_pi_relocated /bin/sh -c "touch '$FAKEHOME/.pi/agent/extensions/relocation-tamper'" 2>/dev/null; then
