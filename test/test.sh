@@ -472,6 +472,10 @@ child_home="$home/Projects/nested-home"
 /bin/mkdir -p "$child_home"
 # Agent Guard's nesting marker, then OpenCode Guard's.
 for marker in AGENT_GUARD_SANDBOXED OPENCODE_SANDBOXED; do
+  refuses "nested diagnostic with $marker names the execution context" \
+    "already inside the guard; run this from Terminal, outside any guard or sandbox" \
+    sb /usr/bin/env "$marker=1" "${launcher[@]}" check
+
   /bin/rm -f "$home/Projects/app/launched" "$home/Documents/escaped" "$home/Projects/app/nested-home"
   print -r -- $'#!/bin/sh\ntouch "$HOME/Documents/escaped"\n[ "$CC_SAFETY_NET_PARANOID_RM" = 1 ] && touch "$HOME/Projects/app/launched"' > "$home/fakebin/opencode"
   /bin/chmod 755 "$home/fakebin/opencode"
