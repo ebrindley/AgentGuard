@@ -20,7 +20,15 @@ best-effort basis. There is no bug bounty.
 
 ## Supported versions
 
-Fixes go into the latest release only. `agent-guard update` installs it.
+Fixes go into the latest release only; older releases do not receive backports.
+As of 2026-10-05, 0.1.2 is the latest stable release (OpenCode only), and 0.2.0
+is a prerelease (OpenCode, Pi and OMP). `agent-guard update` follows stable
+releases and leaves 0.2.0 unchanged while stable is older. Install a prerelease
+through its tagged installer; see [release channels](docs/OPERATIONS.md#release-channels).
+Tagged installers do not include fixes committed after their release tags.
+
+The policy below describes the current source. Where it differs from the
+published 0.2.0 prerelease, those changes are identified below.
 
 ## What Agent Guard is
 
@@ -124,6 +132,12 @@ write.
 The extension's bash analyzer is advisory. It blocks or asks before shell
 commands it recognizes as destructive, but nothing depends on it for safety. The
 Seatbelt profile is the boundary.
+
+### Unreleased changes
+
+After the 0.2.0 tag, `main` added Pi/OMP state-root pinning and protection of
+missing OpenCode configuration behind linked ancestors. These fixes are not
+in the published prerelease; see [the source changes](https://github.com/ebrindley/AgentGuard/compare/v0.2.0...main).
 
 ## What it does not cover
 
