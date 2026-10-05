@@ -163,6 +163,13 @@ What stays in `~/OpenCode Guard`: the old list, which is no longer read, its log
 any `permissions-backup.json`, and a note, `Moved to Agent Guard.txt`. Nothing
 else there is changed or removed.
 
+An imported list keeps its introductory text. It may still say `OpenCode Guard
+List` and point to `last-launch.log`; older lists may also lack the broad-read
+explanation. You can update the text above the first heading without changing
+the policy entries. Agent Guard writes its log to
+`~/Agent Guard/last-launch-opencode.log`. Reads remain broad unless denied,
+including when the READ ONLY section is empty.
+
 Terminal windows opened before the switch still have OpenCode Guard's `bin`
 folder on their PATH. Its `opencode` and `opencode-gui` are then forwarders, links
 to Agent Guard's, so those windows run OpenCode under Agent Guard. The forwarders
@@ -481,6 +488,10 @@ back in `~/.local/bin` in place of the launcher; `pi` then starts Pi unguarded.
     folder, because Pi refuses home as a project. A runtime that is not
     installed is skipped and named.
 
+  Without the `opencode` CLI, the OpenCode plugin check is skipped and named.
+  A passing `doctor` with that skip does not verify that the desktop app loads
+  the guard plugin. The CLI is not required to launch the guarded desktop app.
+
   `agent-guard doctor --json` prints the results as JSON. With Pi's guard
   installed it keeps the fields of pi-sandbox-guard's `npm run status -- --json`,
   such as `runtime_binding`, `pi_binding` and `drift`, with the same meaning.
@@ -561,7 +572,23 @@ back in `~/.local/bin` in place of the launcher; `pi` then starts Pi unguarded.
   ([Custom wrappers](#custom-wrappers)).
 
 `update`, `uninstall` and `wrapper` refuse inside a guard or another sandbox.
-Run `bind` from Terminal too: no session can write its files.
+Run `doctor` and `bind` from Terminal too: `doctor`'s OpenCode check refuses
+inside a guarded OpenCode session, and no session can write `bind`'s files.
+
+## Diagnostic coverage
+
+CC Safety Net 2.4.14's standalone `cc-safety-net doctor` looks for its package
+in OpenCode's plugin configuration. It does not recognize Agent Guard's
+file-based wrapper plugin, so it can report "No integration configured" even
+when Agent Guard is active. That result does not establish whether the guard
+is active; use `agent-guard doctor` outside the guard, noting any skipped
+checks, and `agent_guard_status` in the guarded OpenCode session.
+
+CC Safety Net's synthetic self-test uses three fixed commands, no custom
+rules, and the standard baseline with `fail_closed`, `paranoid_rm` and
+`paranoid_interpreters` off. Its allowed result for `rm -rf ./node_modules`
+does not test Agent Guard's effective policy, which enables paranoid rm and
+includes a custom recursive-rm block.
 
 ## Recovery after a failed or interrupted install
 
