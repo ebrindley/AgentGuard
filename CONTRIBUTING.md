@@ -49,7 +49,7 @@ are bugs. When unsure, use the advisory form.
 ## If you fork
 
 The development tests run from a checkout, outside any agent sandbox, on
-macOS 15 or later; see [Tests](README.md#tests) in the README. `node test/golden.mjs`
+macOS 15 or later; see [Tests](docs/DEVELOPMENT.md#tests). `node test/golden.mjs`
 compares generated Seatbelt profiles against OpenCode Guard v1.0.3 fixtures, so a
 profile change shows up there first. Record an intended profile change as a
 difference in `test/fixtures/differences/` rather than editing the fixtures.

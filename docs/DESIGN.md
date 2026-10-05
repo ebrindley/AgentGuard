@@ -1,6 +1,18 @@
 # Agent Guard design
 
-Status: accepted plan, 2026-10-01. Built on the zsh engine: stage 1 (the OpenCode Guard v1.0.3 port, with the v1.0.4 fixes) and steps 2 to 5: the test contract, permanent names, the staged installer with update, uninstall, recovery and the version stamp, and the migration from OpenCode Guard (section 10). Step 6's first public release (OpenCode only) is published as 0.1.0, then 0.1.1. Step 7, the write protection of OpenCode's package stores, `bin` folder and model catalog (section 9), is built for 0.1.2; steps 7a–11 are not built. The plan for folding in pi-sandbox-guard (sections 3, 5, 6, 7 and 11) is recorded and not built. The design for credentials, Git hooks and composed nested launches for every harness (sections 3, 7, 9 and 11) is recorded and not built.
+Status: accepted plan, updated 2026-10-05. The zsh OpenCode engine, staged
+installer, update/uninstall/recovery, version stamp, OpenCode Guard migration
+and cache protection are built (steps 1–7). The installer split, adoption and
+migration of Pi/OMP, and cross-harness project-config protection are built
+(steps 7a–7d and 7f). OpenCode-only 0.1.2 is the latest stable release; 0.2.0
+is a prerelease that adds Pi and OMP.
+
+Current `main` also includes Pi/OMP state-root pinning and protection of missing
+OpenCode configuration behind linked ancestors, committed after the 0.2.0 tag.
+The checker measurement, Rust launcher, per-launch snapshots and Pi/OMP move
+to the shared engine remain planned (steps 7e and 8–10). Step 11's retirement
+and cleanup are planned. Current user procedures are in [USAGE.md](USAGE.md)
+and [OPERATIONS.md](OPERATIONS.md).
 
 Agent Guard is one macOS guard for terminal coding agents. It replaces OpenCode Guard (v1.0.4) and pi-sandbox-guard with one engine and a small profile, hook set and plugin adapter per harness.
 
