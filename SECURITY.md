@@ -26,6 +26,11 @@ The latest stable release is 0.2.1 (OpenCode, Pi and OMP).
 unchanged. See [release channels](docs/OPERATIONS.md#release-channels) for tagged
 installers; they do not include later commits. The policy below describes 0.2.1.
 
+The next release narrows OpenCode's configuration protections for skill content
+and replaces its blanket recursive-delete block with scoped checks. See
+[skill permissions, preparation and limitations](docs/SKILLS.md). Pi and OMP
+retain their existing policy.
+
 ## What Agent Guard is
 
 Agent Guard is a macOS Seatbelt write-containment boundary for terminal coding

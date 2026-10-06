@@ -142,3 +142,9 @@ executable.
   exits with `HOME_CANON: parameter not set`. This is a pi-sandbox-guard defect,
   present in the current Pi guard whenever `.guard-node` exists, which every
   Agent Guard install records. It fails closed: nothing starts.
+
+## OpenCode skills
+
+The next release permits ordinary skill maintenance in standard OpenCode and
+compatible skill folders. See [skill permissions](SKILLS.md) for defaults,
+explicit restrictions, first-time preparation and scoped deletion.

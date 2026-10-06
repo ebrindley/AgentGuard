@@ -7,6 +7,6 @@ export type CheckCommandResult = Readonly<{
 }> | Readonly<{
     kind: 'deny';
     reason: string;
-    ruleId?: string;
+    ruleId: string;
 }>;
 export declare function checkCommand(input: CheckCommandInput): CheckCommandResult;

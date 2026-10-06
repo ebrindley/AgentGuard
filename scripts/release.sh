@@ -37,6 +37,7 @@ files=(
   engine/vendor/THIRD-PARTY-NOTICES
   profiles/opencode/harness.zsh
   profiles/opencode/hooks.zsh
+  profiles/opencode/skills.zsh
   profiles/opencode/protected.sb
   profiles/opencode/plugin.js
   profiles/opencode/opencode

@@ -593,3 +593,10 @@ folders above a relocated cache) hold no `.npmrc`, `node_modules` or
 `package.json` you did not put there. `agent-guard doctor` checks the
 plugins OpenCode loads outside any project, that is, from the global config and
 `~/.opencode`; plugins named only in a project's config are not checked.
+
+## OpenCode skill preparation
+
+The next release uses a launch-scoped preparation worker and protected checker
+snapshots. The shared legacy rulebook remains for older sessions and independent
+checker consumers. See [OpenCode skills](SKILLS.md). Existing skill files and
+containers are retained during uninstall.
