@@ -21,19 +21,15 @@ best-effort basis. There is no bug bounty.
 ## Supported versions
 
 Fixes go into the latest release only; older releases do not receive backports.
-As of 2026-10-05, 0.1.2 is the latest stable release (OpenCode only), and 0.2.0
-is a prerelease (OpenCode, Pi and OMP). `agent-guard update` follows stable
-releases and leaves 0.2.0 unchanged while stable is older. Install a prerelease
-through its tagged installer; see [release channels](docs/OPERATIONS.md#release-channels).
-Tagged installers do not include fixes committed after their release tags.
-
-The policy below describes the current source. Where it differs from the
-published 0.2.0 prerelease, those changes are identified below.
+The latest stable release is 0.2.1 (OpenCode, Pi and OMP).
+`agent-guard update` follows stable releases and leaves a newer installed version
+unchanged. See [release channels](docs/OPERATIONS.md#release-channels) for tagged
+installers; they do not include later commits. The policy below describes 0.2.1.
 
 ## What Agent Guard is
 
 Agent Guard is a macOS Seatbelt write-containment boundary for terminal coding
-agents. Release 0.2.0 guards OpenCode, Pi and Oh My Pi (OMP). Each harness, and
+agents. Release 0.2.1 guards OpenCode, Pi and Oh My Pi (OMP). Each harness, and
 every process it starts, runs under `/usr/bin/sandbox-exec`, but OpenCode and Pi
 are guarded by different code with different rules until Pi moves onto Agent
 Guard's engine (step 10d of the plan in [docs/DESIGN.md](docs/DESIGN.md#12-plan)).
@@ -93,8 +89,10 @@ that is too broad or sensitive, or that contains its own folder,
 and
 [ARCHITECTURE.md](https://github.com/ebrindley/pi-sandbox-guard/blob/7ad441f51c249eafe6f92d16e92d2fbf37622d67/docs/ARCHITECTURE.md).
 
-Agent Guard 0.2.0 differs from pi-sandbox-guard 7ad441f in seven ways, recorded
-in `test/fixtures/differences/pi.json`, the last two as differences 7 and 8:
+Agent Guard 0.2.1 has nine recorded adoption differences from pi-sandbox-guard
+7ad441f in `test/fixtures/differences/pi.json`. Seven are listed below
+(fixture IDs 1–5, 7 and 8); difference 6 is `agent-guard bind`, and difference 9
+is state-root pinning ([changes since the prerelease](#changes-since-the-prerelease)).
 
 1. Pi and OMP sessions cannot change Agent Guard's engine folder, `~/Agent Guard`,
    `~/Applications/Agent Guard.app`, OpenCode Guard's engine folder,
@@ -111,7 +109,8 @@ in `test/fixtures/differences/pi.json`, the last two as differences 7 and 8:
    under `~/.cache` and under `XDG_CACHE_HOME`, which Pi's `~/.cache` grant would
    otherwise leave writable. An `XDG_CACHE_HOME` that is not an existing folder
    named by its full path refuses the launch.
-5. Repair messages name `agent-guard bind`.
+5. Repair messages name `agent-guard bind`; custom-wrapper installation names
+   `agent-guard wrapper add`.
 6. `.opencode`, not only `.opencode/plugins`, `opencode.json`, `opencode.jsonc`,
    `tui.json`, `tui.jsonc` and `.cc-safety-net` are write-denied in the project.
    A project inside `.opencode` or `.cc-safety-net` is refused, and so is a
@@ -133,11 +132,10 @@ The extension's bash analyzer is advisory. It blocks or asks before shell
 commands it recognizes as destructive, but nothing depends on it for safety. The
 Seatbelt profile is the boundary.
 
-### Unreleased changes
+### Changes since the prerelease
 
-After the 0.2.0 tag, `main` added Pi/OMP state-root pinning and protection of
-missing OpenCode configuration behind linked ancestors. These fixes are not
-in the published prerelease; see [the source changes](https://github.com/ebrindley/AgentGuard/compare/v0.2.0...main).
+0.2.1 also pins Pi/OMP state roots and protects missing OpenCode configuration
+behind linked ancestors. These changes follow the 0.2.0 prerelease.
 
 ## What it does not cover
 
@@ -150,7 +148,7 @@ in the published prerelease; see [the source changes](https://github.com/ebrindl
 - Provider tokens and other secrets the harness itself uses.
 - A VM, container or separate user identity.
 
-## Known limitations in 0.2.0
+## Known limitations in 0.2.1
 
 ### OpenCode
 
@@ -228,7 +226,12 @@ pi-sandbox-guard 7ad441f's with the seven differences above, so:
   write. Planned: step 10d.
 - **The analyzer does not check local Git discards.** It allows `git checkout --
   .`, `git restore .`, `git stash drop` and `git branch -D`, which cc-safety-net
-  blocks in OpenCode sessions. It checks `git reset --hard` and `git clean`, and
+  blocks in OpenCode sessions. Some ordinary forms also bypass its reset/clean and force-push checks, including
+  `git -C repo reset --hard`, `git reset HEAD --hard`, `git clean -d -f`,
+  `git -C $(pwd) push --force` and `git push origin $(git branch --show-current) --force`.
+  Seatbelt cannot contain remote history changes. These classifier gaps remain
+  deferred to checker measurement and consolidation (steps 7e and 10d). It checks
+  simpler `git reset --hard`, `git clean` and force-push forms, and
   asks before the common spellings of pushes that rewrite or delete remote
   branches; as a pattern match it can miss some quoted or wrapped forms, such as
   escaped quotes inside `bash -c`. Planned: cc-safety-net for Pi at step 10d.
