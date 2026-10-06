@@ -601,4 +601,6 @@ missing=()
 for p in ${points#test_point }; do (( ${covered[(Ie)$p]} )) || missing+=("$p"); done
 (( $#points >= 20 && $#missing == 0 )) && pass "all $#points test points are exercised" || fail "test points not exercised: ${missing:-none found}"
 
+node "$source_root/test/install-state.mjs" || fails+=1
+
 finish

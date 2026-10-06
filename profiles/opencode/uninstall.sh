@@ -26,6 +26,16 @@ main() {
     ag_probe || exit 1
     ag_lock || exit 1
     ag_recover uninstall || { ag_unlock; exit 1 }
+    # Recovery may replace the stamp. Read ownership before removing entries or
+    # the engine that holds Pi's saved replacements; 0.1.x installed OpenCode alone.
+    if ! /usr/bin/jq -se 'length == 1 and (.[0] | type == "object" and
+        (if has("harnesses") then
+          (.harnesses | type == "array" and length > 0 and all(.[]; . == "opencode" or . == "pi"))
+        else (.version | type == "string" and test("^0\\.1\\.[0-9]+$")) end))' "$stamp" >/dev/null 2>&1; then
+      ag_err "cannot identify installed harnesses in $stamp; the guard and saved replacements are kept. Restore the stamp from a backup before running uninstall again."
+      ag_unlock
+      exit 1
+    fi
     scratch="$state/.uninstall-$$"
   else
     /bin/mkdir -p -- "$list_dir" || exit 1
