@@ -13,7 +13,7 @@ write permission, for example from a subfolder inside an ALLOW folder. DENY
 blocks both reading and writing. When entries overlap, DENY always wins;
 otherwise the most specific entry wins.
 
-OpenCode's required data, cache, and temporary folders remain writable
+OpenCode's standard skill, required data, cache, and temporary folders remain writable
 automatically. See last-launch-opencode.log next to this file for the applied locations.
 Build tools with their own folders in your home, such as ~/.cargo or ~/go, need
 those folders under ALLOW.

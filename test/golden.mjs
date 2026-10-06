@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const engines = readdirSync(join(root, 'test/engines')).filter((f) => f.endsWith('.mjs')).map((f) => f.slice(0, -4));
-const { values } = parseArgs({ options: { engine: { type: 'string', default: 'zsh' } } });
+const { values } = parseArgs({ options: { engine: { type: 'string', default: 'zsh' }, case: { type: 'string' } } });
 if (!engines.includes(values.engine)) {
   console.error(`unknown engine: ${values.engine} (known: ${engines.join(', ')})`);
   process.exit(1);
@@ -31,11 +31,17 @@ const differences = readdirSync(join(root, 'test/fixtures/differences'))
   .sort((a, b) => a.step - b.step);
 const piInstalled = ['step-7c.json', 'step-7f.json']
   .map((f) => JSON.parse(readFileSync(join(root, 'test/fixtures/differences', f), 'utf8')));
+const skills = JSON.parse(readFileSync(join(root, "test/fixtures/differences/skills.json"), "utf8"));
 function applyDifferences(text, records) {
   for (const { step, after, insert, inserts = [{ after, insert }] } of records) {
     for (const d of inserts) {
-      assert.equal(text.split(d.after).length, 2, `step ${step}: the text to insert after must occur exactly once`);
-      text = text.replace(d.after, () => d.after + d.insert);
+      const anchor = d.before ?? d.after;
+      assert.equal(text.split(anchor).length, 2, `step ${step}: insertion anchor must occur exactly once`);
+      text = text.replace(anchor, () => d.before ? d.insert + anchor : anchor + d.insert);
+    }
+    for (const d of records.find(r => r.step === step)?.replaces ?? []) {
+      assert.equal(text.split(d.before).length, 2, `step ${step}: replacement must occur exactly once`);
+      text = text.replace(d.before, () => d.after);
     }
   }
   return text;
@@ -59,11 +65,12 @@ try {
   // An empty XDG_CACHE_HOME counts as unset, so the cache rules use the default root.
   const options = { cwd: join(home, 'Projects/app'), env: { ...process.env, HOME: home, OPENCODE_SANDBOXED: '', AGENT_GUARD_SANDBOXED: '', XDG_CACHE_HOME: '' } };
   function compare(name, list, records) {
+    if (values.case && values.case !== name) return;
     for (const folder of ['Agent Guard', 'OpenCode Guard']) writeFileSync(join(home, folder, 'Guard List.txt'), list);
     // v1.0.3 takes its home from $HOME, so the reference runs unmodified.
     const old = exec(['/bin/zsh', join(reference, 'launch'), 'profile'], options);
     const current = exec([...adapter.launcher(engine), 'profile'], options);
-    assert.equal(current, applyDifferences(old.replaceAll('OpenCodeGuard', 'AgentGuard').replaceAll('OpenCode Guard', 'Agent Guard'), records), name);
+    assert.equal(current, applyDifferences(old.replaceAll('OpenCodeGuard', 'AgentGuard').replaceAll('OpenCode Guard', 'Agent Guard'), [...records, skills]), name);
     console.log(`ok   ${name} profile matches v1.0.3 exactly apart from renamed paths and recorded differences (step ${records.map((d) => d.step).join(', ')})`);
   }
   compare('empty', 'ALLOW -\nREAD ONLY -\nDENY -\n', differences);

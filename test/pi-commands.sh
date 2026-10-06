@@ -61,7 +61,7 @@ replace_once "$run/tree/profiles/opencode/harness.zsh" \
 /bin/cp "$run/tree/engine/"{launch,profile.sb,account.zsh} "$run/tree/profiles/opencode/"{install.sh,uninstall.sh} "$rel/"
 /bin/cp -R "$run/tree/installer" "$rel/"
 /bin/cp "$run/tree/engine/agent-guard" "$run/tree/profiles/opencode/"{opencode,opencode-gui} "$rel/bin/"
-/bin/cp "$run/tree/profiles/opencode/"{harness.zsh,hooks.zsh,protected.sb,plugin.js} "$rel/profiles/opencode/"
+/bin/cp "$run/tree/profiles/opencode/"{harness.zsh,hooks.zsh,skills.zsh,protected.sb,plugin.js} "$rel/profiles/opencode/"
 /bin/cp -R "$run/tree/profiles/pi/commands" "$rel/profiles/pi/"
 /bin/cp "$run/tree/profiles/pi/scripts/"{bind-executable.sh,lib-ops.sh} "$rel/profiles/pi/scripts/"
 /bin/cp -R "$fixture/"{launchers,sandbox,src} "$rel/profiles/pi/"

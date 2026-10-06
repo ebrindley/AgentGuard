@@ -1795,3 +1795,15 @@ To verify, before or during implementation:
 - **OpenCode.** That 1.18.34 never calls the `permission.ask` plugin hook (found by static inspection of the binary only); whether a plugin tool's `context.ask` could carry an ask tier, not needed now (section 5); whether a `.js` link to a `.mjs` target loads, which the adapter's `.js` name avoids (section 5); how the model catalog refreshes when it is write-denied (step 7, section 9); which files `az account get-access-token` writes (section 3, Credentials); that google-auth-library runs `gcloud` to find the project on each Vertex request when `GOOGLE_CLOUD_PROJECT` is unset (section 3, Credentials).
 - **gcloud.** Whether it works with `~/.config/gcloud` write-denied; its credential store opens `credentials.db` for writing (section 3, Credentials).
 - **Bun.** Whether `import.meta.url` shows a link or its target; the plugin already resolves it (section 5).
+
+## OpenCode skill maintenance
+
+The next release adds the [skill policy](SKILLS.md) ahead of the shared-engine
+roadmap. It narrows the current Seatbelt and plugin configuration denies without
+opening permission-bearing configuration. A fixed-operation, launch-scoped worker
+prepares missing containers for projects selected after startup. Protected policy
+snapshots use cc-safety-net 2.6.0 with original-directory analysis and project-only
+tightenings. Existing shared rulebooks remain for older releases; only the known
+managed recursive rule is omitted from new snapshots. This supersedes the earlier
+recursive-deletes plan's shared-rule retirement and does not implement its Rust
+engine prerequisites. Shared skill persistence is accepted functionality.
