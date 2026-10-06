@@ -1,6 +1,6 @@
 # Using Agent Guard
 
-This guide describes stable 0.2.1, which supports OpenCode, Pi and OMP.
+This guide describes stable 0.2.2, which supports OpenCode, Pi and OMP.
 See [release channels](OPERATIONS.md#release-channels) for installation.
 
 ## Start OpenCode
@@ -39,8 +39,9 @@ DENY
 ~/Private
 ```
 
-Use folders that exist for ALLOW and READ ONLY. A DENY entry may name a path
-that does not exist yet; the launcher keeps it and logs a spelling warning.
+Use folders that exist for ALLOW. A READ ONLY or DENY entry may name a path
+that does not exist yet; the launcher keeps it, and logs a spelling warning for
+DENY.
 
 - ALLOW permits creating, changing and deleting files inside the listed folder.
 - READ ONLY removes write permission, including within an ALLOW folder. It does
@@ -53,7 +54,7 @@ quotes and Finder's backslash escapes are accepted. Heading names are
 case-insensitive; READ-ONLY is also accepted. Lines starting with `#` and text
 before the first heading are ignored.
 
-The launcher skips nonexistent ALLOW and READ ONLY entries. It refuses ALLOW
+The launcher skips nonexistent ALLOW entries and keeps nonexistent READ ONLY entries. It refuses ALLOW
 entries broad enough to contain `~/Library/Application Support`, `~/.config`
 or `~/.local`, and refuses READ ONLY or DENY entries that cover essential
 system or runtime folders. Check `~/Agent Guard/last-launch-opencode.log` for
@@ -145,6 +146,6 @@ executable.
 
 ## OpenCode skills
 
-The next release permits ordinary skill maintenance in standard OpenCode and
+0.2.2 permits ordinary skill maintenance in standard OpenCode and
 compatible skill folders. See [skill permissions](SKILLS.md) for defaults,
 explicit restrictions, first-time preparation and scoped deletion.

@@ -4,13 +4,13 @@ Status: accepted plan, updated 2026-10-05. The zsh OpenCode engine, staged
 installer, update/uninstall/recovery, version stamp, OpenCode Guard migration
 and cache protection are built (steps 1–7). The installer split, adoption and
 migration of Pi/OMP, and cross-harness project-config protection are built
-(steps 7a–7d and 7f). 0.2.1 is the latest stable release for
-OpenCode, Pi and OMP.
+(steps 7a–7d and 7f). 0.2.2 is the latest stable release for
+OpenCode, Pi and OMP; it adds the OpenCode [skill policy](SKILLS.md).
 
 0.2.1 includes Pi/OMP state-root pinning and protection of missing OpenCode
 configuration behind linked ancestors, committed after the 0.2.0 tag.
-The checker measurement, Rust launcher, per-launch snapshots and Pi/OMP move
-to the shared engine remain planned (steps 7e and 8–10). Step 11's retirement
+The checker measurement, Rust launcher, shared-engine per-launch snapshots and
+Pi/OMP move to the shared engine remain planned (steps 7e and 8–10). Step 11's retirement
 and cleanup are planned. Current user procedures are in [USAGE.md](USAGE.md)
 and [OPERATIONS.md](OPERATIONS.md).
 
@@ -45,9 +45,9 @@ The engine as built (stage 1) is zsh and uses only macOS tools (`sandbox-exec`, 
 | List parser | In `engine/launch`. Rules in section 4. |
 | Profile builder | Fills the slots of `engine/profile.sb` (`@WRITABLE@`, `@WRITABLE_GUI@`, `@USER_RULES@`, `@PROTECTED@`, `@STATE_PROTECTED@`, `@PROTECTED_NAMES@`) from the profile and the list, and passes `HOME`, `DARWIN_TEMP`, `DARWIN_CACHE` and `GUI` as `-D` parameters. Rule order in section 3. |
 | Log | `~/Agent Guard/last-launch-opencode.log`, rewritten at each launch: skipped, refused and overridden entries; the resolved ALLOW, READ ONLY and DENY sets; what OpenCode can always write. |
-| State | `state/rules.json` in the engine folder: the resolved allow, read only and deny paths. Every launch, in every mode including `profile` and `check` but except `check staged`, writes it to a temp file and renames it over the old one. The plugin reads it once at start, so launch B can replace it before launch A's plugin reads it; A's plugin then refuses and reports against B's rules while Seatbelt still enforces A's own profile. Step 9 replaces it with the per-launch snapshot (section 7, Per-launch snapshot). |
+| State | New OpenCode sessions read a protected per-launch snapshot in `state/opencode/` in the engine folder. Every launch except `check staged` also writes the resolved allow, read only and deny paths to `state/rules.json` through a temp file and rename, for older plugins and independent readers, which use it as a fallback and read it once at start; when launches start close together, such a reader can refuse and report against another launch's rules while Seatbelt still enforces its own profile. Step 9 replaces it with the shared engine's per-launch snapshot (section 7, Per-launch snapshot). |
 | Plugin | `profiles/opencode/plugin.js`: guard probe, path checks, unguarded refusal, status tool, cc-safety-net loading (section 5). One file for now; at step 9 it splits into `plugin/core.mjs` and an OpenCode adapter, `plugin/opencode.js`, and the Pi adapter follows at step 10d (section 5). |
-| cc-safety-net | Version 2.4.14, unmodified, in `engine/vendor/cc-safety-net`. |
+| cc-safety-net | Version 2.6.0, unmodified, in `engine/vendor/cc-safety-net`. |
 | Bootstrap | `scripts/bootstrap.zsh`, built into the release asset `install.sh`: downloads the archive and its checksum, verifies, unpacks into `stage/<txn>/tree` and runs the archive's installer under its lock. Section 6. |
 | Installer and uninstaller | `profiles/opencode/install.sh` and `profiles/opencode/uninstall.sh`, both copied into each release folder; `install.sh` at the repository root forwards to the first. The installer is also a library (`source install.sh --lib`) for the guard probe, lock, recovery and file primitives that the uninstaller and `agent-guard` use. Both take home from `engine/account.zsh`, a verbatim copy of the launcher's `account_home` function; `scripts/check-seams.zsh` and `test/test.sh` check that the two match. Section 6. |
 | Command | `engine/agent-guard`, installed as `bin/agent-guard`: `doctor`, `version`, `update`, `uninstall` (section 6). It takes its release from its own resolved location, sources that release's `account.zsh` only if the folder has the shape of a release (a `RELEASE` file, a parent named `releases`), then applies the launcher's check. |
@@ -1798,7 +1798,7 @@ To verify, before or during implementation:
 
 ## OpenCode skill maintenance
 
-The next release adds the [skill policy](SKILLS.md) ahead of the shared-engine
+0.2.2 adds the [skill policy](SKILLS.md) ahead of the shared-engine
 roadmap. It narrows the current Seatbelt and plugin configuration denies without
 opening permission-bearing configuration. A fixed-operation, launch-scoped worker
 prepares missing containers for projects selected after startup. Protected policy
