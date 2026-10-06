@@ -546,13 +546,14 @@ ag_txn_plan() {
 
 # True when an install is due although the latest release is installed: a
 # registered source still to migrate or retire, or a harness found on this Mac
-# that the stamp does not list. REPLY names them.
+# that the stamp does not list. REPLY names them. Returns 0 when pending, 1
+# when current, and 2 when migration detection failed (with its diagnostic).
 ag_pending() {
   local m h
   local -a stamped what
   ag_stamp_harnesses
   stamped=($reply)
-  ag_detect 2>/dev/null || return 1
+  ag_detect || return 2
   for m in $ag_migration_modules; do
     [[ ${ag_mig_state[$m]:-} == (migrate|retiring) ]] || continue
     REPLY=$m
