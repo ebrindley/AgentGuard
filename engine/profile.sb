@@ -1,6 +1,7 @@
 (version 1)
 (allow default)
 (define (h s) (string-append (param "HOME") s))
+;;@SKILL_CONTENT@
 
 (deny file-write*)
 (allow file-write*

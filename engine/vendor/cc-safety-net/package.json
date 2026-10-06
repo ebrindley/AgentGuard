@@ -1,11 +1,16 @@
 {
   "name": "cc-safety-net",
-  "version": "2.4.14",
+  "version": "2.6.0",
   "description": "A coding agent CLI hook - block destructive commands and secret file access",
   "keywords": [
     "amp",
     "claude-code",
     "cursor",
+    "deepseek-harness",
+    "devin",
+    "devin-cli",
+    "droid",
+    "factory-droid",
     "grok",
     "grok-build",
     "opencode",
@@ -53,7 +58,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "audit:dependencies": "bun audit",
+    "audit:dependencies": "bun audit --ignore=GHSA-ch52-4w7c-c8xp",
     "build": "bun run clean && bun scripts/project-bun.ts scripts/build.ts",
     "build:types": "tsc --project tsconfig.build.json --emitDeclarationOnly --declaration",
     "verify:package": "bun run scripts/verify-package.ts",
@@ -118,10 +123,15 @@
     "node": ">=18"
   },
   "packageManager": "bun@1.4.2",
+  "dsh": {
+    "bundle": {
+      "patch": "./dist/deepseek-harness/cordis.patch.yml"
+    }
+  },
   "pi": {
     "extensions": [
       "./dist/pi/index.js"
     ]
   },
-  "gitHead": "f9bfeca0ecf361ac3240e10bbb36dca68fe17a38"
+  "gitHead": "3793a43e9b1cab3458622c95175103bcf48ef1c6"
 }

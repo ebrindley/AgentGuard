@@ -719,7 +719,7 @@ ag_assemble() {
   /bin/cp -R -- "$t/engine/vendor" "$r/vendor" || return 1
   # The release's install.sh, which agent-guard and uninstall.sh source, loads these.
   /bin/cp -R -- "$t/installer" "$r/installer" || return 1
-  /bin/cp -- "$p/harness.zsh" "$p/hooks.zsh" "$p/protected.sb" "$p/plugin.js" "$r/profiles/opencode/" || return 1
+  /bin/cp -- "$p/harness.zsh" "$p/hooks.zsh" "$p/protected.sb" "$p/skills.zsh" "$p/plugin.js" "$r/profiles/opencode/" || return 1
   /bin/cp -R -- "$p/templates" "$p/assets" "$r/profiles/opencode/" || return 1
   # check staged points OpenCode's config folder here; its only plugin is this
   # release's. OpenCode 1.18.33 loads no config, and so no plugin, when it cannot
@@ -816,13 +816,25 @@ ag_selftest_staged() {
 # actions.zsh. Each is idempotent forward (do_*) and backward (undo_*): a begun
 # action is finished or undone from its journal line and backup.
 
+ag_factory_rulebook() {
+  /usr/bin/jq -se 'length == 2 and .[0] == .[1]' "$1" "$2" >/dev/null 2>&1
+}
+
 do_rulebook() {
   local rb="$cc/agent-guard/rulebook.json" partial="$cc/agent-guard/.rulebook.json.partial" src folder
   src="$engine/releases/$ag_rid_new/profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json"
   ag_jlast rulebook
   [[ $REPLY == done ]] && return 0
   if [[ -z $REPLY ]]; then
-    if [[ -f $rb ]] && /usr/bin/cmp -s -- "$src" "$rb"; then test_point rulebook; return; fi
+    if [[ -f $rb ]]; then
+      if /usr/bin/cmp -s -- "$src" "$rb"; then test_point rulebook; return; fi
+      if ! ag_factory_rulebook "$src" "$rb" &&
+         { [[ -z $ag_rid_old ]] || ! ag_factory_rulebook "$engine/releases/$ag_rid_old/profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json" "$rb"; }; then
+        ag_warn "custom rulebook kept: $rb"
+        test_point rulebook
+        return
+      fi
+    fi
     folder=0
     [[ -d $cc/agent-guard ]] && folder=1
     ag_backup rulebook "$rb" && ag_jnl rulebook begun "folder=$folder" || return 1

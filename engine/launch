@@ -54,6 +54,7 @@ fi
 
 source "$profile_dir/harness.zsh"
 source "$profile_dir/hooks.zsh"
+source "$profile_dir/skills.zsh"
 
 note() {
   print -r -- "$*" >> "$log"
@@ -104,6 +105,7 @@ find_app() {
 # export would print the environment.
 unset $env_unset
 (( $#env_set )) && export $env_set
+[[ ${CC_SAFETY_NET_LEVEL:-} == paranoid ]] || export CC_SAFETY_NET_LEVEL=strict
 
 # The engine's nesting marker is exported just before exec. OpenCode Guard's
 # marker also counts as already guarded until step 11.
@@ -183,7 +185,7 @@ while IFS= read -r line || [[ -n $line ]]; do
     deny+=("$p")
     continue
   fi
-  [[ -e $p ]] || { note "skipped, does not exist: $p"; continue }
+  if [[ $section == allow && ! -e $p ]]; then note "skipped, does not exist: $p"; continue; fi
   if [[ $section == allow ]]; then
     for e in $sensitive; do
       within "$e" "$p" && { note "refused ALLOW, too broad: $p"; continue 2 }
@@ -196,6 +198,11 @@ while IFS= read -r line || [[ -n $line ]]; do
 done < "$list"
 
 sbpl() { local s=${1//\\/\\\\}; REPLY="\"${s//\"/\\\"}\"" }
+typeset -aU user_readonly skill_roots skill_pins skill_configs protected_targets pi_guard
+user_readonly=($readonly)
+(( ${installed[(Ie)pi]} )) && pi_guard=("$home"/.local/bin/{pi,omp,pi-sandbox.sb,pi-sandbox-preamble.zsh,pi-sandbox-guard-extension} "${(@)pi_wrappers/#/$home/.local/bin/}"
+  "$home/.pi/agent/extensions/pi-sandbox-guard" "$home/.config/pi-sandbox-guard/executables.conf")
+opencode_skill_globals
 typeset -a rules
 typeset -U pinned
 for entry in ${(o)scoped}; do
@@ -237,10 +244,15 @@ for p in $protected; do
   fi
   [[ ( -e $p || $p == "$home/.config/opencode" ) && $target != "$p" ]] || continue
   sbpl "$target"
-  rules+=("(deny file-write* (subpath $REPLY))")
-  readonly+=("$target")
+  if [[ $p == "$home/.config/opencode" || $p == "$home/.opencode" || ${p:t} == .opencode ]]; then
+    rules+=("(deny file-write* (require-all (subpath $REPLY) (require-not (skill-content))))")
+    skill_configs+=("$target")
+  else
+    rules+=("(deny file-write* (subpath $REPLY))")
+  fi
+  protected_targets+=("$target")
 done
-for p in $deny $readonly; do
+for p in $deny $readonly $protected_targets; do
   a=${p:h}
   while [[ $a != / ]]; do pinned+=("$a"); a=${a:h}; done
 done
@@ -301,7 +313,16 @@ for p in $pi_guard; do
   done
 done
 (( $#pi_names )) && state_rules+=('  (regex #"/\.pi(/|$)")' '  (regex #"/\.omp(/|$)")')
-for p in $state_pins; do sbpl_path "$p"; state_rules+=("  (literal $REPLY)"); done
+typeset -aU needed_skill_pins
+for p in $skill_pins; do
+  [[ $p == "$home/.config" || $p == "$home/Library" || $p == "$home/Applications" ]] && continue
+  covered=0
+  for q in $skill_configs; do
+    [[ $p == "$q" || $p == "$q/skill" || $p == "$q/skills" ]] && covered=1
+  done
+  (( covered || ${pinned[(Ie)$p]} || ${state_pins[(Ie)$p]} )) || needed_skill_pins+=("$p")
+done
+for p in $state_pins $needed_skill_pins; do sbpl_path "$p"; state_rules+=("  (literal $REPLY)"); done
 
 note "allow: ${(j:, :)allow:-none}"
 note "read only: ${(j:, :)readonly:-none}"
@@ -320,12 +341,26 @@ path_rules() {
   shift
   for p in "$@"; do
     sbpl "${p#$home}"
-    print -r -- "$indent(subpath (h $REPLY))"
+    if [[ $p == "$home"/* ]]; then print -r -- "$indent(subpath (h $REPLY))"; else sbpl "$p"; print -r -- "$indent(subpath $REPLY)"; fi
   done
 }
-profile=${profile/';;@WRITABLE@'/$(path_rules '  ' $writable)}
+profile=${profile/';;@WRITABLE@'/$(path_rules '  ' $writable $skill_roots)}
 profile=${profile/';;@WRITABLE_GUI@'/$(path_rules '    ' $writable_gui)}
-profile=${profile/';;@PROTECTED@'/$(path_rules '  ' $protected_paths)}
+config_rules() {
+  local p
+  for p in $protected_paths; do sbpl_path "$p"; print -r -- "  (require-all (subpath $REPLY) (require-not (skill-content)))"; done
+}
+skill_content() {
+  local p
+  print -r -- '(define (skill-content) (require-any'
+  print -r -- '  (regex #"/\.opencode/skills?/[^/]+")'
+  print -r -- '  (regex #"/\.(agents|claude)/skills/[^/]+")'
+  for p in $skill_roots; do sbpl_path "$p"; print -r -- "  (require-all (subpath $REPLY) (require-not (literal $REPLY)))"; done
+  for p in ${^skill_configs}/{skill,skills}; do (( ${skill_roots[(Ie)$p]} )) && continue; sbpl_path "$p"; print -r -- "  (require-all (subpath $REPLY) (require-not (literal $REPLY)))"; done
+  print -r -- '))'
+}
+profile=${profile/';;@SKILL_CONTENT@'/$(skill_content)}
+profile=${profile/';;@PROTECTED@'/$(config_rules)}
 profile=${profile/';;@STATE_PROTECTED@'/${(F)state_rules}}
 profile=${profile/';;@PROTECTED_NAMES@'/$(<"$profile_dir/$protected_fragment")}
 darwin_temp=${$(/usr/bin/getconf DARWIN_USER_TEMP_DIR):A}
@@ -337,8 +372,29 @@ darwin_cache=${$(/usr/bin/getconf DARWIN_USER_CACHE_DIR):A}
 
 jarr() { /usr/bin/jq -cn '$ARGS.positional' --args "$@" }
 /bin/mkdir -p "$engine/state"
+/bin/mkdir -p "$engine/state/opencode"
+session=$(/usr/bin/mktemp -d "$engine/state/opencode/${release:t}.XXXXXXXX")
+# No process outlives a staged check, and a snapshot left behind would keep a
+# failed install from removing the new engine folder.
+if (( staged )); then
+  trap '/bin/rm -rf -- "$session"; /bin/rmdir -- "$engine/state/opencode" 2>/dev/null || true' EXIT
+fi
+channel= replies=
+if [[ $mode == (cli|gui) ]]; then
+  channel=$(/usr/bin/mktemp -d "$darwin_temp/agent-guard-skills.XXXXXXXX")
+  replies="$session/preparation"
+  /bin/mkdir -- "$replies"
+fi
+opencode_checker_snapshot "$session" || fail "cannot preserve the checker policy in $session"
+context="$session/permissions.json"
+/usr/bin/jq -n --argjson allow "$(jarr $allow)" --argjson readonly "$(jarr $user_readonly)" \
+  --argjson deny "$(jarr $deny)" --argjson protected "$(jarr $protected_targets)" \
+  --argjson skills "$(jarr $skill_roots)" --argjson configs "$(jarr $skill_configs)" \
+  --arg checker "$session/checker" --arg preparation "$channel" --arg preparationReplies "$replies" \
+  '{allow:$allow,readonly:$readonly,deny:$deny,protected:$protected,skills:$skills,configs:$configs,checker:$checker,preparation:$preparation,preparationReplies:$preparationReplies}' > "$context"
+export AGENT_GUARD_CONTEXT="$context"
 if (( ! staged )); then
-  print -r -- "{\"allow\":$(jarr $allow),\"readonly\":$(jarr $readonly),\"deny\":$(jarr $deny)}" > "$engine/state/rules.json.$$"
+  /bin/cp "$context" "$engine/state/rules.json.$$"
   /bin/mv -f "$engine/state/rules.json.$$" "$engine/state/rules.json"
 fi
 
@@ -377,4 +433,21 @@ esac
 # The plugin loads through current, which an update can move; AGENT_GUARD_RELEASE
 # tells it to use this release.
 export AGENT_GUARD_SANDBOXED=1 AGENT_GUARD_RELEASE=${release:t}
-exec $sandbox "$@"
+# Preparation must remain outside Seatbelt for projects selected after startup.
+export AGENT_GUARD_PREPARATION="$channel"
+exec {guard_stdin}<&0
+$sandbox "$@" <&$guard_stdin &
+child=$!
+exec {guard_stdin}<&-
+opencode_skill_worker $child "$channel" "$replies" &
+worker=$!
+cleanup_launch() {
+  kill $worker 2>/dev/null || true
+  wait $worker 2>/dev/null || true
+  /bin/rm -rf -- "$channel" "$replies"
+}
+trap 'kill $child 2>/dev/null; cleanup_launch; exit 130' INT TERM HUP
+trap cleanup_launch EXIT
+rc=0
+wait $child || rc=$?
+exit $rc

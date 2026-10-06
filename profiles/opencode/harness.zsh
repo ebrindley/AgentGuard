@@ -24,7 +24,7 @@ cache_catalogs=(opencode 'models-[^/]*\.json$')
 cache_folders=(opencode/bin)
 state_hook=opencode_state_roots
 gui_args=(--no-sandbox)
-env_unset=(ELECTRON_RUN_AS_NODE OPENCODE_SIDECAR_V2 CC_SAFETY_NET_HOME CC_SAFETY_NET_WORKTREE SAFETY_NET_WORKTREE)
-env_set=(CC_SAFETY_NET_PARANOID_RM=1)
+env_unset=(ELECTRON_RUN_AS_NODE OPENCODE_SIDECAR_V2 CC_SAFETY_NET_HOME CC_SAFETY_NET_WORKTREE SAFETY_NET_WORKTREE CC_SAFETY_NET_AUDIT_HOME)
+env_set=(CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY=1)
 prepare_hook=opencode_prepare
 check_hook=opencode_check

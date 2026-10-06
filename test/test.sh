@@ -477,10 +477,10 @@ for marker in AGENT_GUARD_SANDBOXED OPENCODE_SANDBOXED; do
     sb /usr/bin/env "$marker=1" "${launcher[@]}" check
 
   /bin/rm -f "$home/Projects/app/launched" "$home/Documents/escaped" "$home/Projects/app/nested-home"
-  print -r -- $'#!/bin/sh\ntouch "$HOME/Documents/escaped"\n[ "$CC_SAFETY_NET_PARANOID_RM" = 1 ] && touch "$HOME/Projects/app/launched"' > "$home/fakebin/opencode"
+  print -r -- $'#!/bin/sh\ntouch "$HOME/Documents/escaped"\n[ "$CC_SAFETY_NET_LEVEL" = strict ] && touch "$HOME/Projects/app/launched"' > "$home/fakebin/opencode"
   /bin/chmod 755 "$home/fakebin/opencode"
   /usr/bin/env PATH="$home/fakebin:$PATH" "$marker=1" "$engine/bin/opencode" >/dev/null 2>&1
-  [[ -e $home/Projects/app/launched && ! -e $home/Documents/escaped ]] && pass "launch cli sandboxes despite $marker, paranoid rm on" || fail "launch cli sandbox with $marker"
+  [[ -e $home/Projects/app/launched && ! -e $home/Documents/escaped ]] && pass "launch cli sandboxes despite $marker, scoped checker strict" || fail "launch cli sandbox with $marker"
 
   print -r -- $'#!/bin/sh\nprintf "%s\\n" "$HOME" > "$NESTED_HOME_RESULT"' > "$home/fakebin/opencode"
   HOME="$child_home" NESTED_HOME_RESULT="$home/Projects/app/nested-home" \

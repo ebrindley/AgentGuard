@@ -16,6 +16,8 @@ opencode_state_roots() {
 
 opencode_prepare() {
 oc="$home/.config/opencode"
+opencode_skill_scope "${oc:A}"
+[[ $REPLY == (readonly|deny) ]] && return 0
 /bin/mkdir -p "$oc"
 [[ -e $oc/.gitignore ]] || print -l node_modules package.json package-lock.json bun.lock .gitignore > "$oc/.gitignore"
 [[ -e $oc/config.json || -e $oc/opencode.json || -e $oc/opencode.jsonc ]] || print -r -- '{"$schema": "https://opencode.ai/config.json"}' > "$oc/opencode.json"
