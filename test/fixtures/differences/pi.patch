@@ -1,7 +1,16 @@
 diff --git a/launchers/example-custom b/launchers/example-custom
-index 2f94258..5b380df 100755
+index 2f94258..d86d372 100755
 --- a/launchers/example-custom
 +++ b/launchers/example-custom
+@@ -6,7 +6,7 @@ set -euo pipefail
+ # Copy this to your own directory (NOT into this repo — see below), edit the exec
+ # line at the bottom, then install it alongside the protected shim:
+ #
+-#   scripts/deploy-launchers.sh --extra-launchers ~/my-pi-launchers
++#   agent-guard wrapper add ~/my-pi-launchers/example-custom
+ #
+ # Keep your wrappers OUTSIDE this repo so `git pull` never conflicts with them and
+ # an unreviewed file can never be picked up from the working tree.
 @@ -65,7 +65,7 @@ fi
  PI_SHIM="${0:A:h}/pi"
  if [ ! -x "$PI_SHIM" ]; then
