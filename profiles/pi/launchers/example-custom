@@ -6,7 +6,7 @@ set -euo pipefail
 # Copy this to your own directory (NOT into this repo — see below), edit the exec
 # line at the bottom, then install it alongside the protected shim:
 #
-#   scripts/deploy-launchers.sh --extra-launchers ~/my-pi-launchers
+#   agent-guard wrapper add ~/my-pi-launchers/example-custom
 #
 # Keep your wrappers OUTSIDE this repo so `git pull` never conflicts with them and
 # an unreviewed file can never be picked up from the working tree.
