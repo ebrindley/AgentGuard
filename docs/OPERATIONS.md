@@ -1,36 +1,44 @@
 # Installation and maintenance
 
-These procedures describe the current source. Pi and OMP require the 0.2.0
-prerelease or a source install. Use [Release channels](#release-channels) to
-choose the installer and update route. For everyday use, see the
+These procedures describe stable 0.2.1. For everyday use, see the
 [user guide](USAGE.md).
 
 ## Release channels
 
-As of 2026-10-05, the latest stable release is
-[0.1.2](https://github.com/ebrindley/AgentGuard/releases/tag/v0.1.2), for OpenCode
-only. The [0.2.0 prerelease](https://github.com/ebrindley/AgentGuard/releases/tag/v0.2.0)
-adds Pi and Oh My Pi (OMP). These guides describe the current source; the
-[changes after 0.2.0](https://github.com/ebrindley/AgentGuard/compare/v0.2.0...main)
-are not included in that prerelease.
-
-Run the stable installer from Terminal outside any agent session or sandbox:
+The latest stable release is
+[0.2.1](https://github.com/ebrindley/AgentGuard/releases/tag/v0.2.1), for OpenCode,
+Pi and Oh My Pi (OMP). Run the installer from Terminal outside any agent session
+or sandbox:
 
 ```sh
 /bin/zsh -c "$(/usr/bin/curl -fsSL https://github.com/ebrindley/AgentGuard/releases/latest/download/install.sh)"
 ```
 
-For Pi or OMP, install the 0.2.0 prerelease explicitly:
+`agent-guard update` follows stable releases, leaves a newer installed version
+unchanged, and does not fetch changes on `main`. For a particular release, use
+`releases/download/vVERSION/install.sh` in place of `releases/latest/download/install.sh`.
+Rerunning a tagged installer reinstalls that release; it does not obtain later commits.
 
-```sh
-/bin/zsh -c "$(/usr/bin/curl -fsSL https://github.com/ebrindley/AgentGuard/releases/download/v0.2.0/install.sh)"
-```
+### Updating from 0.1.2 or 0.2.0
 
-`agent-guard update` follows stable releases. It does not install prereleases or
-unreleased fixes from `main`, and it leaves an installed version newer than
-stable unchanged. Install a later prerelease by changing the tag in the second
-command. Rerunning the same tagged installer reinstalls that release; it does
-not obtain fixes committed after the tag.
+0.2.1 adds Pi/OMP installation and migration to the stable OpenCode release.
+The installer enrolls Pi's guard when it detects Pi or OMP, including during
+an OpenCode update. Pi/OMP require Node and executable locations outside their
+writable folders; see [requirements](#requirements) and
+[bindings](USAGE.md#pi-and-omp). If detection or binding fails, follow the
+reported remedy outside the guard and rerun the update.
+
+Compared with the 0.2.0 prerelease, 0.2.1 pins Pi/OMP state roots, protects
+missing OpenCode configuration behind linked ancestors, improves diagnostics,
+preserves uninstall recovery when harness ownership is unreadable, and reports
+same-version migration-detection errors. The custom-wrapper template now names
+`agent-guard wrapper add`.
+
+Restart sessions after updating to apply the new Seatbelt profile. Pi/OMP's
+`/reload` refreshes the extension; it cannot change a running process's sandbox.
+Before downgrading to 0.1.2 or reinstating an older guard, run
+`agent-guard uninstall`. Do not run an older installer over a 0.2.x installation.
+See [recovery](#recovery-after-a-failed-or-interrupted-install) for interrupted updates.
 
 To allow an existing projects folder without the prompt, append
 `install.sh --projects ~/Projects` after the closing quote. This grants OpenCode
@@ -348,11 +356,14 @@ loaded; `/reload` loads the extension now on disk.
   when the installed release is newer, it does nothing apart from removing the
   forwarders at OpenCode Guard's old command paths once the Mac has restarted
   since the migration.
-  With 0.2.0 installed and 0.1.2 marked Latest on GitHub, it reports that the
-  installed release is newer and leaves it unchanged. It does not fetch
-  prereleases. To install a prerelease, rerun the installer for that tag under
+  A migration-detection error returns failure with its diagnostic; it is not
+  reported as current. It does not fetch prereleases. To install a prerelease, rerun the installer for that tag under
   [Release channels](#release-channels).
-- `agent-guard uninstall` removes PATH blocks, restores the permission values
+- `agent-guard uninstall` first checks that the stamp identifies the installed
+  harnesses. An unreadable or invalid ownership record stops uninstall and keeps
+  the guard and saved replacement entries; restore the stamp from a backup
+  before retrying.
+  Valid 0.1.x stamps without a harness list still mean OpenCode alone. It removes PATH blocks, restores the permission values
   the installer changed (unless you changed them since), then removes the app,
   the rulebook, after a migration the forwarders, then the plugin and the engine
   folder. `~/Agent Guard` stays. A value it could not restore is reported, and

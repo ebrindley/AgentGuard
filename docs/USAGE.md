@@ -1,8 +1,7 @@
 # Using Agent Guard
 
-This guide describes the current source. Stable 0.1.2 supports OpenCode only;
-the 0.2.0 prerelease adds Pi and OMP. See [release channels](OPERATIONS.md#release-channels)
-for installation and unreleased changes.
+This guide describes stable 0.2.1, which supports OpenCode, Pi and OMP.
+See [release channels](OPERATIONS.md#release-channels) for installation.
 
 ## Start OpenCode
 

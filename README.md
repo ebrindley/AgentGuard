@@ -4,19 +4,16 @@ Agent Guard limits where coding agents can write on macOS using the operating
 system sandbox (Seatbelt). The sandbox covers the agent and its child processes;
 plugins and command analyzers provide additional checks.
 
-The stable release, [0.1.2](https://github.com/ebrindley/AgentGuard/releases/tag/v0.1.2),
-supports OpenCode. The [0.2.0 prerelease](https://github.com/ebrindley/AgentGuard/releases/tag/v0.2.0)
-adds Pi and Oh My Pi (OMP), using a separate project-based policy. `main` contains
-[unreleased changes](https://github.com/ebrindley/AgentGuard/compare/v0.2.0...main);
-the detailed guides describe that source. Agent Guard replaces OpenCode Guard
-and pi-sandbox-guard.
+The stable release, [0.2.1](https://github.com/ebrindley/AgentGuard/releases/tag/v0.2.1),
+supports OpenCode, Pi and Oh My Pi (OMP). Agent Guard replaces OpenCode Guard
+and pi-sandbox-guard. Pi and OMP use a separate project-based policy.
 
 ## Supported agents and protection
 
 | Agent | Write access | Read restrictions | Guard List |
 |---|---|---|---|
 | OpenCode | ALLOW folders and required runtime/cache/temp locations | Explicit DENY entries | Applies |
-| Pi / OMP (0.2.0) | Launched project and permitted runtime/cache/temp locations | Fixed credential-path and `.env` denies | Does not apply |
+| Pi / OMP | Launched project and permitted runtime/cache/temp locations | Fixed credential-path and `.env` denies | Does not apply |
 
 Agent configuration and guard files are write-protected, subject to the
 [documented exceptions](SECURITY.md). Network access is unrestricted. Files
@@ -30,7 +27,7 @@ boundary; plugins and analyzers cannot replace it.
 Requires macOS 15 or later and an installed agent. For OpenCode, install the
 CLI or desktop app. Pi/OMP also require Node on PATH outside folders their
 sessions can write, such as a Homebrew installation. The OpenCode guard is
-installed on every Mac; the 0.2.0 installer adds Pi's guard when it detects Pi
+installed on every Mac; the installer adds Pi's guard when it detects Pi
 or OMP. An OMP executable stored directly at `~/.local/bin/omp` must be moved
 first; see [requirements](docs/OPERATIONS.md#requirements).
 
@@ -38,19 +35,11 @@ Run installation from Terminal outside any agent session or sandbox. Quit
 running agents before migrating an older guard. Choose an existing projects
 folder when prompted; OpenCode will be able to change its contents.
 
-Stable (OpenCode only):
-
 ```sh
 /bin/zsh -c "$(/usr/bin/curl -fsSL https://github.com/ebrindley/AgentGuard/releases/latest/download/install.sh)"
 ```
 
-Prerelease (OpenCode, Pi and OMP):
-
-```sh
-/bin/zsh -c "$(/usr/bin/curl -fsSL https://github.com/ebrindley/AgentGuard/releases/download/v0.2.0/install.sh)"
-```
-
-These commands execute downloaded bootstrap code. The bootstrap checks the
+This command executes downloaded bootstrap code. The bootstrap checks the
 archive's SHA-256 checksum before installation; the checksum detects corruption,
 not publisher authenticity. See [installation and migration](docs/OPERATIONS.md#installation)
 for options, rollback and older guards.
@@ -120,9 +109,8 @@ Run these commands from Terminal outside an agent session:
 | `agent-guard update` | Install the latest stable release |
 | `agent-guard uninstall` | Remove the guard; retain `~/Agent Guard` |
 
-`update` does not fetch prereleases or changes on `main`; it leaves a version
-newer than stable unchanged. To update a prerelease, rerun the installer for
-the desired tag. Reinstalling 0.2.0 does not include commits made after its tag.
+`update` follows stable releases and leaves a newer installed version unchanged.
+See [release channels](docs/OPERATIONS.md#release-channels) for tagged installs.
 
 For an interrupted installation, rerun its installer from Terminal. See
 [recovery](docs/OPERATIONS.md#recovery-after-a-failed-or-interrupted-install)
