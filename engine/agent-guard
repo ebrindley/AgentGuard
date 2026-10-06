@@ -148,11 +148,13 @@ update() {
   if [[ $tag == "$cur" ]]; then
     # Current, unless a registered source is still to migrate or retire, or a
     # harness on this Mac is missing from the stamp: then the install runs again.
-    if ! ag_pending; then
-      ag_unlock
-      print -r -- "Agent Guard ${tag#v} is current."
-      exit 0
-    fi
+    ag_pending
+    rc=$?
+    case $rc in
+      (1) ag_unlock; print -r -- "Agent Guard ${tag#v} is current."; exit 0 ;;
+      (0) ;;
+      (*) ag_unlock; exit 1 ;;
+    esac
     print -r -- "Agent Guard ${tag#v} is installed; installing it again for $REPLY"
   elif [[ -n $cur ]] && older "$tag" "$cur"; then
     ag_unlock

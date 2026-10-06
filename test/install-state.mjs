@@ -87,5 +87,18 @@ try {
       assert.equal(existsSync(engine),false);
     });
   }
+  if(process.argv.includes('--update') || process.argv.length===2){
+    restore();
+    check('same-version detection error is reported',()=>{
+      writeFileSync(engine+'/state/migration.json','{ broken');
+      const r=command(entry,['update'],'update-detection');
+      assert.notEqual(r.status,0);assert.match(r.stderr,/cannot read .*migration.json/);
+      assert.doesNotMatch(r.stdout,/is current/);assert.equal(existsSync(engine+'/state/txn'),false);
+    });
+    restore();
+    check('same-version update without pending work succeeds',()=>{
+      const r=command(entry,['update'],'update-current');assert.equal(r.status,0);assert.match(r.stdout,/is current/);
+    });
+  }
   console.log(`${checks} checks, 0 failures; ${run}`);
 } finally {server.kill();}
