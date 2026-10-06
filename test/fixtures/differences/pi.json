@@ -72,7 +72,7 @@
     },
     {
       "id": 5,
-      "change": "User-facing repair text names Agent Guard's commands instead of pi-sandbox-guard's npm commands, which no longer exist after the adoption: the preamble's messages and its binding comment say agent-guard bind instead of npm run bind and drop 'from the repo checkout'; src/index.mjs's FILTER-ONLY warning says to install Agent Guard (agent-guard update, or the one-line installer) and run agent-guard bind instead of npm run deploy:launchers and npm run bind from a checkout; launchers/example-custom's missing-shim message says to install Agent Guard first (agent-guard update, or the one-line installer) instead of npm run deploy:launchers.",
+      "change": "User-facing repair text names Agent Guard's commands instead of pi-sandbox-guard's npm commands, which no longer exist after the adoption: the preamble's messages and its binding comment say agent-guard bind instead of npm run bind and drop 'from the repo checkout'; src/index.mjs's FILTER-ONLY warning says to install Agent Guard (agent-guard update, or the one-line installer) and run agent-guard bind instead of npm run deploy:launchers and npm run bind from a checkout; launchers/example-custom's installation instruction says agent-guard wrapper add instead of scripts/deploy-launchers.sh --extra-launchers; its missing-shim message says to install Agent Guard first (agent-guard update, or the one-line installer) instead of npm run deploy:launchers.",
       "files": ["sandbox/pi-sandbox-preamble.zsh", "src/index.mjs", "launchers/example-custom"]
     },
     {
