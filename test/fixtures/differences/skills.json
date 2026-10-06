@@ -1,0 +1,40 @@
+{
+  "step": "skills",
+  "reason": "Automatic OpenCode and compatible skill grants precede user restrictions; ordinary skill descendants are removed from configuration denies while container identities and guard mechanisms remain protected.",
+  "inserts": [
+    {
+      "after": "(define (h s) (string-append (param \"HOME\") s))\n",
+      "insert": "(define (skill-content) (require-any\n  (regex #\"/\\.opencode/skills?/[^/]+\")\n  (regex #\"/\\.(agents|claude)/skills/[^/]+\")\n  (require-all (subpath (h \"/.config/opencode/skill\")) (require-not (literal (h \"/.config/opencode/skill\"))))\n  (require-all (subpath (h \"/.config/opencode/skills\")) (require-not (literal (h \"/.config/opencode/skills\"))))\n  (require-all (subpath (h \"/.opencode/skill\")) (require-not (literal (h \"/.opencode/skill\"))))\n  (require-all (subpath (h \"/.opencode/skills\")) (require-not (literal (h \"/.opencode/skills\"))))\n  (require-all (subpath (h \"/.claude/skills\")) (require-not (literal (h \"/.claude/skills\"))))\n  (require-all (subpath (h \"/.agents/skills\")) (require-not (literal (h \"/.agents/skills\"))))\n))\n"
+    },
+    {
+      "after": "  (subpath (h \"/.cc-safety-net/logs\"))\n",
+      "insert": "  (subpath (h \"/.config/opencode/skill\"))\n  (subpath (h \"/.config/opencode/skills\"))\n  (subpath (h \"/.opencode/skill\"))\n  (subpath (h \"/.opencode/skills\"))\n  (subpath (h \"/.claude/skills\"))\n  (subpath (h \"/.agents/skills\"))\n"
+    },
+    {
+      "insert": "  (literal (h \"/.claude/skills\"))\n  (literal (h \"/.agents/skills\"))\n  (literal (h \"/.claude\"))\n  (literal (h \"/.agents\"))\n",
+      "before": "  (subpath (h \"/Library/LaunchAgents\"))\n"
+    }
+  ],
+  "replaces": [
+    {
+      "before": "  (subpath (h \"/.config/opencode\"))\n",
+      "after": "  (require-all (subpath (h \"/.config/opencode\")) (require-not (skill-content)))\n"
+    },
+    {
+      "before": "  (subpath (h \"/.opencode\"))\n",
+      "after": "  (require-all (subpath (h \"/.opencode\")) (require-not (skill-content)))\n"
+    },
+    {
+      "before": "  (regex #\"/\\.opencode(/|$)\")\n",
+      "after": "  (require-all (regex #\"/\\.opencode(/|$)\") (require-not (skill-content)))\n"
+    },
+    {
+      "before": "  (regex #\"/(opencode|tui)\\.jsonc?$\")\n",
+      "after": "  (require-all (regex #\"/(opencode|tui)\\.jsonc?$\") (require-not (skill-content)))\n"
+    },
+    {
+      "before": "  (require-all (regex #\"/\\.cc-safety-net(/|$)\") (require-not (subpath (h \"/.cc-safety-net/logs\")))))\n",
+      "after": "  (require-all (regex #\"/\\.cc-safety-net(/|$)\") (require-not (skill-content)) (require-not (subpath (h \"/.cc-safety-net/logs\"))))\n  (regex #\"/\\.opencode/skills?$\"))\n"
+    }
+  ]
+}

@@ -18,6 +18,7 @@ export function stage(source, dest, home) {
   assert.equal(copy.status, 0, copy.stderr);
   fixtureHome(join(dest, 'engine/launch'), home);
   fixtureAccount(join(dest, 'engine/account.zsh'), home);
+  replaceOnce(join(dest, 'installer/lib.zsh'), seams.pgrep, pgrep);
   piSeams(dest, home);
 }
 

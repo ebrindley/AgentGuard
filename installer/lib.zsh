@@ -719,7 +719,7 @@ ag_assemble() {
   /bin/cp -R -- "$t/engine/vendor" "$r/vendor" || return 1
   # The release's install.sh, which agent-guard and uninstall.sh source, loads these.
   /bin/cp -R -- "$t/installer" "$r/installer" || return 1
-  /bin/cp -- "$p/harness.zsh" "$p/hooks.zsh" "$p/protected.sb" "$p/plugin.js" "$r/profiles/opencode/" || return 1
+  /bin/cp -- "$p/harness.zsh" "$p/hooks.zsh" "$p/protected.sb" "$p/skills.zsh" "$p/plugin.js" "$r/profiles/opencode/" || return 1
   /bin/cp -R -- "$p/templates" "$p/assets" "$r/profiles/opencode/" || return 1
   # check staged points OpenCode's config folder here; its only plugin is this
   # release's. OpenCode 1.18.33 loads no config, and so no plugin, when it cannot
@@ -822,7 +822,11 @@ do_rulebook() {
   ag_jlast rulebook
   [[ $REPLY == done ]] && return 0
   if [[ -z $REPLY ]]; then
-    if [[ -f $rb ]] && /usr/bin/cmp -s -- "$src" "$rb"; then test_point rulebook; return; fi
+    if [[ -f $rb ]]; then
+      /usr/bin/cmp -s -- "$src" "$rb" || ag_warn "custom rulebook kept: $rb"
+      test_point rulebook
+      return
+    fi
     folder=0
     [[ -d $cc/agent-guard ]] && folder=1
     ag_backup rulebook "$rb" && ag_jnl rulebook begun "folder=$folder" || return 1
@@ -1124,7 +1128,10 @@ ag_stamp_write() {
   local out="$ag_tstage/stamp.json" rel="$engine/releases/$ag_rid_new" sums links harnesses h m
   local -a files kv
   test_point stamp || return 1
-  files=("$rel"/**/*(.DN) "$cc/agent-guard/rulebook.json"(N) "$app"/**/*(.DN))
+  files=("$rel"/**/*(.DN) "$app"/**/*(.DN))
+  if /usr/bin/cmp -s "$cc/agent-guard/rulebook.json" "$rel/profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json"; then
+    files+=("$cc/agent-guard/rulebook.json")
+  fi
   for h in $ag_harnesses; do reply=(); ag_hook_opt h $h files; files+=("${reply[@]}"); done
   sums=$(/usr/bin/shasum -a 256 -- $files) || return 1
   kv=("$engine/current" "$(/usr/bin/readlink -- "$engine/current")" "$engine/bin" "$(/usr/bin/readlink -- "$engine/bin")")

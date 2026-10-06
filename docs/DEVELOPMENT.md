@@ -7,6 +7,14 @@ and homes described below. For installed checks, see
 
 ## Tests
 
+For skill changes, run `node test/skills.mjs`, `node test/skills.mjs readonly`,
+`node test/skills.mjs kernel`, `node test/skills.mjs stdin` and
+`node test/skills-policy.mjs` sequentially.
+`node test/skills-native.mjs` tests real OpenCode tools with a local model fixture;
+`server` and `gui` arguments exercise project selection after startup. The GUI
+fixture uses a test bundle with the real backend. Logs remain under `test/.run-*`.
+These focused runners use disposable homes and require no additional account.
+
 Run from a checkout, outside any agent sandbox, on macOS 15 or later:
 
 ```sh

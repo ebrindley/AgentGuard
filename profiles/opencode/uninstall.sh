@@ -77,11 +77,15 @@ main() {
 
   # U5: the rule.json entry, then the rulebook. transparent_wrappers stay.
   test_point uninstall-rulebook || stop uninstall-rulebook
-  if [[ -e $cc/rule.json ]] && /usr/bin/jq -e '(.rules // []) | index("agent-guard") != null' "$cc/rule.json" >/dev/null 2>&1; then
-    /usr/bin/jq '.rules -= ["agent-guard"]' "$cc/rule.json" > "$scratch/rule" 2>/dev/null && replace_file "$cc/rule.json" "$scratch/rule" ||
-      kept+=("the agent-guard entry in $cc/rule.json")
+  if [[ -f $cc/agent-guard/rulebook.json ]] && ! /usr/bin/cmp -s "$cc/agent-guard/rulebook.json" "$here/profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json"; then
+    ag_warn "custom rulebook and registration kept: $cc/agent-guard"
+  else
+    if [[ -e $cc/rule.json ]] && /usr/bin/jq -e '(.rules // []) | index("agent-guard") != null' "$cc/rule.json" >/dev/null 2>&1; then
+      /usr/bin/jq '.rules -= ["agent-guard"]' "$cc/rule.json" > "$scratch/rule" 2>/dev/null && replace_file "$cc/rule.json" "$scratch/rule" ||
+        kept+=("the agent-guard entry in $cc/rule.json")
+    fi
+    /bin/rm -rf -- "$cc/agent-guard" || kept+=("$cc/agent-guard")
   fi
-  /bin/rm -rf -- "$cc/agent-guard" || kept+=("$cc/agent-guard")
 
   # U6: after a migration, what it left: OpenCode Guard's retirement if it is
   # unfinished, then the forwarders at its old command paths and its engine
