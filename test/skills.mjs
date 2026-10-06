@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { spawnSync } from "node:child_process"
@@ -35,8 +35,40 @@ function client(mode, extra = {}) {
   assert.equal(existsSync(context.preparationReplies), false, "preparation replies are removed when the launch ends")
   process.stdout.write(r.stdout)
 }
+// A staged check removes its own snapshot however it ends, and leaves other sessions' snapshots.
+function staged() {
+  const next = join(engine, "releases/0.0.0-20000101T000000Z"), config = join(next, "profiles/opencode/check-config/opencode")
+  const sessions = join(engine, "state/opencode"), rules = join(home, ".cc-safety-net/rules/rule.json"), saved = readFileSync(rules)
+  cpSync(release, next, { recursive: true, verbatimSymlinks: true })
+  writeFileSync(join(next, "RELEASE"), "0.0.0-20000101T000000Z\n")
+  mkdirSync(join(config, "plugins"), { recursive: true })
+  symlinkSync("../../../plugin.js", join(config, "plugins/agent-guard.js"))
+  writeFileSync(join(config, ".gitignore"), "node_modules\npackage.json\npackage-lock.json\nbun.lock\n.gitignore\n")
+  mkdirSync(join(home, "fakeserve"), { recursive: true })
+  writeFileSync(join(home, "fakeserve/opencode"), `#!/bin/sh\nexec '${process.execPath}' '${join(root, "test/fake-opencode.mjs")}' "$@"\n`, { mode: 0o755 })
+  const check = (extra = {}) => spawnSync("/bin/zsh", [join(next, "launch"), "check", "staged"], { cwd: join(home, "Projects/app"), env: { ...env, ...extra }, encoding: "utf8", timeout: 60000 })
+  if (existsSync(sessions)) renameSync(sessions, sessions + ".kept")
+  let r = check({ PATH: join(home, "fakeserve") + ":" + process.env.PATH })
+  assert.equal(r.status, 0, `staged check passes\n${r.stdout}\n${r.stderr}\nfixture: ${run}`)
+  assert.equal(existsSync(sessions), false, "a passing staged check removes its snapshot and the empty sessions folder")
+  if (existsSync(sessions + ".kept")) renameSync(sessions + ".kept", sessions)
+  mkdirSync(join(sessions, "unrelated.AAAAAAAA/checker"), { recursive: true })
+  writeFileSync(join(sessions, "unrelated.AAAAAAAA/checker/policy.json"), "{}")
+  const before = readdirSync(sessions).sort().join("\n")
+  r = check()
+  assert.notEqual(r.status, 0, "staged check fails without a serving OpenCode")
+  assert.equal(readdirSync(sessions).sort().join("\n"), before, "a failed staged check removes only its own snapshot")
+  writeFileSync(rules, "[]")
+  r = check()
+  writeFileSync(rules, saved)
+  assert.ok(r.status !== 0 && r.stderr.includes("cannot preserve the checker policy"), r.stdout + r.stderr)
+  assert.equal(readdirSync(sessions).sort().join("\n"), before, "a partial snapshot is removed")
+  rmSync(next, { recursive: true })
+  console.log("ok staged check snapshots removed")
+}
 console.log(`fixture: ${run}`)
 if (!process.argv[2] || process.argv[2] === "lifecycle") client("lifecycle")
+if (!process.argv[2] || process.argv[2] === "staged") staged()
 if (process.argv[2] === "readonly") client("readonly")
 if (process.argv[2] === "kernel") client("kernel")
 if (process.argv[2] === "stdin") {

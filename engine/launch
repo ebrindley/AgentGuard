@@ -374,6 +374,11 @@ jarr() { /usr/bin/jq -cn '$ARGS.positional' --args "$@" }
 /bin/mkdir -p "$engine/state"
 /bin/mkdir -p "$engine/state/opencode"
 session=$(/usr/bin/mktemp -d "$engine/state/opencode/${release:t}.XXXXXXXX")
+# No process outlives a staged check, and a snapshot left behind would keep a
+# failed install from removing the new engine folder.
+if (( staged )); then
+  trap '/bin/rm -rf -- "$session"; /bin/rmdir -- "$engine/state/opencode" 2>/dev/null || true' EXIT
+fi
 channel= replies=
 if [[ $mode == (cli|gui) ]]; then
   channel=$(/usr/bin/mktemp -d "$darwin_temp/agent-guard-skills.XXXXXXXX")
