@@ -374,15 +374,19 @@ jarr() { /usr/bin/jq -cn '$ARGS.positional' --args "$@" }
 /bin/mkdir -p "$engine/state"
 /bin/mkdir -p "$engine/state/opencode"
 session=$(/usr/bin/mktemp -d "$engine/state/opencode/${release:t}.XXXXXXXX")
-channel=
-[[ $mode == (cli|gui) ]] && channel=$(/usr/bin/mktemp -d "$darwin_temp/agent-guard-skills.XXXXXXXX")
+channel= replies=
+if [[ $mode == (cli|gui) ]]; then
+  channel=$(/usr/bin/mktemp -d "$darwin_temp/agent-guard-skills.XXXXXXXX")
+  replies="$session/preparation"
+  /bin/mkdir -- "$replies"
+fi
 opencode_checker_snapshot "$session" || fail "cannot preserve the checker policy in $session"
 context="$session/permissions.json"
 /usr/bin/jq -n --argjson allow "$(jarr $allow)" --argjson readonly "$(jarr $user_readonly)" \
   --argjson deny "$(jarr $deny)" --argjson protected "$(jarr $protected_targets)" \
   --argjson skills "$(jarr $skill_roots)" --argjson configs "$(jarr $skill_configs)" \
-  --arg checker "$session/checker" --arg preparation "$channel" \
-  '{allow:$allow,readonly:$readonly,deny:$deny,protected:$protected,skills:$skills,configs:$configs,checker:$checker,preparation:$preparation}' > "$context"
+  --arg checker "$session/checker" --arg preparation "$channel" --arg preparationReplies "$replies" \
+  '{allow:$allow,readonly:$readonly,deny:$deny,protected:$protected,skills:$skills,configs:$configs,checker:$checker,preparation:$preparation,preparationReplies:$preparationReplies}' > "$context"
 export AGENT_GUARD_CONTEXT="$context"
 if (( ! staged )); then
   /bin/cp "$context" "$engine/state/rules.json.$$"
@@ -430,12 +434,12 @@ exec {guard_stdin}<&0
 $sandbox "$@" <&$guard_stdin &
 child=$!
 exec {guard_stdin}<&-
-opencode_skill_worker $child "$channel" &
+opencode_skill_worker $child "$channel" "$replies" &
 worker=$!
 cleanup_launch() {
   kill $worker 2>/dev/null || true
   wait $worker 2>/dev/null || true
-  /bin/rm -rf -- "$channel"
+  /bin/rm -rf -- "$channel" "$replies"
 }
 trap 'kill $child 2>/dev/null; cleanup_launch; exit 130' INT TERM HUP
 trap cleanup_launch EXIT

@@ -97,7 +97,7 @@ opencode_skill_project() {
 }
 
 opencode_skill_worker() {
-  local child=$1 channel=$2 request directory reply result
+  local child=$1 channel=$2 replies=$3 request directory reply result
   while kill -0 $child 2>/dev/null; do
     for request in "$channel"/request-*(N.); do
       [[ $request == *.partial ]] && continue
@@ -106,7 +106,7 @@ opencode_skill_worker() {
         IFS= read -rd $'\0' directory < <(/usr/bin/jq -j '.directory, "\u0000"' "$request")
         if opencode_skill_project "$directory"; then result='{"ok":true}'; fi
       fi
-      reply="$channel/reply-${${request:t}#request-}"
+      reply="$replies/reply-${${request:t}#request-}"
       print -r -- "$result" > "$reply.partial"
       /bin/mv -f -- "$reply.partial" "$reply"
       /bin/rm -f -- "$request"

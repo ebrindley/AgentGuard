@@ -8,8 +8,9 @@ import * as adapter from "./engines/zsh.mjs"
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const run = mkdtempSync(join(root, "test/.run-skills-"))
 const home = join(run, "home"), tree = join(run, "source"), engine = join(home, "Library/Application Support/AgentGuard")
-for (const p of [home, tree, join(home, "Projects/app"), join(home, "Projects/second"), join(home, "Projects/third"), join(home, "Projects/reference"),
+for (const p of [home, tree, join(home, "Projects/app"), join(home, "Projects/second"), join(home, "Projects/third"), join(home, "Projects/blocked"), join(home, "Projects/reference"),
                  join(home, "Documents"), join(home, "Agent Guard"), join(home, "fakebin")]) mkdirSync(p, { recursive: true })
+writeFileSync(join(home, "Projects/blocked/.opencode"), "not a directory")
 adapter.stage(root, tree, home)
 const release = adapter.layout(tree, engine)
 cpSync(join(tree, "engine/vendor"), join(release, "vendor"), { recursive: true })
@@ -31,6 +32,7 @@ function client(mode, extra = {}) {
   assert.equal(r.status, 0, `${mode}: ${r.error ?? ""}\n${r.stdout}\n${r.stderr}\nfixture: ${run}`)
   const context = JSON.parse(readFileSync(join(engine, "state/rules.json"), "utf8"))
   assert.equal(existsSync(context.preparation), false, "preparation channel is removed when the launch ends")
+  assert.equal(existsSync(context.preparationReplies), false, "preparation replies are removed when the launch ends")
   process.stdout.write(r.stdout)
 }
 console.log(`fixture: ${run}`)

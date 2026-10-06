@@ -168,7 +168,7 @@ async function guard(input) {
     if (!process.env.AGENT_GUARD_CONTEXT || !channel || prepared.has(project) || !rules || scope(project) !== "allow") return
     if (!existsSync(channel) || !basename(channel).startsWith("agent-guard-skills.")) throw new Error("Agent Guard: invalid preparation channel")
     const token = `${process.pid}-${randomBytes(12).toString("hex")}`
-    const request = join(channel, `request-${token}`), reply = join(channel, `reply-${token}`)
+    const request = join(channel, `request-${token}`), reply = join(rules.preparationReplies, `reply-${token}`)
     writeFileSync(request + ".partial", JSON.stringify({ operation: "prepare", directory: project }), { flag: "wx", mode: 0o600 })
     renameSync(request + ".partial", request)
     try {
@@ -183,7 +183,7 @@ async function guard(input) {
       }
       throw new Error("Agent Guard: skill preparation did not respond; restart OpenCode.")
     } finally {
-      for (const file of [request, reply]) { try { unlinkSync(file) } catch {} }
+      try { unlinkSync(request) } catch {}
     }
   }
   const preparePath = async raw => {
@@ -192,7 +192,9 @@ async function guard(input) {
     const marker = p.indexOf("/.opencode/")
     if (marker >= 0) await prepare(canonical(p.slice(0, marker)))
   }
-  if (guarded && net) await prepare(canonical(directory))
+  if (guarded && net) {
+    try { await prepare(canonical(directory)) } catch {}
+  }
 
   const before = async (info, output) => {
     const { tool } = info

@@ -816,6 +816,10 @@ ag_selftest_staged() {
 # actions.zsh. Each is idempotent forward (do_*) and backward (undo_*): a begun
 # action is finished or undone from its journal line and backup.
 
+ag_factory_rulebook() {
+  /usr/bin/jq -se 'length == 2 and .[0] == .[1]' "$1" "$2" >/dev/null 2>&1
+}
+
 do_rulebook() {
   local rb="$cc/agent-guard/rulebook.json" partial="$cc/agent-guard/.rulebook.json.partial" src folder
   src="$engine/releases/$ag_rid_new/profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json"
@@ -823,9 +827,13 @@ do_rulebook() {
   [[ $REPLY == done ]] && return 0
   if [[ -z $REPLY ]]; then
     if [[ -f $rb ]]; then
-      /usr/bin/cmp -s -- "$src" "$rb" || ag_warn "custom rulebook kept: $rb"
-      test_point rulebook
-      return
+      if /usr/bin/cmp -s -- "$src" "$rb"; then test_point rulebook; return; fi
+      if ! ag_factory_rulebook "$src" "$rb" &&
+         { [[ -z $ag_rid_old ]] || ! ag_factory_rulebook "$engine/releases/$ag_rid_old/profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json" "$rb"; }; then
+        ag_warn "custom rulebook kept: $rb"
+        test_point rulebook
+        return
+      fi
     fi
     folder=0
     [[ -d $cc/agent-guard ]] && folder=1
@@ -1128,10 +1136,7 @@ ag_stamp_write() {
   local out="$ag_tstage/stamp.json" rel="$engine/releases/$ag_rid_new" sums links harnesses h m
   local -a files kv
   test_point stamp || return 1
-  files=("$rel"/**/*(.DN) "$app"/**/*(.DN))
-  if /usr/bin/cmp -s "$cc/agent-guard/rulebook.json" "$rel/profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json"; then
-    files+=("$cc/agent-guard/rulebook.json")
-  fi
+  files=("$rel"/**/*(.DN) "$cc/agent-guard/rulebook.json"(N) "$app"/**/*(.DN))
   for h in $ag_harnesses; do reply=(); ag_hook_opt h $h files; files+=("${reply[@]}"); done
   sums=$(/usr/bin/shasum -a 256 -- $files) || return 1
   kv=("$engine/current" "$(/usr/bin/readlink -- "$engine/current")" "$engine/bin" "$(/usr/bin/readlink -- "$engine/bin")")
