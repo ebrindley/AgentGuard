@@ -4,7 +4,7 @@ Agent Guard limits where coding agents can write on macOS using the operating
 system sandbox (Seatbelt). The sandbox covers the agent and its child processes;
 plugins and command analyzers provide additional checks.
 
-The stable release, [0.2.1](https://github.com/ebrindley/AgentGuard/releases/tag/v0.2.1),
+The stable release, [0.2.2](https://github.com/ebrindley/AgentGuard/releases/tag/v0.2.2),
 supports OpenCode, Pi and Oh My Pi (OMP). Agent Guard replaces OpenCode Guard
 and pi-sandbox-guard. Pi and OMP use a separate project-based policy.
 
@@ -12,7 +12,7 @@ and pi-sandbox-guard. Pi and OMP use a separate project-based policy.
 
 | Agent | Write access | Read restrictions | Guard List |
 |---|---|---|---|
-| OpenCode | ALLOW folders and required runtime/cache/temp locations | Explicit DENY entries | Applies |
+| OpenCode | ALLOW folders, standard global skill folders and required runtime/cache/temp locations | Explicit DENY entries | Applies |
 | Pi / OMP | Launched project and permitted runtime/cache/temp locations | Fixed credential-path and `.env` denies | Does not apply |
 
 Agent configuration and guard files are write-protected, subject to the
@@ -82,7 +82,8 @@ permission, including within ALLOW. DENY blocks reads and writes and wins
 overlaps; otherwise the most specific entry wins. READ ONLY is not a read
 allowlist: unlisted readable files remain readable.
 
-ALLOW and READ ONLY folders must exist; missing entries are skipped. Check
+ALLOW folders must exist; missing ALLOW entries are skipped. Missing READ ONLY
+entries still apply. Check
 `~/Agent Guard/last-launch-opencode.log` for applied, skipped or refused rules.
 Allowing `~/Projects` grants access to every project there. Pi/OMP ignore this
 list and select their project from the launch context. See

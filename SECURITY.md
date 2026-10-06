@@ -21,12 +21,12 @@ best-effort basis. There is no bug bounty.
 ## Supported versions
 
 Fixes go into the latest release only; older releases do not receive backports.
-The latest stable release is 0.2.1 (OpenCode, Pi and OMP).
+The latest stable release is 0.2.2 (OpenCode, Pi and OMP).
 `agent-guard update` follows stable releases and leaves a newer installed version
 unchanged. See [release channels](docs/OPERATIONS.md#release-channels) for tagged
-installers; they do not include later commits. The policy below describes 0.2.1.
+installers; they do not include later commits. The policy below describes 0.2.2.
 
-The next release narrows OpenCode's configuration protections for skill content
+0.2.2 narrows OpenCode's configuration protections for skill content
 and replaces its blanket recursive-delete block with scoped checks. See
 [skill permissions, preparation and limitations](docs/SKILLS.md). Pi and OMP
 retain their existing policy.
@@ -34,7 +34,7 @@ retain their existing policy.
 ## What Agent Guard is
 
 Agent Guard is a macOS Seatbelt write-containment boundary for terminal coding
-agents. Release 0.2.1 guards OpenCode, Pi and Oh My Pi (OMP). Each harness, and
+agents. Release 0.2.2 guards OpenCode, Pi and Oh My Pi (OMP). Each harness, and
 every process it starts, runs under `/usr/bin/sandbox-exec`, but OpenCode and Pi
 are guarded by different code with different rules until Pi moves onto Agent
 Guard's engine (step 10d of the plan in [docs/DESIGN.md](docs/DESIGN.md#12-plan)).
@@ -44,9 +44,10 @@ Statements about Pi below apply to OMP too unless they name one runtime.
 
 The launcher runs OpenCode under a profile generated from the Guard List
 (`~/Agent Guard/Guard List.txt`) at each launch. Under that profile the agent
-can write only to ALLOW folders and the data, cache and temp folders OpenCode
-needs, cannot read or write DENY entries, and cannot change the guard, the list,
-OpenCode's global config and plugin folder (`~/.config/opencode`), OpenCode's
+can write only to ALLOW folders, the standard global skill folders and the data,
+cache and temp folders OpenCode needs, cannot read or write DENY entries, and
+cannot change the guard, the list, OpenCode's global config and plugin folder
+(`~/.config/opencode`) apart from its skill folders, OpenCode's
 package stores, `bin` folder and model catalog in its cache (also under
 `XDG_CACHE_HOME`, even inside ALLOW), the shell startup files or
 `~/Library/LaunchAgents`. Once Pi's guard is installed, it also cannot change
@@ -63,7 +64,7 @@ the target of a link inside the extension folder can be written where an ALLOW
 entry covers it, and a protected path that is a link to a missing target is
 protected at its name only, so the missing target can be created where an ALLOW
 entry covers it. The other exceptions are under
-[Known limitations](#known-limitations-in-020): npm configuration in the cache
+[Known limitations](#known-limitations-in-022): npm configuration in the cache
 that steers installs made outside the guard, remote-configuration entries in
 OpenCode's `auth.json`, the targets of symlinked project config names, and Pi's
 and OMP's other configuration under ALLOW.
@@ -153,7 +154,7 @@ behind linked ancestors. These changes follow the 0.2.0 prerelease.
 - Provider tokens and other secrets the harness itself uses.
 - A VM, container or separate user identity.
 
-## Known limitations in 0.2.1
+## Known limitations in 0.2.2
 
 ### OpenCode
 
@@ -174,16 +175,18 @@ behind linked ancestors. These changes follow the 0.2.0 prerelease.
   for a guarded start and with full authority otherwise. Planned: before the
   composition release (step 10e of the plan), this is protected, checked at
   launch or accepted in writing ([docs/DESIGN.md](docs/DESIGN.md#9-code-in-writable-folders), section 9).
-- **Concurrent launches share `state/rules.json`.** Each launch writes the
-  resolved ALLOW, READ ONLY and DENY paths to one file in the engine folder, and
-  each plugin reads it once at start. When two launches start close together, or
-  start in folders whose symlinked config names differ, the first session's
-  plugin can refuse and report against the second launch's rules. Seatbelt still
-  enforces each session's own profile. Planned: step 9 of the plan in
-  [docs/DESIGN.md](docs/DESIGN.md#12-plan) writes one state file per launch.
+- **Older plugins share `state/rules.json`.** Each launch writes its resolved
+  ALLOW, READ ONLY and DENY paths to a protected per-launch snapshot, which its
+  plugin reads. It still writes them to the shared `state/rules.json`, which
+  older OpenCode sessions and independent consumers read once at start; the new
+  plugin uses that file only as a fallback when no snapshot is named. When two
+  launches start close together, such a reader can refuse and report against the
+  second launch's rules. Seatbelt still enforces each session's own profile.
+  Planned: step 9 of the plan in [docs/DESIGN.md](docs/DESIGN.md#12-plan) moves
+  per-launch state onto the shared engine.
 - **Symlinked project config names.** The names `.opencode`, `opencode.json`,
   `opencode.jsonc`, `tui.json` and `tui.jsonc` cannot be created, replaced or
-  removed anywhere. When one of them is a symlink, its target is write-protected
+  removed anywhere outside ordinary skill content in the standard skill folders. When one of them is a symlink, its target is write-protected
   only when OpenCode starts from the folder that holds the link, in a terminal.
   Started from the app, or with `opencode <project>` from another folder, writes
   through the link reach its target. The plugin refuses file edits through such a

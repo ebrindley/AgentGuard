@@ -1,12 +1,12 @@
 # Installation and maintenance
 
-These procedures describe stable 0.2.1. For everyday use, see the
+These procedures describe stable 0.2.2. For everyday use, see the
 [user guide](USAGE.md).
 
 ## Release channels
 
 The latest stable release is
-[0.2.1](https://github.com/ebrindley/AgentGuard/releases/tag/v0.2.1), for OpenCode,
+[0.2.2](https://github.com/ebrindley/AgentGuard/releases/tag/v0.2.2), for OpenCode,
 Pi and Oh My Pi (OMP). Run the installer from Terminal outside any agent session
 or sandbox:
 
@@ -444,8 +444,8 @@ checks, and `agent_guard_status` in the guarded OpenCode session.
 CC Safety Net's synthetic self-test uses three fixed commands, no custom
 rules, and the standard baseline with `fail_closed`, `paranoid_rm` and
 `paranoid_interpreters` off. Its allowed result for `rm -rf ./node_modules`
-does not test Agent Guard's effective policy, which enables paranoid rm and
-includes a custom recursive-rm block.
+does not test Agent Guard's effective policy, which uses at least the strict
+preset, scoped deletion allowances and registered custom rules.
 
 ## Recovery after a failed or interrupted install
 
@@ -596,7 +596,7 @@ plugins OpenCode loads outside any project, that is, from the global config and
 
 ## OpenCode skill preparation
 
-The next release uses a launch-scoped preparation worker and protected checker
+0.2.2 uses a launch-scoped preparation worker and protected checker
 snapshots. The shared legacy rulebook remains for older sessions and independent
 checker consumers. See [OpenCode skills](SKILLS.md). Existing skill files and
 containers are retained during uninstall.
