@@ -22,10 +22,6 @@ and review changes before running them outside the guard. Reads outside the
 applicable denies remain broad. The operating system sandbox is the enforcement
 boundary; plugins and analyzers cannot replace it.
 
-The next release allows ordinary OpenCode skill creation, editing and deletion
-without per-skill setup. Stable 0.2.1 still protects those folders. See
-[skill permissions and deletion](docs/SKILLS.md).
-
 ## Install and first run
 
 Requires macOS 15 or later and an installed agent. For OpenCode, install the
