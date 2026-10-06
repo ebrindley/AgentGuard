@@ -1,7 +1,7 @@
 # OpenCode skills
 
-This describes the next release. Stable 0.2.1 still write-protects OpenCode's
-skill folders.
+This describes 0.2.2. Releases before 0.2.2 write-protect OpenCode's skill
+folders.
 
 OpenCode can create, edit, rename, move and delete skills and their supporting
 files without adding each skill to the Guard List. The automatic global roots
@@ -61,7 +61,8 @@ tighten these checks but cannot weaken them.
 
 Each launch materializes policy and registered rulebooks in an engine-owned
 snapshot; the checker's reader rejects links beneath its policy root. Snapshots
-remain for child processes that inherited them. Independent checker consumers
+remain for child processes that inherited them; a staged release check removes
+its own snapshot when it ends. Independent checker consumers
 and older OpenCode sessions retain the shared legacy rulebook. New child
 processes inherit their guarded session's checker policy.
 
