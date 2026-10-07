@@ -224,6 +224,11 @@ async function guard(input) {
       }
     }
     await net["tool.execute.before"]?.(info, output)
+    // Shell startup files can prepend native CLIs ahead of the session wrappers.
+    if (tool === "bash" && typeof args.command === "string" && RELEASE && existsSync(join(RELEASE, "peers"))) {
+      const peers = "'" + join(RELEASE, "peers").replaceAll("'", "'\\''") + "'"
+      args.command = `export PATH=${peers}:$PATH\n${args.command}`
+    }
   }
 
   const status = {

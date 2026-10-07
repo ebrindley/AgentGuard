@@ -36,6 +36,7 @@ jobs:
       # test/test.sh launches the real OpenCode CLI; 1.18.33 is the version the suites are written against.
       - run: npm install -g opencode-ai@1.18.33 && opencode --version
       - run: node test/golden.mjs
+      - run: node test/peers.mjs
       - run: node test/skills.mjs
       - run: node test/skills.mjs readonly
       - run: node test/skills.mjs kernel

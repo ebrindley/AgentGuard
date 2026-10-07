@@ -20,6 +20,8 @@
   (allow file-write*
 ;;@WRITABLE_GUI@))
 
+;;@PEER_RUNTIME@
+
 ;;@USER_RULES@
 
 (deny file-write*
