@@ -18,10 +18,11 @@ built=$(/bin/zsh "$source_root/scripts/release.sh" --dev $version 2>&1 >/dev/nul
 pass "release.sh passed the seam check: production seam forms present, no AG_TEST_"
 
 # The file list from the backlog item: named files, VERSION, COMMIT, and every
-# tracked file in the two folders shipped whole.
+# tracked file in the folders shipped whole.
 expected=(
   VERSION COMMIT install.sh LICENSE
   engine/launch engine/account.zsh engine/agent-guard engine/profile.sb engine/vendor/THIRD-PARTY-NOTICES
+  engine/peers.zsh engine/peer-runtime.sb
   profiles/opencode/{harness.zsh,hooks.zsh,skills.zsh,protected.sb,plugin.js,opencode,opencode-gui,install.sh,uninstall.sh}
   installer/{lib.zsh,actions.zsh,harness/{opencode,pi}.zsh,migrate/{opencode-guard,pi-sandbox-guard}.zsh}
   profiles/opencode/assets/AgentGuard.icns
@@ -29,7 +30,7 @@ expected=(
   profiles/pi/src/{index.mjs,guard-core.mjs,validate-bash-command.sh}
   profiles/pi/scripts/{extension-entry.ts,test-sandbox-profile.sh,check-launchers.mjs,bind-executable.sh,lib-ops.sh}
   profiles/pi/commands/{bind,doctor,wrapper}.zsh
-  ${(f)"$(/usr/bin/git -C "$source_root" ls-files -- engine/vendor/cc-safety-net profiles/opencode/templates)"}
+  ${(f)"$(/usr/bin/git -C "$source_root" ls-files -- engine/vendor/cc-safety-net engine/peers profiles/opencode/templates)"}
 )
 listed=$(/usr/bin/tar -tzf "$archive") || fail "archive readable"
 if [[ ${(F)${(o)${(f)listed}}} == ${(F)${(o)expected/#/$name/}} ]]; then
