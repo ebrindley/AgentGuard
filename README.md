@@ -4,7 +4,7 @@ Agent Guard limits where coding agents can write on macOS using the operating
 system sandbox (Seatbelt). The sandbox covers the agent and its child processes;
 plugins and command analyzers provide additional checks.
 
-The stable release, [0.2.2](https://github.com/ebrindley/AgentGuard/releases/tag/v0.2.2),
+The stable release, [0.2.3](https://github.com/ebrindley/AgentGuard/releases/tag/v0.2.3),
 supports OpenCode, Pi and Oh My Pi (OMP). Agent Guard replaces OpenCode Guard
 and pi-sandbox-guard. Pi and OMP use a separate project-based policy.
 
