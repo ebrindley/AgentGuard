@@ -6,7 +6,7 @@ These procedures describe stable 0.2.2. For everyday use, see the
 ## Release channels
 
 The latest stable release is
-[0.2.3](https://github.com/ebrindley/AgentGuard/releases/tag/v0.2.3), for OpenCode,
+[0.2.4](https://github.com/ebrindley/AgentGuard/releases/tag/v0.2.4), for OpenCode,
 Pi and Oh My Pi (OMP). Run the installer from Terminal outside any agent session
 or sandbox:
 
