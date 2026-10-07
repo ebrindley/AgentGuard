@@ -1,13 +1,8 @@
-# The nine test suites on a standard GitHub-hosted macOS runner, which is free for
-# public repositories. Larger runners are billed even then; do not switch to one.
+# Use standard GitHub-hosted macOS runners; larger runners are billed.
 name: Tests
 
 on:
-  push:
-    branches: [main]
-    paths-ignore: ['backlog/**', '**.md']
   pull_request:
-    paths-ignore: ['backlog/**', '**.md']
   workflow_dispatch:
 
 permissions:
@@ -18,7 +13,40 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      docs-only: ${{ steps.paths.outputs.docs-only }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: paths
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 - <<'PYTHON'
+          import os
+          import subprocess
+          docs_only = False
+          if os.environ['EVENT'] == 'pull_request':
+              paths = subprocess.check_output([
+                  'git', 'diff', '--no-renames', '--name-only', '-z',
+                  os.environ['BASE'] + '...' + os.environ['HEAD'], '--'
+              ]).split(b'\0')[:-1]
+              docs_only = bool(paths) and all(
+                  p.endswith(b'.md') or p.startswith(b'backlog/') for p in paths
+              )
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('docs-only=' + str(docs_only).lower() + '\n')
+          PYTHON
+
+  suites:
+    needs: changes
+    if: needs.changes.outputs.docs-only == 'false'
     strategy:
       fail-fast: false
       matrix:
@@ -34,27 +62,86 @@ jobs:
         with:
           node-version: '24'
       # test/test.sh launches the real OpenCode CLI; 1.18.33 is the version the suites are written against.
-      - run: npm install -g opencode-ai@1.18.33 && opencode --version
-      - run: node test/golden.mjs
-      - run: node test/peers.mjs
-      - run: node test/skills.mjs
-      - run: node test/skills.mjs readonly
-      - run: node test/skills.mjs kernel
-      - run: node test/skills.mjs stdin
-      - run: node test/skills-policy.mjs
-      - run: node test/skills-native.mjs
-      - run: node test/skills-native.mjs server
-      - run: node test/skills-native.mjs gui
-      - run: zsh test/pi.sh
-      - run: zsh test/test.sh
-      - run: zsh test/release.sh
-      - run: zsh test/bootstrap.sh
-      - run: zsh test/install.sh
-      - run: zsh test/pi-commands.sh
+      - id: setup
+        run: npm install -g opencode-ai@1.18.33 && opencode --version
+      - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node test/golden.mjs
+      - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node test/peers.mjs
+      - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node test/skills.mjs
+      - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node test/skills.mjs readonly
+      - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node test/skills.mjs kernel
+      - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node test/skills.mjs stdin
+      - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node test/skills-policy.mjs
+      - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node test/skills-native.mjs
+      - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node test/skills-native.mjs server
+      - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node test/skills-native.mjs gui
+      - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: zsh test/pi.sh
+      - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: zsh test/test.sh
+      - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: zsh test/release.sh
+      - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: zsh test/bootstrap.sh
+      - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: zsh test/install.sh
+      - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: zsh test/pi-commands.sh
       # The migration suite makes its OpenCode Guard installs with OpenCode Guard's own
       # unmodified installer, which stops on macOS 15: its `plutil -remove CFBundleIconName`
       # finds no such key in the app osacompile builds there.
-      - if: matrix.os != 'macos-15'
+      - if: ${{ !cancelled() && steps.setup.outcome == 'success' && matrix.os != 'macos-15' }}
         run: zsh test/migrate.sh
-      # Its case with both old guards needs that installer too and is skipped on macOS 15.
+
+  migrate-pi:
+    needs: changes
+    if: needs.changes.outputs.docs-only == 'false'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+      - run: npm install -g opencode-ai@1.18.33 && opencode --version
+      # The case with both old guards is skipped on macOS 15.
       - run: zsh test/migrate-pi.sh
+
+  tests:
+    needs: [changes, suites, migrate-pi]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PYTHON'
+          import json
+          import os
+          needs = json.loads(os.environ['NEEDS'])
+          changes = needs['changes']
+          docs_only = changes.get('outputs', {}).get('docs-only')
+          expected = 'skipped' if docs_only == 'true' else 'success'
+          passed = (
+              changes['result'] == 'success'
+              and docs_only in ('true', 'false')
+              and all(needs[job]['result'] == expected for job in ('suites', 'migrate-pi'))
+          )
+          if not passed:
+              raise SystemExit('Required test jobs did not complete as expected: ' + json.dumps(needs))
+          PYTHON
