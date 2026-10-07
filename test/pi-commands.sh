@@ -58,7 +58,8 @@ replace_once "$run/tree/profiles/opencode/harness.zsh" \
 
 # The release folder, as the installer lays it out, with the Pi files from the fixture.
 /bin/mkdir -p "$rel/bin" "$rel/profiles/opencode" "$rel/profiles/pi/scripts" "$engine/state" "$home/Agent Guard"
-/bin/cp "$run/tree/engine/"{launch,profile.sb,account.zsh} "$run/tree/profiles/opencode/"{install.sh,uninstall.sh} "$rel/"
+/bin/cp "$run/tree/engine/"{launch,profile.sb,account.zsh,peers.zsh,peer-runtime.sb} "$run/tree/profiles/opencode/"{install.sh,uninstall.sh} "$rel/"
+/bin/cp -R "$run/tree/engine/peers" "$rel/peers"
 /bin/cp -R "$run/tree/installer" "$rel/"
 /bin/cp "$run/tree/engine/agent-guard" "$run/tree/profiles/opencode/"{opencode,opencode-gui} "$rel/bin/"
 /bin/cp "$run/tree/profiles/opencode/"{harness.zsh,hooks.zsh,skills.zsh,protected.sb,plugin.js} "$rel/profiles/opencode/"
