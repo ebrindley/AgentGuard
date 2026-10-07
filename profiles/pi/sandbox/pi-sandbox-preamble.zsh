@@ -48,6 +48,7 @@ unset _PI_GIT_ENV_NAME
 
 # Sanitize PATH before any remaining external lookups. Keep Homebrew + system
 # bins so trusted Pi resolution still works; drop ambient hostile entries.
+AGENT_GUARD_PEER_PATH="${AGENT_GUARD_PEER_PATH:-$PATH}"
 PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 # Homebrew versioned Node formulae do not link `node` into /opt/homebrew/bin.
@@ -1281,6 +1282,15 @@ fi
 export PI_SANDBOX_PROFILE_DIGEST PI_SANDBOX_PROJECT_BOUNDARY
 export PI_SANDBOX_ACTIVE_HOOKS_BOUNDARY PI_SANDBOX_AGENT_STATE_BOUNDARY
 
+AG_PEER_RELEASE="$HOME_CANON/Library/Application Support/AgentGuard/current"
+AG_PEER_PROFILE="$(<"$PROFILE")"
+if [[ -f "$AG_PEER_RELEASE/peer-runtime.sb" && -d "$AG_PEER_RELEASE/peers" ]]; then
+  AG_PEER_PROFILE=${AG_PEER_PROFILE/';;@PEER_RUNTIME@'/$(<"$AG_PEER_RELEASE/peer-runtime.sb")}
+  export AGENT_GUARD_PEER_PATH
+  PATH="$AG_PEER_RELEASE/peers:$PATH"
+  export PATH
+fi
+
 PI_SANDBOX_CMD=(
   "$SANDBOX_EXEC"
   -D "PROJECT=$PROJECT"
@@ -1292,5 +1302,5 @@ PI_SANDBOX_CMD=(
   -D "OMP_STATE_ROOT=$OMP_STATE_ROOT"
   -D "OMP_BASE_ROOT=$OMP_BASE_ROOT"
   "${AG_SANDBOX_PARAMS[@]}"
-  -f "$PROFILE"
+  -p "$AG_PEER_PROFILE"
 )

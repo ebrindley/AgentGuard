@@ -1807,3 +1807,12 @@ tightenings. Existing shared rulebooks remain for older releases; only the known
 managed recursive rule is omitted from new snapshots. This supersedes the earlier
 recursive-deletes plan's shared-rule retirement and does not implement its Rust
 engine prerequisites. Shared skill persistence is accepted functionality.
+
+### Peer CLI execution
+
+The peer CLI change supersedes the native-sandbox exclusion for child `codex`,
+`claude`, `cursor-agent`, `grok` and `opencode` commands. They run under the
+parent profile with session-only wrappers and shared runtime grants. Native
+approvals and hooks remain active. This does not implement D3's planned
+`NESTED` membership, snapshots or canaries, or add standalone guard profiles
+for the peer CLIs. See USAGE and SECURITY for the execution boundary and limits.

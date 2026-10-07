@@ -113,6 +113,8 @@
   (literal "/dev/fd/2")
   (regex #"^/dev/ttys[0-9]+$"))                                 ; pty slaves for the TUI
 
+;;@PEER_RUNTIME@
+
 ;; Re-protect the sensitive parts of ~/.pi/agent: the sandboxed process may write
 ;; its operational state (sessions/locks/history) but must NOT tamper with config,
 ;; auth, or the deployed extensions (which would let it DISABLE the guard).
