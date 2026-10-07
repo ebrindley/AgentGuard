@@ -334,6 +334,7 @@ note "write-protected in ${(j: and :)cache_dirs}, maintained outside the guard: 
 (( $#pi_names )) && note "write-protected anywhere, Pi's and OMP's project config: ${(j:, :)pi_names}"
 
 profile=$(<"$here/profile.sb")
+profile=${profile/';;@PEER_RUNTIME@'/$(<"$here/peer-runtime.sb")}
 profile=${profile/';;@USER_RULES@'/${(F)rules}}
 # Keep 1.0.3 rule order and SBPL spelling while moving harness paths to data.
 path_rules() {
@@ -433,6 +434,8 @@ esac
 # The plugin loads through current, which an update can move; AGENT_GUARD_RELEASE
 # tells it to use this release.
 export AGENT_GUARD_SANDBOXED=1 AGENT_GUARD_RELEASE=${release:t}
+export AGENT_GUARD_PEER_PATH=${AGENT_GUARD_PEER_PATH:-$PATH}
+path=("$release/peers" $path)
 # Preparation must remain outside Seatbelt for projects selected after startup.
 export AGENT_GUARD_PREPARATION="$channel"
 exec {guard_stdin}<&0

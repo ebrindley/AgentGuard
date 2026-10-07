@@ -21,10 +21,18 @@ index 2f94258..d86d372 100755
  fi
  
 diff --git a/sandbox/pi-sandbox-preamble.zsh b/sandbox/pi-sandbox-preamble.zsh
-index 9b7c788..31620e7 100644
+index 9b7c788..d7a3f48 100644
 --- a/sandbox/pi-sandbox-preamble.zsh
 +++ b/sandbox/pi-sandbox-preamble.zsh
-@@ -547,7 +547,7 @@ resolve_configured_executable() {
+@@ -48,6 +48,7 @@ unset _PI_GIT_ENV_NAME
+ 
+ # Sanitize PATH before any remaining external lookups. Keep Homebrew + system
+ # bins so trusted Pi resolution still works; drop ambient hostile entries.
++AGENT_GUARD_PEER_PATH="${AGENT_GUARD_PEER_PATH:-$PATH}"
+ PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+ 
+ # Homebrew versioned Node formulae do not link `node` into /opt/homebrew/bin.
+@@ -547,7 +548,7 @@ resolve_configured_executable() {
  }
  
  # Operator-recorded binding: an absolute path written to the pinned config by a
@@ -33,7 +41,7 @@ index 9b7c788..31620e7 100644
  # no fixed path shape can describe the real install surface — Homebrew's Cellar,
  # npm user prefixes, nvm/fnm/volta/asdf/mise version dirs, pnpm/bun/yarn global
  # roots, and Nix store paths are all legitimate and all differently shaped.
-@@ -664,7 +664,7 @@ resolve_agent_executable() {
+@@ -664,7 +665,7 @@ resolve_agent_executable() {
        resolved="$(resolve_configured_executable "$configured" || true)"
        if [ -z "$resolved" ]; then
          emit "$ambient_name='$configured' is not an accepted ambient override."
@@ -42,7 +50,7 @@ index 9b7c788..31620e7 100644
          exit 1
        fi
        ;;
-@@ -672,7 +672,7 @@ resolve_agent_executable() {
+@@ -672,7 +673,7 @@ resolve_agent_executable() {
        resolved="$(resolve_bound_executable "$bound" || true)"
        if [ -z "$resolved" ]; then
          emit "recorded $runtime_label binding is no longer usable: '$bound'"
@@ -51,7 +59,7 @@ index 9b7c788..31620e7 100644
          exit 1
        fi
        ;;
-@@ -680,7 +680,7 @@ resolve_agent_executable() {
+@@ -680,7 +681,7 @@ resolve_agent_executable() {
        resolved="$(resolve_command_outside_shim_dir "$PI_SANDBOX_RUNTIME" || true)"
        if [ -z "$resolved" ]; then
          emit "cannot auto-resolve the real $runtime_label executable outside the shim path."
@@ -60,7 +68,7 @@ index 9b7c788..31620e7 100644
          exit 1
        fi
        ;;
-@@ -705,7 +705,7 @@ resolve_agent_executable() {
+@@ -705,7 +706,7 @@ resolve_agent_executable() {
        interpreter="$(resolve_bound_interpreter "$bound_interpreter" || true)"
        [ -n "$interpreter" ] || {
          emit "recorded Node interpreter is no longer usable: '$bound_interpreter'"
@@ -69,7 +77,7 @@ index 9b7c788..31620e7 100644
          exit 1
        }
      fi
-@@ -1009,15 +1009,107 @@ esac
+@@ -1009,15 +1010,107 @@ esac
  # worktree under ~/.omp/wt) would be denied wholesale, so refuse it clearly
  # instead of launching into a read-only project.
  # Keep these patterns in step with the project agent config regexes in pi-sandbox.sb.
@@ -178,7 +186,7 @@ index 9b7c788..31620e7 100644
  ACTIVE_HOOKS="$(resolve_active_hooks "$PROJECT")" || exit 1
  TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
  
-@@ -1028,16 +1120,40 @@ TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
+@@ -1028,16 +1121,40 @@ TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
  # PROJECT and the launch cwd (Pi resolves <cwd>/.pi). Links that stay inside the
  # config folder (npm .bin links) or point to non-writable locations are fine.
  # Prints the offending path and returns 1 on a refused layout.
@@ -222,7 +230,7 @@ index 9b7c788..31620e7 100644
          target="${link:A}"
          case "$target" in "$dir_canon"|"$dir_canon"/*) continue ;; esac
          # Probe a child so a link to a write root itself (e.g. PROJECT) matches too.
-@@ -1054,9 +1170,9 @@ _pi_config_bases=("$PROJECT")
+@@ -1054,9 +1171,9 @@ _pi_config_bases=("$PROJECT")
  [ "${PWD:A}" = "$PROJECT" ] || _pi_config_bases+=("${PWD:A}")
  if ! _pi_config_offender="$(project_config_symlink_offender "${_pi_config_bases[@]}")"; then
    emit "refusing to launch: symlinked project agent config '$_pi_config_offender'."
@@ -235,7 +243,7 @@ index 9b7c788..31620e7 100644
    exit 1
  fi
  unset _pi_config_bases _pi_config_offender
-@@ -1084,12 +1200,65 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
+@@ -1084,12 +1201,65 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
      # the recorded interpreter, and both --detect and a bare --pi re-derive node via
      # detect_node, which takes the first PATH hit with no write-root filter — so
      # either would re-record the same unsafe path and fail identically next launch.
@@ -302,18 +310,44 @@ index 9b7c788..31620e7 100644
  emit "OS sandbox ON. Runtime [$PI_SANDBOX_RUNTIME]. Project [$PROJECT_VIA]: $PROJECT"
  emit "  active Git hooks denied: $ACTIVE_HOOKS"
  if [ "$PI_SANDBOX_RUNTIME" = "pi" ]; then
-@@ -1122,5 +1291,6 @@ PI_SANDBOX_CMD=(
+@@ -1112,6 +1282,15 @@ fi
+ export PI_SANDBOX_PROFILE_DIGEST PI_SANDBOX_PROJECT_BOUNDARY
+ export PI_SANDBOX_ACTIVE_HOOKS_BOUNDARY PI_SANDBOX_AGENT_STATE_BOUNDARY
+ 
++AG_PEER_RELEASE="$HOME_CANON/Library/Application Support/AgentGuard/current"
++AG_PEER_PROFILE="$(<"$PROFILE")"
++if [[ -f "$AG_PEER_RELEASE/peer-runtime.sb" && -d "$AG_PEER_RELEASE/peers" ]]; then
++  AG_PEER_PROFILE=${AG_PEER_PROFILE/';;@PEER_RUNTIME@'/$(<"$AG_PEER_RELEASE/peer-runtime.sb")}
++  export AGENT_GUARD_PEER_PATH
++  PATH="$AG_PEER_RELEASE/peers:$PATH"
++  export PATH
++fi
++
+ PI_SANDBOX_CMD=(
+   "$SANDBOX_EXEC"
+   -D "PROJECT=$PROJECT"
+@@ -1122,5 +1301,6 @@ PI_SANDBOX_CMD=(
    -D "OMP_AGENT_STATE=$OMP_AGENT_STATE"
    -D "OMP_STATE_ROOT=$OMP_STATE_ROOT"
    -D "OMP_BASE_ROOT=$OMP_BASE_ROOT"
+-  -f "$PROFILE"
 +  "${AG_SANDBOX_PARAMS[@]}"
-   -f "$PROFILE"
++  -p "$AG_PEER_PROFILE"
  )
 diff --git a/sandbox/pi-sandbox.sb b/sandbox/pi-sandbox.sb
-index f560a31..4c99070 100644
+index f560a31..cedde23 100644
 --- a/sandbox/pi-sandbox.sb
 +++ b/sandbox/pi-sandbox.sb
-@@ -160,6 +160,12 @@
+@@ -113,6 +113,8 @@
+   (literal "/dev/fd/2")
+   (regex #"^/dev/ttys[0-9]+$"))                                 ; pty slaves for the TUI
+ 
++;;@PEER_RUNTIME@
++
+ ;; Re-protect the sensitive parts of ~/.pi/agent: the sandboxed process may write
+ ;; its operational state (sessions/locks/history) but must NOT tamper with config,
+ ;; auth, or the deployed extensions (which would let it DISABLE the guard).
+@@ -160,6 +162,12 @@
    ;; refuses a PROJECT whose own path has any of these components, which these
    ;; regexes would otherwise match wholesale, and symlinked .pi/.omp layouts.
    ;; Keep these regexes in step with the PROJECT refusal patterns in pi-sandbox-preamble.zsh.
@@ -326,7 +360,7 @@ index f560a31..4c99070 100644
    (require-all
      (subpath (param "PROJECT"))
      (require-any
-@@ -167,7 +173,11 @@
+@@ -167,7 +175,11 @@
        (regex #"/\.omp(/|$)")
        (regex #"/\.(claude|codex)/(extensions|hooks|tools)(/|$)")
        (regex #"/\.gemini/extensions(/|$)")
@@ -339,7 +373,7 @@ index f560a31..4c99070 100644
    (subpath (string-append (param "PI_AGENT_STATE") "/extensions"))
    (literal (string-append (param "PI_AGENT_STATE") "/settings.json"))
    (literal (string-append (param "PI_AGENT_STATE") "/auth.json"))
-@@ -323,3 +333,142 @@
+@@ -323,3 +335,142 @@
    (literal (string-append (param "HOME") "/.pi/agent/security-events.log"))
    ;; .env files anywhere (incl. project) — the one project-wide secret deny.
    (regex #"/\.env($|\.)"))

@@ -217,7 +217,7 @@ behind linked ancestors. These changes follow the 0.2.0 prerelease.
 ### Pi and OMP
 
 Until Pi moves onto Agent Guard's engine (step 10d), Pi's guard is
-pi-sandbox-guard 7ad441f's with the seven differences above, so:
+pi-sandbox-guard 7ad441f's with the recorded adoption differences, so:
 
 - **The Guard List does not apply.** ALLOW entries do not add writes, and DENY
   and READ ONLY entries do not restrict a Pi or OMP session: a DENY entry
@@ -283,7 +283,7 @@ pi-sandbox-guard 7ad441f's with the seven differences above, so:
   outside the guard. Not planned.
 
 pi-sandbox-guard defects kept until step 10d, because the launcher, preamble and
-extension are reused unchanged apart from the seven differences:
+extension are reused unchanged apart from the recorded adoption differences:
 
 - A runtime started inside its own session, such as `pi` inside a Pi session,
   exits with `HOME_CANON: parameter not set` whenever `.guard-node` exists, which
@@ -346,3 +346,32 @@ Everything else is a bug and goes to a public issue (see
 Pi's analyzer that should not happen, a destructive command cc-safety-net or the
 analyzer misses while Seatbelt still holds, an install, update, migration or
 uninstall failure, and the limitations above. When unsure, use the advisory form.
+
+## Peer CLI execution
+
+Pi adoption difference 10 adds peer runtime grants and session-only launch wrappers.
+
+Peer launch wrappers disable incompatible inner sandboxes only when an enclosing
+sandbox is detected. They preserve native approval policies and hooks. They do
+not install global wrappers or change global CLI settings. The parent command
+checker does not inspect the peer's later tool calls; the parent OS sandbox
+continues to confine every local child process.
+Explicit Codex remote execution and OpenCode server attachment are refused;
+the guard cannot confine a server started outside the session.
+
+Peer runtime grants are shared by every process in the session, including the
+outer agent. They cover runtime subdirectories and selected files, not whole
+peer configuration directories. Peer configuration, credential files and CLI
+installations receive no new write grants. Claude's mixed `~/.claude.json` is
+not granted. The added OpenCode data/state grants under Pi and OMP carry the
+existing `auth.json` remote-configuration limitation described above.
+
+OpenCode and Pi have different read policies. Disabling a peer's inner sandbox
+leaves the parent's read policy in force; it does not reproduce the peer's
+native sandbox read restrictions. Native permissions and hooks still apply.
+
+Cursor returned responses and executed a shell tool under both parent policies,
+but its macOS keychain credential-save operation warned inside the sandbox.
+The same outside-guard qualification had no warning. Existing authentication
+worked; credential-refresh qualification remains incomplete. No keychain write
+grant was added.

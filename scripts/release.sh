@@ -34,6 +34,8 @@ files=(
   engine/account.zsh
   engine/agent-guard
   engine/profile.sb
+  engine/peers.zsh
+  engine/peer-runtime.sb
   engine/vendor/THIRD-PARTY-NOTICES
   profiles/opencode/harness.zsh
   profiles/opencode/hooks.zsh
@@ -73,6 +75,7 @@ files=(
 # Folders shipped whole, apart from Finder and AppleDouble files.
 trees=(
   engine/vendor/cc-safety-net
+  engine/peers
   profiles/opencode/templates
 )
 

@@ -94,6 +94,11 @@
       "id": 9,
       "change": "Literal write denies pin PI_AGENT_STATE, OMP_AGENT_STATE, OMP_STATE_ROOT, OMP_BASE_ROOT and OMP_BASE_ROOT/profiles after every allow. The profiles pin prevents moving a named OMP profile through its writable ancestor; identical base/state paths share the same protection. Config denies stay attached to their paths while runtime descendants remain writable. The preamble creates only the active runtime's roots before confinement and refuses on failure, because the pins also deny creating those nodes inside the sandbox.",
       "files": ["sandbox/pi-sandbox.sb", "sandbox/pi-sandbox-preamble.zsh"]
+    },
+    {
+      "id": 10,
+      "change": "Load the release peer runtime grants before configuration denies and prepend session-only peer wrappers after PATH sanitization. Preserve the original PATH for peer discovery.",
+      "files": ["sandbox/pi-sandbox.sb", "sandbox/pi-sandbox-preamble.zsh"]
     }
   ],
   "test_notes": [
