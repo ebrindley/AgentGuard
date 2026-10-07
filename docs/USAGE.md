@@ -131,6 +131,27 @@ name; a changed wrapper is reported and left in place. `agent-guard doctor`
 checks each recorded hash and reports an earlier wrapper name that is still
 executable.
 
+## Peer CLIs
+
+Inside guarded OpenCode, Pi and OMP sessions, `codex`, `claude`,
+`cursor-agent`, `grok` and `opencode` use session-only launch wrappers. They
+inherit the parent filesystem boundary and keep their native approvals, hooks,
+models and configuration. No additional sandbox flags are needed. Launches
+outside the guard use the normal CLI behavior.
+
+An explicit inner sandbox such as `codex --sandbox read-only` is refused:
+macOS cannot apply that restriction inside the existing sandbox. A read-only
+consultation prompt expresses task intent; it does not remove the parent's
+write permissions. Persistent sandbox defaults, including Codex profiles, are
+replaced by parent confinement; native approvals remain active. Use the parent's
+read-only filesystem rules when that
+boundary is required.
+
+Runtime state uses the standard user locations. Authentication and configuration
+files are not copied or relocated. CLI-specific mixed state files are excluded
+from the new grants. OMP launcher behavior is covered by disposable fixtures;
+real OMP qualification requires an OMP installation.
+
 ## Nested launches
 
 - `pi` or `omp` started inside an OpenCode session refuses, as it refuses under

@@ -27,7 +27,7 @@ export function stage(source, dest, home) {
 export function layout(tree, engine, rid = '0.0.0-20260101T000000Z') {
   const release = join(engine, 'releases', rid);
   mkdirSync(join(release, 'profiles'), { recursive: true });
-  for (const f of ['launch', 'profile.sb', 'account.zsh']) cpSync(join(tree, 'engine', f), join(release, f));
+  for (const f of ['launch', 'profile.sb', 'account.zsh', 'peers.zsh', 'peer-runtime.sb', 'peers']) cpSync(join(tree, 'engine', f), join(release, f), { recursive: true });
   cpSync(join(tree, 'profiles/opencode'), join(release, 'profiles/opencode'), { recursive: true });
   writeFileSync(join(release, 'RELEASE'), `${rid}\n`);
   writeFileSync(join(release, 'VERSION'), `${rid.split('-')[0]}\n`);

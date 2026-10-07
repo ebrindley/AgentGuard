@@ -717,6 +717,8 @@ ag_assemble() {
   print -r -- "$ag_commit" > "$r/COMMIT" && print -r -- "$ag_rid_new" > "$r/RELEASE" || return 1
   /bin/cp -- "$p/opencode" "$p/opencode-gui" "$t/engine/agent-guard" "$r/bin/" || return 1
   /bin/cp -R -- "$t/engine/vendor" "$r/vendor" || return 1
+  /bin/cp -- "$t/engine/peers.zsh" "$t/engine/peer-runtime.sb" "$r/" || return 1
+  /bin/cp -R -- "$t/engine/peers" "$r/peers" || return 1
   # The release's install.sh, which agent-guard and uninstall.sh source, loads these.
   /bin/cp -R -- "$t/installer" "$r/installer" || return 1
   /bin/cp -- "$p/harness.zsh" "$p/hooks.zsh" "$p/protected.sb" "$p/skills.zsh" "$p/plugin.js" "$r/profiles/opencode/" || return 1

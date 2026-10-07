@@ -1,0 +1,3 @@
+#!/bin/zsh -f
+source "${0:A:h:h}/peers.zsh"
+agent_guard_peer "${0:A:h:h}" "${0:t}" "$@"
