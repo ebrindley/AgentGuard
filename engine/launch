@@ -439,7 +439,7 @@ path=("$release/peers" $path)
 # Preparation must remain outside Seatbelt for projects selected after startup.
 export AGENT_GUARD_PREPARATION="$channel"
 exec {guard_stdin}<&0
-$sandbox "$@" <&$guard_stdin &
+$sandbox "$@" <&${guard_stdin:-0} &
 child=$!
 exec {guard_stdin}<&-
 opencode_skill_worker $child "$channel" "$replies" &
