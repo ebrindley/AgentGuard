@@ -72,6 +72,9 @@ if (!process.argv[2] || process.argv[2] === "staged") staged()
 if (process.argv[2] === "readonly") client("readonly")
 if (process.argv[2] === "kernel") client("kernel")
 if (process.argv[2] === "stdin") {
+  const syntax = spawnSync("/bin/zsh", ["-fn", join(release, "launch")], { encoding: "utf8" })
+  assert.equal(syntax.status, 0, syntax.stderr)
+  assert.equal(syntax.stderr, "", "launcher syntax check is silent")
   const args = ["/bin/zsh", join(release, "launch"), "cli", process.execPath, join(root, "test/skills-client.mjs"), join(release, "profiles/opencode/plugin.js"), "stdin"]
   const words = args.map(a => "{" + a.replaceAll("}", "\\}") + "}").join(" ")
   const script = `set timeout 15\nspawn -noecho ${words}\nexpect stdin-ready\nsend "fixture\\r"\nexpect stdin-received:fixture\nexpect eof\nset r [wait]\nexit [lindex $r 3]\n`
