@@ -9,8 +9,8 @@ import * as adapter from "./engines/zsh.mjs"
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const run = mkdtempSync(join(root, "test/.run-skills-native-")), home = join(run, "home"), tree = join(run, "source")
 const engine = join(home, "Library/Application Support/AgentGuard"), start = join(home, "Projects/start"), project = join(home, "Projects/selected")
-const realCLI = ["/opt/homebrew/bin/opencode", "/usr/local/bin/opencode", ...process.env.PATH.split(":").map(p => join(p, "opencode"))]
-  .find(p => existsSync(p) && !realpathSync(p).includes("/Library/Application Support/AgentGuard/"))
+const realCLI = [process.env.AG_TEST_OPENCODE, "/opt/homebrew/bin/opencode", "/usr/local/bin/opencode", ...process.env.PATH.split(":").map(p => join(p, "opencode"))]
+  .find(p => p && existsSync(p) && !realpathSync(p).includes("/Library/Application Support/AgentGuard/"))
 assert.ok(realCLI, "OpenCode CLI is required")
 for (const p of [home, tree, start, project, join(home, "Agent Guard"), join(home, ".config/opencode/plugins"), join(home, "fakebin")]) mkdirSync(p, { recursive: true })
 adapter.stage(root, tree, home)
@@ -22,7 +22,15 @@ writeFileSync(join(home, "Agent Guard/Guard List.txt"), `ALLOW\n${home}/Projects
 const quote = p => "'" + p.replaceAll("'", "'\\''") + "'"
 writeFileSync(join(home, "fakebin/opencode"), `#!/bin/sh\nexec ${quote(realpathSync(realCLI))} "$@"\n`, { mode: 0o755 })
 const localSkill = join(project, ".opencode/skills/native"), globalSkill = join(home, ".agents/skills/native")
+const projectConfig = join(project, "opencode.json")
+const ordinaryPlugin = join(project, ".opencode/plugins/ordinary.js")
 const calls = [
+  ["write", { filePath: projectConfig, content: "{}" }],
+  ["read", { filePath: projectConfig }],
+  ["edit", { filePath: projectConfig, oldString: "{}", newString: '{"model":"guardfixture/test"}' }],
+  ["write", { filePath: ordinaryPlugin, content: "export const Ordinary = async () => ({})" }],
+  ["bash", { command: "rm .opencode/plugins/ordinary.js", workdir: project, description: "Remove ordinary plugin" }],
+  ["write", { filePath: join(project, ".opencode/.gitignore"), content: "node_modules/\n" }],
   ["write", { filePath: join(localSkill, "SKILL.md"), content: "first" }],
   ["write", { filePath: join(localSkill, "references/opencode.json"), content: "{}" }],
   ["edit", { filePath: join(localSkill, "SKILL.md"), oldString: "first", newString: "updated" }],
@@ -48,7 +56,28 @@ const server = createServer(async (req, res) => {
 })
 await new Promise(resolve => server.listen(0, "127.0.0.1", resolve))
 const url = `http://127.0.0.1:${server.address().port}`
+// Both execute directly, before model tool hooks. Kernel confinement must hold.
+const containment = `
+import fs from 'node:fs';
+try { fs.writeFileSync(${JSON.stringify(join(home, "Documents/outside"))}, 'bad'); throw new Error('outside write succeeded'); }
+catch (error) { if (error.code !== 'EPERM' && error.code !== 'EACCES') throw error; }
+`;
+mkdirSync(join(home, "Documents"));
+writeFileSync(join(home, ".config/opencode/plugins/containment.js"), containment + `
+export const Containment = async () => { fs.writeFileSync(${JSON.stringify(join(project, "plugin-confined"))}, 'ok'); return {}; };
+`);
+const mcpScript = join(project, "mcp-fixture.mjs");
+writeFileSync(mcpScript, containment + `
+import readline from 'node:readline';
+fs.writeFileSync(${JSON.stringify(join(project, "mcp-confined"))}, 'ok');
+readline.createInterface({input: process.stdin}).on('line', line => {
+  const req = JSON.parse(line); if (req.id === undefined) return;
+  const result = req.method === 'initialize' ? {protocolVersion:'2024-11-05',capabilities:{tools:{}},serverInfo:{name:'fixture',version:'1'}} : req.method === 'tools/list' ? {tools:[]} : {};
+  process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:req.id,result})+'\\n');
+});
+`);
 writeFileSync(join(home, ".config/opencode/opencode.json"), JSON.stringify({
+  mcp: { confinement: { type: "local", command: [process.execPath, mcpScript], enabled: true } },
   permission: { edit: "allow", bash: "allow", external_directory: "allow" },
   provider: { guardfixture: { name: "Fixture", npm: "@ai-sdk/openai-compatible", options: { baseURL: url + "/v1", apiKey: "fixture" }, models: { test: { name: "Fixture", tool_call: true, limit: { context: 8192, output: 1024 } } } } },
 }))
@@ -100,9 +129,12 @@ assert.equal(requests, calls.length + 1, output)
 assert.equal(existsSync(localSkill), false)
 assert.equal(existsSync(localSkill + "-renamed"), false)
 assert.equal(existsSync(globalSkill), false)
-assert.equal(existsSync(join(project, ".opencode/.gitignore")), true)
+assert.equal(readFileSync(join(project, ".opencode/.gitignore"), "utf8"), "node_modules/\n")
+assert.equal(existsSync(ordinaryPlugin), false)
+assert.equal(readFileSync(join(project, "plugin-confined"), "utf8"), "ok")
+assert.equal(readFileSync(join(project, "mcp-confined"), "utf8"), "ok")
 const events = output.split("\n").flatMap(line => { try { return [JSON.parse(line)] } catch { return [] } })
 const tools = events.filter(e => e.type === "tool_use")
 assert.equal(tools.length, calls.length, output)
 assert.ok(tools.every(e => e.part?.state?.status !== "error"), output)
-console.log(`ok native OpenCode ${mode}: ${calls.length} skill operations in a project selected after launch`)
+console.log(`ok native OpenCode ${mode}: ${calls.length} configuration and skill operations with confined plugin/MCP initialization`)

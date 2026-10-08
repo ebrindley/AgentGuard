@@ -1,5 +1,5 @@
-# Shared by launch preparation and its fixed-operation worker. Inputs are the
-# account-derived home and the launch's frozen Guard List decisions.
+# Automatic roots and checker policy use the account-derived home and frozen
+# Guard List. Editable descendants never become independent write grants.
 opencode_skill_scope() {
   local p=$1 r best= kind=none
   for r in $deny; do within "$p" "$r" && { REPLY=deny; return; }; done
@@ -39,80 +39,34 @@ opencode_skill_parents() {
 }
 
 opencode_skill_globals() {
-  local config p q a
-  skill_roots=() skill_pins=() skill_configs=()
-  for config in "$home/.config/opencode" "$home/.opencode"; do
-    skill_configs+=("$config" "${config:A}")
-    for p in "$config/skill" "$config/skills"; do
-      q=${p:A}
-      opencode_skill_safe "$q" || { note "refused skill root: $p -> $q"; continue; }
-      skill_roots+=("$q"); skill_pins+=("$p")
-    done
-  done
-  for p in "$home/.claude/skills" "$home/.agents/skills"; do
+  local p q a
+  skill_roots=() skill_pins=() skill_configs=() config_roots=()
+  for p in "$home/.config/opencode" "$home/.opencode" "$home/.claude/skills" "$home/.agents/skills"; do
     q=${p:A}
-    opencode_skill_safe "$q" || { note "refused skill root: $p -> $q"; continue; }
-    skill_roots+=("$q"); skill_pins+=("$p")
-  done
-  for p in $skill_roots; do
-    opencode_skill_scope "$p"
-    if [[ $REPLY != (deny|readonly) && $staged == 0 ]] && opencode_skill_parents "$p"; then
-      /bin/mkdir -p -- "$p"
+    for a in "$p" "$q"; do
+      while [[ $a != / && $a != "$home" ]]; do skill_pins+=("$a"); a=${a:h}; done
+    done
+    if [[ -L $p && ! -e $p ]] || ! opencode_skill_safe "$q"; then
+      note "refused automatic OpenCode root: $p"; continue
     fi
-    a=$p
-    while [[ $a != / && $a != "$home" ]]; do skill_pins+=("$a"); a=${a:h}; done
-  done
-  if (( ! staged )); then
-    for config in "$home/.config/opencode" "$home/.opencode"; do
-      opencode_skill_scope "${config:A}"
-      opencode_skill_scope "${config:A}/.gitignore"
-      if [[ $REPLY != (readonly|deny) && -d $config && ! -e $config/.gitignore && ! -L $config/.gitignore ]]; then
-        (setopt noclobber; print -l node_modules package.json package-lock.json bun.lock .gitignore > "$config/.gitignore") || return 1
-      fi
-    done
-  fi
-}
-
-opencode_skill_project() {
-  local project=${1:A} config p q prepared=0
-  [[ -d $project ]] || return 1
-  opencode_skill_scope "$project"
-  [[ $REPLY == allow ]] || return 1
-  config="$project/.opencode"
-  [[ ! -e $config || -d $config ]] || return 1
-  for p in "$config/skill" "$config/skills"; do
-    q=${p:A}
-    opencode_skill_safe "$q" || return 1
+    if [[ $p == "$home/.config/opencode" || $p == "$home/.opencode" ]]; then
+      config_roots+=("$q"); skill_configs+=("$q")
+    else
+      skill_roots+=("$q")
+    fi
+    # Only the automatic root itself is initialized outside Seatbelt. Its entry
+    # and both ancestor chains remain pinned on every launch, including absence.
     opencode_skill_scope "$q"
-    [[ $REPLY == allow ]] || continue
-    opencode_skill_parents "$q" || continue
-    /bin/mkdir -p -- "$p" || return 1
-    prepared=1
+    if [[ $REPLY != (deny|readonly) && $staged == 0 ]] && opencode_skill_parents "$q"; then
+      /bin/mkdir -p -- "$q"
+    fi
   done
-  # Create no user-controlled contents and never overwrite an existing file.
-  opencode_skill_scope "${config:A}/.gitignore"
-  if (( prepared )) && [[ $REPLY != (readonly|deny) && ! -e $config/.gitignore && ! -L $config/.gitignore ]]; then
-    (setopt noclobber; print -l node_modules package.json package-lock.json bun.lock .gitignore > "$config/.gitignore") || return 1
+  # The pinned bootstrap container may be absent in an existing installation.
+  p="$home/.config/opencode/plugins"
+  opencode_skill_scope "${p:A}"
+  if [[ $staged == 0 && $REPLY != (deny|readonly) && -d ${p:h} && ! -e $p && ! -L $p ]]; then
+    /bin/mkdir -- "$p"
   fi
-}
-
-opencode_skill_worker() {
-  local child=$1 channel=$2 replies=$3 request directory reply result
-  while kill -0 $child 2>/dev/null; do
-    for request in "$channel"/request-*(N.); do
-      [[ $request == *.partial ]] && continue
-      result='{"ok":false,"reason":"Project skill preparation is outside the writable boundary."}'
-      if /usr/bin/jq -e 'type == "object" and .operation == "prepare" and (.directory | type == "string" and startswith("/") and (contains("\u0000") | not))' "$request" >/dev/null 2>&1; then
-        IFS= read -rd $'\0' directory < <(/usr/bin/jq -j '.directory, "\u0000"' "$request")
-        if opencode_skill_project "$directory"; then result='{"ok":true}'; fi
-      fi
-      reply="$replies/reply-${${request:t}#request-}"
-      print -r -- "$result" > "$reply.partial"
-      /bin/mv -f -- "$reply.partial" "$reply"
-      /bin/rm -f -- "$request"
-    done
-    sleep 0.05
-  done
 }
 
 # The shared legacy rule remains available to old releases and other CLIs.
@@ -160,7 +114,16 @@ opencode_checker_snapshot() {
     return 0
   fi
   local -a deletion_roots
-  for name in $skill_roots; do
+  local root child target
+  local -a content_roots=($skill_roots)
+  for root in $config_roots; do
+    for child in agent agents command commands mode modes plugin plugins skill skills tool tools themes node_modules; do
+      name="$root/$child" target=${name:A}
+      # A mutable link may only name already-granted content, never a new root.
+      within "$target" "$root" && content_roots+=("$name")
+    done
+  done
+  for name in $content_roots; do
     opencode_skill_scope "$name"
     [[ $REPLY == (deny|readonly) ]] || deletion_roots+=("$name")
   done

@@ -34,12 +34,13 @@ function shell(f, body) {
   return result
 }
 
-for (const name of ["engine", "checker", "activation", "wrapper", "directory", "dangling"]) {
+for (const name of ["engine", "checker", "activation", "wrapper", "binary", "directory", "dangling"]) {
   const f = fixture(name)
   const target = name === "engine" ? join(f.engine, "state/stamp.json")
     : name === "checker" ? join(f.home, ".cc-safety-net/policy.json")
     : name === "activation" ? join(f.home, ".zshrc")
     : name === "wrapper" ? join(f.home, ".local/bin/custom-pi")
+    : name === "binary" ? join(f.home, ".opencode/bin/opencode")
     : join(f.home, "other", name)
   mkdirSync(dirname(target), { recursive: true })
   if (name === "directory") mkdirSync(target)

@@ -31,7 +31,7 @@ async function shell(command, workdir = project, allowed = true, handler = befor
 const quote = p => "'" + p.replaceAll("'", "'\\''") + "'"
 if (mode === "lifecycle") {
   assert.equal((await hooks.tool.agent_guard_status.execute()).includes("is active"), true)
-  assert.equal(existsSync(join(project, ".opencode/skills")), true)
+  assert.equal(existsSync(join(project, ".opencode/skills")), false)
   for (const root of [join(project, ".opencode/skills"), join(home, ".config/opencode/skills"),
                      join(home, ".opencode/skill"), join(home, ".agents/skills"), join(home, ".claude/skills")]) {
     const skill = join(root, "new-skill")
@@ -44,13 +44,28 @@ if (mode === "lifecycle") {
     await shell(`rm -r ${quote(skill + "-renamed")}`)
     assert.equal(existsSync(skill + "-renamed"), false)
   }
+  for (const root of [join(project, ".opencode"), join(home, ".config/opencode"), join(home, ".opencode")]) {
+    const config = join(root, "opencode.json")
+    await put(config, '{"mcp":{}}')
+    await call("read", { filePath: config })
+    await call("edit", { filePath: config })
+    await shell(`cp ${quote(config)} ${quote(config + ".new")} && mv ${quote(config + ".new")} ${quote(config)}`)
+    await put(join(root, "plugins/ordinary/index.js"), "export const Ordinary = async () => ({})")
+    await shell(`mv ${quote(join(root, "plugins/ordinary"))} ${quote(join(root, "plugins/renamed"))}`)
+    await shell(`rm -r ${quote(join(root, "plugins/renamed"))}`)
+    await put(join(root, "tools/search.ts"), "export default {}")
+    await shell(`rm ${quote(join(root, "tools/search.ts"))}`)
+  }
+  await shell(`rm -r ${quote(join(home, ".config/opencode"))}`, project, false)
+  await call("write", { filePath: join(home, ".config/opencode/read-only/config.json") }, false)
+  await call("write", { filePath: join(home, ".config/opencode/private/config.json") }, false)
   const other = await AgentGuard({ directory: second, worktree: second })
   await put(join(second, ".opencode/skills/dynamic/SKILL.md"), "dynamic", other["tool.execute.before"])
-  assert.equal(existsSync(join(second, ".opencode/.gitignore")), true)
+  assert.equal(existsSync(join(second, ".opencode/.gitignore")), false)
   await shell("rm -rf dynamic", join(second, ".opencode/skills"), true, other["tool.execute.before"])
   await call("write", { filePath: join(home, "Library/Application Support/AgentGuard/state/stamp.json") }, false)
-  await call("write", { filePath: join(project, ".opencode/plugins/x.js") }, false)
-  await call("write", { filePath: join(project, "opencode.json") }, false)
+  await put(join(project, ".opencode/plugins/x.js"), "export const ordinary = async () => ({})")
+  await put(join(project, "opencode.json"), "{}")
   await call("write", { filePath: join(home, "Projects/reference/.opencode/skills/x/SKILL.md") }, false)
   await shell("rm -r second", join(home, "Projects"), false)
   await shell(`rm -r ${quote(join(home, ".config/opencode/skills"))}/x ${quote(join(home, "Documents"))}`, project, false)
@@ -72,45 +87,28 @@ if (mode === "lifecycle") {
 } else if (mode === "kernel") {
   const denied = fn => { assert.throws(fn, e => e.code === "EPERM" || e.code === "EACCES"); checks++ }
   denied(() => writeFileSync(join(home, "Library/Application Support/AgentGuard/state/tamper"), "x"))
-  denied(() => writeFileSync(join(project, ".opencode/opencode.json"), "{}"))
-  denied(() => renameSync(join(project, ".opencode/skills"), join(project, "replaced")))
-  const stage = join(project, "staging")
-  mkdirSync(join(stage, "plugins"), { recursive: true })
-  writeFileSync(join(stage, "plugins/x.js"), "x")
-  const third = join(home, "Projects/third")
-  denied(() => renameSync(stage, join(third, ".opencode")))
-  denied(() => symlinkSync(stage, join(third, ".opencode")))
+  mkdirSync(join(project, ".opencode/skills"), { recursive: true })
+  writeFileSync(join(project, ".opencode/opencode.json"), "{}")
+  renameSync(join(project, ".opencode/skills"), join(project, "replaced"))
+  const config = join(home, ".config/opencode")
+  for (const name of ["plugins/agent-guard.js", "plugins/.agent-guard.js.partial"]) {
+    denied(() => writeFileSync(join(config, name), "tamper"))
+  }
+  denied(() => renameSync(join(config, "plugins"), join(project, "plugins")))
+  denied(() => renameSync(config, join(project, "config")))
+  denied(() => mkdirSync(join(home, ".opencode/bin")))
   const alias = join(home, ".agents/skills/guard-alias")
   symlinkSync(join(home, "Library/Application Support/AgentGuard/state"), alias)
   denied(() => writeFileSync(join(alias, "tamper"), "x"))
-  const context = JSON.parse(readFileSync(process.env.AGENT_GUARD_CONTEXT, "utf8"))
-  for (const [i, request] of [
-    { operation: "exec", directory: project, command: "touch arbitrary" },
-    { operation: "prepare", directory: join(home, "Documents") },
-    { operation: "prepare", directory: join(home, "Library/Application Support/AgentGuard") },
-  ].entries()) {
-    const token = `${process.pid}-invalid-${i}`, reply = join(context.preparationReplies, "reply-" + token)
-    const pending = join(context.preparation, "request-" + token)
-    writeFileSync(pending + ".partial", JSON.stringify(request))
-    renameSync(pending + ".partial", pending)
-    for (let n = 0; n < 100 && !existsSync(reply); n++) await new Promise(resolve => setTimeout(resolve, 50))
-    assert.equal(JSON.parse(readFileSync(reply, "utf8")).ok, false)
-    checks++
-  }
-  assert.equal(existsSync(join(home, "Documents/.opencode")), false)
-  const token = `${process.pid}-symlink`, name = "reply-" + token
-  const policy = join(context.checker, "policy.json"), originalPolicy = readFileSync(policy, "utf8")
-  symlinkSync(policy, join(context.preparation, name + ".partial"))
-  symlinkSync(join(home, "Documents"), join(context.preparation, name))
-  const pending = join(context.preparation, "request-" + token), reply = join(context.preparationReplies, name)
-  writeFileSync(pending + ".partial", JSON.stringify({ operation: "prepare", directory: project }))
-  renameSync(pending + ".partial", pending)
-  for (let n = 0; n < 100 && !existsSync(reply); n++) await new Promise(resolve => setTimeout(resolve, 50))
-  assert.equal(JSON.parse(readFileSync(reply, "utf8")).ok, true)
-  assert.equal(readFileSync(policy, "utf8"), originalPolicy)
-  assert.equal(existsSync(join(home, "Documents", name + ".partial")), false)
-  checks += 3
-  denied(() => writeFileSync(reply, "tampered"))
+  symlinkSync(join(home, "Documents"), join(config, "skill"))
+  symlinkSync(join(home, "Documents/startup-ignore"), join(config, ".gitignore"))
+  symlinkSync(join(home, "Documents/startup-config"), join(config, "opencode.json"))
+} else if (mode === "relinked") {
+  const config = join(home, ".config/opencode")
+  assert.throws(() => writeFileSync(join(config, "skill/outside"), "x"), e => e.code === "EPERM" || e.code === "EACCES")
+  assert.equal(existsSync(join(home, "Documents/startup-ignore")), false)
+  assert.equal(existsSync(join(home, "Documents/startup-config")), false)
+  await call("write", { filePath: join(config, "skill/outside") }, false)
 } else if (mode === "stdin") {
   assert.equal(process.stdin.isTTY, true, "guarded CLI retains its terminal")
   console.log("stdin-ready")
