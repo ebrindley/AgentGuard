@@ -109,10 +109,9 @@ guard. OMP profiles must be selected before confinement; `--profile` must be
 the first argument and appear only once. Active XDG-split OMP state is refused
 by the current launcher.
 
-Current `main` creates and pins active state-root directory nodes before
-confinement, including OMP's `profiles` directory. Runtime files below them
-remain writable. This change was committed after the 0.2.0 tag and is not in
-the published prerelease.
+Since stable 0.2.1, the launcher creates and pins active state-root directory
+nodes before confinement, including OMP's `profiles` directory. Runtime files
+below them remain writable.
 
 After updating Pi or OMP, run `agent-guard doctor` from Terminal. An npm update
 with its prefix at `~/.local` can replace the Pi launcher and make `pi` start
