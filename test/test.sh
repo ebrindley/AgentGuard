@@ -236,7 +236,7 @@ expect ok "write project .opencode"       sb /bin/mkdir -p "$home/Projects/app/.
 expect ok "write project opencode.json"   sb /usr/bin/touch "$home/Projects/app/opencode.json"
 expect ok "write project tui.json"        sb /usr/bin/touch "$home/Projects/app/tui.json"
 expect no "write symlinked bash_login"    sb /bin/sh -c "echo x >> '$home/Projects/dotfiles/bash_login'"
-expect ok "write symlinked project config target" sb /bin/sh -c "echo x >> '$home/Projects/dotfiles/oc.json'"
+expect ok "write symlinked project config target" sb /bin/sh -c "echo '{}' > '$home/Projects/dotfiles/oc.json'"
 expect no ".opencode/.gitignore in READ ONLY" sb /bin/sh -c ": > '$home/Projects/archive/.opencode/.gitignore'"
 expect no "exec open"                     sb /usr/bin/open -h
 expect no "exec codesign"                 sb /usr/bin/codesign -h

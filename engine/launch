@@ -268,7 +268,7 @@ typeset -aU pi_guard
   pi_guard=("$home"/.local/bin/{pi,omp,pi-sandbox.sb,pi-sandbox-preamble.zsh,pi-sandbox-guard-extension} "${(@)pi_wrappers/#/$home/.local/bin/}"
             "$home/.pi/agent/extensions/pi-sandbox-guard" "$home/.config/pi-sandbox-guard/executables.conf")
 for p in $protected_paths $pi_guard; do
-  for q in "${${p:h:A}%/}/${p:t}" "${p:A}"; do protected_targets+=("$q"); sbpl_path "$q"; state_rules+=("  (subpath $REPLY)"); pin_above "$q"; done
+  for q in "$p" "${${p:h:A}%/}/${p:t}" "${p:A}"; do protected_targets+=("$q"); sbpl_path "$q"; state_rules+=("  (subpath $REPLY)"); pin_above "$q"; done
   a=${p:h}
   while [[ $a != / && $a != "$home" ]]; do
     q="${${a:h:A}%/}/${a:t}"
@@ -308,10 +308,6 @@ path_rules() {
 }
 profile=${profile/';;@WRITABLE@'/$(path_rules '  ' $writable $skill_roots $config_roots)}
 profile=${profile/';;@WRITABLE_GUI@'/$(path_rules '    ' $writable_gui)}
-config_rules() {
-  local p
-  for p in $protected_paths; do sbpl_path "$p"; print -r -- "  (subpath $REPLY)"; done
-}
 skill_content() {
   local p
   print -r -- '(define (skill-content) (require-any'
@@ -322,7 +318,6 @@ skill_content() {
   print -r -- '))'
 }
 profile=${profile/';;@SKILL_CONTENT@'/$(skill_content)}
-profile=${profile/';;@PROTECTED@'/$(config_rules)}
 profile=${profile/';;@STATE_PROTECTED@'/${(F)state_rules}}
 profile=${profile/';;@PROTECTED_NAMES@'/$(<"$profile_dir/$protected_fragment")}
 darwin_temp=${$(/usr/bin/getconf DARWIN_USER_TEMP_DIR):A}

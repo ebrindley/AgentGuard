@@ -70,7 +70,7 @@ try {
     // v1.0.3 takes its home from $HOME, so the reference runs unmodified.
     const old = exec(['/bin/zsh', join(reference, 'launch'), 'profile'], options);
     const current = exec([...adapter.launcher(engine), 'profile'], options);
-    const expected = applyDifferences(old.replaceAll('OpenCodeGuard', 'AgentGuard').replaceAll('OpenCode Guard', 'Agent Guard'), [...records, skills, configuration]);
+    const expected = applyDifferences(old.replaceAll('OpenCodeGuard', 'AgentGuard').replaceAll('OpenCode Guard', 'Agent Guard'), [...records, skills, configuration, ...(name === 'pi-installed' ? [configuration.pi] : [])]);
     if (current !== expected) {
       writeFileSync(join(run, `${name}.actual.sb`), current);
       writeFileSync(join(run, `${name}.expected.sb`), expected);

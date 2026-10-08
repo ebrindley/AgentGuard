@@ -2,5 +2,52 @@
   "step": "configuration",
   "reason": "Ordinary OpenCode configuration is writable; guard entries and automatic root identities remain protected.",
   "inserts": [],
-  "replaces": []
+  "replaces": [
+    {
+      "before": "  (require-all (regex #\"/\\.opencode(/|$)\") (require-not (skill-content)))\n  (require-all (regex #\"/(opencode|tui)\\.jsonc?$\") (require-not (skill-content)))\n  (require-all (regex #\"/\\.cc-safety-net(/|$)\") (require-not (skill-content)) (require-not (subpath (h \"/.cc-safety-net/logs\"))))\n  (regex #\"/\\.opencode/skills?$\"))\n",
+      "after": "  (require-all (regex #\"/\\.cc-safety-net(/|$)\") (require-not (skill-content)) (require-not (subpath (h \"/.cc-safety-net/logs\")))))\n"
+    },
+    {
+      "before": "  (literal (h \"/.claude\"))\n",
+      "after": ""
+    },
+    {
+      "before": "  (literal (h \"/.claude/skills\"))\n",
+      "after": "  (literal (h \"/.claude/skills\"))\n  (literal (h \"/.claude\"))\n"
+    },
+    {
+      "before": "  (literal (h \"/.cache\"))\n",
+      "after": "  (literal (h \"/.cache\"))\n  (literal (h \"/.config/opencode/plugins\"))\n  (literal (h \"/.config/opencode\"))\n  (literal (h \"/.config\"))\n  (literal (h \"/.opencode\"))\n"
+    },
+    {
+      "before": "  (require-all (subpath (h \"/.config/opencode\")) (require-not (skill-content)))\n  (require-all (subpath (h \"/.opencode\")) (require-not (skill-content)))\n",
+      "after": "  (subpath (h \"/.config/opencode/plugins/agent-guard.js\"))\n  (subpath (h \"/.config/opencode/plugins/.agent-guard.js.partial\"))\n  (subpath (h \"/.opencode/bin\"))\n"
+    },
+    {
+      "before": "  (subpath (h \"/.agents/skills\"))\n",
+      "after": "  (subpath (h \"/.agents/skills\"))\n  (subpath (h \"/.config/opencode\"))\n  (subpath (h \"/.opencode\"))\n"
+    },
+    {
+      "before": "  (subpath (h \"/.config/opencode/skill\"))\n  (subpath (h \"/.config/opencode/skills\"))\n  (subpath (h \"/.opencode/skill\"))\n  (subpath (h \"/.opencode/skills\"))\n",
+      "after": ""
+    },
+    {
+      "before": "  (require-all (subpath (h \"/.claude/skills\")) (require-not (literal (h \"/.claude/skills\"))))\n  (require-all (subpath (h \"/.agents/skills\")) (require-not (literal (h \"/.agents/skills\"))))\n",
+      "after": ""
+    },
+    {
+      "before": "  (regex #\"/\\.(agents|claude)/skills/[^/]+\")\n",
+      "after": "  (regex #\"/\\.(agents|claude)/skills/[^/]+\")\n  (require-all (subpath (h \"/.claude/skills\")) (require-not (literal (h \"/.claude/skills\"))))\n  (require-all (subpath (h \"/.agents/skills\")) (require-not (literal (h \"/.agents/skills\"))))\n"
+    }
+  ],
+  "pi": {
+    "step": "configuration-pi",
+    "inserts": [],
+    "replaces": [
+      {
+        "before": "  (literal (h \"/.config/pi-sandbox-guard\"))\n  (literal (h \"/.config\"))\n",
+        "after": "  (literal (h \"/.config/pi-sandbox-guard\"))\n"
+      }
+    ]
+  }
 }
