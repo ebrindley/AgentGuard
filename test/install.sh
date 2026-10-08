@@ -11,6 +11,7 @@ unset AGENT_GUARD_RELEASE AGENT_GUARD_SANDBOXED OPENCODE_SANDBOXED XDG_CACHE_HOM
 command -v node >/dev/null || { print -ru2 'Node is required for the release server and the fake CLI'; exit 1 }
 
 source_root=${0:A:h:h}
+node "$source_root/test/opencode-config.mjs" || exit 1
 adapter="$source_root/test/engines/zsh.mjs"
 integer fails=0 checks=0
 label=

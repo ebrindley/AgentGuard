@@ -75,6 +75,13 @@ together. It does not prove who published them: whoever can replace the archive
 can replace its checksum. The bootstrap itself is trusted code fetched over
 HTTPS; nothing verifies it before it runs. A download cut short runs nothing.
 
+OpenCode permission maintenance preserves links to ordinary configuration files.
+It skips non-regular targets and links into guard policy, activation files or
+recorded Pi wrappers, with a warning. Update, rollback and uninstall use the same
+target check; an unrestored value remains in the recovery record. This adds one
+shared configuration-target check where there was none; it changes no runtime
+filesystem grants.
+
 The installer refuses, before any change, inside a guard or another sandbox,
 while another install runs and over an install made before release folders (run
 its `uninstall.sh` in the engine folder first). Over OpenCode Guard or
