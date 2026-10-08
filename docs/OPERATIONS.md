@@ -1,7 +1,8 @@
 # Installation and maintenance
 
-These procedures describe stable 0.2.2. For everyday use, see the
-[user guide](USAGE.md).
+These procedures describe the current checkout. OpenCode configuration
+maintenance is unreleased; see [release channels](#release-channels) for the
+stable installer. For everyday use, see the [user guide](USAGE.md).
 
 ## Release channels
 
@@ -189,8 +190,9 @@ both records in `~/Agent Guard`.
 
 ## Moving from pi-sandbox-guard
 
-Use the 0.2.0 prerelease installer below. `agent-guard update` follows the stable
-channel, which does not yet include Pi or OMP. When Agent Guard does not guard Pi yet and finds any part of
+Use the stable installer under [Release channels](#release-channels). Stable
+releases support Pi and OMP starting with 0.2.1. When Agent Guard does not guard
+Pi yet and finds any part of
 pi-sandbox-guard (a `pi` or `omp` in `~/.local/bin` that names
 pi-sandbox-guard, `pi-sandbox.sb` or `pi-sandbox-preamble.zsh` there, the
 extension folder `~/.pi/agent/extensions/pi-sandbox-guard/`, or
