@@ -4,8 +4,40 @@
   "inserts": [],
   "replaces": [
     {
-      "before": "  (subpath (h \"/.cache/opencode/packages\"))\n  (subpath (h \"/.cache/opencode/node_modules\"))\n  (subpath (h \"/.cache/opencode/package.json\"))\n  (subpath (h \"/.cache/opencode/package-lock.json\"))\n  (subpath (h \"/.cache/opencode/bun.lock\"))\n  (subpath (h \"/.cache/opencode/bin\"))\n  (subpath (h \"/.cache/opencode/models.json\"))\n  (require-all (subpath (h \"/.cache/opencode\")) (regex #\"/opencode/models-[^/]*\\.json$\"))\n  (literal (h \"/.cache/opencode\"))\n  (literal (h \"/.cache\"))\n",
-      "after": "  (literal (h \"/.cache\"))\n"
+      "before": "  (subpath (h \"/.cache/opencode/packages\"))\n",
+      "after": ""
+    },
+    {
+      "before": "  (subpath (h \"/.cache/opencode/node_modules\"))\n",
+      "after": ""
+    },
+    {
+      "before": "  (subpath (h \"/.cache/opencode/package.json\"))\n",
+      "after": ""
+    },
+    {
+      "before": "  (subpath (h \"/.cache/opencode/package-lock.json\"))\n",
+      "after": ""
+    },
+    {
+      "before": "  (subpath (h \"/.cache/opencode/bun.lock\"))\n",
+      "after": ""
+    },
+    {
+      "before": "  (subpath (h \"/.cache/opencode/bin\"))\n",
+      "after": ""
+    },
+    {
+      "before": "  (subpath (h \"/.cache/opencode/models.json\"))\n",
+      "after": ""
+    },
+    {
+      "before": "  (require-all (subpath (h \"/.cache/opencode\")) (regex #\"/opencode/models-[^/]*\\.json$\"))\n",
+      "after": ""
+    },
+    {
+      "before": "  (literal (h \"/.cache/opencode\"))\n",
+      "after": ""
     }
   ]
 }

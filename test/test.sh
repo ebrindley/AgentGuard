@@ -282,6 +282,7 @@ check "a missing absolute cache does not require trusted creation" /usr/bin/env 
 
 # A local package lifecycle runs under Seatbelt without contacting a registry.
 /bin/mkdir -p "$run/package" "$oc/npm-fixture"
+/usr/bin/jq -n --arg archive "file:$run/dependency.tgz" '{name:"fixture-project",version:"1.0.0",private:true,allowScripts:{($archive):true}}' > "$oc/npm-fixture/package.json"
 print -r -- '{"name":"agentguard-dependency-fixture","version":"1.0.0","scripts":{"postinstall":"node install.cjs"}}' > "$run/package/package.json"
 cat > "$run/package/install.cjs" <<'JS'
 const fs = require('node:fs'), path = require('node:path');
@@ -295,7 +296,7 @@ try {
 JS
 /usr/bin/tar -czf "$run/dependency.tgz" -C "$run" package
 expect ok "install a local dependency with confined lifecycle" sb "$(command -v npm)" install \
-  --prefix "$oc/npm-fixture" --no-audit --no-fund --allow-scripts=agentguard-dependency-fixture "$run/dependency.tgz"
+  --prefix "$oc/npm-fixture" --no-audit --no-fund "$run/dependency.tgz"
 check "dependency lifecycle ran" test -f "$oc/npm-fixture/node_modules/agentguard-dependency-fixture/installed"
 expect ok "remove installed dependency" sb "$(command -v npm)" uninstall \
   --prefix "$oc/npm-fixture" --no-audit --no-fund agentguard-dependency-fixture

@@ -85,7 +85,7 @@ try {
   mkdirSync(join(engine, 'state'), { recursive: true });
   writeFileSync(join(engine, 'state/stamp.json'), JSON.stringify({ harnesses: ['opencode', 'pi'] }));
   writeFileSync(join(engine, 'state/wrappers.json'), JSON.stringify({ wrappers: { 'pi-work': { sha256: '0'.repeat(64) } }, historical: ['pi-old'] }));
-  compare('pi-installed', `ALLOW -\n${home}/.local/bin\nREAD ONLY -\nDENY -\n`, [...differences, ...piInstalled]);
+  compare('pi-installed', `ALLOW -\n${home}/.local/bin\nREAD ONLY -\nDENY -\n`, [...differences, ...piInstalled].sort((a, b) => parseFloat(a.step) - parseFloat(b.step)));
   passed = true;
 } finally {
   if (passed) rmSync(run, { recursive: true, force: true });
