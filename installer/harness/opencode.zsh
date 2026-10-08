@@ -25,10 +25,50 @@ ag_h_opencode_bundle() { reply=(profiles/opencode/harness.zsh) }
 # True for a plugin path that is Agent Guard's link (into current).
 ag_ours() { [[ -L $1 && $(/usr/bin/readlink -- "$1") == "$plugin_target" ]] }
 
+# Configuration may be linked into dotfiles, but maintenance must not rewrite
+# guard policy or activation through a user-editable configuration link.
+ag_opencode_config_writable() {
+  local file=$1 target=${1:A} p resolved wrappers
+  local -a protected=("$engine" "$home/Agent Guard" "$home/.cc-safety-net"
+    "$home/Library/Application Support/OpenCodeGuard" "$home/Library/LaunchAgents"
+    "$home/Applications/Agent Guard.app" "$home/.config/pi-sandbox-guard"
+    "$home/.pi/agent/extensions/pi-sandbox-guard"
+    "$home/.local/bin/pi-sandbox-guard-extension")
+  for p in $protected; do
+    for resolved in "$p" "${p:A}"; do
+      if [[ $target == "$resolved" || $target == "$resolved"/* ]]; then
+        ag_warn "$file not changed (target is protected: $target)"; return 1
+      fi
+    done
+  done
+  protected=("$home"/.{zshenv,zprofile,zshrc,zlogin,profile,bash_profile,bash_login,bashrc}
+    "$home"/.local/bin/{pi,omp,pi-sandbox.sb,pi-sandbox-preamble.zsh}
+    "$plugin" "$plugins/.agent-guard.js.partial")
+  if [[ -f $engine/state/wrappers.json ]]; then
+    if ! wrappers=$(/usr/bin/jq -r --arg prefix "$home/.local/bin/" '
+      .wrappers | keys[] | select(test("^[A-Za-z0-9._-]+$") and . != "." and . != "..") | $prefix + .
+      ' "$engine/state/wrappers.json" 2>/dev/null); then
+      ag_warn "$file not changed (cannot read recorded guard wrappers)"; return 1
+    fi
+    protected+=("${(@f)wrappers}")
+  fi
+  for p in $protected; do
+    [[ -n $p ]] || continue
+    if [[ $target == "$p" || $target == ${p:A} ]]; then
+      ag_warn "$file not changed (target is protected: $target)"; return 1
+    fi
+  done
+  if [[ ( -L $file && ! -e $file ) || ( -e $file && ! -f $file ) ]]; then
+    ag_warn "$file not changed (target is not a regular file)"; return 1
+  fi
+  return 0
+}
+
 ag_classify_configs() {
   local f
   ag_configs=()
   for f in "$conf/config.json" "$conf/opencode.json" "$conf/opencode.jsonc"; do
+    ag_opencode_config_writable "$f" || continue
     [[ -e $f ]] || continue
     if ! /usr/bin/jq -e 'type == "object"' "$f" >/dev/null 2>&1; then
       ag_warnings+=("${f:t} not changed (comments or invalid JSON): set permission edit, bash and external_directory to allow yourself")
@@ -38,7 +78,10 @@ ag_classify_configs() {
       ag_configs+=("$f")
     fi
   done
-  [[ -e $conf/config.json || -e $conf/opencode.json || -e $conf/opencode.jsonc ]] || ag_configs=("$conf/opencode.json")
+  if [[ ! -e $conf/config.json && ! -e $conf/opencode.json && ! -e $conf/opencode.jsonc ]] &&
+      ag_opencode_config_writable "$conf/opencode.json"; then
+    ag_configs=("$conf/opencode.json")
+  fi
   return 0
 }
 
@@ -189,6 +232,7 @@ ag_perm_report() {  # FILE CUR ENTRY: names each key changed after install
 # value is left as is. FILE is rewritten only when that changes its content, so a
 # file the user changed back is not reformatted.
 ag_perm_restore() {
+  ag_opencode_config_writable "$1" || return 1
   /usr/bin/jq --argjson e "$2" 'reduce ($e | to_entries[]) as $x (.;
       if ($x.value // {} | has("wrote")) and .permission[$x.key] == $x.value.wrote then
         (if $x.value.orig == null then del(.permission[$x.key]) else .permission[$x.key] = $x.value.orig end)
@@ -214,6 +258,7 @@ do_permissions() {
   integer i
   for (( i = 1; i <= $#ag_configs; i++ )); do
     f=$ag_configs[i] n=$i
+    ag_opencode_config_writable "$f" || continue
     ag_jlast permissions $n
     st=$REPLY
     [[ $st == (done|undone) ]] && continue
@@ -268,6 +313,7 @@ undo_permissions() {
     ag_jlast permissions $n
     st=$REPLY
     [[ $st == (begun|done) ]] || continue
+    if ! ag_opencode_config_writable "$f"; then ag_unrestored+=("$f"); continue; fi
     b="$txn_dir/backup/permissions-$n/file" tmp="$ag_tstage/cfg.$n.undo.json"
     ag_jfind permissions begun $n
     ag_jval created
