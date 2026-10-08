@@ -11,6 +11,11 @@ const home = join(run, "home"), tree = join(run, "source"), engine = join(home, 
 for (const p of [home, tree, join(home, "Projects/app"), join(home, "Projects/second"), join(home, "Projects/third"), join(home, "Projects/blocked"), join(home, "Projects/reference"),
                  join(home, "Documents"), join(home, "Agent Guard"), join(home, "fakebin")]) mkdirSync(p, { recursive: true })
 writeFileSync(join(home, "Projects/blocked/.opencode"), "not a directory")
+if (process.argv[2] === "linked") {
+  mkdirSync(join(home, "dotfiles/opencode"), { recursive: true })
+  mkdirSync(join(home, ".config"), { recursive: true })
+  symlinkSync(join(home, "dotfiles/opencode"), join(home, ".config/opencode"))
+}
 adapter.stage(root, tree, home)
 const release = adapter.layout(tree, engine)
 cpSync(join(tree, "engine/vendor"), join(release, "vendor"), { recursive: true })
@@ -18,7 +23,7 @@ mkdirSync(join(home, ".cc-safety-net/rules/agent-guard"), { recursive: true })
 cpSync(join(root, "profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json"), join(home, ".cc-safety-net/rules/agent-guard/rulebook.json"))
 writeFileSync(join(home, ".cc-safety-net/rules/rule.json"), '{"version":1,"rules":["agent-guard"],"overrides":{},"transparent_wrappers":["env","timeout"]}')
 const list = join(home, "Agent Guard/Guard List.txt")
-writeFileSync(list, `ALLOW\n${home}/Projects\nREAD ONLY\n${home}/Projects/reference\n${process.argv[2] === "readonly" ? home + "/.claude/skills\n" : ""}DENY\n`)
+writeFileSync(list, `ALLOW\n${home}/Projects\nREAD ONLY\n${home}/Projects/reference\n${home}/.config/opencode/read-only\n${process.argv[2] === "readonly" ? home + "/.claude/skills\n" : ""}DENY\n${home}/.config/opencode/private\n`)
 writeFileSync(join(home, "fakebin/opencode"), '#!/bin/sh\nexec "$@"\n', { mode: 0o755 })
 const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, ".config"), XDG_DATA_HOME: join(home, ".local/share"), XDG_STATE_HOME: join(home, ".local/state"), PATH: join(home, "fakebin") + ":" + process.env.PATH,
               AGENT_GUARD_CONTEXT: "", AGENT_GUARD_RELEASE: "", AGENT_GUARD_SANDBOXED: "", OPENCODE_SANDBOXED: "",
@@ -67,10 +72,13 @@ function staged() {
   console.log("ok staged check snapshots removed")
 }
 console.log(`fixture: ${run}`)
-if (!process.argv[2] || process.argv[2] === "lifecycle") client("lifecycle")
+if (!process.argv[2] || process.argv[2] === "lifecycle" || process.argv[2] === "linked") client("lifecycle")
 if (!process.argv[2] || process.argv[2] === "staged") staged()
 if (process.argv[2] === "readonly") client("readonly")
-if (process.argv[2] === "kernel") client("kernel")
+if (process.argv[2] === "kernel") {
+  client("kernel")
+  client("relinked", { OPENCODE_CONFIG_DIR: join(home, "Documents"), XDG_CONFIG_HOME: join(home, "Documents"), OPENCODE_PURE: "1" })
+}
 if (process.argv[2] === "stdin") {
   const syntax = spawnSync("/bin/zsh", ["-fn", join(release, "launch")], { encoding: "utf8" })
   assert.equal(syntax.status, 0, syntax.stderr)

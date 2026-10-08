@@ -30,6 +30,7 @@ ag_ours() { [[ -L $1 && $(/usr/bin/readlink -- "$1") == "$plugin_target" ]] }
 ag_opencode_config_writable() {
   local file=$1 target=${1:A} p resolved wrappers
   local -a protected=("$engine" "$home/Agent Guard" "$home/.cc-safety-net"
+    "$home/.opencode/bin"
     "$home/Library/Application Support/OpenCodeGuard" "$home/Library/LaunchAgents"
     "$home/Applications/Agent Guard.app" "$home/.config/pi-sandbox-guard"
     "$home/.pi/agent/extensions/pi-sandbox-guard"

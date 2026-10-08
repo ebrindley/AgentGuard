@@ -12,11 +12,13 @@ and pi-sandbox-guard. Pi and OMP use a separate project-based policy.
 
 | Agent | Write access | Read restrictions | Guard List |
 |---|---|---|---|
-| OpenCode | ALLOW folders, standard global skill folders and required runtime/cache/temp locations | Explicit DENY entries | Applies |
+| OpenCode | ALLOW folders, ordinary global configuration and skills, and runtime/cache/temp locations | Explicit DENY entries | Applies |
 | Pi / OMP | Launched project and permitted runtime/cache/temp locations | Fixed credential-path and `.env` denies | Does not apply |
 
-Agent configuration and guard files are write-protected, subject to the
-[documented exceptions](SECURITY.md). Network access is unrestricted. Files
+Guard files remain write-protected. OpenCode can maintain its ordinary
+configuration, plugins, MCPs, skills and dependencies under the sandbox. These
+OpenCode maintenance changes are unreleased. Pi/OMP retain their separate
+configuration restrictions; see [the security policy](SECURITY.md). Network access is unrestricted. Files
 inside permitted write locations can still be changed or deleted; keep backups
 and review changes before running them outside the guard. Reads outside the
 applicable denies remain broad. The operating system sandbox is the enforcement
@@ -92,9 +94,9 @@ bindings, custom wrappers and nested launches.
 
 ## Maintenance outside the guard
 
-Install or update OpenCode plugins, language servers and model catalogs outside
-the guard using the real executable. Pi/OMP packages and protected settings
-also need outside maintenance. These commands run with your account's full
+OpenCode can maintain configured plugin dependencies, downloaded tools and model
+catalogs inside its writable cache. Pi/OMP packages and protected settings
+still need outside maintenance. These commands run with your account's full
 authority. Follow the [maintenance procedures](docs/OPERATIONS.md#maintenance-outside-the-guard),
 including the cache checks before installing code. Run `agent-guard doctor`
 after agent updates; an npm update can replace Pi's guarded launcher.

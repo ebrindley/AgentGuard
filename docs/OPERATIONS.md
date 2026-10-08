@@ -439,7 +439,8 @@ inside a guarded OpenCode session, and no session can write `bind`'s files.
 possible command. It checks OpenCode plugins from the global configuration and
 `~/.opencode`, not plugins named only in a project's configuration. Read the
 warnings and skipped checks as well as the exit status. Inside guarded OpenCode,
-`agent_guard_status` reports whether Agent Guard is active and names its release.
+`agent_guard_status` reports the loaded plugin's view of local confinement and
+its release. It does not attest remote services or other plugins' hook behavior.
 
 CC Safety Net 2.4.14's standalone `cc-safety-net doctor` looks for its package
 in OpenCode's plugin configuration. It does not recognize Agent Guard's
@@ -532,78 +533,56 @@ back in `~/.local/bin` in place of the launcher; `pi` then starts Pi unguarded.
 
 ## Maintenance outside the guard
 
-Inside the guard, OpenCode can read and run the code and configuration it keeps
-in its cache, but cannot write, create, remove, rename or replace them:
+OpenCode can install, update and remove packages, downloaded tools and model
+catalogs inside its writable cache. This includes `packages`, legacy
+`node_modules` and package metadata, `bin`, `models.json` and `models-*.json`.
+Installers and their child processes stay under the launch's Seatbelt profile.
+Guard's own checker remains vendored in its protected release folder.
 
-- the npm package store, `~/.cache/opencode/packages`, which holds configured
-  plugins and npm language servers such as TypeScript's;
-- the legacy store, `~/.cache/opencode/node_modules`, with `package.json`,
-  `package-lock.json` and `bun.lock` beside it;
-- `~/.cache/opencode/bin`, where OpenCode keeps ripgrep and the language servers
-  it downloads;
-- the model catalog, `~/.cache/opencode/models.json`, or `models-<hash>.json`
-  when `OPENCODE_MODELS_URL` names another source.
+`XDG_CACHE_HOME` selects a cache location but grants no additional access. A
+relocated cache must already be writable through the Guard List or a runtime
+grant. Missing directories are created by OpenCode inside the sandbox. The
+default `~/.cache` root remains pinned against replacement.
 
-When `XDG_CACHE_HOME` is set, the same paths under `$XDG_CACHE_HOME/opencode` are
-protected too. A launch refuses when `XDG_CACHE_HOME` is set but is not an
-existing folder named by its full path. The rest of `~/.cache` stays writable.
-OpenCode creates `bin` at every start and stops when it cannot, so the launch
-creates it when it is missing. Pi and OMP sessions cannot write these paths
-either; see [Pi and OMP](USAGE.md#pi-and-omp).
+Configured npm plugins install at startup. OpenCode can download ripgrep when
+it is absent from PATH and the cache, and `opencode models --refresh` can replace
+its cached catalog. Language servers may also need toolchain-specific paths,
+such as `~/go` or `~/.cargo`, under ALLOW. Their locations are not automatically
+granted. Ordinary plugin configuration is writable; Guard bootstrap entries remain
+protected.
 
-Installing, updating and repairing these happens outside the guard, by running
-OpenCode's real executable directly. That runs with your account's full
-authority, and what it installs runs in every later OpenCode session, guarded or
-not, so install only what you trust. `which -a opencode` lists the real
-executable after Agent Guard's own `opencode` (for example
-`/opt/homebrew/bin/opencode`); `<opencode>` below stands for it.
+Cache contents can affect later independently unguarded starts. Install only
+packages you trust and inspect changes before running them outside Guard.
+Pi/OMP cache and configuration protections are unchanged. Their maintenance,
+and changes to Agent Guard itself, still run outside the guard.
 
-- **Plugins.** `<opencode> plugin <package> --global` installs a plugin into the
-  store and adds it to the global config; `--force` replaces the installed
-  version. Inside the guard, a configured plugin missing from the store cannot be
-  installed: OpenCode reports "Failed to install plugin <package>@<version>", and
-  `agent-guard doctor` fails and names it. The installer's checks, which also run
-  in `agent-guard update`, report a configured plugin that fails to install, load
-  or start as a warning and pass, so a broken plugin in your configuration does
-  not roll back an install or block an update. They still fail when the guard's
-  own plugin does not load.
-- **npm language servers** (TypeScript, Pyright, Vue, Svelte, Astro, Bash, YAML,
-  Dockerfile, PHP Intelephense and Biome in OpenCode 1.18.34). OpenCode starts
-  language servers only when `lsp` is enabled in its config. Run
-  `<opencode> debug lsp diagnostics <file>` on a file of that language inside a
-  project; OpenCode installs the server into the store. Inside the guard a server
-  missing from the store is skipped without a message.
-- **ripgrep.** OpenCode's grep and glob tools run `rg` from PATH, else `bin/rg`,
-  else download it into `bin`, which fails inside the guard. Install ripgrep on
-  PATH, for example with `brew install ripgrep`. `agent-guard doctor` warns when
-  `rg` is in neither place.
-- **Language servers OpenCode downloads into `bin`** (gopls, RuboCop, ElixirLS,
-  ESLint's server, zls, clangd, F# `fsautocomplete`, JDT LS, the Kotlin and Lua
-  servers, terraform-ls, TexLab and Tinymist in OpenCode 1.18.34): run
-  `<opencode> debug lsp diagnostics <file>` as above, or install the server on
-  PATH. Inside the guard such a server is skipped without a message, so it is
-  unavailable until it is installed outside the guard.
-- **Model catalog.** `<opencode> models --refresh`. Inside the guard, OpenCode
-  still fetches a new catalog at start when the one on disk is older than five
-  minutes, and on `opencode models --refresh`, but cannot rename it into place.
-  It logs the failure and keeps using the catalog on disk, or its bundled list
-  when there is none; `opencode models --refresh` still prints "Models cache
-  refreshed". The catalog changes only when OpenCode runs outside the guard.
+## OpenCode configuration and skills
 
-Not covered: a catalog named by `OPENCODE_MODELS_PATH`, which OpenCode reads in
-place of the protected one, and anything written to the store, `bin` or the
-catalog before 0.1.2, which is not checked. npm configuration in the cache is
-writable too: with `~/.cache/node_modules` or `~/.cache/package.json` present,
-an install of a new plugin or npm language server reads `~/.cache/.npmrc`, which
-can name another registry. Before installing, check that `~/.cache` (and the
-folders above a relocated cache) hold no `.npmrc`, `node_modules` or
-`package.json` you did not put there. `agent-guard doctor` checks the
-plugins OpenCode loads outside any project, that is, from the global config and
-`~/.opencode`; plugins named only in a project's config are not checked.
+Default global configuration roots, `~/.config/opencode` and `~/.opencode`, are
+writable except for Guard's bootstrap, its installer staging entry and the
+installed `~/.opencode/bin` executable. Their identities and the Guard plugin
+container stay pinned, so replacing the whole tree from a session is refused.
+Ordinary sibling plugins, configuration files, MCP definitions, skills and
+supporting files can be created, edited, renamed and deleted. Project settings
+follow project permissions; READ ONLY and DENY still restrict automatic grants.
 
-## OpenCode skill preparation
+Configuration overrides retain OpenCode's own precedence. A relocated XDG root,
+`OPENCODE_CONFIG`, `OPENCODE_CONFIG_DIR` or `OPENCODE_TUI_CONFIG` receives no
+additional write grant. Put a custom location under ALLOW when it needs writes.
+A non-default global config or plugin-disabled mode can omit the advisory Guard
+plugin; it does not remove Seatbelt. Logs distinguish these cases. No Guard
+configuration is injected into the user's inline configuration.
 
-0.2.2 uses a launch-scoped preparation worker and protected checker
-snapshots. The shared legacy rulebook remains for older sessions and independent
-checker consumers. See [OpenCode skills](SKILLS.md). Existing skill files and
-containers are retained during uninstall.
+The launcher creates only pinned root containers. Ordinary config files and
+project folders are initialized inside Seatbelt. No outside-sandbox worker
+prepares skill directories. Policy snapshots remain immutable for the session;
+restart to pick up changed Guard List permissions or a new release.
+
+The diagnostic plugin check uses a controlled snapshot directory with project
+configuration disabled. Plugin registration is operational evidence, not proof
+that every hook executes or that a remote server is sandboxed. A local MCP child
+inherits the launch profile; an existing or remote service does not. Attaching
+a client to a server does not change that server's permissions.
+
+See [skills and deletion policy](SKILLS.md). Pi/OMP policy is unchanged, including
+when OpenCode is a child of a Pi/OMP session.

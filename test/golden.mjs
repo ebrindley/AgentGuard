@@ -32,6 +32,7 @@ const differences = readdirSync(join(root, 'test/fixtures/differences'))
 const piInstalled = ['step-7c.json', 'step-7f.json']
   .map((f) => JSON.parse(readFileSync(join(root, 'test/fixtures/differences', f), 'utf8')));
 const skills = JSON.parse(readFileSync(join(root, "test/fixtures/differences/skills.json"), "utf8"));
+const configuration = JSON.parse(readFileSync(join(root, "test/fixtures/differences/configuration.json"), "utf8"));
 function applyDifferences(text, records) {
   for (const { step, after, insert, inserts = [{ after, insert }] } of records) {
     for (const d of inserts) {
@@ -51,14 +52,13 @@ function exec([command, ...args], options = {}) {
   assert.equal(result.status, 0, result.stderr);
   return result.stdout;
 }
+let passed = false;
 try {
   for (const dir of ['Projects/app/secret', 'Projects/archive/live', 'Projects/dotfiles', 'Agent Guard', 'OpenCode Guard'])
     mkdirSync(join(home, dir), { recursive: true });
   mkdirSync(source);
   adapter.stage(root, source, home);
   adapter.layout(source, engine);
-  writeFileSync(join(home, 'Projects/dotfiles/config'), '{}');
-  symlinkSync(join(home, 'Projects/dotfiles/config'), join(home, 'Projects/app/opencode.json'));
   const identity = adapter.identity(root, { HOME: home, USER: 'not-the-login-user' });
   assert.deepEqual([identity.home, identity.engine], [userInfo().homedir, join(userInfo().homedir, 'Library/Application Support/AgentGuard')]);
   console.log('ok   account lookup ignores spoofed HOME and USER before profile loading');
@@ -70,7 +70,12 @@ try {
     // v1.0.3 takes its home from $HOME, so the reference runs unmodified.
     const old = exec(['/bin/zsh', join(reference, 'launch'), 'profile'], options);
     const current = exec([...adapter.launcher(engine), 'profile'], options);
-    assert.equal(current, applyDifferences(old.replaceAll('OpenCodeGuard', 'AgentGuard').replaceAll('OpenCode Guard', 'Agent Guard'), [...records, skills]), name);
+    const expected = applyDifferences(old.replaceAll('OpenCodeGuard', 'AgentGuard').replaceAll('OpenCode Guard', 'Agent Guard'), [...records, skills, configuration, ...(name === 'pi-installed' ? [configuration.pi] : [])]);
+    if (current !== expected) {
+      writeFileSync(join(run, `${name}.actual.sb`), current);
+      writeFileSync(join(run, `${name}.expected.sb`), expected);
+    }
+    assert.equal(current, expected, name);
     console.log(`ok   ${name} profile matches v1.0.3 exactly apart from renamed paths and recorded differences (step ${records.map((d) => d.step).join(', ')})`);
   }
   compare('empty', 'ALLOW -\nREAD ONLY -\nDENY -\n', differences);
@@ -80,7 +85,9 @@ try {
   mkdirSync(join(engine, 'state'), { recursive: true });
   writeFileSync(join(engine, 'state/stamp.json'), JSON.stringify({ harnesses: ['opencode', 'pi'] }));
   writeFileSync(join(engine, 'state/wrappers.json'), JSON.stringify({ wrappers: { 'pi-work': { sha256: '0'.repeat(64) } }, historical: ['pi-old'] }));
-  compare('pi-installed', `ALLOW -\n${home}/.local/bin\nREAD ONLY -\nDENY -\n`, [...differences, ...piInstalled]);
+  compare('pi-installed', `ALLOW -\n${home}/.local/bin\nREAD ONLY -\nDENY -\n`, [...differences, ...piInstalled].sort((a, b) => parseFloat(a.step) - parseFloat(b.step)));
+  passed = true;
 } finally {
-  rmSync(run, { recursive: true, force: true });
+  if (passed) rmSync(run, { recursive: true, force: true });
+  else console.error(`golden fixture retained: ${run}`);
 }
