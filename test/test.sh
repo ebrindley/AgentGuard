@@ -650,9 +650,11 @@ catalog_state() { /usr/bin/stat -f '%m %z' "$models_file" && /usr/bin/shasum -a 
 before=$(catalog_state)
 models() { (cd "$home/Projects/app" && OPENCODE_MODELS_URL=$models_url GUARD_PROBE_API_KEY=x "$engine/bin/opencode" models "$@" --print-logs --log-level ERROR 2>&1) }
 out=$(models --refresh guardprobe)
-[[ $out == *"Models cache refreshed"* && $out == *guardprobe/served-model* && $out != *guardprobe/disk-model* ]] &&
-  pass "models --refresh loads the served catalog inside the guard" || { fail "models --refresh loads the served catalog"; print -r -- "$out" }
+[[ $out == *"Models cache refreshed"* ]] && pass "models --refresh runs inside the guard" || { fail "models --refresh runs inside the guard"; print -r -- "$out" }
 [[ $(catalog_state) != "$before" ]] && pass "the model catalog is updated" || fail "the model catalog was not updated"
+out=$(models guardprobe)
+[[ $out == *guardprobe/served-model* && $out != *guardprobe/disk-model* ]] &&
+  pass "a new launch reads the refreshed catalog" || { fail "a new launch reads the refreshed catalog"; print -r -- "$out" }
 check "no temporary catalog file is left" test -z "$(print -l "$models_file".*.tmp(N))"
 kill $catalog_server 2>/dev/null
 
