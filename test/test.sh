@@ -578,6 +578,30 @@ out=$("$engine/bin/agent-guard" doctor 2>&1) && [[ $out == *"ok   plugins loaded
   pass "doctor passes with the live plugin meanwhile" || { fail "doctor passes with the live plugin meanwhile"; print -r -- "$out" }
 /bin/rm -rf "$next"
 
+# A cold npm plugin install through OpenCode, served locally as a tarball.
+plugin_assets="$run/plugin-assets"
+/bin/mkdir -p "$plugin_assets/plugin/package"
+print -r -- '{"name":"agentguard-npm-probe","version":"1.0.0","type":"module","main":"index.js"}' > "$plugin_assets/plugin/package/package.json"
+print -r -- "import { writeFileSync } from 'node:fs';
+export const ColdProbe = async () => { writeFileSync('$home/Projects/app/cold-plugin-loaded', 'ok'); return {}; };" > "$plugin_assets/plugin/package/index.js"
+/usr/bin/tar -czf "$plugin_assets/plugin/probe.tgz" -C "$plugin_assets/plugin" package
+node "$source_root/test/release-server.mjs" "$plugin_assets" > "$run/plugin-port" 2>/dev/null &
+plugin_server=$!
+for i in {1..100}; do [[ -s $run/plugin-port ]] && break; sleep 0.05; done
+plugin_url="http://127.0.0.1:$(<"$run/plugin-port")/assets/plugin/probe.tgz"
+/bin/cp "$cfg" "$run/before-cold-plugin.json"
+/usr/bin/jq --arg p "$plugin_url" '.plugin = [$p]' "$run/before-cold-plugin.json" > "$cfg"
+out=$("$engine/bin/agent-guard" doctor 2>&1) && rc=0 || rc=$?
+(( rc == 0 )) && [[ -f $home/Projects/app/cold-plugin-loaded ]] &&
+  pass "OpenCode installs and loads a missing npm plugin inside the guard" || { fail "OpenCode cold plugin install (rc $rc)"; print -r -- "$out" }
+expect ok "remove the downloaded plugin package" sb /bin/rm -r "$oc/packages/$plugin_url"
+/bin/rm -f "$home/Projects/app/cold-plugin-loaded"
+out=$("$engine/bin/agent-guard" doctor 2>&1) && rc=0 || rc=$?
+(( rc == 0 )) && [[ -f $home/Projects/app/cold-plugin-loaded ]] &&
+  pass "OpenCode reinstalls a removed plugin inside the guard" || { fail "OpenCode plugin reinstall (rc $rc)"; print -r -- "$out" }
+/bin/cp "$run/before-cold-plugin.json" "$cfg"
+kill $plugin_server 2>/dev/null
+
 # Configured packages load from the writable store. Missing or broken packages
 # still produce diagnostics; OpenCode creates its own missing bin folder.
 probe_pkg="$oc/packages/guard-probe-plugin@latest/node_modules/guard-probe-plugin"
