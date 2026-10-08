@@ -57,6 +57,7 @@ if (mode === "unguarded" || mode === "old-bypass" || mode === "symlinked") {
   await expect("blocked", "recursive rm behind a wrapper", "bash", { command: "timeout 5 rm -r ../outside" })
   await expect("blocked", "recursive rm inside bash -c", "bash", { command: "bash -c 'rm -r ../outside'" })
   await expect("blocked", "recursive rm inside env -S", "bash", { command: '/usr/bin/env -S "rm -r ../outside"' })
+  await expect("allowed", "write cache through file tools", "write", { filePath: `${home}/.cache/opencode/package.json` })
   await expect("allowed", "edit in ALLOW", "edit", { filePath: "src/index.js" })
   await expect("allowed", "write new file in ALLOW", "write", { filePath: `${home}/Projects/app/a/b/c.txt` })
   await expect("blocked", "write outside lists", "write", { filePath: `${home}/Documents/x.txt` })

@@ -258,38 +258,13 @@ for p in $deny $readonly $protected_targets; do
 done
 for p in $pinned; do sbpl "$p"; rules+=("(deny file-write* (literal $REPLY))"); done
 
-# Denies inside the writable cache, at each cache root, rendered in the final deny
-# block, after the list rules, so an ALLOW entry cannot reopen them. A protected
-# path that is or passes through a link is denied at its target too. The folders
-# above either, up to home, and each folder on the way to a root as named, are
-# pinned against rename and removal.
 sbpl_path() { if [[ $1 == "$home"/* ]]; then sbpl "${1#$home}"; REPLY="(h $REPLY)"; else sbpl "$1"; fi }
 typeset -aU state_rules state_pins
 pin_above() { local a=${1:h}; while [[ $a != / && $a != "$home" ]]; do state_pins+=("$a"); a=${a:h}; done }
-for root in $cache_roots; do
-  for rel in $cache_protected; do
-    p="${root%/}/$rel"
-    for q in "$p" "${p:A}"; do sbpl_path "$q"; state_rules+=("  (subpath $REPLY)"); pin_above "$q"; done
-  done
-  # Catalog names directly in a folder: a folder named like the lexical one also
-  # matches below it; a link target with another name matches the name anywhere in it.
-  for f re in $cache_catalogs; do
-    p="${root%/}/$f"
-    for q in "$p" "${p:A}"; do
-      sbpl_path "$q"
-      [[ ${q:t} == "${f:t}" ]] && state_rules+=("  (require-all (subpath $REPLY) (regex #\"/${f:t}/$re\"))") ||
-        state_rules+=("  (require-all (subpath $REPLY) (regex #\"/$re\"))")
-    done
-  done
-done
-for a in $cache_given; do
-  while [[ $a != / ]]; do
-    q="${${a:h:A}%/}/${a:t}"
-    [[ $q == "$home" ]] && break
-    state_pins+=("$q")
-    a=${a:h}
-  done
-done
+# The default cache is an automatic grant; its entry must not be redirected by
+# a session and interpreted as a different grant at the next launch.
+p="$home/.cache"
+for q in "$p" "${p:A}"; do state_pins+=("$q"); pin_above "$q"; done
 # Pi's guard files, once Pi is installed (docs/DESIGN.md section 11, What changes
 # for OpenCode sessions): the launchers, profile, preamble and recorded wrappers,
 # which run outside the sandbox at the next Pi start, the extension folder and the
@@ -329,7 +304,7 @@ note "read only: ${(j:, :)readonly:-none}"
 note "deny: ${(j:, :)deny:-none}"
 note "always writable for OpenCode itself: ~/.local/share/opencode, ~/.local/state/opencode, ~/.cache, ~/Library/Caches, ~/.npm, ~/.bun/install/cache, /private/tmp, per-user temp and cache"
 cache_dirs=(${^cache_roots}/opencode)
-note "write-protected in ${(j: and :)cache_dirs}, maintained outside the guard: packages, node_modules with its package metadata, bin, models.json and models-*.json"
+note "OpenCode cache follows filesystem permissions: ${(j:, :)cache_dirs}"
 (( $#pi_guard )) && note "write-protected for Pi, maintained outside the guard: ${(j:, :)pi_guard}"
 (( $#pi_names )) && note "write-protected anywhere, Pi's and OMP's project config: ${(j:, :)pi_names}"
 
@@ -367,7 +342,7 @@ profile=${profile/';;@PROTECTED_NAMES@'/$(<"$profile_dir/$protected_fragment")}
 darwin_temp=${$(/usr/bin/getconf DARWIN_USER_TEMP_DIR):A}
 darwin_cache=${$(/usr/bin/getconf DARWIN_USER_CACHE_DIR):A}
 
-/bin/mkdir -p $writable ${cache_folders/#/$cache_prefix}
+/bin/mkdir -p $writable
 [[ $mode == gui ]] && /bin/mkdir -p "$writable_gui[1]"
 (( staged )) || $prepare_hook
 
@@ -391,8 +366,9 @@ context="$session/permissions.json"
 /usr/bin/jq -n --argjson allow "$(jarr $allow)" --argjson readonly "$(jarr $user_readonly)" \
   --argjson deny "$(jarr $deny)" --argjson protected "$(jarr $protected_targets)" \
   --argjson skills "$(jarr $skill_roots)" --argjson configs "$(jarr $skill_configs)" \
+  --argjson writable "$(jarr $writable $darwin_cache)" \
   --arg checker "$session/checker" --arg preparation "$channel" --arg preparationReplies "$replies" \
-  '{allow:$allow,readonly:$readonly,deny:$deny,protected:$protected,skills:$skills,configs:$configs,checker:$checker,preparation:$preparation,preparationReplies:$preparationReplies}' > "$context"
+  '{allow:$allow,readonly:$readonly,deny:$deny,protected:$protected,skills:$skills,configs:$configs,writable:$writable,checker:$checker,preparation:$preparation,preparationReplies:$preparationReplies}' > "$context"
 export AGENT_GUARD_CONTEXT="$context"
 if (( ! staged )); then
   /bin/cp "$context" "$engine/state/rules.json.$$"

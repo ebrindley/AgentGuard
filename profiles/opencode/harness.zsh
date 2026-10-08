@@ -13,15 +13,6 @@ protected_paths=("$home/.config/opencode" "$home/.opencode")
 protected=($protected_paths "$home/.cc-safety-net")
 protected_names=(.opencode opencode.json opencode.jsonc tui.json tui.jsonc)
 protected_fragment=protected.sb
-# Code and configuration OpenCode runs or trusts from its writable cache, relative
-# to the cache root state_hook resolves: the package store, the legacy store with
-# its install metadata, bin and the model catalog. Write-denied after the list rules,
-# with link targets protected and the folders above pinned; cache_folders are
-# created before exec, since OpenCode creates bin at every start.
-cache_protected=(opencode/packages opencode/node_modules opencode/package.json opencode/package-lock.json
-                 opencode/bun.lock opencode/bin opencode/models.json)
-cache_catalogs=(opencode 'models-[^/]*\.json$')
-cache_folders=(opencode/bin)
 state_hook=opencode_state_roots
 gui_args=(--no-sandbox)
 env_unset=(ELECTRON_RUN_AS_NODE OPENCODE_SIDECAR_V2 CC_SAFETY_NET_HOME CC_SAFETY_NET_WORKTREE SAFETY_NET_WORKTREE CC_SAFETY_NET_AUDIT_HOME)

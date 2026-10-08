@@ -964,6 +964,16 @@ OpenCode runs the credential and hooks cases from its credentials and hooks rele
 
 ## 9. Code in writable folders
 
+Current OpenCode policy supersedes step 7's cache immutability below. Package
+installation and tool/catalog maintenance now occur under Seatbelt. The seven
+cache subtree denies and one catalog-name deny become zero; the cache-content
+parent pin is removed while the automatic default cache-root pin remains.
+Guard's vendored code and policy remain protected. A relocated cache adds no
+write grant. This accepts cache persistence into later unguarded execution,
+already accepted for editable project code, to permit ordinary dependency work.
+Pi's cache protections are unchanged. The following evidence records the older
+policy and its original motivation.
+
 OpenCode Guard v1.0.3 lets an agent change code that OpenCode runs, and configuration it trusts, from its cache. Its profile allows writes beneath `~/.cache`, which holds OpenCode's npm package store, its `bin` folder of downloaded binaries and its model catalog. Stage 1 kept this unchanged. A spike on 2026-09-28 measured the write access to the package store under the v1.0.3 profile; that OpenCode then imports the changed code comes from its source, not from running a payload. What `bin` and the catalog do came from OpenCode 1.18.34's source; no probe covered them before step 7. Step 7, release 0.1.2, write-protects all three: As built and Test results, below. Code other harnesses run from their writable folders is listed under Other code in writable folders, below.
 
 ### Evidence

@@ -85,6 +85,7 @@ function loadRules() {
     const rules = JSON.parse(readFileSync(file, "utf8"))
     for (const key of ["allow", "readonly", "deny", "skills", "configs", "protected"])
       if (!Array.isArray(rules[key]) || rules[key].some(p => typeof p !== "string" || !p.startsWith("/"))) return null
+    if (rules.writable !== undefined && (!Array.isArray(rules.writable) || rules.writable.some(p => typeof p !== "string" || !p.startsWith("/")))) return null
     if (!rules.checker?.startsWith(join(STATE, "opencode") + "/") || !existsSync(join(rules.checker, "rules/rule.json"))) return null
     return rules
   } catch {
@@ -159,7 +160,7 @@ async function guard(input) {
     if (!rules) throw new Error("Agent Guard: rules unavailable; relaunch OpenCode.")
     const kind = scope(p)
     if (kind === "deny") throw new Error(`Agent Guard: ${p} is in the DENY list (${LIST}).`)
-    if (kind === "allow" || (kind === "none" && [...temps, ...rules.skills].some(r => under(p, r)))) return
+    if (kind === "allow" || (kind === "none" && [...temps, ...rules.skills, ...(rules.writable ?? [])].some(r => under(p, r)))) return
     throw new Error(`Agent Guard: ${p} is not writable. Add it under ALLOW in ${LIST}, then relaunch.`)
   }
   const prepared = new Set()

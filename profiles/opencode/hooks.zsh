@@ -1,16 +1,11 @@
 # OpenCode-specific setup and the plugin-load check.
 
-# State roots: OpenCode's cache root, XDG_CACHE_HOME, else ~/.cache. OpenCode
-# (xdg-basedir) treats an empty XDG_CACHE_HOME as unset. A value that is not an
-# existing folder named by its full path refuses the launch, so a relocated
-# package store is never left unprotected. The default root follows the launch's
-# own, because ~/.cache is writable in every launch. cache_given holds the roots as
-# named, cache_roots their canonical forms, the launch's first.
+# Resolve only for diagnostics. A relocated cache gets no extra filesystem grant.
 opencode_state_roots() {
-  local given=${XDG_CACHE_HOME:-}
-  [[ -z $given || ( $given == /* && -d $given ) ]] ||
-    fail "XDG_CACHE_HOME must name an existing folder by its full path, or be unset: $given"
-  cache_given=(${given:+${given:a}} "$home/.cache")
+  local given=${XDG_CACHE_HOME:-$home/.cache}
+  [[ $given == /* && ( ! -e $given || -d $given ) ]] ||
+    fail "XDG_CACHE_HOME must name a folder by its full path, or be unset: $given"
+  cache_given=("$given")
   cache_roots=(${cache_given:A})
 }
 
@@ -80,7 +75,7 @@ opencode_check() {
         (( listening )) || { print "$sev cannot read OpenCode's events to check its plugins$label"; [[ $sev == warn ]] || ok=0 }
       fi
       for f in $failed; do
-        [[ $f == 'Failed to install plugin '* ]] && f+="; install it outside the guard (Agent Guard's README, Maintenance outside the guard)"
+        [[ $f == 'Failed to install plugin '* ]] && f+="; check the package source and the cache's Guard List permissions"
         print -r -- "$sev plugin not loaded in OpenCode$label: $f"
         [[ $sev == warn ]] || ok=0
       done
@@ -96,12 +91,11 @@ opencode_check() {
         print "FAIL OpenCode Guard's plugin is also in ~/.config/opencode/plugins"
         ok=0
       fi
-      # OpenCode's grep and glob tools need ripgrep, and cannot download it into
-      # the write-protected bin.
+      # OpenCode may download ripgrep into its writable cache when it is absent.
       if whence -p rg >/dev/null || [[ -x ${cache_prefix}opencode/bin/rg ]]; then
         print "ok   ripgrep found"
       else
-        print -r -- "warn ripgrep is not on PATH or in ${cache_prefix}opencode/bin, so OpenCode's grep and glob tools fail; install it outside the guard (Agent Guard's README, Maintenance outside the guard)"
+        print -r -- "warn ripgrep is not on PATH or in ${cache_prefix}opencode/bin; OpenCode may download it if that cache is writable"
       fi
       # After a migration: OpenCode Guard's shim paths, while present, link to Agent Guard's shims.
       if [[ -f $engine/state/migration.json ]]; then

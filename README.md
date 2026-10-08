@@ -92,9 +92,9 @@ bindings, custom wrappers and nested launches.
 
 ## Maintenance outside the guard
 
-Install or update OpenCode plugins, language servers and model catalogs outside
-the guard using the real executable. Pi/OMP packages and protected settings
-also need outside maintenance. These commands run with your account's full
+OpenCode can maintain configured plugin dependencies, downloaded tools and model
+catalogs inside its writable cache. Pi/OMP packages and protected settings
+still need outside maintenance. These commands run with your account's full
 authority. Follow the [maintenance procedures](docs/OPERATIONS.md#maintenance-outside-the-guard),
 including the cache checks before installing code. Run `agent-guard doctor`
 after agent updates; an npm update can replace Pi's guarded launcher.

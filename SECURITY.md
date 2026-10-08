@@ -47,9 +47,7 @@ The launcher runs OpenCode under a profile generated from the Guard List
 can write only to ALLOW folders, the standard global skill folders and the data,
 cache and temp folders OpenCode needs, cannot read or write DENY entries, and
 cannot change the guard, the list, OpenCode's global config and plugin folder
-(`~/.config/opencode`) apart from its skill folders, OpenCode's
-package stores, `bin` folder and model catalog in its cache (also under
-`XDG_CACHE_HOME`, even inside ALLOW), the shell startup files or
+(`~/.config/opencode`) apart from its skill folders, the shell startup files or
 `~/Library/LaunchAgents`. Once Pi's guard is installed, it also cannot change
 Pi's guard files, even inside ALLOW: `pi`, `omp`, `pi-sandbox.sb`,
 `pi-sandbox-preamble.zsh` and the recorded custom wrappers in `~/.local/bin`, the
@@ -68,6 +66,11 @@ entry covers it. The other exceptions are under
 that steers installs made outside the guard, remote-configuration entries in
 OpenCode's `auth.json`, the targets of symlinked project config names, and Pi's
 and OMP's other configuration under ALLOW.
+
+OpenCode may maintain its cached packages, tools and catalogs under Seatbelt.
+A relocated cache gets no new grant from `XDG_CACHE_HOME`. Cache code can affect
+a later unguarded process; that persistence risk is accepted for this workload,
+as it is for ordinary project scripts. Guard's release and policy stay protected.
 
 The OpenCode plugin and cc-safety-net are advisory. They refuse tool calls with
 a clear message, but nothing depends on them for safety. The Seatbelt profile is
@@ -159,8 +162,8 @@ behind linked ancestors. These changes follow the 0.2.0 prerelease.
 ### OpenCode
 
 - **npm configuration in the cache steers installs made outside the guard.**
-  Apart from OpenCode's package stores, `bin` and model catalog, `~/.cache` is
-  writable. An agent can create `~/.cache/node_modules` and `~/.cache/.npmrc`; a
+  OpenCode's cache, including its package stores, downloaded tools and model
+  catalog, is writable. An agent can create `~/.cache/node_modules` and `~/.cache/.npmrc`; a
   later install of a new plugin or npm language server outside the guard then
   fetches it from the registry that `.npmrc` names (OpenCode 1.18.33), and the
   installed code runs in every later OpenCode session. Check `~/.cache` before
@@ -310,9 +313,8 @@ For OpenCode:
 
 - write outside ALLOW and the folders OpenCode needs;
 - read a DENY entry;
-- change the guard, the Guard List, OpenCode's config or plugins, its package
-  stores, `bin` folder or model catalog, Pi's guard files once Pi's guard is
-  installed, or another protected path or name;
+- change the guard, the Guard List, OpenCode's config or plugins, Pi's guard
+  files once Pi's guard is installed, or another protected path or name;
 - start OpenCode unguarded through an Agent Guard entry point (the `opencode`
   command, the app, or a forwarder left after the move from OpenCode Guard)
   without the plugin's refusal.
