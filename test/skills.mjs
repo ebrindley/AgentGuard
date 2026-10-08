@@ -75,7 +75,10 @@ console.log(`fixture: ${run}`)
 if (!process.argv[2] || process.argv[2] === "lifecycle" || process.argv[2] === "linked") client("lifecycle")
 if (!process.argv[2] || process.argv[2] === "staged") staged()
 if (process.argv[2] === "readonly") client("readonly")
-if (process.argv[2] === "kernel") { client("kernel"); client("relinked") }
+if (process.argv[2] === "kernel") {
+  client("kernel")
+  client("relinked", { OPENCODE_CONFIG_DIR: join(home, "Documents"), XDG_CONFIG_HOME: join(home, "Documents"), OPENCODE_PURE: "1" })
+}
 if (process.argv[2] === "stdin") {
   const syntax = spawnSync("/bin/zsh", ["-fn", join(release, "launch")], { encoding: "utf8" })
   assert.equal(syntax.status, 0, syntax.stderr)
