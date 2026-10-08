@@ -1,0 +1,43 @@
+{
+  "step": 9,
+  "reason": "OpenCode package stores, cached tools and catalogs are ordinary sandboxed workload. Keep the automatic cache root pinned.",
+  "inserts": [],
+  "replaces": [
+    {
+      "before": "  (subpath (h \"/.cache/opencode/packages\"))\n",
+      "after": ""
+    },
+    {
+      "before": "  (subpath (h \"/.cache/opencode/node_modules\"))\n",
+      "after": ""
+    },
+    {
+      "before": "  (subpath (h \"/.cache/opencode/package.json\"))\n",
+      "after": ""
+    },
+    {
+      "before": "  (subpath (h \"/.cache/opencode/package-lock.json\"))\n",
+      "after": ""
+    },
+    {
+      "before": "  (subpath (h \"/.cache/opencode/bun.lock\"))\n",
+      "after": ""
+    },
+    {
+      "before": "  (subpath (h \"/.cache/opencode/bin\"))\n",
+      "after": ""
+    },
+    {
+      "before": "  (subpath (h \"/.cache/opencode/models.json\"))\n",
+      "after": ""
+    },
+    {
+      "before": "  (require-all (subpath (h \"/.cache/opencode\")) (regex #\"/opencode/models-[^/]*\\.json$\"))\n",
+      "after": ""
+    },
+    {
+      "before": "  (literal (h \"/.cache/opencode\"))\n",
+      "after": ""
+    }
+  ]
+}
