@@ -53,3 +53,6 @@ logs/injection/
 temp/
 tmp/
 .cache/
+analysis-synthesis/
+research/
+config/*.backup.*
