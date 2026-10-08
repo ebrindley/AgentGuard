@@ -37,12 +37,14 @@ bypass variables, PATH holding both guards' shim folders (with the unmodified
 v1.0.3 launcher as OpenCode Guard), that OpenCode Guard's engine folder stays
 write-protected when listed under ALLOW, and that uninstall leaves OpenCode
 Guard's PATH blocks, rulebook and plugin file unchanged. For OpenCode's cache it
-checks writes, creation, removal, renames and link replacement of the stores,
-`bin` and the catalog at the default root and at an `XDG_CACHE_HOME` root inside
-ALLOW, the refusal of an unusable `XDG_CACHE_HOME`, and, with the real CLI, a
-plugin loading from the write-protected store, `doctor` naming a missing or
-failing plugin, ripgrep from `bin`, and the catalog refresh against a local
-catalog source. Only its copied launcher has the
+checks package, tool and catalog maintenance at the default cache and a relocated
+cache inside ALLOW. It checks the default root pin, no additional access for an
+ungranted relocated cache, acceptance of a missing absolute cache path, and
+rejection of relative paths or existing non-directories. A
+local npm fixture verifies lifecycle confinement and removal. Real OpenCode
+installs and reinstalls a cold plugin from a locally served tarball, reports
+missing or failing plugins, runs cached ripgrep, and reads a refreshed catalog
+on the next launch. Only its copied launcher has the
 account-home lookup replaced; production has no test override. The golden test checks the
 real account lookup under spoofed environment values, then compares complete
 generated profiles against unmodified v1.0.3 fixtures for empty and nested lists.
