@@ -12,11 +12,13 @@ and pi-sandbox-guard. Pi and OMP use a separate project-based policy.
 
 | Agent | Write access | Read restrictions | Guard List |
 |---|---|---|---|
-| OpenCode | ALLOW folders, standard global skill folders and required runtime/cache/temp locations | Explicit DENY entries | Applies |
+| OpenCode | ALLOW folders, ordinary global configuration and skills, and runtime/cache/temp locations | Explicit DENY entries | Applies |
 | Pi / OMP | Launched project and permitted runtime/cache/temp locations | Fixed credential-path and `.env` denies | Does not apply |
 
-Agent configuration and guard files are write-protected, subject to the
-[documented exceptions](SECURITY.md). Network access is unrestricted. Files
+Guard files remain write-protected. OpenCode can maintain its ordinary
+configuration, plugins, MCPs, skills and dependencies under the sandbox. These
+OpenCode maintenance changes are unreleased. Pi/OMP retain their separate
+configuration restrictions; see [the security policy](SECURITY.md). Network access is unrestricted. Files
 inside permitted write locations can still be changed or deleted; keep backups
 and review changes before running them outside the guard. Reads outside the
 applicable denies remain broad. The operating system sandbox is the enforcement

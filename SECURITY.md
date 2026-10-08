@@ -21,10 +21,11 @@ best-effort basis. There is no bug bounty.
 ## Supported versions
 
 Fixes go into the latest release only; older releases do not receive backports.
-The latest stable release is 0.2.2 (OpenCode, Pi and OMP).
+The latest stable release is 0.2.4 (OpenCode, Pi and OMP).
 `agent-guard update` follows stable releases and leaves a newer installed version
 unchanged. See [release channels](docs/OPERATIONS.md#release-channels) for tagged
-installers; they do not include later commits. The policy below describes 0.2.2.
+installers; they do not include later commits. The OpenCode policy below describes the current checkout; configuration and
+dependency maintenance changes are unreleased.
 
 0.2.2 narrows OpenCode's configuration protections for skill content
 and replaces its blanket recursive-delete block with scoped checks. See
@@ -44,11 +45,13 @@ Statements about Pi below apply to OMP too unless they name one runtime.
 
 The launcher runs OpenCode under a profile generated from the Guard List
 (`~/Agent Guard/Guard List.txt`) at each launch. Under that profile the agent
-can write only to ALLOW folders, the standard global skill folders and the data,
-cache and temp folders OpenCode needs, cannot read or write DENY entries, and
-cannot change the guard, the list, OpenCode's global config and plugin folder
-(`~/.config/opencode`) apart from its skill folders, the shell startup files or
-`~/Library/LaunchAgents`. Once Pi's guard is installed, it also cannot change
+can write to ALLOW folders, ordinary global OpenCode configuration, standard
+global skill folders and required runtime/cache/temp locations. DENY entries
+block reads and writes. Guard-owned code, policy, snapshots, bootstrap entries,
+the installed `~/.opencode/bin` executable, shell startup files and
+`~/Library/LaunchAgents` remain protected. The global configuration roots and
+the bootstrap container are pinned against replacement; their ordinary
+descendants are editable. Once Pi's guard is installed, it also cannot change
 Pi's guard files, even inside ALLOW: `pi`, `omp`, `pi-sandbox.sb`,
 `pi-sandbox-preamble.zsh` and the recorded custom wrappers in `~/.local/bin`, the
 extension folder `~/.pi/agent/extensions/pi-sandbox-guard/` and
@@ -64,13 +67,20 @@ protected at its name only, so the missing target can be created where an ALLOW
 entry covers it. The other exceptions are under
 [Known limitations](#known-limitations-in-022): npm configuration in the cache
 that steers installs made outside the guard, remote-configuration entries in
-OpenCode's `auth.json`, the targets of symlinked project config names, and Pi's
+OpenCode's `auth.json`, and Pi's
 and OMP's other configuration under ALLOW.
 
 OpenCode may maintain its cached packages, tools and catalogs under Seatbelt.
 A relocated cache gets no new grant from `XDG_CACHE_HOME`. Cache code can affect
 a later unguarded process; that persistence risk is accepted for this workload,
 as it is for ordinary project scripts. Guard's release and policy stay protected.
+
+Ordinary configuration and extensions can execute code and persist changes into
+later unguarded sessions. This risk is accepted, as for editable project scripts
+and shared skills. Their execution in a guarded process tree remains confined.
+Editable child symlinks and config-selection environment variables never create
+new write grants. Root identity pinning preserves launch-time automatic grants.
+A local MCP child inherits Seatbelt; services reached over the network do not.
 
 The OpenCode plugin and cc-safety-net are advisory. They refuse tool calls with
 a clear message, but nothing depends on them for safety. The Seatbelt profile is
@@ -187,13 +197,6 @@ behind linked ancestors. These changes follow the 0.2.0 prerelease.
   second launch's rules. Seatbelt still enforces each session's own profile.
   Planned: step 9 of the plan in [docs/DESIGN.md](docs/DESIGN.md#12-plan) moves
   per-launch state onto the shared engine.
-- **Symlinked project config names.** The names `.opencode`, `opencode.json`,
-  `opencode.jsonc`, `tui.json` and `tui.jsonc` cannot be created, replaced or
-  removed anywhere outside ordinary skill content in the standard skill folders. When one of them is a symlink, its target is write-protected
-  only when OpenCode starts from the folder that holds the link, in a terminal.
-  Started from the app, or with `opencode <project>` from another folder, writes
-  through the link reach its target. The plugin refuses file edits through such a
-  link; shell commands are not checked. Not planned.
 - **Pi's and OMP's other configuration is writable under ALLOW.** On a Mac with
   Pi's guard, an OpenCode session can write Pi's and OMP's configuration,
   extensions and other folders Pi and OMP load from wherever an ALLOW entry
@@ -313,8 +316,9 @@ For OpenCode:
 
 - write outside ALLOW and the folders OpenCode needs;
 - read a DENY entry;
-- change the guard, the Guard List, OpenCode's config or plugins, Pi's guard
-  files once Pi's guard is installed, or another protected path or name;
+- change the guard, the Guard List, the Guard bootstrap or its staging entry,
+  the installed `~/.opencode/bin`, Pi's guard files once installed, or another
+  protected path or name;
 - start OpenCode unguarded through an Agent Guard entry point (the `opencode`
   command, the app, or a forwarder left after the move from OpenCode Guard)
   without the plugin's refusal.

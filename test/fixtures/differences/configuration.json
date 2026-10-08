@@ -1,0 +1,6 @@
+{
+  "step": "configuration",
+  "reason": "Ordinary OpenCode configuration is writable; guard entries and automatic root identities remain protected.",
+  "inserts": [],
+  "replaces": []
+}

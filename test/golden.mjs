@@ -32,6 +32,7 @@ const differences = readdirSync(join(root, 'test/fixtures/differences'))
 const piInstalled = ['step-7c.json', 'step-7f.json']
   .map((f) => JSON.parse(readFileSync(join(root, 'test/fixtures/differences', f), 'utf8')));
 const skills = JSON.parse(readFileSync(join(root, "test/fixtures/differences/skills.json"), "utf8"));
+const configuration = JSON.parse(readFileSync(join(root, "test/fixtures/differences/configuration.json"), "utf8"));
 function applyDifferences(text, records) {
   for (const { step, after, insert, inserts = [{ after, insert }] } of records) {
     for (const d of inserts) {
@@ -57,8 +58,6 @@ try {
   mkdirSync(source);
   adapter.stage(root, source, home);
   adapter.layout(source, engine);
-  writeFileSync(join(home, 'Projects/dotfiles/config'), '{}');
-  symlinkSync(join(home, 'Projects/dotfiles/config'), join(home, 'Projects/app/opencode.json'));
   const identity = adapter.identity(root, { HOME: home, USER: 'not-the-login-user' });
   assert.deepEqual([identity.home, identity.engine], [userInfo().homedir, join(userInfo().homedir, 'Library/Application Support/AgentGuard')]);
   console.log('ok   account lookup ignores spoofed HOME and USER before profile loading');
@@ -70,7 +69,7 @@ try {
     // v1.0.3 takes its home from $HOME, so the reference runs unmodified.
     const old = exec(['/bin/zsh', join(reference, 'launch'), 'profile'], options);
     const current = exec([...adapter.launcher(engine), 'profile'], options);
-    assert.equal(current, applyDifferences(old.replaceAll('OpenCodeGuard', 'AgentGuard').replaceAll('OpenCode Guard', 'Agent Guard'), [...records, skills]), name);
+    assert.equal(current, applyDifferences(old.replaceAll('OpenCodeGuard', 'AgentGuard').replaceAll('OpenCode Guard', 'Agent Guard'), [...records, skills, configuration]), name);
     console.log(`ok   ${name} profile matches v1.0.3 exactly apart from renamed paths and recorded differences (step ${records.map((d) => d.step).join(', ')})`);
   }
   compare('empty', 'ALLOW -\nREAD ONLY -\nDENY -\n', differences);

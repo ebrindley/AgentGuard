@@ -432,7 +432,8 @@ inside a guarded OpenCode session, and no session can write `bind`'s files.
 possible command. It checks OpenCode plugins from the global configuration and
 `~/.opencode`, not plugins named only in a project's configuration. Read the
 warnings and skipped checks as well as the exit status. Inside guarded OpenCode,
-`agent_guard_status` reports whether Agent Guard is active and names its release.
+`agent_guard_status` reports the loaded plugin's view of local confinement and
+its release. It does not attest remote services or other plugins' hook behavior.
 
 CC Safety Net 2.4.14's standalone `cc-safety-net doctor` looks for its package
 in OpenCode's plugin configuration. It does not recognize Agent Guard's
@@ -540,17 +541,41 @@ Configured npm plugins install at startup. OpenCode can download ripgrep when
 it is absent from PATH and the cache, and `opencode models --refresh` can replace
 its cached catalog. Language servers may also need toolchain-specific paths,
 such as `~/go` or `~/.cargo`, under ALLOW. Their locations are not automatically
-granted. Global plugin configuration remains protected until the configuration
-editing change; existing configured plugins can maintain their dependencies.
+granted. Ordinary plugin configuration is writable; Guard bootstrap entries remain
+protected.
 
 Cache contents can affect later independently unguarded starts. Install only
 packages you trust and inspect changes before running them outside Guard.
 Pi/OMP cache and configuration protections are unchanged. Their maintenance,
 and changes to Agent Guard itself, still run outside the guard.
 
-## OpenCode skill preparation
+## OpenCode configuration and skills
 
-0.2.2 uses a launch-scoped preparation worker and protected checker
-snapshots. The shared legacy rulebook remains for older sessions and independent
-checker consumers. See [OpenCode skills](SKILLS.md). Existing skill files and
-containers are retained during uninstall.
+Default global configuration roots, `~/.config/opencode` and `~/.opencode`, are
+writable except for Guard's bootstrap, its installer staging entry and the
+installed `~/.opencode/bin` executable. Their identities and the Guard plugin
+container stay pinned, so replacing the whole tree from a session is refused.
+Ordinary sibling plugins, configuration files, MCP definitions, skills and
+supporting files can be created, edited, renamed and deleted. Project settings
+follow project permissions; READ ONLY and DENY still restrict automatic grants.
+
+Configuration overrides retain OpenCode's own precedence. A relocated XDG root,
+`OPENCODE_CONFIG`, `OPENCODE_CONFIG_DIR` or `OPENCODE_TUI_CONFIG` receives no
+additional write grant. Put a custom location under ALLOW when it needs writes.
+A non-default global config or plugin-disabled mode can omit the advisory Guard
+plugin; it does not remove Seatbelt. Logs distinguish these cases. No Guard
+configuration is injected into the user's inline configuration.
+
+The launcher creates only pinned root containers. Ordinary config files and
+project folders are initialized inside Seatbelt. No outside-sandbox worker
+prepares skill directories. Policy snapshots remain immutable for the session;
+restart to pick up changed Guard List permissions or a new release.
+
+The diagnostic plugin check uses a controlled snapshot directory with project
+configuration disabled. Plugin registration is operational evidence, not proof
+that every hook executes or that a remote server is sandboxed. A local MCP child
+inherits the launch profile; an existing or remote service does not. Attaching
+a client to a server does not change that server's permissions.
+
+See [skills and deletion policy](SKILLS.md). Pi/OMP policy is unchanged, including
+when OpenCode is a child of a Pi/OMP session.

@@ -1,7 +1,7 @@
 # OpenCode skills
 
-This describes 0.2.2. Releases before 0.2.2 write-protect OpenCode's skill
-folders.
+This describes the current checkout. OpenCode configuration maintenance is
+unreleased; releases before 0.2.2 also write-protect skill content.
 
 OpenCode can create, edit, rename, move and delete skills and their supporting
 files without adding each skill to the Guard List. The automatic global roots
@@ -15,8 +15,9 @@ outside authorized locations.
 
 Reference files such as `opencode.json` inside the standard skill folders are
 writable. Agent Guard's installed code, launchers, plugin, Guard List, checker
-policy and activation remain protected. Other OpenCode configuration and plugin
-folders remain protected.
+policy and activation remain protected. Ordinary OpenCode configuration, plugins,
+MCP definitions, agents, tools and themes are writable too. The installed
+`~/.opencode/bin` executable remains protected.
 
 ## Restrictions
 
@@ -33,16 +34,16 @@ session.
 
 ## Preparation
 
-The launcher prepares global containers. A launch-scoped worker prepares project
-containers when the plugin selects a writable project or first uses its skill
-path. This covers projects selected after a server starts. The worker remains
-outside Seatbelt and can only create missing skill containers and OpenCode's
-constant `.gitignore`. It cannot execute requested commands, overwrite existing
-configuration, or grant new filesystem access. It stops when the guarded launch
-ends. No service or account is installed.
+The launcher initializes only pinned automatic root containers and the pinned
+Guard plugin container. OpenCode creates ordinary files and subdirectories
+inside Seatbelt. There is no outside-sandbox preparation worker or request
+channel. Projects selected after startup use the same frozen filesystem scope.
 
-The worker uses the frozen Guard List. A request outside its writable boundary
-is refused. If preparation cannot respond, the tool reports that failure.
+Links inside editable configuration, including `skill` and `skills`, never
+create new write grants on a later launch. Automatic root entries and their
+ancestor entries are protected against replacement. Custom configuration and
+skill locations retain Guard List permissions; environment variables and
+`skills.paths` cannot add filesystem authority.
 
 ## Deletes and checker policy
 
@@ -54,8 +55,8 @@ rules are preserved.
 
 Literal `rm -r` and `rm -rf` can delete ordinary skills. When a shell tool selects
 an outside working directory, the checker also analyzes the command from the
-original session boundary. A refusal from either analysis wins. Global skill
-roots receive deletion allowances unless the operator's paranoid deletion policy
+original session boundary. A refusal from either analysis wins. Standalone global skill roots and ordinary content folders inside global
+configuration receive deletion allowances unless the operator's paranoid deletion policy
 applies. Existing explicit allowances are retained. A repository's policy may
 tighten these checks but cannot weaken them.
 
@@ -75,6 +76,8 @@ containment and guard integrity. Complete Git metadata integrity is not claimed.
 
 Disposable homes exercise real Seatbelt, plugin checks, policy snapshots, custom
 rules and an older checker consumer. Real OpenCode performs the skill lifecycle
-against a local model fixture through CLI and server routes. The GUI entry-point
+and configuration lifecycle against a local model fixture through CLI and server
+routes. Plugin initialization and a local MCP child attempt outside writes
+without relying on the advisory hook. The GUI entry-point
 fixture hosts the real backend; it does not exercise the desktop UI. Tests
 require no additional macOS account.

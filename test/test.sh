@@ -230,13 +230,13 @@ expect no "edit Guard List"               sb /bin/sh -c "echo x >> '$list'"
 expect no "move Guard List folder"        sb /bin/mv "$home/Agent Guard" "$home/moved"
 expect no "write engine"                  sb /usr/bin/touch "$engine/x"
 expect no "write OpenCode Guard's engine folder, though under ALLOW" sb /usr/bin/touch "$old_engine/x"
-expect no "write opencode config"         sb /usr/bin/touch "$home/.config/opencode/x"
+expect ok "write opencode config"         sb /usr/bin/touch "$home/.config/opencode/x"
 expect no "write symlinked shell profile" sb /bin/sh -c "echo x >> '$home/Projects/dotfiles/zshrc'"
-expect no "write project .opencode"       sb /bin/mkdir -p "$home/Projects/app/.opencode/plugins"
-expect no "write project opencode.json"   sb /usr/bin/touch "$home/Projects/app/opencode.json"
-expect no "write project tui.json"        sb /usr/bin/touch "$home/Projects/app/tui.json"
+expect ok "write project .opencode"       sb /bin/mkdir -p "$home/Projects/app/.opencode/plugins"
+expect ok "write project opencode.json"   sb /usr/bin/touch "$home/Projects/app/opencode.json"
+expect ok "write project tui.json"        sb /usr/bin/touch "$home/Projects/app/tui.json"
 expect no "write symlinked bash_login"    sb /bin/sh -c "echo x >> '$home/Projects/dotfiles/bash_login'"
-expect no "write symlinked project config target" sb /bin/sh -c "echo x >> '$home/Projects/dotfiles/oc.json'"
+expect ok "write symlinked project config target" sb /bin/sh -c "echo x >> '$home/Projects/dotfiles/oc.json'"
 expect no ".opencode/.gitignore in READ ONLY" sb /bin/sh -c ": > '$home/Projects/archive/.opencode/.gitignore'"
 expect no "exec open"                     sb /usr/bin/open -h
 expect no "exec codesign"                 sb /usr/bin/codesign -h
@@ -658,7 +658,8 @@ kill $catalog_server 2>/dev/null
 
 # OpenCode Guard's plugin next to Agent Guard's: doctor names it; uninstall leaves it.
 add_old_parts
-refuses "doctor fails with OpenCode Guard's plugin also installed" "FAIL OpenCode Guard's plugin is also in" "$engine/bin/agent-guard" doctor
+out=$("$engine/bin/agent-guard" doctor 2>&1)
+[[ $out == *"warn OpenCode Guard"* ]] && pass "doctor warns about the other guard plugin" || fail "doctor warns about the other guard plugin"
 /bin/zsh "$engine/current/uninstall.sh" >/dev/null 2>&1
 [[ ! -e $engine && ! -L $home/.config/opencode/plugins/agent-guard.js && ! -e $cc/agent-guard ]] && pass "uninstall" || fail "uninstall"
 check "rc block removed" sh -c "! /usr/bin/grep -q agent-guard '$home/.zshrc' '$home/.zprofile'"

@@ -69,9 +69,9 @@ if (mode === "unguarded" || mode === "old-bypass" || mode === "symlinked") {
   await expect("blocked", "edit Guard List", "edit", { filePath: `${home}/Agent Guard/Guard List.txt` })
   // test.sh lists this folder under ALLOW; it stays protected.
   await expect("blocked", "write OpenCode Guard's engine folder", "write", { filePath: `${home}/Library/Application Support/OpenCodeGuard/bin/opencode` }, "is protected")
-  await expect("blocked", "project plugin", "write", { filePath: ".opencode/plugins/x.js" })
-  await expect("blocked", "project config", "edit", { filePath: "opencode.json" })
-  await expect("blocked", "project tui config", "write", { filePath: "tui.json" })
+  await expect("allowed", "project plugin", "write", { filePath: ".opencode/plugins/x.js" })
+  await expect("allowed", "project config", "edit", { filePath: "opencode.json" })
+  await expect("allowed", "project tui config", "write", { filePath: "tui.json" })
   await expect("blocked", "list DENY", "list", { path: `${home}/Documents/private` })
   await expect("blocked", "project cc-safety-net policy", "write", { filePath: ".cc-safety-net/policy.json" })
   await expect("blocked", "tilde outside", "write", { filePath: "~/.zshrc" })

@@ -9,30 +9,22 @@ opencode_state_roots() {
   cache_roots=(${cache_given:A})
 }
 
-opencode_prepare() {
-oc="$home/.config/opencode"
-opencode_skill_scope "${oc:A}"
-[[ $REPLY == (readonly|deny) ]] && return 0
-/bin/mkdir -p "$oc"
-[[ -e $oc/.gitignore ]] || print -l node_modules package.json package-lock.json bun.lock .gitignore > "$oc/.gitignore"
-[[ -e $oc/config.json || -e $oc/opencode.json || -e $oc/opencode.jsonc ]] || print -r -- '{"$schema": "https://opencode.ai/config.json"}' > "$oc/opencode.json"
-
-}
 opencode_check() {
     # check staged replaces the global config folder with one inside the release
     # whose only plugin links to the release's plugin.js, so the live plugin is
     # not loaded. ~/.opencode is still read.
-    local -a scope=()
+    local -a scope=(/usr/bin/env OPENCODE_DISABLE_PROJECT_CONFIG=1)
     local label=
     if (( staged )); then
       scope=(/usr/bin/env -u OPENCODE_CONFIG -u OPENCODE_CONFIG_DIR -u OPENCODE_CONFIG_CONTENT
-             "XDG_CONFIG_HOME=$profile_dir/check-config")
+             OPENCODE_DISABLE_PROJECT_CONFIG=1 "XDG_CONFIG_HOME=$profile_dir/check-config")
       label=' (staged)'
     fi
     if next_cli; then
       # OpenCode loads the configured plugins at the first request for a folder.
       # It reports a plugin that fails to install, resolve or import as an event,
       # and one whose init fails only in its log, so the check listens to both.
+      /bin/mkdir -p "$session/check-project"
       out="$engine/state/.serve.$$" events="$engine/state/.events.$$"
       AGENT_GUARD_SANDBOXED=1 AGENT_GUARD_RELEASE=${release:t} $scope $sandbox -D GUI=0 "$REPLY" serve --print-logs --log-level ERROR --hostname 127.0.0.1 --port $(( 20000 + RANDOM % 30000 )) > "$out" 2>&1 &
       pid=$!
@@ -48,7 +40,7 @@ opencode_check() {
           for j in {1..20}; do /usr/bin/grep -q '"server.connected"' "$events" 2>/dev/null && { listening=1; break }; sleep 0.1; done
           sleep 0.2
         fi
-        [[ -n $url ]] && ids=$(/usr/bin/curl -sf --max-time 5 "$url/experimental/tool/ids?directory=${darwin_temp// /%20}" 2>/dev/null) &&
+        [[ -n $url ]] && ids=$(/usr/bin/curl -sf --max-time 5 "$url/experimental/tool/ids?directory=${session// /%20}/check-project" 2>/dev/null) &&
           [[ $ids == *'"agent_guard_status"'* ]] && break
         sleep 0.5
       done
@@ -88,8 +80,7 @@ opencode_check() {
       if [[ ! -e $old && ! -L $old ]] || within "${old:A}" "$engine/releases"; then
         print "ok   one guard plugin"
       else
-        print "FAIL OpenCode Guard's plugin is also in ~/.config/opencode/plugins"
-        ok=0
+        print "warn OpenCode Guard's plugin is also in ~/.config/opencode/plugins"
       fi
       # OpenCode may download ripgrep into its writable cache when it is absent.
       if whence -p rg >/dev/null || [[ -x ${cache_prefix}opencode/bin/rg ]]; then

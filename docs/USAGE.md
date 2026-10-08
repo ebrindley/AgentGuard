@@ -1,6 +1,7 @@
 # Using Agent Guard
 
-This guide describes stable 0.2.2, which supports OpenCode, Pi and OMP.
+This guide describes the current checkout, which supports OpenCode, Pi and OMP.
+OpenCode configuration maintenance is unreleased.
 See [release channels](OPERATIONS.md#release-channels) for installation.
 
 ## Start OpenCode
@@ -15,7 +16,7 @@ opencode
 
 For the desktop app, open `~/Applications/Agent Guard.app` instead of
 `OpenCode.app`. Inside guarded OpenCode, the `agent_guard_status` tool reports
-the active guard and release. Run `agent-guard doctor` from Terminal outside
+the loaded advisory plugin and its observed guard release. Run `agent-guard doctor` from Terminal outside
 the guard; [diagnostic coverage](OPERATIONS.md#diagnostic-coverage) explains
 what that check verifies and what it skips.
 
@@ -24,6 +25,14 @@ unrestricted, and permitted project files can still be changed or deleted.
 Review changes before executing them outside the guard.
 
 ## Configure OpenCode
+
+Inside guarded OpenCode you can maintain ordinary configuration, plugins, MCPs,
+skills, agents, tools and themes. Default global roots are writable and project
+configuration follows project access. Guard's own files, bootstrap entries and
+`~/.opencode/bin` stay protected. Custom config paths require existing write
+permission; selecting one does not expand the sandbox. See
+[configuration maintenance](OPERATIONS.md#opencode-configuration-and-skills).
+
 
 Edit `~/Agent Guard/Guard List.txt` in Terminal or a text editor outside the
 guard. Save it, then quit and reopen OpenCode. Pi and OMP do not read this list.

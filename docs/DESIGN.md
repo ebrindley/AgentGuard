@@ -18,7 +18,25 @@ Agent Guard is one macOS guard for terminal coding agents. It replaces OpenCode 
 
 ## 1. Goal and non-goals
 
-Goal: an agent keeps full tool permissions and broad read access, but can only change or delete files in folders you allow, plus the data, cache and temp folders its harness needs. It can never read or change folders you deny. It cannot edit the guard, the list or its harness's config and plugins, so it cannot switch its own guardrails off. Both layers are on by default. Install is a one-line terminal command (section 6). The end states are in section 12.
+The current zsh OpenCode policy supersedes the broad configuration protection
+in the historical steps below. Two global configuration roots are granted;
+three configuration matcher denies (`.opencode`, `opencode`/`tui` JSON names,
+and the skill-container matcher) are removed. Three narrow protected entries replace
+the two broad configuration subtree denies: the Guard bootstrap, its installer
+staging entry and `~/.opencode/bin`. Their targets and ancestor identities stay
+protected after user rules. The outside-sandbox skill worker and its request
+channel go from one to zero. Only pinned automatic root containers are created
+before Seatbelt; ordinary initialization happens inside it.
+
+Ordinary editable child links cannot become automatic grants on relaunch.
+Custom configuration locations receive no grants from environment variables.
+This accepts persistence into later unguarded execution, already accepted for
+project scripts and shared skills. Guard-owned state and per-launch confinement
+remain protected. Pi/OMP's protection union is unchanged by this OpenCode-only
+change. Any planned union must preserve the distinction between guard assets
+and ordinary OpenCode workload.
+
+Goal: an agent keeps full tool permissions and broad read access, but can only change or delete files in folders you allow, plus the data, cache and temp folders its harness needs. It can never read or change folders you deny. It cannot edit Guard-owned policy, code or activation. OpenCode can maintain ordinary configuration and plugins under Seatbelt; advisory hooks are not an adversarial boundary. Pi/OMP retain their existing configuration restrictions. Both layers are on by default. Install is a one-line terminal command (section 6). The end states are in section 12.
 
 Non-goals:
 
@@ -365,7 +383,7 @@ Planned, step 10c. One credential set, defined once in engine data and applied t
 | `~/.azure` | all of it | the files `az account get-access-token` writes, listed from a trace at step 10c |
 | Paths named by `AWS_CONFIG_FILE`, `AWS_SHARED_CREDENTIALS_FILE`, `AWS_WEB_IDENTITY_TOKEN_FILE`, `AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE`, `AWS_LOGIN_CACHE_DIRECTORY`, `GOOGLE_APPLICATION_CREDENTIALS`, `CLOUDSDK_CONFIG`, `AZURE_CONFIG_DIR` | token and key files; inside `~/.secrets`, an exception for that exact file | cache folders only; configuration files stay locked |
 | OMP's `<omp_state>/.env` and `<omp_agent>/.env` | yes, after the launch check (below) | no |
-| A `{file:...}` key file under `~/.secrets` named in OpenCode's config in `~/.config/opencode` | that exact file | no |
+| A `{file:...}` key file under `~/.secrets` named in editable OpenCode config | no automatic exception (deferred) | no |
 
 Harness login stores (OpenCode's and Pi's `auth.json`, OMP's `agent.db`) are not part of the set; their profiles govern them.
 
@@ -381,7 +399,7 @@ Rules:
 
 - **Configuration stays locked because it runs programs:** `credential_process` in `~/.aws/config`, Google's executable-sourced credentials, `az` extensions. An agent that could edit them would have code run outside the guard at the next use of those CLIs.
 - **Read exceptions are narrow.** Apart from OMP's `.env` files and the template names, they are made only inside `~/.secrets`, each for one exact file. An exception whose canonical path resolves outside `~/.secrets` is dropped.
-- **`{file:...}` references count only from `~/.config/opencode`,** which no session can write: not from `OPENCODE_CONFIG`, `OPENCODE_CONFIG_DIR`, a relocated `XDG_CONFIG_HOME`, a project's config or remote config. OpenCode 1.18.34 substitutes them in every config it loads and stops with a config error when it cannot read one (`packages/opencode/src/config/variable.ts`), so a project config that names a denied file stops OpenCode at startup.
+- **Deferred: `{file:...}` references cannot authorize credential exceptions from editable OpenCode configuration.** The former proposal trusted `~/.config/opencode`; that assumption no longer holds. A separate operator-owned authorization design is required before this planned exception can ship. Historical proposal: not from `OPENCODE_CONFIG`, `OPENCODE_CONFIG_DIR`, a relocated `XDG_CONFIG_HOME`, a project's config or remote config. OpenCode 1.18.34 substitutes them in every config it loads and stops with a config error when it cannot read one (`packages/opencode/src/config/variable.ts`), so a project config that names a denied file stops OpenCode at startup.
 - **Files named inside configuration files** are partly supported. `web_identity_token_file` in `~/.aws/config`, or a Google credential file's `credential_source.file` or `output_file`, is readable unless it lies in the tool class; there it is not supported, and the documentation says so.
 - **Environment-named cache folders** are granted only when they resolve inside the account home and outside every protected path and the tool class; otherwise the log says so and nothing is granted. Environment-named configuration files and relocated folders get the same write lock as the defaults.
 - **OMP's `.env` files are checked at launch,** as part of R6 for OMP (section 7, Launch pipeline). OMP 18.4.9 loads `~/.env`, its config root's `.env`, its agent folder's `.env` and the project's `.env`, copies `OMP_` names to their `PI_` spellings, applies a value only when the variable is unset, then recomputes its folders from `XDG_*_HOME` and `PI_CODING_AGENT_DIR` (`packages/utils/src/env.ts`). Those files could therefore move OMP's folders after R6 resolved them, or restore a variable the launch removed. Before exec the launcher reads the variable names, never the values, in `<omp_state>/.env` and `<omp_agent>/.env` (`~/.omp/.env` and `~/.omp/agent/.env` by default, or the active profile's). A name that moves OMP's folders (`PI_CODING_AGENT_DIR`, `PI_CONFIG_DIR`, `XDG_*_HOME`, or an `OMP_` spelling of one) that the launch removes (the Git selectors, `SSH_AUTH_SOCK`, `GPG_AGENT_INFO`, the profile's `env_unset`), or that names a credential location (the environment-named variables above, whose targets the launch can lock only when they are set before it; OMP 18.4.9 reads `AWS_CONFIG_FILE` after loading these files, `packages/ai/src/providers/aws-credentials.ts`) refuses a launch of OMP, naming the file and the variable, and drops OMP when it would be a granted member (Composition); OMP's lexical protections still apply. `state_config` write-denies both files, so a session cannot add a name later. pi-sandbox-guard refuses a relocated `PI_CODING_AGENT_DIR` the same way (`sandbox/pi-sandbox-preamble.zsh`).
