@@ -1,8 +1,10 @@
 {
   "$schema": "https://raw.githubusercontent.com/ebrindley/Poetic/main/schemas/poetic.config.schema.json",
 
-  // No project-level defaultProvider override: Poetic resolves the default
-  // from environment, user config, profiles, and the bundled provider registry.
+  // Cursor remains available for explicit use; automatic work uses this order.
+  "defaults": {
+    "providerOrder": ["claude", "codex", "grok", "opencode", "antigravity", "copilot", "kiro", "gemini", "pi"],
+  },
 
   // AI provider configuration: providers are peers. Enable or disable entries
   // for this project without choosing a universal default here.

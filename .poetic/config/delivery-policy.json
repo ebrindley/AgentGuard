@@ -38,12 +38,6 @@
       }
     }
   },
-  "services": {
-    "reviewer": {
-      "id": "cursor-bugbot",
-      "recipe": "bugbot"
-    }
-  },
   "repair": {
     "enabled": false,
     "maxCandidateAttempts": 2
