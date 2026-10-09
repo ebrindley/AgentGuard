@@ -1,7 +1,6 @@
 # OpenCode skills
 
-This describes the current checkout. OpenCode configuration maintenance is
-unreleased; releases before 0.2.2 also write-protect skill content.
+This describes release 0.2.5. Releases before 0.2.2 also write-protect skill content.
 
 OpenCode can create, edit, rename, move and delete skills and their supporting
 files without adding each skill to the Guard List. The automatic global roots
