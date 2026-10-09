@@ -41,19 +41,18 @@ stage proofs. The generated incident kit records failing matrix jobs/steps and
 closes them after the originally failing steps pass in a newer run on main's
 history. Resolutions name the tested commit and observed main head; later commits
 do not inherit exact-SHA validation. Repair remains disabled.
-The reviewer binding records intent, not account activation or entitlement.
+No automated reviewer is declared. Independent review and the required `tests`
+check remain part of landing. Cursor review is paused through its account
+settings; deleting the service binding alone does not disable account triggers.
+The dormant `.cursor/config/bugbot.yaml` and `.cursor/BUGBOT.md` are retained for
+deliberate reactivation. Repository Autofix remains disabled.
 
-Bugbot's repository settings are in `.cursor/config/bugbot.yaml`; review context
-is in `.cursor/BUGBOT.md`. Reviews are incremental with explicit Smart routing:
-High for protection, launch/recovery and CI gating changes, including weakened
-protection tests or documented commands that alter installation, update or
-recovery; Default otherwise. PR
-summaries and repository Autofix are disabled. Personal overrides can take
-precedence; verify the effective Cursor settings before relying on those choices.
-Bugbot is advisory and does not replace independent review or the required
-`tests` check.
+The project provider order excludes Cursor from automatic Poetic selection.
+Explicit provider selections, profiles and higher-precedence defaults can
+override that order; inspect resolved configuration before unattended execution.
 
-Required check count stays one: hosted `tests`. The four full macOS jobs move
+Required check count stays one: hosted `tests`. Declared automated advisory
+reviewers change from one to zero. The four full macOS jobs move
 from PR blocking to main background execution. Three hosted workflows remain:
 the fast gate, full validation and record-only incident intake. No local CI gate
 is active.
