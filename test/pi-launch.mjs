@@ -191,7 +191,7 @@ try {
       allowed(write(a, join(target, 'sibling.txt')), 'sibling config');
     });
 
-    // Reset the missing case so profile rendering must resolve it before prepare.
+    // OpenCode grants ordinary config writes while pinning the linked roots and Guard files.
     if (!existing) rmSync(oc, { recursive: true });
     const source = join(run, `opencode-source-${existing}`);
     mkdirSync(source);
@@ -200,17 +200,22 @@ try {
     layout(source, engine);
     mkdirSync(join(a.home, 'Agent Guard'));
     writeFileSync(join(a.home, 'Agent Guard/Guard List.txt'), `ALLOW -\n${a.project}\nREAD ONLY -\nDENY -\n`);
-    check(`OpenCode prepares and protects config behind linked ancestors with a ${existing ? 'present' : 'missing'} leaf`, () => {
+    check(`OpenCode permits ordinary config and protects Guard behind linked ancestors with a ${existing ? 'present' : 'missing'} leaf`, () => {
       const r = spawnSync('/bin/zsh', [join(engine, 'current/launch'), 'profile'], {
         cwd: a.project, encoding: 'utf8', env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', HOME: a.home },
       });
       assert.equal(r.status, 0, r.stderr);
       assert.ok(lstatSync(join(a.home, '.config')).isSymbolicLink(), 'config link replaced');
-      assert.ok(existsSync(join(oc, 'opencode.json')), 'first-launch config not prepared');
+      assert.ok(existsSync(oc), 'config root not prepared');
+      assert.ok(!existsSync(join(oc, 'opencode.json')), 'profile wrote user config');
       mkdirSync(join(oc, 'plugins'), { recursive: true });
       const defines = ['HOME=' + a.home, 'DARWIN_TEMP=' + temp, 'DARWIN_CACHE=' + temp, 'GUI=0'];
       const sandbox = (argv) => spawnSync('/usr/bin/sandbox-exec', [...defines.flatMap((d) => ['-D', d]), '-p', r.stdout, ...argv], { encoding: 'utf8' });
       for (const p of [join(oc, 'config.json'), join(oc, 'plugins/probe.js'), join(a.home, '.config/opencode/plugins/probe.js')]) {
+        const result = sandbox(['/bin/sh', '-c', 'printf x > "$1"', 'sh', p]);
+        assert.equal(result.status, 0, `ordinary config denied: ${p}: ${result.stderr}`);
+      }
+      for (const p of [join(oc, 'plugins/agent-guard.js'), join(oc, 'plugins/.agent-guard.js.partial'), join(engine, 'current/launch')]) {
         const result = sandbox(['/bin/sh', '-c', 'printf x > "$1"', 'sh', p]);
         assert.notEqual(result.status, 0, `write allowed: ${p}`);
         assert.match(result.stderr, /Operation not permitted/);
@@ -232,13 +237,18 @@ try {
     layout(source, engine);
     mkdirSync(join(a.home, 'Agent Guard'));
     writeFileSync(join(a.home, 'Agent Guard/Guard List.txt'), 'ALLOW -\nREAD ONLY -\nDENY -\n');
-    check('OpenCode creates ordinary first-launch config without linked ancestors', () => {
+    check('OpenCode prepares a writable config root without creating user config', () => {
       assert.ok(!existsSync(join(a.home, '.config/opencode')));
       const r = spawnSync('/bin/zsh', [join(engine, 'current/launch'), 'profile'], {
         cwd: a.project, encoding: 'utf8', env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', HOME: a.home },
       });
       assert.equal(r.status, 0, r.stderr);
-      assert.ok(existsSync(join(a.home, '.config/opencode/opencode.json')));
+      assert.ok(existsSync(join(a.home, '.config/opencode')));
+      assert.ok(!existsSync(join(a.home, '.config/opencode/opencode.json')), 'profile wrote user config');
+      const defines = ['HOME=' + a.home, 'DARWIN_TEMP=' + temp, 'DARWIN_CACHE=' + temp, 'GUI=0'];
+      const result = spawnSync('/usr/bin/sandbox-exec', [...defines.flatMap((d) => ['-D', d]), '-p', r.stdout,
+        '/bin/sh', '-c', 'printf "{}" > "$1"', 'sh', join(a.home, '.config/opencode/opencode.json')], { encoding: 'utf8' });
+      assert.equal(result.status, 0, result.stderr);
     });
   }
 
