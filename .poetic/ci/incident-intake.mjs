@@ -233,9 +233,40 @@ async function ownedIssues(api, base, { workflow, signature } = {}) {
   return incidents;
 }
 
-async function resolveCoveredIncidents(api, ctx, run, jobs, incidents) {
+// Later default-branch commits do not erase recovery evidence at its actual SHA.
+function recoveryEligibility(api, ctx, run) {
+  let onMain;
+  const proofs = new Map();
+  return (issue, state) => {
+    const latest = state.latest;
+    if (
+      !latest ||
+      run.id < latest.id ||
+      (run.id === latest.id && run.run_attempt <= latest.attempt)
+    )
+      return Promise.resolve(false);
+    if (!proofs.has(issue.number)) {
+      proofs.set(issue.number, (async () => {
+        onMain ??= (async () => {
+          if (run.head_sha === ctx.head) return true;
+          const comparison = await api('GET', `${ctx.base}/compare/${run.head_sha}...${ctx.head}`);
+          return ['ahead', 'identical'].includes(comparison.status);
+        })();
+        if (!(await onMain)) return false;
+        for (const sha of new Set([state.runs[0]?.sha, latest.sha])) {
+          if (!sha) return false;
+          const comparison = await api('GET', `${ctx.base}/compare/${sha}...${run.head_sha}`);
+          if (!['ahead', 'identical'].includes(comparison.status)) return false;
+        }
+        return true;
+      })());
+    }
+    return proofs.get(issue.number);
+  };
+}
+
+async function resolveCoveredIncidents(api, ctx, run, jobs, incidents, canRecover) {
   const errors = [];
-  if (run.head_sha !== ctx.head) return errors;
   for (const { issue, state } of incidents.filter((item) => item.issue.state === 'open')) {
     if (!state.failedScope?.length || state.workflow !== run.path?.split('@')[0]) continue;
     const covered = state.failedScope.every(
@@ -252,22 +283,19 @@ async function resolveCoveredIncidents(api, ctx, run, jobs, incidents) {
     );
     if (!covered) continue;
     try {
-      const comparison = await api(
-        'GET',
-        `${ctx.base}/compare/${state.runs[0].sha}...${run.head_sha}`
-      );
-      if (!['ahead', 'identical'].includes(comparison.status)) continue;
+      if (!(await canRecover(issue, state))) continue;
       const resolution = {
         runId: run.id,
         runAttempt: run.run_attempt,
         sha: run.head_sha,
+        defaultHead: ctx.head,
         url: run.html_url,
         scope: state.failedScope,
         attribution: 'source-check-evidence',
       };
       // Intake never rewrites dispatcher-owned budgets, even while resolving source evidence.
       await api('POST', `${ctx.base}/issues/${issue.number}/comments`, {
-        body: `Verified original failing steps on current default branch.\n<!-- poetic-ci-resolution:v1\n${JSON.stringify(resolution)}${END}`,
+        body: `Verified original failing steps at ${run.head_sha}, on default branch history ending at ${ctx.head}.\n<!-- poetic-ci-resolution:v1\n${JSON.stringify(resolution)}${END}`,
       });
       await writeEvidence(api, ctx.base, issue, state, { resolution }, 'closed');
       issue.state = 'closed';
@@ -335,16 +363,18 @@ export async function handleIncident(api, event, env) {
     .update(JSON.stringify([workflow.path, failedScope]))
     .digest('hex');
   const incidents = await ownedIssues(api, ctx.base, { workflow: workflow.path, signature });
+  const canRecover = recoveryEligibility(api, ctx, run);
   const resolutionErrors = await resolveCoveredIncidents(
     api,
     ctx,
     { ...run, path: workflow.path },
     jobs,
-    incidents
+    incidents,
+    canRecover
   );
   const finish = (result) => (resolutionErrors.length ? { ...result, resolutionErrors } : result);
   if (!failed.length) {
-    if (run.conclusion === 'success' && run.head_sha === ctx.head) {
+    if (run.conclusion === 'success') {
       for (const { issue, state } of incidents.filter(
         (item) => item.issue.state === 'open' && item.state.workflow === workflow.path
       )) {
@@ -355,11 +385,20 @@ export async function handleIncident(api, event, env) {
           })
         )
           continue;
-        if (state.coverageObserved) continue;
-        await api('POST', `${ctx.base}/issues/${issue.number}/comments`, {
-          body: `Passing coverage observed for the incident job scope at ${run.head_sha}: ${run.html_url}. Owner verification is still required.`,
-        });
-        await writeEvidence(api, ctx.base, issue, state, { coverageObserved: true });
+        if (
+          state.coverageObserved ||
+          resolutionErrors.some((error) => error.incident === issue.number)
+        )
+          continue;
+        try {
+          if (!(await canRecover(issue, state))) continue;
+          await api('POST', `${ctx.base}/issues/${issue.number}/comments`, {
+            body: `Passing coverage observed for the incident job scope at ${run.head_sha}: ${run.html_url}. Owner verification is still required.`,
+          });
+          await writeEvidence(api, ctx.base, issue, state, { coverageObserved: true });
+        } catch (error) {
+          resolutionErrors.push({ incident: issue.number, message: error.message });
+        }
       }
     }
     return finish({ status: 'recorded-coverage' });
