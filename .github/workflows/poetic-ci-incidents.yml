@@ -23,7 +23,11 @@ on:
         options:
           - retry
           - needs-decision
+          - candidate
       repair_pr:
+        required: false
+        type: string
+      repair_sha:
         required: false
         type: string
 permissions:
