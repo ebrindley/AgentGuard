@@ -15,7 +15,11 @@ import { layout, stage } from './engines/zsh.mjs';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const pi = join(root, 'profiles/pi');
 const profile = join(pi, 'sandbox/pi-sandbox.sb');
-const run = realpathSync(mkdtempSync(join(root, 'test/.run-pi-launch-')));
+// Local CI checkouts live under Darwin temp. Fake homes and bound executables
+// must remain outside that writable grant, as production requires.
+const fixtureCache = join(userInfo().homedir, 'Library/Caches');
+mkdirSync(fixtureCache, { recursive: true });
+const run = realpathSync(mkdtempSync(join(fixtureCache, 'agent-guard-pi-launch-')));
 const temp = realpathSync(execFileSync('/usr/bin/getconf', ['DARWIN_USER_TEMP_DIR'], { encoding: 'utf8' }).trim());
 // Writable through the session's TMPDIR grant, outside every account home.
 const scratch = realpathSync(mkdtempSync(join(temp, 'agent-guard-pi-')));
@@ -32,12 +36,9 @@ function check(name, fn) {
   }
 }
 
-// CI checkouts live under Darwin temp, which production bindings correctly reject.
-// This disposable executable is outside every fake account's writable roots.
-const executableCache = join(userInfo().homedir, 'Library/Caches');
-mkdirSync(executableCache, { recursive: true });
-const executableRun = realpathSync(mkdtempSync(join(executableCache, 'agent-guard-pi-fixture-')));
-const standIn = join(executableRun, 'pi');
+// The stand-in Pi: drops the injected extension flag and runs the rest.
+const standIn = join(run, 'runtime', 'pi');
+mkdirSync(dirname(standIn));
 writeFileSync(standIn, '#!/bin/sh\nif [ "$1" = --extension ]; then shift 2; fi\nexec "$@"\n');
 chmodSync(standIn, 0o755);
 
@@ -655,7 +656,6 @@ try {
 } finally {
   rmSync(run, { recursive: true, force: true });
   rmSync(scratch, { recursive: true, force: true });
-  rmSync(executableRun, { recursive: true, force: true });
 }
 console.log(`${fails} failure(s)`);
 process.exit(fails ? 1 : 0);
