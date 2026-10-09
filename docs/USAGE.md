@@ -1,7 +1,6 @@
 # Using Agent Guard
 
-This guide describes the current checkout, which supports OpenCode, Pi and OMP.
-OpenCode configuration maintenance is unreleased.
+This guide describes release 0.2.5, which supports OpenCode, Pi and OMP.
 See [release channels](OPERATIONS.md#release-channels) for installation.
 
 ## Start OpenCode
@@ -67,7 +66,10 @@ The launcher skips nonexistent ALLOW entries and keeps nonexistent READ ONLY ent
 entries broad enough to contain `~/Library/Application Support`, `~/.config`
 or `~/.local`, and refuses READ ONLY or DENY entries that cover essential
 system or runtime folders. Check `~/Agent Guard/last-launch-opencode.log` for
-the applied paths and any skipped or refused entries. The full list of
+the applied paths and any skipped or refused entries. A terminal launch prints
+refusals, warnings and failures. The desktop app and `check` keep refusals and
+warnings in that log; failures still print. The allow, read-only, deny and
+protection summary is written only to that log. The full list of
 essential folders is in [the security policy](../SECURITY.md#opencode-1).
 
 OpenCode's required data, cache and temporary folders remain writable without
