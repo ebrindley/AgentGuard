@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "profile": "fast",
+  "repository": {
+    "host": "github.com",
+    "fullName": "ebrindley/AgentGuard"
+  },
+  "landingOwner": "poetic-local-ci",
+  "reviewTiming": "before-merge",
+  "stages": {
+    "gate": {
+      "owner": "local",
+      "scope": "Core profiles, rulebook and macOS confinement",
+      "local": {
+        "source": "resolved-ci-config"
+      }
+    },
+    "background": {
+      "owner": "github-actions",
+      "scope": "Full integration and migration matrix for code pushes and manual validation",
+      "githubActions": {
+        "workflows": [
+          ".github/workflows/full.yml"
+        ],
+        "selectedChecks": [
+          "suites (macos-15)",
+          "suites (macos-26)",
+          "migrate-pi (macos-15)",
+          "migrate-pi (macos-26)"
+        ],
+        "events": [
+          "push",
+          "workflow_dispatch"
+        ],
+        "ref": "refs/heads/main"
+      }
+    }
+  },
+  "services": {
+    "reviewer": {
+      "id": "cursor-bugbot",
+      "recipe": "bugbot"
+    }
+  },
+  "repair": {
+    "enabled": false,
+    "maxCandidateAttempts": 2
+  }
+}

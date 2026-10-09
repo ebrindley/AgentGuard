@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "primary": "local",
+  "repository": { "host": "github.com", "fullName": "ebrindley/AgentGuard" }
+}
