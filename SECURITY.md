@@ -35,7 +35,7 @@ retain their existing policy.
 ## What Agent Guard is
 
 Agent Guard is a macOS Seatbelt write-containment boundary for terminal coding
-agents. Release 0.2.2 guards OpenCode, Pi and Oh My Pi (OMP). Each harness, and
+agents. Release 0.2.5 guards OpenCode, Pi and Oh My Pi (OMP). Each harness, and
 every process it starts, runs under `/usr/bin/sandbox-exec`, but OpenCode and Pi
 are guarded by different code with different rules until Pi moves onto Agent
 Guard's engine (step 10d of the plan in [docs/DESIGN.md](docs/DESIGN.md#12-plan)).

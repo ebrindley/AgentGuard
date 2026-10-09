@@ -1,6 +1,6 @@
 # Installation and maintenance
 
-These procedures describe stable 0.2.2. For everyday use, see the
+These procedures describe stable 0.2.5. For everyday use, see the
 [user guide](USAGE.md).
 
 ## Release channels

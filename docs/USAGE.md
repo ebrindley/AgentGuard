@@ -67,8 +67,9 @@ entries broad enough to contain `~/Library/Application Support`, `~/.config`
 or `~/.local`, and refuses READ ONLY or DENY entries that cover essential
 system or runtime folders. Check `~/Agent Guard/last-launch-opencode.log` for
 the applied paths and any skipped or refused entries. A terminal launch prints
-refusals, warnings and failures. The desktop app and `check` keep refusals and
-warnings in that log; failures still print. The allow, read-only, deny and
+refusals, warnings, failures, skipped entries, overrides and environment notices.
+The desktop app and `check` keep refusals and warnings in that log. A desktop
+failure shows an alert. A `check` failure prints. The allow, read-only, deny and
 protection summary is written only to that log. The full list of
 essential folders is in [the security policy](../SECURITY.md#opencode-1).
 
