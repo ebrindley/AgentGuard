@@ -1,0 +1,18 @@
+#!/bin/zsh
+# Required local gate. Full installation, GUI and migration suites run on GitHub.
+emulate -L zsh
+setopt no_unset pipe_fail
+[[ $(/usr/bin/uname -s) == Darwin ]] || { print -ru2 'Gate requires macOS'; exit 1; }
+[[ -z ${AGENT_GUARD_SANDBOXED:-} && -z ${OPENCODE_SANDBOXED:-} ]] || {
+  print -ru2 'Run the CI worker outside the coding agent sandbox'; exit 1
+}
+command -v node >/dev/null || { print -ru2 'Node 24 is required'; exit 1; }
+node -e 'if (process.versions.node.split(".")[0] !== "24") { console.error("Node 24 is required"); process.exit(1); }' || exit 1
+root=${0:A:h:h}
+cd "$root" || exit 1
+started=$SECONDS
+for file in test/golden.mjs test/skills-policy.mjs test/pi-launch.mjs; do
+  print -r -- "Gate: $file"
+  node "$file" || exit $?
+done
+print -r -- "Gate passed in $((SECONDS - started)) seconds"
