@@ -44,10 +44,14 @@ do not inherit exact-SHA validation. Repair remains disabled.
 The reviewer binding records intent, not account activation or entitlement.
 
 Bugbot's repository settings are in `.cursor/config/bugbot.yaml`; review context
-is in `.cursor/BUGBOT.md`. Reviews are incremental with Default effort, without
-PR summaries or repository Autofix. Personal overrides can take precedence;
-verify the effective Cursor settings before relying on those choices. Bugbot is
-advisory and does not replace independent review or the required `tests` check.
+is in `.cursor/BUGBOT.md`. Reviews are incremental with explicit Smart routing:
+High for protection, launch/recovery and CI gating changes, including weakened
+protection tests or documented commands that alter installation, update or
+recovery; Default otherwise. PR
+summaries and repository Autofix are disabled. Personal overrides can take
+precedence; verify the effective Cursor settings before relying on those choices.
+Bugbot is advisory and does not replace independent review or the required
+`tests` check.
 
 Required check count stays one: hosted `tests`. The four full macOS jobs move
 from PR blocking to main background execution. Three hosted workflows remain:
