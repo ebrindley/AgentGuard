@@ -3,7 +3,21 @@ triggers:
   drafts: false
   frequency: everyPush
 review:
-  effort: default
+  effort: smart
+  smartPrompt: |-
+    Choose effort from changed behavior, not PR size, file type or path alone.
+    Use High for changes to sandbox grants or denials; Guard-owned code, policy,
+    bootstrap entries, executable bindings or pinned roots; launch, install,
+    update, migration or recovery behavior; Pi/OMP policy; or the boundary between
+    Guard-owned files and ordinary OpenCode configuration, plugins, MCPs and skills.
+    Also use High for CI permissions, triggers, path filters, token use or merge
+    check identities; weakened, removed or skipped protection assertions; and
+    documented commands that alter installation, update or recovery behavior.
+    Otherwise use Default for ordinary tests and fixtures, prose, backlog,
+    customization handling that preserves the boundary, and metadata changes
+    without execution, protection or gating effects.
+    If uncertain, use High only for plausible deployment harm in those areas;
+    otherwise use Default. Never select Low.
   incremental: true
 prSummary:
   mode: disabled
