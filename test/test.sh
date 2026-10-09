@@ -346,7 +346,7 @@ print 'pi=/usr/bin/true' > "$pi_conf"
 /bin/cp "$pi_stamp" "$run/stamp.saved"
 print -rl -- 'ALLOW - Pi' '~/.local/bin' '~/.pi' '~/.config/pi-sandbox-guard' >> "$list"
 pi_stamped() { /usr/bin/jq "$1" "$run/stamp.saved" > "$pi_stamp" }
-pi_launch() { (cd "$home/Projects/app" && "${launcher[@]}" profile 2>/dev/null) }
+pi_launch() { (cd "$home/Projects/app" && "${launcher[@]}" profile 2>"$run/pi.err") }
 # No rule in the final deny block names a Pi path.
 no_pi_rules() { [[ $1 != *'(h "/.local/bin'* && $1 != *'(h "/.pi'* && $1 != *'(h "/Projects/dotfiles/pi-agent'* && $1 != *'(h "/.config/pi-sandbox-guard'* ]] }
 # Without Pi in the stamp nothing changes, and a malformed wrapper record is not read.
@@ -364,6 +364,18 @@ expect ok "without Pi in the stamp: write .omp's link target" psb /usr/bin/touch
 pi_stamped '.harnesses = ["opencode", "pi"]'
 print -r -- '{"wrappers":{"pi-work":{"sha256":"00"},".":{"sha256":"00"},"..":{"sha256":"00"},"../escape":{"sha256":"00"}},"historical":["pi-old"]}' > "$pi_wrappers"
 pi_profile=$(pi_launch) || fail "profile with Pi installed"
+pi_summary_quiet() {
+  local label hit
+  for label in 'agent-guard: write-protected for Pi' \
+               "agent-guard: write-protected anywhere, Pi's and OMP's project config"; do
+    if hit=$(/usr/bin/grep -F -- "$label" "$run/pi.err"); then
+      print -ru2 -- "summary on terminal: $hit"
+      return 1
+    fi
+  done
+  return 0
+}
+if pi_summary_quiet; then pass "Pi summary stays off the terminal"; else fail "Pi summary stays off the terminal"; fi
 check "launch log names Pi's write-protected files" /usr/bin/grep -Fxq \
   "write-protected for Pi, maintained outside the guard: $pi_bin/pi, $pi_bin/omp, $pi_bin/pi-sandbox.sb, $pi_bin/pi-sandbox-preamble.zsh, $pi_bin/pi-sandbox-guard-extension, $pi_bin/pi-work, $pi_ext, $pi_conf" "$log"
 ignored_keys() {
