@@ -7,6 +7,42 @@ and homes described below. For installed checks, see
 
 ## Tests
 
+### Fast landing and background validation
+
+`script/test` is the required local macOS gate: profile characterization,
+rulebook/policy checks and real Seatbelt launch checks in disposable homes. It
+requires Node 24 and an unguarded CI/orchestration process; it does not disable a
+coding agent's sandbox. The initial measurement on the development Mac was 62
+checks in 35 seconds. Installation, GUI, native OpenCode and migration suites
+remain in the full macOS 15/26 matrix.
+
+After independent review, `poetic ci merge <pr> --sha <reviewed-sha>` owns local
+validation and protected landing. Keep independently armed GitHub auto-merge off.
+The Mac must be available. Use `poetic ci status <pr>` for local proof and
+`poetic ci reconcile` from the trusted host context for interrupted work.
+
+The temporary GitHub `tests` workflow bootstraps this configuration under the
+existing required check. Remove it only after `Poetic Local CI` is required on
+main and a real local attestation has been verified. The steady-state merge path
+runs the gate once locally.
+
+`Full validation` runs automatically on pushes to main and by manual dispatch.
+Documentation/backlog-only pushes skip the matrix; manual dispatch always runs
+it. Those skipped jobs do not count as full stage proof. Before publishing a
+release, require a successful full run on its exact source commit and retain the
+existing packaging/seam checks. Local gate success alone is not release proof.
+
+The delivery policy declares the scopes. `poetic ci status --delivery` inspects
+hosted background evidence; it does not relabel ordinary Local CI runs as new
+stage proofs. The generated incident kit records failing matrix jobs/steps and
+closes them only after matching current-main coverage. Repair remains disabled.
+The reviewer binding records intent, not account activation or entitlement.
+
+Required check count stays one: hosted `tests` during bootstrap, then `Poetic
+Local CI`. The four full macOS jobs move from PR blocking to main background
+execution. Hosted workflows go from one to three during bootstrap, then two
+after the temporary gate is removed.
+
 For skill changes, run `node test/skills.mjs`, `node test/skills.mjs readonly`,
 `node test/skills.mjs kernel`, `node test/skills.mjs linked`, `node test/skills.mjs stdin` and
 `node test/skills-policy.mjs` sequentially.

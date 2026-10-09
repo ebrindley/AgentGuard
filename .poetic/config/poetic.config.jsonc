@@ -20,6 +20,14 @@
     },
   },
 
+  // Required local macOS verification, resolved from the trusted main branch.
+  "ci": {
+    "enabled": true,
+    "commands": ["script/test"],
+    "statusContext": "Poetic Local CI",
+    "authorityPaths": ["script/", "test/", ".github/workflows/"],
+  },
+
   // Quality gates: automated validation for generated work where project
   // capabilities or explicit verification config provide commands.
   "quality": {
