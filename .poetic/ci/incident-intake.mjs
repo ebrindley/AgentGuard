@@ -246,20 +246,26 @@ function recoveryEligibility(api, ctx, run) {
     )
       return Promise.resolve(false);
     if (!proofs.has(issue.number)) {
-      proofs.set(issue.number, (async () => {
-        onMain ??= (async () => {
-          if (run.head_sha === ctx.head) return true;
-          const comparison = await api('GET', `${ctx.base}/compare/${run.head_sha}...${ctx.head}`);
-          return ['ahead', 'identical'].includes(comparison.status);
-        })();
-        if (!(await onMain)) return false;
-        for (const sha of new Set([state.runs[0]?.sha, latest.sha])) {
-          if (!sha) return false;
-          const comparison = await api('GET', `${ctx.base}/compare/${sha}...${run.head_sha}`);
-          if (!['ahead', 'identical'].includes(comparison.status)) return false;
-        }
-        return true;
-      })());
+      proofs.set(
+        issue.number,
+        (async () => {
+          onMain ??= (async () => {
+            if (run.head_sha === ctx.head) return true;
+            const comparison = await api(
+              'GET',
+              `${ctx.base}/compare/${run.head_sha}...${ctx.head}`
+            );
+            return ['ahead', 'identical'].includes(comparison.status);
+          })();
+          if (!(await onMain)) return false;
+          for (const sha of new Set([state.runs[0]?.sha, latest.sha])) {
+            if (!sha) return false;
+            const comparison = await api('GET', `${ctx.base}/compare/${sha}...${run.head_sha}`);
+            if (!['ahead', 'identical'].includes(comparison.status)) return false;
+          }
+          return true;
+        })()
+      );
     }
     return proofs.get(issue.number);
   };
@@ -438,9 +444,26 @@ export async function handleIncident(api, event, env) {
     historyComplete: true,
   };
   if (existing) {
+    const updates = {};
+    if (state.status === 'awaiting-verification' && state.candidate?.pr) {
+      const pr = await api('GET', `${ctx.base}/pulls/${state.candidate.pr}`);
+      if (pr.merged && pr.head?.sha === state.candidate.sha && pr.merge_commit_sha) {
+        const comparison = await api(
+          'GET',
+          `${ctx.base}/compare/${pr.merge_commit_sha}...${run.head_sha}`
+        );
+        if (['ahead', 'identical'].includes(comparison.status)) {
+          updates.status =
+            state.attempts < (ctx.policy.repair?.maxCandidateAttempts ?? 2)
+              ? 'pending'
+              : 'needs-attention';
+          updates.candidate = { ...state.candidate, failedRun: evidence };
+        }
+      }
+    }
     // Serialized evidence updates preserve the current reservation and budget.
     state.runs.push(evidence);
-    await writeEvidence(api, ctx.base, existing.issue, state);
+    await writeEvidence(api, ctx.base, existing.issue, state, updates);
     if (existing.issue.state === 'closed')
       await api('PATCH', `${ctx.base}/issues/${existing.issue.number}`, { state: 'open' });
     return finish({ status: 'recorded', incident: existing.issue.number });
@@ -564,14 +587,26 @@ export async function dispatchIncident(api, env) {
     body: incidentBody(candidate.state),
   });
   try {
-    await api('POST', `${ctx.base}/actions/workflows/${executor.id}/dispatches`, {
-      ref: ctx.repo.default_branch,
-      inputs: {
-        incident_number: String(candidate.issue.number),
-        failure_run_id: String(candidate.state.latest.id),
-        failed_sha: candidate.state.latest.sha,
-        attempt: String(candidate.state.attempts),
-      },
+    const dispatched = await api(
+      'POST',
+      `${ctx.base}/actions/workflows/${executor.id}/dispatches`,
+      {
+        ref: ctx.repo.default_branch,
+        inputs: {
+          incident_number: String(candidate.issue.number),
+          failure_run_id: String(candidate.state.latest.id),
+          failed_sha: candidate.state.latest.sha,
+          attempt: String(candidate.state.attempts),
+        },
+      }
+    );
+    if (!Number.isSafeInteger(dispatched.workflow_run_id) || dispatched.workflow_run_id <= 0)
+      throw new Error(
+        'Executor run ID is unavailable; inspect the reserved attempt before retrying.'
+      );
+    candidate.state.executorRunId = dispatched.workflow_run_id;
+    await writeEvidence(api, ctx.base, candidate.issue, candidate.state, {
+      executorRunId: dispatched.workflow_run_id,
     });
   } catch (error) {
     candidate.state.status = 'needs-attention';
@@ -592,7 +627,7 @@ export async function reconcileIncident(api, event, env) {
   const input = event.inputs;
   if (
     !input ||
-    !['retry', 'needs-decision'].includes(input.outcome) ||
+    !['retry', 'needs-decision', 'candidate'].includes(input.outcome) ||
     !/^\d+$/.test(input.incident_number) ||
     !/^\d+$/.test(input.expected_attempt) ||
     !/^\d+$/.test(input.executor_run_id)
@@ -604,9 +639,13 @@ export async function reconcileIncident(api, event, env) {
   if (
     !state ||
     issue.state !== 'open' ||
-    state.status !== 'active' ||
+    !(
+      state.status === 'active' ||
+      (state.status === 'needs-attention' && state.completion?.callbackMissing === true)
+    ) ||
     state.attempts !== Number(input.expected_attempt) ||
-    state.executor !== env.POETIC_REPAIR_WORKFLOW
+    state.executor !== env.POETIC_REPAIR_WORKFLOW ||
+    state.executorRunId !== Number(input.executor_run_id)
   )
     throw new Error('The callback does not match the active reserved attempt.');
   const run = await api('GET', `${ctx.base}/actions/runs/${input.executor_run_id}`);
@@ -634,27 +673,69 @@ export async function reconcileIncident(api, event, env) {
       pr.base?.ref !== ctx.repo.default_branch
     )
       throw new Error('Repair PR source does not match.');
-    const checks = await pages(api, `${ctx.base}/commits/${pr.head.sha}/check-runs`, 'check_runs');
+    if (
+      input.outcome === 'candidate' &&
+      (run.conclusion !== 'success' ||
+        pr.state !== 'open' ||
+        !/^[a-f0-9]{40}$/i.test(input.repair_sha ?? '') ||
+        pr.head.sha !== input.repair_sha)
+    )
+      throw new Error('Repair candidate revision or successful executor evidence does not match.');
     state.candidate = {
       pr: pr.number,
       sha: pr.head.sha,
-      checks: checks.map((check) => ({
-        name: check.name,
-        conclusion: check.conclusion,
-        status: check.status,
-      })),
     };
+  } else if (input.outcome === 'candidate') {
+    throw new Error('Candidate completion requires an exact repair PR and revision.');
   }
   state.completion = { runId: run.id, url: run.html_url, conclusion: run.conclusion };
   const limit = ctx.policy.repair?.maxCandidateAttempts ?? 2;
   if (!Number.isInteger(limit) || limit < 1 || limit > 10)
     throw new Error('Unsupported repair attempt budget.');
   state.status =
-    input.outcome === 'retry' && ctx.policy.repair?.enabled === true && state.attempts < limit
-      ? 'pending'
-      : 'needs-attention';
+    input.outcome === 'candidate'
+      ? 'awaiting-verification'
+      : input.outcome === 'retry' && ctx.policy.repair?.enabled === true && state.attempts < limit
+        ? 'pending'
+        : 'needs-attention';
   await api('PATCH', `${ctx.base}/issues/${issue.number}`, { body: incidentBody(state) });
   return { status: state.status, incident: issue.number, attempt: state.attempts };
+}
+
+/** Completion relay runs after the bound executor, including cancellation and failure. */
+export async function handleExecutorCompletion(api, event, env) {
+  if (event.action !== 'completed' || !event.workflow_run?.id || !env.POETIC_REPAIR_WORKFLOW)
+    return { status: 'ignored' };
+  const ctx = await context(api, env.GITHUB_REPOSITORY);
+  const run = await api('GET', `${ctx.base}/actions/runs/${event.workflow_run.id}`);
+  const workflow = await api('GET', `${ctx.base}/actions/workflows/${run.workflow_id}`);
+  if (
+    run.status !== 'completed' ||
+    run.event !== 'workflow_dispatch' ||
+    run.head_branch !== ctx.repo.default_branch ||
+    run.repository?.full_name?.toLowerCase() !== env.GITHUB_REPOSITORY.toLowerCase() ||
+    run.head_repository?.full_name?.toLowerCase() !== env.GITHUB_REPOSITORY.toLowerCase() ||
+    workflow.path !== env.POETIC_REPAIR_WORKFLOW
+  )
+    return { status: 'ignored' };
+  const incident = (await ownedIssues(api, ctx.base)).find(
+    ({ issue, state }) =>
+      issue.state === 'open' &&
+      state.status === 'active' &&
+      state.executorRunId === run.id &&
+      state.executor === workflow.path
+  );
+  if (!incident) return { status: 'ignored' };
+  await writeEvidence(api, ctx.base, incident.issue, incident.state, {
+    status: 'needs-attention',
+    completion: {
+      runId: run.id,
+      url: run.html_url,
+      conclusion: run.conclusion,
+      callbackMissing: true,
+    },
+  });
+  return { status: 'needs-attention', incident: incident.issue.number };
 }
 
 /** A recorded failure does not authorize dispatch while older resolution is unavailable. */
@@ -671,7 +752,9 @@ async function main() {
         Authorization: `Bearer ${env.GITHUB_TOKEN}`,
         Accept: 'application/vnd.github+json',
         'Content-Type': 'application/json',
-        'X-GitHub-Api-Version': '2022-11-28',
+        // Dispatch needs the returned run ID; preserve the existing PR payload contract.
+        'X-GitHub-Api-Version':
+          method === 'POST' && endpoint.endsWith('/dispatches') ? '2026-03-10' : '2022-11-28',
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
@@ -680,13 +763,19 @@ async function main() {
     return response.status === 204 ? {} : response.json();
   };
   const result =
-    process.argv[2] === 'dispatch'
-      ? await dispatchIncident(api, env)
-      : await (process.argv[2] === 'reconcile' ? reconcileIncident : handleIncident)(
+    process.argv[2] === 'complete'
+      ? await handleExecutorCompletion(
           api,
           JSON.parse(await readFile(env.GITHUB_EVENT_PATH, 'utf8')),
           env
-        );
+        )
+      : process.argv[2] === 'dispatch'
+        ? await dispatchIncident(api, env)
+        : await (process.argv[2] === 'reconcile' ? reconcileIncident : handleIncident)(
+            api,
+            JSON.parse(await readFile(env.GITHUB_EVENT_PATH, 'utf8')),
+            env
+          );
   process.stdout.write(`${JSON.stringify(result)}\n`);
   process.exitCode = incidentExitCode(result);
 }
