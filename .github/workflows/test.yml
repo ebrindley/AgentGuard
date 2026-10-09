@@ -1,4 +1,4 @@
-# Temporary bootstrap check; remove after the Poetic Local CI requirement is active.
+# Fast required PR gate; full validation runs on main after merge.
 name: Tests
 on:
   pull_request:
