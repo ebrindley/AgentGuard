@@ -9,12 +9,17 @@ import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync,
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { userInfo } from 'node:os';
 import { layout, stage } from './engines/zsh.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const pi = join(root, 'profiles/pi');
 const profile = join(pi, 'sandbox/pi-sandbox.sb');
-const run = realpathSync(mkdtempSync(join(root, 'test/.run-pi-launch-')));
+// Local CI checkouts live under Darwin temp. Fake homes and bound executables
+// must remain outside that writable grant, as production requires.
+const fixtureCache = join(userInfo().homedir, 'Library/Caches');
+mkdirSync(fixtureCache, { recursive: true });
+const run = realpathSync(mkdtempSync(join(fixtureCache, 'agent-guard-pi-launch-')));
 const temp = realpathSync(execFileSync('/usr/bin/getconf', ['DARWIN_USER_TEMP_DIR'], { encoding: 'utf8' }).trim());
 // Writable through the session's TMPDIR grant, outside every account home.
 const scratch = realpathSync(mkdtempSync(join(temp, 'agent-guard-pi-')));
@@ -140,6 +145,7 @@ try {
     check(`difference 9: ${variant} prepares missing roots and preserves runtime writes`, () => {
       if (variant !== 'pi') assert.ok(!existsSync(agent), 'state root already exists');
       allowed(session(a, ['/bin/sh', '-c', 'mkdir -p "$1/sessions" && printf state > "$1/sessions/probe"', 'sh', agent], options), 'session state');
+      denied(write(a, standIn, options), 'fixture executable remains outside session writes');
       for (const p of roots) assert.ok(existsSync(p), `root not prepared: ${p}`);
       allowed(session(a, ['/bin/mkdir', '-p', ...roots], options), 'existing root mkdir');
       const files = variant.startsWith('omp') ? [join(agent, 'agent.db'), join(state, 'stats.db'), join(base, 'install-id')]

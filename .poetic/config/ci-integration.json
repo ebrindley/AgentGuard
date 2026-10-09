@@ -1,5 +1,9 @@
 {
   "schemaVersion": 1,
-  "primary": "local",
-  "repository": { "host": "github.com", "fullName": "ebrindley/AgentGuard" }
+  "primary": "github-actions",
+  "repository": { "host": "github.com", "fullName": "ebrindley/AgentGuard" },
+  "githubActions": {
+    "workflows": [".github/workflows/test.yml"],
+    "selectedChecks": ["tests"]
+  }
 }
