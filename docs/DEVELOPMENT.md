@@ -15,6 +15,7 @@ requires Node 24 and an unguarded CI/orchestration process; it does not disable 
 coding agent's sandbox. The initial measurement on the development Mac was 62
 checks in 35 seconds. Installation, GUI, native OpenCode and migration suites
 remain in the full macOS 15/26 matrix.
+The bootstrap GitHub check completed in 51 seconds on macOS 26 with Node 24.
 
 After independent review, `poetic ci merge <pr> --sha <reviewed-sha>` owns local
 validation and protected landing. Keep independently armed GitHub auto-merge off.
