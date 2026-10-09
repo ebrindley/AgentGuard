@@ -187,7 +187,7 @@ check "reinstall keeps one plugin, the link" only_plugin
   /^DENY -/ { print; print h "/Projects/app/secret"; print "Allow me to note:"; print "~/Documents/private"; print "~/Documents/typo"; print h "/Library"; print "not a path"; next }
   { print }' "$list" > "$list.tmp" && /bin/mv "$list.tmp" "$list"
 
-profile=$(cd "$home/Projects/app" && "${launcher[@]}" profile 2>/dev/null) || fail "profile"
+profile=$(cd "$home/Projects/app" && "${launcher[@]}" profile 2>"$run/profile.err") || fail "profile"
 check "essential DENY refused" /usr/bin/grep -q "refused DENY, OpenCode needs" "$log"
 check "broad ALLOW refused" /usr/bin/grep -q "refused ALLOW, too broad: $home/Library" "$log"
 check "ALLOW / refused" /usr/bin/grep -qx "refused ALLOW, too broad: /" "$log"
@@ -195,6 +195,28 @@ check "essential READ ONLY refused" /usr/bin/grep -q "refused READ ONLY, OpenCod
 check "missing DENY warned" /usr/bin/grep -q "DENY entry does not exist, check the spelling: $home/Documents/typo" "$log"
 check "junk line skipped" /usr/bin/grep -q "skipped, not a full path: not a path" "$log"
 check "built-ins listed" /usr/bin/grep -q "always writable for OpenCode itself" "$log"
+summary_quiet() {
+  local label hit
+  for label in 'agent-guard: allow:' 'agent-guard: read only:' 'agent-guard: deny:' \
+               'agent-guard: always writable' 'agent-guard: OpenCode cache follows'; do
+    if hit=$(/usr/bin/grep -F -- "$label" "$run/profile.err"); then
+      print -ru2 -- "summary on terminal: $hit"
+      return 1
+    fi
+  done
+  return 0
+}
+summary_logged() {
+  /usr/bin/grep -q '^allow: ' "$log" &&
+    /usr/bin/grep -q '^read only: ' "$log" &&
+    /usr/bin/grep -q '^deny: ' "$log" &&
+    /usr/bin/grep -q '^OpenCode cache follows filesystem permissions: ' "$log"
+}
+if summary_quiet; then pass "summary stays off the terminal"; else fail "summary stays off the terminal"; fi
+check "summary stays in the log" summary_logged
+check "refusal still reaches the terminal" /usr/bin/grep -q 'agent-guard: refused DENY' "$run/profile.err"
+check "warning reaches the terminal" /usr/bin/grep -q 'agent-guard: warning: DENY entry does not exist' "$run/profile.err"
+check "skipped entry reaches the terminal" /usr/bin/grep -q 'agent-guard: skipped, not a full path' "$run/profile.err"
 check "rules.json" /usr/bin/jq -e --arg h "$home" '.deny == [$h + "/Projects/app/secret", $h + "/Documents/private", $h + "/Documents/typo"]' "$engine/state/rules.json"
 first_line() { [[ "$(/usr/bin/head -1 "$log")" == "Agent Guard profile $rid "* ]] }
 check "first log line names the release" first_line

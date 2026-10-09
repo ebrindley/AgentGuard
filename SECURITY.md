@@ -21,11 +21,11 @@ best-effort basis. There is no bug bounty.
 ## Supported versions
 
 Fixes go into the latest release only; older releases do not receive backports.
-The latest stable release is 0.2.4 (OpenCode, Pi and OMP).
+The latest stable release is 0.2.5 (OpenCode, Pi and OMP).
 `agent-guard update` follows stable releases and leaves a newer installed version
 unchanged. See [release channels](docs/OPERATIONS.md#release-channels) for tagged
-installers; they do not include later commits. The OpenCode policy below describes the current checkout; configuration and
-dependency maintenance changes are unreleased.
+installers; they do not include later commits. The OpenCode policy below describes
+release 0.2.5.
 
 0.2.2 narrows OpenCode's configuration protections for skill content
 and replaces its blanket recursive-delete block with scoped checks. See
