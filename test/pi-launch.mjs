@@ -9,6 +9,7 @@ import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync,
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { userInfo } from 'node:os';
 import { layout, stage } from './engines/zsh.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -31,9 +32,12 @@ function check(name, fn) {
   }
 }
 
-// The stand-in Pi: drops the injected extension flag and runs the rest.
-const standIn = join(run, 'runtime', 'pi');
-mkdirSync(dirname(standIn));
+// CI checkouts live under Darwin temp, which production bindings correctly reject.
+// This disposable executable is outside every fake account's writable roots.
+const executableCache = join(userInfo().homedir, 'Library/Caches');
+mkdirSync(executableCache, { recursive: true });
+const executableRun = realpathSync(mkdtempSync(join(executableCache, 'agent-guard-pi-fixture-')));
+const standIn = join(executableRun, 'pi');
 writeFileSync(standIn, '#!/bin/sh\nif [ "$1" = --extension ]; then shift 2; fi\nexec "$@"\n');
 chmodSync(standIn, 0o755);
 
@@ -140,6 +144,7 @@ try {
     check(`difference 9: ${variant} prepares missing roots and preserves runtime writes`, () => {
       if (variant !== 'pi') assert.ok(!existsSync(agent), 'state root already exists');
       allowed(session(a, ['/bin/sh', '-c', 'mkdir -p "$1/sessions" && printf state > "$1/sessions/probe"', 'sh', agent], options), 'session state');
+      denied(write(a, standIn, options), 'fixture executable remains outside session writes');
       for (const p of roots) assert.ok(existsSync(p), `root not prepared: ${p}`);
       allowed(session(a, ['/bin/mkdir', '-p', ...roots], options), 'existing root mkdir');
       const files = variant.startsWith('omp') ? [join(agent, 'agent.db'), join(state, 'stats.db'), join(base, 'install-id')]
@@ -650,6 +655,7 @@ try {
 } finally {
   rmSync(run, { recursive: true, force: true });
   rmSync(scratch, { recursive: true, force: true });
+  rmSync(executableRun, { recursive: true, force: true });
 }
 console.log(`${fails} failure(s)`);
 process.exit(fails ? 1 : 0);
