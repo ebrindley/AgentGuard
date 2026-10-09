@@ -9,22 +9,24 @@ and homes described below. For installed checks, see
 
 ### Fast landing and background validation
 
-`script/test` is the required local macOS gate: profile characterization,
+`script/test` is the required macOS gate: profile characterization,
 rulebook/policy checks and real Seatbelt launch checks in disposable homes. It
 requires Node 24 and an unguarded CI/orchestration process; it does not disable a
 coding agent's sandbox. The initial measurement on the development Mac was 62
 checks in 35 seconds. Installation, GUI, native OpenCode and migration suites
 remain in the full macOS 15/26 matrix.
+The bootstrap GitHub check completed in 51 seconds on macOS 26 with Node 24.
 
-After independent review, `poetic ci merge <pr> --sha <reviewed-sha>` owns local
-validation and protected landing. Keep independently armed GitHub auto-merge off.
-The Mac must be available. Use `poetic ci status <pr>` for local proof and
-`poetic ci reconcile` from the trusted host context for interrupted work.
+The GitHub `tests` check runs this gate for pull requests. After independent
+review, merge through GitHub's protected path with the reviewed head SHA;
+native auto-merge may wait for the required check. Local gate execution is useful
+for focused development, but is not required in addition to the hosted gate.
 
-The temporary GitHub `tests` workflow bootstraps this configuration under the
-existing required check. Remove it only after `Poetic Local CI` is required on
-main and a real local attestation has been verified. The steady-state merge path
-runs the gate once locally.
+Poetic local CI is disabled. Its verification runner applies an outer macOS
+sandbox, which prevents these confinement fixtures from applying their own.
+A temporary-checkout fixture correction passed independently, but the actual
+local queue still refused nested sandbox initialization. Hosted CI owns landing;
+no local status substitutes for the required GitHub Actions check.
 
 `Full validation` runs automatically on pushes to main and by manual dispatch.
 Documentation/backlog-only pushes do not start it, so they cannot cancel an
@@ -39,10 +41,10 @@ stage proofs. The generated incident kit records failing matrix jobs/steps and
 closes them only after matching current-main coverage. Repair remains disabled.
 The reviewer binding records intent, not account activation or entitlement.
 
-Required check count stays one: hosted `tests` during bootstrap, then `Poetic
-Local CI`. The four full macOS jobs move from PR blocking to main background
-execution. Hosted workflows go from one to three during bootstrap, then two
-after the temporary gate is removed.
+Required check count stays one: hosted `tests`. The four full macOS jobs move
+from PR blocking to main background execution. Three hosted workflows remain:
+the fast gate, full validation and record-only incident intake. No local CI gate
+is active.
 
 For skill changes, run `node test/skills.mjs`, `node test/skills.mjs readonly`,
 `node test/skills.mjs kernel`, `node test/skills.mjs linked`, `node test/skills.mjs stdin` and

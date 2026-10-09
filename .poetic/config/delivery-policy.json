@@ -5,14 +5,16 @@
     "host": "github.com",
     "fullName": "ebrindley/AgentGuard"
   },
-  "landingOwner": "poetic-local-ci",
+  "landingOwner": "native-host",
   "reviewTiming": "before-merge",
   "stages": {
     "gate": {
-      "owner": "local",
+      "owner": "github-actions",
       "scope": "Core profiles, rulebook and macOS confinement",
-      "local": {
-        "source": "resolved-ci-config"
+      "githubActions": {
+        "workflows": [".github/workflows/test.yml"],
+        "selectedChecks": ["tests"],
+        "events": ["pull_request", "workflow_dispatch"]
       }
     },
     "background": {
