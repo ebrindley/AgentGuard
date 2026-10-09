@@ -38,7 +38,9 @@ existing packaging/seam checks. Local gate success alone is not release proof.
 The delivery policy declares the scopes. `poetic ci status --delivery` inspects
 hosted background evidence; it does not relabel ordinary Local CI runs as new
 stage proofs. The generated incident kit records failing matrix jobs/steps and
-closes them only after matching current-main coverage. Repair remains disabled.
+closes them after the originally failing steps pass in a newer run on main's
+history. Resolutions name the tested commit and observed main head; later commits
+do not inherit exact-SHA validation. Repair remains disabled.
 The reviewer binding records intent, not account activation or entitlement.
 
 Bugbot's repository settings are in `.cursor/config/bugbot.yaml`; review context
