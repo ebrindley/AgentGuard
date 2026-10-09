@@ -4,6 +4,7 @@ name: Full validation
 on:
   push:
     branches: [main]
+    paths-ignore: ["**/*.md", "backlog/**"]
   workflow_dispatch:
 
 permissions:
@@ -14,40 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      docs-only: ${{ steps.paths.outputs.docs-only }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-      - id: paths
-        env:
-          EVENT: ${{ github.event_name }}
-          BASE: ${{ github.event.before }}
-          HEAD: ${{ github.sha }}
-        run: |
-          python3 - <<'PYTHON'
-          import os
-          import subprocess
-          docs_only = False
-          if os.environ['EVENT'] == 'push' and os.environ['BASE'] and set(os.environ['BASE']) != {'0'}:
-              paths = subprocess.check_output([
-                  'git', 'diff', '--no-renames', '--name-only', '-z',
-                  os.environ['BASE'] + '..' + os.environ['HEAD'], '--'
-              ]).split(b'\0')[:-1]
-              docs_only = bool(paths) and all(
-                  p.endswith(b'.md') or p.startswith(b'backlog/') for p in paths
-              )
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write('docs-only=' + str(docs_only).lower() + '\n')
-          PYTHON
-
   suites:
-    needs: changes
-    if: needs.changes.outputs.docs-only == 'false'
     strategy:
       fail-fast: false
       matrix:
@@ -104,8 +72,6 @@ jobs:
         run: zsh test/migrate.sh
 
   migrate-pi:
-    needs: changes
-    if: needs.changes.outputs.docs-only == 'false'
     strategy:
       fail-fast: false
       matrix:
@@ -124,7 +90,7 @@ jobs:
       - run: zsh test/migrate-pi.sh
 
   full-tests:
-    needs: [changes, suites, migrate-pi]
+    needs: [suites, migrate-pi]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -135,14 +101,7 @@ jobs:
           import json
           import os
           needs = json.loads(os.environ['NEEDS'])
-          changes = needs['changes']
-          docs_only = changes.get('outputs', {}).get('docs-only')
-          expected = 'skipped' if docs_only == 'true' else 'success'
-          passed = (
-              changes['result'] == 'success'
-              and docs_only in ('true', 'false')
-              and all(needs[job]['result'] == expected for job in ('suites', 'migrate-pi'))
-          )
+          passed = all(needs[job]['result'] == 'success' for job in ('suites', 'migrate-pi'))
           if not passed:
               raise SystemExit('Required test jobs did not complete as expected: ' + json.dumps(needs))
           PYTHON

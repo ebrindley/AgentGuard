@@ -17,7 +17,7 @@
     },
     "background": {
       "owner": "github-actions",
-      "scope": "Full integration and migration matrix; documentation-only pushes skip suites",
+      "scope": "Full integration and migration matrix for code pushes and manual validation",
       "githubActions": {
         "workflows": [
           ".github/workflows/full.yml"

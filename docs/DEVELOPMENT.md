@@ -27,8 +27,9 @@ main and a real local attestation has been verified. The steady-state merge path
 runs the gate once locally.
 
 `Full validation` runs automatically on pushes to main and by manual dispatch.
-Documentation/backlog-only pushes skip the matrix; manual dispatch always runs
-it. Those skipped jobs do not count as full stage proof. Before publishing a
+Documentation/backlog-only pushes do not start it, so they cannot cancel an
+already-running code validation. Manual dispatch always runs it. No matching run
+means full stage proof is unverified. Before publishing a
 release, require a successful full run on its exact source commit and retain the
 existing packaging/seam checks. Local gate success alone is not release proof.
 
