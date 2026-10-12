@@ -51,6 +51,11 @@ Use folders that exist for ALLOW. A READ ONLY or DENY entry may name a path
 that does not exist yet; the launcher keeps it, and logs a spelling warning for
 DENY.
 
+Paths resolve existing symlink targets before `..`, as filesystem access does.
+Missing suffixes below resolved folders remain restricted. A dangling symlink is
+kept at its name; its missing target is not separately restricted. A tab in a
+path refuses the launch; remove it from the Guard List and reopen OpenCode.
+
 - ALLOW permits creating, changing and deleting files inside the listed folder.
 - READ ONLY removes write permission, including within an ALLOW folder. It does
   not restrict reads to listed folders; other readable paths remain readable.
