@@ -197,7 +197,10 @@ extension folder `~/.pi/agent/extensions/pi-sandbox-guard/`, or
 `~/.config/pi-sandbox-guard/executables.conf`), it takes those files over at the
 same paths. It does not run pi-sandbox-guard's npm scripts:
 
-1. Quit every Pi and OMP session first. The installer stops while one runs, and
+1. Quit OpenCode, Pi and OMP before migrating. The Pi migration enforces the
+   Pi/OMP check only; an existing OpenCode process retains its earlier profile
+   until restarted and does not acquire protections for newly installed Pi
+   files. The installer stops while Pi or OMP runs, and
    names it. A Pi session's process is `node`, so it looks for processes that run
    the Pi and OMP executables, not for a process named `pi`. When it cannot list
    processes, it stops and asks to be run outside any sandbox. It checks again
@@ -583,6 +586,10 @@ configuration disabled. Plugin registration is operational evidence, not proof
 that every hook executes or that a remote server is sandboxed. A local MCP child
 inherits the launch profile; an existing or remote service does not. Attaching
 a client to a server does not change that server's permissions.
+The main launcher permits this attachment and logs the distinction. Peer CLI
+wrappers refuse attachment. An unguarded server with the Guard plugin refuses
+unsafe tools unless `AGENT_GUARD_BYPASS=1` is set; no refusal is assured on a
+server without that plugin.
 
 See [skills and deletion policy](SKILLS.md). Pi/OMP policy is unchanged, including
 when OpenCode is a child of a Pi/OMP session.
