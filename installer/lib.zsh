@@ -391,9 +391,12 @@ ag_plan_write() {
   /usr/bin/jq -n --arg txn "$ag_txn" --arg kind "$ag_kind" --arg source "$ag_source" --arg rid_new "$ag_rid_new" --arg rid_old "$ag_rid_old" \
     --argjson started "$EPOCHSECONDS" --argjson app "$ag_app_rebuild" --arg app_inputs "$ag_app_inputs" \
     --arg version "$ag_version" --arg tag "$ag_tag" --arg commit "$ag_commit" --argjson harnesses "$harnesses" --argjson keep "$keep" \
+    --argjson restore_edit_permissions "${ag_restore_edit_permissions:-0}" \
+    --arg approval_preference "${ag_approval_preference:-}" \
     '{txn: $txn, kind: $kind, migration: (if $source == "" then null else $source end), harnesses: $harnesses,
       rid_new: $rid_new, rid_old: (if $rid_old == "" then null else $rid_old end), keep: $keep,
-      started_at: $started, app: ($app == 1), app_inputs: $app_inputs,
+      started_at: $started, app: ($app == 1), app_inputs: $app_inputs, restore_edit_permissions: ($restore_edit_permissions == 1),
+      approval_preference: (if $approval_preference == "" then null else $approval_preference end),
       version: $version, tag: $tag, commit: $commit, configs: $ARGS.positional}' --args "${ag_configs[@]}" > "$1"
 }
 
@@ -406,6 +409,9 @@ ag_txn_load() {
   (( $#v == 10 )) || { ag_err "cannot read $p"; return 1 }
   ag_txn=$v[1] ag_kind=$v[2] ag_source=$v[3] ag_rid_new=$v[4] ag_rid_old=$v[5] ag_app_rebuild=$v[6] ag_app_inputs=$v[7]
   ag_version=$v[8] ag_tag=$v[9] ag_commit=$v[10]
+  ag_restore_edit_permissions=$(/usr/bin/jq -r 'if .restore_edit_permissions == true then "1" else "0" end' "$p") || return 1
+  ag_approval_preference=$(/usr/bin/jq -r '.approval_preference // ""' "$p") || return 1
+  [[ -z $ag_approval_preference || $ag_approval_preference == (auto|host) ]] || { ag_err "unexpected approval preference in $p"; return 1 }
   [[ $ag_txn == [0-9A-Za-z.-]## && $ag_rid_new == [0-9A-Za-z.+-]## && $ag_rid_old == [0-9A-Za-z.+-]# && $ag_kind == (install|update|migrate) ]] &&
     [[ -z $ag_source || ${ag_migration_modules[(Ie)$ag_source]} != 0 ]] || { ag_err "unexpected values in $p"; return 1 }
   ag_configs=(${(f)"$(/usr/bin/jq -r '.configs[]' "$p")"})
@@ -567,6 +573,9 @@ ag_pending() {
     ag_hook_opt h $h title
     what+=("$REPLY")
   done
+  if [[ -f $record ]] && /usr/bin/jq -e 'any(.[]; (.edit // {} | has("wrote")))' "$record" >/dev/null 2>&1; then
+    what+=('OpenCode edit permission migration')
+  fi
   REPLY=${(j:, :)what}
   (( $#what ))
 }
@@ -1369,11 +1378,15 @@ ag_install_main() {
   local w m
   ag_txn=$1
   shift
-  ag_gui=0 ag_projects= ag_update=0
+  ag_gui=0 ag_projects= ag_update=0 ag_restore_edit_permissions=0 ag_approval_preference=
   while (( $# )); do
     case $1 in
       (--gui) ag_gui=1 ;;
       (--update) ag_update=1 ;;
+      (--restore-edit-permissions) ag_restore_edit_permissions=1 ;;
+      (--approval-preference)
+        (( $# >= 2 )) && [[ $2 == (auto|host) ]] || { ag_err 'usage: --approval-preference auto|host'; exit 2 }
+        ag_approval_preference=$2; shift ;;
       (--projects) (( $# >= 2 )) || { ag_err 'usage: install.sh [--projects DIR] [--gui]'; exit 2 }; ag_projects=$2; shift ;;
       (*) ag_err "unknown option: $1"; exit 2 ;;
     esac

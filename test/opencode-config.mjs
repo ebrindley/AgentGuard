@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { spawnSync } from "node:child_process"
@@ -14,19 +14,22 @@ function fixture(name) {
   for (const p of [dirname(config), join(engine, "state"), join(home, "stage")]) mkdirSync(p, { recursive: true })
   return { home, engine, config }
 }
-function shell(f, body) {
+function shell(f, body, journal = false) {
   const result = spawnSync("/bin/zsh", ["-fc", `
-    setopt no_unset
+    setopt no_unset extended_glob
     source "$1/installer/lib.zsh"
     source "$1/installer/harness/opencode.zsh"
     home=$2 engine=$3
-    state="$engine/state" record="$state/permissions.json" ag_tstage="$home/stage"
+    state="$engine/state" record="$state/permissions.json" ag_tstage="$home/stage" txn_dir="$state/txn"
+    ag_restore_edit_permissions=0
     typeset -a ag_configs ag_warnings ag_unrestored
     ag_configs=() ag_warnings=() ag_unrestored=()
     ag_h_opencode_init
-    ag_jlast() { REPLY=; }
-    ag_jnl() { :; }
-    ag_backup() { :; }
+    ${journal ? '/bin/mkdir -p "$txn_dir/backup"; touch "$txn_dir/journal"' : `
+      ag_jlast() { REPLY=; }
+      ag_jnl() { :; }
+      ag_backup() { :; }
+    `}
     ${body}
   `, "config-test", root, f.home, f.engine], { encoding: "utf8" })
   assert.equal(result.status, 0, result.stdout + result.stderr)
@@ -65,7 +68,7 @@ writeFileSync(target, original)
 symlinkSync(target, f.config)
 shell(f, `ag_classify_configs; do_permissions`)
 let config = JSON.parse(readFileSync(target, "utf8"))
-assert.equal(config.permission.edit, "allow")
+assert.equal(config.permission.edit, "ask")
 assert.equal(config.model, "fixture")
 config.permission.bash = "deny"
 writeFileSync(target, JSON.stringify(config))
@@ -83,12 +86,103 @@ shell(changed, `/bin/mv "$conf/config.json" "$home/old-config.json"
   /bin/ln -s "$engine/state/target.json" "$conf/config.json"
   ag_h_opencode_uninstall_restore "$ag_tstage"
   (( $#ag_unrestored == 1 ))`)
-assert.equal(JSON.parse(readFileSync(protectedFile, "utf8")).permission.edit, "allow")
+assert.equal(JSON.parse(readFileSync(protectedFile, "utf8")).permission.bash, "allow")
 shell(changed, `ag_configs=("$conf/config.json")
   undo_permissions
   (( $#ag_unrestored == 0 )) || exit 1
   ag_jlast() { REPLY=done; }
   undo_permissions
   (( $#ag_unrestored == 1 ))`)
-assert.equal(JSON.parse(readFileSync(protectedFile, "utf8")).permission.edit, "allow")
+assert.equal(JSON.parse(readFileSync(protectedFile, "utf8")).permission.bash, "allow")
+
+for (const [name, permission, expected] of [
+  ["scalar-deny", "deny", "deny"],
+  ["scalar-ask", "ask", "ask"],
+  ["scalar-allow", "allow", "allow"],
+  ["array-permissions", ["deny"], ["deny"]],
+  ["catchall-deny", { "*": "deny" }, { "*": "deny" }],
+  ["specific-deny", { bash: "deny", external_directory: "deny" }, { bash: "deny", external_directory: "deny" }],
+  ["pattern-deny", { bash: { "rm *": "deny", "*": "ask" } }, { bash: { "rm *": "deny", "*": "ask" }, external_directory: "allow" }],
+  ["pattern-order", { bash: { "*": "ask", "ls *": "allow" } }, { bash: { "*": "allow", "ls *": "allow" }, external_directory: "allow" }],
+  ["pattern-specific", { bash: { "ls *": "ask" } }, { bash: { "ls *": "ask" }, external_directory: "allow" }],
+  ["fresh", {}, { bash: "allow", external_directory: "allow" }],
+]) {
+  const p = fixture(name)
+  writeFileSync(p.config, JSON.stringify({ permission }))
+  shell(p, 'ag_classify_configs; do_permissions')
+  assert.deepEqual(JSON.parse(readFileSync(p.config)).permission, expected)
+  assert.deepEqual(Object.keys(JSON.parse(readFileSync(p.config)).permission.bash ?? {}), Object.keys(expected.bash ?? {}))
+}
+
+function legacy(name, orig, current = "allow") {
+  const f = fixture(name)
+  writeFileSync(f.config, JSON.stringify({ permission: { edit: current, bash: "allow", external_directory: "allow" }, model: "fixture" }))
+  f.record = join(f.engine, "state/permissions.json")
+  f.ledger = { [f.config]: { edit: { orig, wrote: "allow" }, bash: { orig: "ask", wrote: "allow" } } }
+  writeFileSync(f.record, JSON.stringify(f.ledger))
+  return f
+}
+for (const orig of [null, "deny", "allow"]) {
+  const f = legacy(`retire-${orig}`, orig)
+  shell(f, 'do_retire_edit', true)
+  assert.equal(JSON.parse(readFileSync(f.config)).permission.edit ?? null, orig)
+  assert.deepEqual(JSON.parse(readFileSync(f.record)), { [f.config]: { bash: f.ledger[f.config].bash } })
+  shell(f, 'undo_retire_edit', true)
+  assert.equal(JSON.parse(readFileSync(f.config)).permission.edit, "allow")
+  assert.deepEqual(JSON.parse(readFileSync(f.record)), f.ledger)
+}
+for (const orig of ["ask", { "*": "deny", "plan/*": "ask" }]) {
+  const f = legacy(`defer-${typeof orig}`, orig)
+  const output = shell(f, 'do_retire_edit; print -l -- $ag_warnings', true).stdout
+  assert.match(output, /approval-prompts-would-return/)
+  assert.equal(JSON.parse(readFileSync(f.config)).permission.edit, "allow")
+  assert.deepEqual(JSON.parse(readFileSync(f.record)), f.ledger)
+}
+const explicit = legacy("explicit-ask", "ask")
+shell(explicit, 'ag_restore_edit_permissions=1; do_retire_edit', true)
+assert.equal(JSON.parse(readFileSync(explicit.config)).permission.edit, "ask")
+shell(explicit, 'ag_h_opencode_uninstall_restore "$ag_tstage"', true)
+assert.deepEqual(JSON.parse(readFileSync(explicit.config)).permission, { edit: "ask", bash: "ask", external_directory: "allow" })
+
+const userChanged = legacy("user-edit", null, "deny")
+shell(userChanged, 'do_retire_edit; undo_retire_edit', true)
+assert.equal(JSON.parse(readFileSync(userChanged.config)).permission.edit, "deny")
+assert.deepEqual(JSON.parse(readFileSync(userChanged.record)), userChanged.ledger)
+
+for (const point of ["edit-restored", "edit-retired"]) {
+  const f = legacy(`resume-${point}`, null)
+  shell(f, `test_point() { [[ $1 != ${point} ]]; }; do_retire_edit && exit 1; exit 0`, true)
+  assert.equal(JSON.parse(readFileSync(f.config)).permission.edit, undefined)
+  shell(f, 'do_retire_edit', true)
+  assert.equal(JSON.parse(readFileSync(f.config)).permission.edit, undefined)
+  assert.deepEqual(JSON.parse(readFileSync(f.record)), { [f.config]: { bash: f.ledger[f.config].bash } })
+  shell(f, 'undo_retire_edit', true)
+  assert.equal(JSON.parse(readFileSync(f.config)).permission.edit, "allow")
+  assert.deepEqual(JSON.parse(readFileSync(f.record)), f.ledger)
+}
+const rollbackEdit = legacy("rollback-user-edit", null)
+shell(rollbackEdit, 'do_retire_edit', true)
+writeFileSync(rollbackEdit.config, JSON.stringify({ permission: { edit: "deny", bash: "allow" } }))
+shell(rollbackEdit, 'undo_retire_edit', true)
+assert.equal(JSON.parse(readFileSync(rollbackEdit.config)).permission.edit, "deny")
+
+const preference = fixture("approval-preference")
+const preferenceFile = join(preference.engine, "state/opencode-preferences.json")
+shell(preference, 'ag_approval_preference=auto; do_opencode_preference', true)
+assert.deepEqual(JSON.parse(readFileSync(preferenceFile)), { schemaVersion: 1, approvalPreference: "auto" })
+shell(preference, 'ag_approval_preference=; do_opencode_preference', true)
+assert.equal(JSON.parse(readFileSync(preferenceFile)).approvalPreference, "auto")
+writeFileSync(preferenceFile, JSON.stringify({ schemaVersion: 1, approvalPreference: "host" }))
+shell(preference, 'ag_approval_preference=auto; undo_opencode_preference', true)
+assert.equal(JSON.parse(readFileSync(preferenceFile)).approvalPreference, "host")
+const preferenceRollback = fixture("preference-rollback")
+const preferenceRollbackFile = join(preferenceRollback.engine, "state/opencode-preferences.json")
+shell(preferenceRollback, 'ag_approval_preference=auto; do_opencode_preference; undo_opencode_preference', true)
+assert.equal(existsSync(preferenceRollbackFile), false)
+const preferenceExisting = fixture("preference-existing")
+const preferenceExistingFile = join(preferenceExisting.engine, "state/opencode-preferences.json")
+const oldPreference = JSON.stringify({ schemaVersion: 1, approvalPreference: "host" })
+writeFileSync(preferenceExistingFile, oldPreference)
+shell(preferenceExisting, 'ag_approval_preference=auto; do_opencode_preference; undo_opencode_preference', true)
+assert.equal(readFileSync(preferenceExistingFile, "utf8"), oldPreference)
 console.log(`ok OpenCode maintenance: ${checks} cases; ${run}`)

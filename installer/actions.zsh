@@ -140,6 +140,8 @@ ag_registry() {
     switch   plugin-take      migrate:opencode-guard    migrate  do_ocg_plugin_take    undo_plugin_take
     switch   plugin-name      migrate:opencode-guard    migrate  do_ocg_plugin_name    undo_plugin_name
     switch   plugin           harness:opencode          all      do_plugin             undo_plugin
+    switch   opencode-preference harness:opencode       all      do_opencode_preference undo_opencode_preference
+    switch   retire-edit      harness:opencode          all      do_retire_edit        undo_retire_edit
     switch   permissions      harness:opencode          plain    do_permissions        undo_permissions
     switch   rc               engine                    all      do_rc                 undo_rc
     switch   app              engine                    migrate  do_app                undo_app

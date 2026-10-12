@@ -222,9 +222,9 @@ for p in $fresh_points; do
   (( rc == 0 )) && pass 'rerun recovers and installs' || { fail "rerun (exit $rc)"; show }
   same_snapshot 'final state equals a full install and a rerun' "$run/fresh-ref.snapshot"
   if [[ $p == perm-recorded ]]; then
-    /usr/bin/jq -e '.permission.edit == "allow" and .permission.external_directory == "allow" and .permission.bash["*"] == "allow"' "$cfg" >/dev/null &&
+    /usr/bin/jq -e '(.permission | has("edit") | not) and .permission.external_directory == "allow" and .permission.bash["*"] == "allow"' "$cfg" >/dev/null &&
       pass 'P3 the rerun wrote allow' || fail 'P3 the rerun wrote allow'
-    /usr/bin/jq -e --arg f "$cfg" '.[$f].edit.orig == null and .[$f].bash.orig == {"ls *": "allow", "*": "ask"}' "$state/permissions.json" >/dev/null &&
+    /usr/bin/jq -e --arg f "$cfg" '(.[$f] | has("edit") | not) and .[$f].bash.orig == {"ls *": "allow", "*": "ask"}' "$state/permissions.json" >/dev/null &&
       pass 'P3 orig holds the original values' || fail 'P3 orig holds the original values'
   fi
 done
@@ -506,7 +506,47 @@ rc=$?
 [[ $(sha "$list") == "$list_hash" ]] && pass 'P1 the edited list is identical' || fail 'P1 the edited list changed'
 [[ $(sha "$state/permissions.json") == "$record_hash" ]] && pass 'P4 the record is byte-identical' || fail 'P4 the record changed'
 [[ $(sha "$cfg") == "$cfg_hash" ]] && pass 'P5 edit stays ask; model, task and the rest untouched' || fail 'P5 the config changed'
-/usr/bin/grep -qF "left unchanged: $cfg edit was changed after install" "$out" && pass 'P5 the edit is reported' || { fail 'P5 the edit is reported'; show }
+/usr/bin/grep -qF 'global edit policy can override Plan/Explore restrictions' "$out" && pass 'P5 the edit role conflict is reported' || { fail 'P5 the edit is reported'; show }
+
+# Old managed edit writes are retired on updates, including the same version.
+label='edit migration'
+restore A
+/usr/bin/jq --arg f "$cfg" '.[$f].edit = {orig: null, wrote: "allow"}' "$state/permissions.json" > "$state/permissions.json.new" && /bin/mv "$state/permissions.json.new" "$state/permissions.json"
+/usr/bin/jq '.permission.edit = "allow"' "$cfg" > "$cfg.new" && /bin/mv "$cfg.new" "$cfg"
+save old-edit
+for p in edit-restored edit-retired; do
+  restore old-edit
+  point=kill:$p ag update
+  rc=$?
+  (( rc == 137 )) && pass "killed at $p" || { fail "kill $p (exit $rc)"; show; continue }
+  point= ag update
+  rc=$?
+  (( rc == 0 )) && /usr/bin/jq -e '(.permission | has("edit") | not)' "$cfg" >/dev/null &&
+    /usr/bin/jq -e --arg f "$cfg" '(.[$f] | has("edit") | not) and .[$f].bash.orig == {"ls *": "allow", "*": "ask"}' "$state/permissions.json" >/dev/null &&
+    pass "$p recovery retires edit and preserves first-install originals" || { fail "$p recovery (exit $rc)"; show }
+done
+restore old-edit
+/usr/bin/jq --arg f "$cfg" '.[$f].edit.orig = "ask"' "$state/permissions.json" > "$state/permissions.json.new" && /bin/mv "$state/permissions.json.new" "$state/permissions.json"
+point= ag update
+rc=$?
+(( rc == 0 )) && /usr/bin/grep -q 'approval-prompts-would-return' "$out" &&
+  /usr/bin/jq -e '.permission.edit == "allow"' "$cfg" >/dev/null && pass 'ASK restoration is deferred without an explicit choice' || { fail 'ASK default'; show }
+point= ag update --restore-edit-permissions
+rc=$?
+(( rc == 0 )) && /usr/bin/jq -e '.permission.edit == "ask"' "$cfg" >/dev/null &&
+  /usr/bin/jq -e --arg f "$cfg" '(.[$f] | has("edit") | not)' "$state/permissions.json" >/dev/null &&
+  pass 'explicit ASK restoration retires ownership' || { fail 'ASK explicit'; show }
+restore old-edit
+/usr/bin/jq --arg f "$cfg" '.[$f].edit.orig = "ask"' "$state/permissions.json" > "$state/permissions.json.new" && /bin/mv "$state/permissions.json.new" "$state/permissions.json"
+point=kill:edit-restored ag update --restore-edit-permissions --approval-preference auto
+rc=$?
+(( rc == 137 )) && /usr/bin/jq -e '.restore_edit_permissions == true and .approval_preference == "auto"' "$state/txn/plan.json" >/dev/null &&
+  pass 'explicit retirement and requested auto mode are frozen for recovery' || { fail 'frozen setup choice'; show }
+point= ag update
+rc=$?
+(( rc == 0 )) && /usr/bin/jq -e '.permission.edit == "ask"' "$cfg" >/dev/null &&
+  /usr/bin/jq -e '. == {schemaVersion:1, approvalPreference:"auto"}' "$state/opencode-preferences.json" >/dev/null &&
+  pass 'recovery preserves the requested preference without enabling native mode' || { fail 'preference recovery'; show }
 
 # --- P2: a kill after the record write, then uninstall: the originals come back.
 label=P2
@@ -596,7 +636,7 @@ rc=$?
 # or in test/migrate-pi.sh ($pi_points); each of those fails for any it does not
 # exercise.
 label=coverage
-covered=($update_points $uninstall_points rollback after-unpack after-download after-verify $migrate_points $pi_points)
+covered=($update_points $uninstall_points rollback after-unpack after-download after-verify edit-restored edit-retired $migrate_points $pi_points)
 points=(${(f)"$(/usr/bin/grep -ohE 'test_point [a-z0-9-]+' "$source_root"/profiles/opencode/{install,uninstall}.sh "$source_root"/installer/**/*.zsh "$source_root"/scripts/bootstrap.zsh "$source_root"/engine/agent-guard | /usr/bin/sort -u)"})
 missing=()
 for p in ${points#test_point }; do (( ${covered[(Ie)$p]} )) || missing+=("$p"); done
