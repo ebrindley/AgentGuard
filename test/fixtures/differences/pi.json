@@ -99,6 +99,11 @@
       "id": 10,
       "change": "Load the release peer runtime grants before configuration denies and prepend session-only peer wrappers after PATH sanitization. Preserve the original PATH for peer discovery.",
       "files": ["sandbox/pi-sandbox.sb", "sandbox/pi-sandbox-preamble.zsh"]
+    },
+    {
+      "id": 11,
+      "change": "When Git selects the project boundary, require it to match the physical checkout root found through the nearest .git directory or file. A session-writable core.worktree cannot redirect the next launch to a sibling or ancestor. Explicit PI_PROJECT retains operator-selected boundaries; linked worktrees and non-Git folders remain supported.",
+      "files": ["sandbox/pi-sandbox-preamble.zsh"]
     }
   ],
   "test_notes": [
