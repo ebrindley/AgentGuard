@@ -108,10 +108,12 @@ that is too broad or sensitive, or that contains its own folder,
 and
 [ARCHITECTURE.md](https://github.com/ebrindley/pi-sandbox-guard/blob/7ad441f51c249eafe6f92d16e92d2fbf37622d67/docs/ARCHITECTURE.md).
 
-Agent Guard 0.2.1 has nine recorded adoption differences from pi-sandbox-guard
-7ad441f in `test/fixtures/differences/pi.json`. Seven are listed below
-(fixture IDs 1–5, 7 and 8); difference 6 is `agent-guard bind`, and difference 9
-is state-root pinning ([changes since the prerelease](#changes-since-the-prerelease)).
+Agent Guard records its adoption differences from pi-sandbox-guard 7ad441f in
+`test/fixtures/differences/pi.json`. Eight are listed below (fixture IDs 1–5, 7,
+8 and 11); difference 6 is `agent-guard bind`, difference 9 is state-root pinning
+([changes since the prerelease](#changes-since-the-prerelease)), and difference 10
+is [peer CLI execution](#peer-cli-execution). Difference 11 is in the current
+checkout, after release 0.2.5.
 
 1. Pi and OMP sessions cannot change Agent Guard's engine folder, `~/Agent Guard`,
    `~/Applications/Agent Guard.app`, OpenCode Guard's engine folder,
@@ -138,6 +140,10 @@ is state-root pinning ([changes since the prerelease](#changes-since-the-prerele
 7. The analyzer asks before `git push` with `--force` or one of its variants,
    `--mirror`, `--prune`, `--delete`, a short option cluster containing `f` or
    `d`, or a refspec that starts with `+` or `:`.
+8. Git-selected project roots must match the physical checkout's `.git` directory
+   or file. A changed `core.worktree` that selects a sibling or ancestor refuses
+   the launch. Review that setting or use explicit `PI_PROJECT` to select another
+   boundary. Linked worktrees and non-Git launch folders remain supported.
 
 Taking over from pi-sandbox-guard also changes what surrounds the profile:
 Agent Guard's installer, `agent-guard update` and `agent-guard uninstall`
