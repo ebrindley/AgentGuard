@@ -1,7 +1,8 @@
 import { realpathSync } from "node:fs"
 import { homedir } from "node:os"
 
-// STATUS, in guarded mode: the exact text the status tool must return.
+// STATUS retains legacy fixture text; current status reports the same release
+// through its structured health model.
 const [plugin, mode, status] = process.argv.slice(2)
 // OpenCode Guard's plugin exports OpenCodeGuard; the migration tests probe it too.
 const mod = await import(plugin)
@@ -30,13 +31,16 @@ if (mode === "unguarded" || mode === "old-bypass" || mode === "symlinked") {
 } else if (mode === "bypass") {
   await expect("allowed", "bash allowed", "bash", { command: "ls" })
 } else if (mode === "outside" || mode === "updated") {
-  // Run guarded, a copy outside releases/ (outside) or a plugin whose
-  // AGENT_GUARD_RELEASE names a release that is gone (updated): no cc-safety-net,
-  // so no status tool and every tool refused.
+  // A missing trusted release retains diagnostics, while ordinary tools refuse.
   const text = mode === "updated" ? "Agent Guard was updated; quit and reopen OpenCode" : undefined
-  const absent = hooks.tool?.agent_guard_status === undefined
-  console.log(`${absent ? "ok  " : "FAIL"} plugin ${mode}: no agent_guard_status`)
-  if (!absent) failures++
+  const registered = typeof hooks.tool?.agent_guard_status?.execute === "function"
+  console.log(`${registered ? "ok  " : "FAIL"} plugin ${mode}: degraded agent_guard_status registered`)
+  if (!registered) failures++
+  await expect("allowed", "status survives before hook", "agent_guard_status", {})
+  const health = registered ? JSON.parse(await hooks.tool.agent_guard_status.execute({})) : {}
+  const degraded = health.state === "degraded" && !health.safetyNet?.hooksReady && hooks.tool.agent_guard_status.description.includes("[agent-guard:degraded]")
+  console.log(`${degraded ? "ok  " : "FAIL"} plugin ${mode}: degraded readiness`)
+  if (!degraded) failures++
   await expect("blocked", "bash refused", "bash", { command: "ls" }, text)
   await expect("blocked", "read refused", "read", { filePath: "README.md" }, text)
   await expect("blocked", "edit in ALLOW refused", "edit", { filePath: "src/index.js" }, text)
@@ -46,8 +50,16 @@ if (mode === "unguarded" || mode === "old-bypass" || mode === "symlinked") {
   if (!registered) failures++
   if (status !== undefined) {
     const said = registered ? await hooks.tool.agent_guard_status.execute({}) : ""
-    console.log(`${said === status ? "ok  " : "FAIL"} plugin ${mode}: status reports "${status}"`)
-    if (said !== status) failures++
+    let matches = said === status
+    if (said.startsWith("{")) {
+      const health = JSON.parse(said)
+      const expected = status.match(/^Agent Guard (\S+) \(([^)]+)\) is active\.$/)
+      matches = !!expected && health.state === "active" && health.releases.version === expected[1] && health.releases.loaded === expected[2] &&
+        health.rules.loaded && health.safetyNet.moduleLoaded && health.safetyNet.apiLoaded && health.safetyNet.hooksReady &&
+        hooks.tool.agent_guard_status.description.includes("[agent-guard:ready]")
+    }
+    console.log(`${matches ? "ok  " : "FAIL"} plugin ${mode}: status reports expected release and readiness`)
+    if (!matches) failures++
   }
   // status mode checks only which release answered.
   if (mode === "status") process.exit(failures ? 1 : 0)
