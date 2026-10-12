@@ -86,6 +86,44 @@ try {
   writeFileSync(join(engine, 'state/stamp.json'), JSON.stringify({ harnesses: ['opencode', 'pi'] }));
   writeFileSync(join(engine, 'state/wrappers.json'), JSON.stringify({ wrappers: { 'pi-work': { sha256: '0'.repeat(64) } }, historical: ['pi-old'] }));
   compare('pi-installed', `ALLOW -\n${home}/.local/bin\nREAD ONLY -\nDENY -\n`, [...differences, ...piInstalled].sort((a, b) => parseFloat(a.step) - parseFloat(b.step)));
+  if (!values.case || values.case === 'path-identity') {
+    const real = join(home, 'real');
+    for (const p of ['child', 'allowed', 'reference', 'private']) mkdirSync(join(real, p), { recursive: true });
+    symlinkSync(join(real, 'child'), join(home, 'Projects/link'));
+    const link = join(home, 'Projects/link');
+    const list = join(home, 'Agent Guard/Guard List.txt');
+    writeFileSync(list, `ALLOW\n${link}/../allowed\nREAD ONLY\n${link}/../reference\nDENY\n${link}/../private\n${link}/../missing/secret\n${link}/absent/../future\n`);
+    const current = exec([...adapter.launcher(engine), 'profile'], options);
+    const rules = JSON.parse(readFileSync(join(engine, 'state/rules.json'), 'utf8'));
+    assert.deepEqual(rules.allow, [join(real, 'allowed')]);
+    assert.deepEqual(rules.readonly, [join(real, 'reference')]);
+    assert.deepEqual(rules.deny, [join(real, 'private'), join(real, 'missing/secret'), join(real, 'child/future')]);
+    const temp = exec(['/usr/bin/getconf', 'DARWIN_USER_TEMP_DIR']).trim();
+    const cache = exec(['/usr/bin/getconf', 'DARWIN_USER_CACHE_DIR']).trim();
+    const sandbox = ['/usr/bin/sandbox-exec', '-D', `HOME=${home}`, '-D', `DARWIN_TEMP=${temp}`,
+      '-D', `DARWIN_CACHE=${cache}`, '-D', 'GUI=0', '-p', current];
+    const write = p => spawnSync(sandbox[0], [...sandbox.slice(1), '/bin/sh', '-c', 'printf x > "$1"', 'sh', p], { encoding: 'utf8' });
+    assert.equal(write(join(real, 'allowed/probe')).status, 0, 'kernel-resolved ALLOW target');
+    assert.notEqual(write(join(real, 'reference/probe')).status, 0, 'kernel-resolved READ ONLY target');
+    mkdirSync(join(real, 'missing'), { recursive: true });
+    mkdirSync(join(real, 'child/absent'));
+    for (const p of [join(real, 'private/probe'), join(real, 'missing/secret'), join(real, 'child/future')]) {
+      writeFileSync(p, 'fixture');
+      const result = spawnSync(sandbox[0], [...sandbox.slice(1), '/bin/cat', p], { encoding: 'utf8' });
+      assert.notEqual(result.status, 0, `DENY target readable: ${p}`);
+      assert.match(result.stderr, /Operation not permitted/, p);
+    }
+    console.log('ok   Guard List symlink/.. paths and missing targets match Seatbelt access');
+    for (const section of ['ALLOW', 'READ ONLY', 'DENY']) {
+      writeFileSync(list, `ALLOW\n${home}/Projects\n${section}\n${home}/Projects/tab\tpath\n`);
+      const [command, ...args] = adapter.launcher(engine);
+      const result = spawnSync(command, [...args, 'profile'], { ...options, encoding: 'utf8' });
+      assert.notEqual(result.status, 0, `${section} tab-bearing path accepted`);
+      assert.match(result.stderr, /Guard List path contains a tab/);
+      assert.equal(result.stdout, '', 'invalid list emitted a profile');
+    }
+    console.log('ok   tab-bearing Guard List entries refuse the launch in every section');
+  }
   passed = true;
 } finally {
   if (passed) rmSync(run, { recursive: true, force: true });
