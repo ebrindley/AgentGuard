@@ -151,12 +151,21 @@ if (( ${installed[(Ie)pi]} )) && [[ -e $f || -L $f ]]; then
 fi
 
 normalize() {
-  local p=$1
+  local p=$1 component resolved=/
   [[ $p == (\"*\"|\'*\') ]] && p=${p[2,-2]}
   [[ -e $p || $p != *\\* ]] || p=${(Q)p}
   [[ $p == '~' || $p == '~/'* ]] && p=$home${p#\~}
   [[ $p == /* ]] || return 1
-  REPLY=${p:A}
+  # Resolve each component before applying ..; :A collapses .. before links.
+  # Missing suffixes remain usable for DENY and READ ONLY entries.
+  for component in "${(@s:/:)p}"; do
+    case $component in
+      (''|.) continue ;;
+      (..) resolved=${resolved:h} ;;
+      (*) resolved="${resolved%/}/$component"; resolved=${resolved:P} ;;
+    esac
+  done
+  REPLY=$resolved
 }
 
 print -r -- "Agent Guard $mode ${release:t} $(/bin/date '+%Y-%m-%d %H:%M:%S')" > "$log"
@@ -176,6 +185,7 @@ while IFS= read -r line || [[ -n $line ]]; do
     (DENY(|[[:space:]]#[-:]*)) section=deny; continue ;;
   esac
   [[ -n $section ]] || continue
+  [[ $line != *$'\t'* ]] || fail "Guard List path contains a tab; remove it: $line"
   normalize "$line" || { note "skipped, not a full path: $line"; continue }
   p=$REPLY
   if [[ $section != allow ]]; then
