@@ -21,7 +21,7 @@ index 2f94258..d86d372 100755
  fi
  
 diff --git a/sandbox/pi-sandbox-preamble.zsh b/sandbox/pi-sandbox-preamble.zsh
-index 9b7c788..d7a3f48 100644
+index 9b7c788..a53d353 100644
 --- a/sandbox/pi-sandbox-preamble.zsh
 +++ b/sandbox/pi-sandbox-preamble.zsh
 @@ -48,6 +48,7 @@ unset _PI_GIT_ENV_NAME
@@ -77,7 +77,30 @@ index 9b7c788..d7a3f48 100644
          exit 1
        }
      fi
-@@ -1009,15 +1010,107 @@ esac
+@@ -953,6 +954,22 @@ fi
+ PROJECT="$(cd -P "$PROJECT" 2>/dev/null && pwd -P)" || {
+   emit "cannot resolve project dir '$PROJECT'; refusing."; exit 1; }
+ 
++# .git/config is writable in a session. Anchor Git's selected work tree to the
++# physical checkout entry so core.worktree cannot grant a sibling or ancestor.
++# A .git file covers linked worktrees and separate-git-dir checkouts too.
++if [ "$PROJECT_VIA" = "git-toplevel" ]; then
++  _pi_checkout="${PWD:P}"
++  while [[ "$_pi_checkout" != / && ! -d "$_pi_checkout/.git" && ! -f "$_pi_checkout/.git" ]]; do
++    _pi_checkout="${_pi_checkout:h}"
++  done
++  if [ "$PROJECT" != "$_pi_checkout" ]; then
++    emit "Git selected '$PROJECT' instead of the checkout '$_pi_checkout'; refusing."
++    emit "  Review core.worktree, or set PI_PROJECT=<dir> to select an explicit boundary."
++    exit 1
++  fi
++  unset _pi_checkout
++fi
++
+ # Refuse dangerous boundaries (the actual safety check). A fresh empty project dir
+ # is fine; broad roots, system prefixes, and credential/home subtrees are not.
+ # This matters more now that a non-git cwd falls back to $PWD: ANY directory you
+@@ -1009,15 +1026,107 @@ esac
  # worktree under ~/.omp/wt) would be denied wholesale, so refuse it clearly
  # instead of launching into a read-only project.
  # Keep these patterns in step with the project agent config regexes in pi-sandbox.sb.
@@ -186,7 +209,7 @@ index 9b7c788..d7a3f48 100644
  ACTIVE_HOOKS="$(resolve_active_hooks "$PROJECT")" || exit 1
  TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
  
-@@ -1028,16 +1121,40 @@ TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
+@@ -1028,16 +1137,40 @@ TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
  # PROJECT and the launch cwd (Pi resolves <cwd>/.pi). Links that stay inside the
  # config folder (npm .bin links) or point to non-writable locations are fine.
  # Prints the offending path and returns 1 on a refused layout.
@@ -230,7 +253,7 @@ index 9b7c788..d7a3f48 100644
          target="${link:A}"
          case "$target" in "$dir_canon"|"$dir_canon"/*) continue ;; esac
          # Probe a child so a link to a write root itself (e.g. PROJECT) matches too.
-@@ -1054,9 +1171,9 @@ _pi_config_bases=("$PROJECT")
+@@ -1054,9 +1187,9 @@ _pi_config_bases=("$PROJECT")
  [ "${PWD:A}" = "$PROJECT" ] || _pi_config_bases+=("${PWD:A}")
  if ! _pi_config_offender="$(project_config_symlink_offender "${_pi_config_bases[@]}")"; then
    emit "refusing to launch: symlinked project agent config '$_pi_config_offender'."
@@ -243,7 +266,7 @@ index 9b7c788..d7a3f48 100644
    exit 1
  fi
  unset _pi_config_bases _pi_config_offender
-@@ -1084,12 +1201,65 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
+@@ -1084,12 +1217,65 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
      # the recorded interpreter, and both --detect and a bare --pi re-derive node via
      # detect_node, which takes the first PATH hit with no write-root filter — so
      # either would re-record the same unsafe path and fail identically next launch.
@@ -310,7 +333,7 @@ index 9b7c788..d7a3f48 100644
  emit "OS sandbox ON. Runtime [$PI_SANDBOX_RUNTIME]. Project [$PROJECT_VIA]: $PROJECT"
  emit "  active Git hooks denied: $ACTIVE_HOOKS"
  if [ "$PI_SANDBOX_RUNTIME" = "pi" ]; then
-@@ -1112,6 +1282,15 @@ fi
+@@ -1112,6 +1298,15 @@ fi
  export PI_SANDBOX_PROFILE_DIGEST PI_SANDBOX_PROJECT_BOUNDARY
  export PI_SANDBOX_ACTIVE_HOOKS_BOUNDARY PI_SANDBOX_AGENT_STATE_BOUNDARY
  
@@ -326,7 +349,7 @@ index 9b7c788..d7a3f48 100644
  PI_SANDBOX_CMD=(
    "$SANDBOX_EXEC"
    -D "PROJECT=$PROJECT"
-@@ -1122,5 +1301,6 @@ PI_SANDBOX_CMD=(
+@@ -1122,5 +1317,6 @@ PI_SANDBOX_CMD=(
    -D "OMP_AGENT_STATE=$OMP_AGENT_STATE"
    -D "OMP_STATE_ROOT=$OMP_STATE_ROOT"
    -D "OMP_BASE_ROOT=$OMP_BASE_ROOT"
