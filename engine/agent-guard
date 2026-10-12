@@ -1,10 +1,10 @@
 #!/bin/zsh
-# usage: agent-guard doctor [--json]|version|update|uninstall|bind [OPTIONS]|wrapper add|remove|list
+# usage: agent-guard doctor|diagnose [--json]|version|update [--restore-edit-permissions] [--approval-preference auto|host]|uninstall|bind [OPTIONS]|wrapper add|remove|list
 emulate -L zsh
 setopt no_unset pipe_fail extended_glob
 
 die() { print -ru2 -- "agent-guard: $*"; exit 1 }
-usage() { print -ru2 -- 'usage: agent-guard doctor [--json]|version|update|uninstall|bind [OPTIONS]|wrapper add|remove|list'; exit 2 }
+usage() { print -ru2 -- 'usage: agent-guard doctor|diagnose [--json]|version|update [--restore-edit-permissions] [--approval-preference auto|host]|uninstall|bind [OPTIONS]|wrapper add|remove|list'; exit 2 }
 
 # This file is bin/agent-guard inside a release folder. Only a folder shaped like
 # one is trusted to supply the account lookup; after it, the release must be a
@@ -126,8 +126,19 @@ older() {
 update() {
   local repo='https://github.com/ebrindley/AgentGuard'; local -a curl_proto=(--proto '=https' --proto-redir '=https')
   local url="$repo/releases/latest/download/install.sh" text tag cur=
-  local -a lines tags
-  integer rc
+  local -a lines tags bootstrap_args=(--update)
+  integer rc restore_seen=0 preference_seen=0
+  while (( $# )); do
+    case $1 in
+      (--restore-edit-permissions)
+        (( restore_seen == 0 )) || usage
+        restore_seen=1; bootstrap_args+=(--restore-edit-permissions); shift ;;
+      (--approval-preference)
+        (( preference_seen == 0 && $# >= 2 )) && [[ $2 == (auto|host) ]] || usage
+        preference_seen=1; bootstrap_args+=(--approval-preference "$2"); shift 2 ;;
+      (*) usage ;;
+    esac
+  done
   load_installer
   ag_probe || exit 1
   ag_lock || exit 1
@@ -150,21 +161,24 @@ update() {
     # harness on this Mac is missing from the stamp: then the install runs again.
     ag_pending
     rc=$?
+    # An explicitly requested setup change still needs the transaction even
+    # when release and ordinary maintenance are already current.
+    (( rc == 1 && (restore_seen || preference_seen) )) && { rc=0; REPLY='the requested permission setup'; }
     case $rc in
-      (1) ag_unlock; print -r -- "Agent Guard ${tag#v} is current."; exit 0 ;;
+      (1) ag_unlock; print -r -- "Agent Guard ${tag#v} is current; checking the installation."; doctor ;;
       (0) ;;
       (*) ag_unlock; exit 1 ;;
     esac
     print -r -- "Agent Guard ${tag#v} is installed; installing it again for $REPLY"
   elif [[ -n $cur ]] && older "$tag" "$cur"; then
     ag_unlock
-    print -r -- "The installed release ($cur) is newer than the latest release ($tag); nothing changed."
-    exit 0
+    print -r -- "The installed release ($cur) is newer than the latest release ($tag); checking the installation."
+    doctor
   else
     print -r -- "updating to Agent Guard ${tag#v}"
   fi
   # exec keeps this process, so the bootstrap and its installer keep the lock.
-  exec /bin/zsh -fc "$text" install.sh --update
+  exec /bin/zsh -fc "$text" install.sh "${bootstrap_args[@]}"
 }
 
 # Recovery first: it may roll back an open switch and delete the release this
@@ -213,11 +227,20 @@ if [[ ${1:-} == (bind|wrapper) ]]; then
   pi_$pi_command "$@"
   exit
 fi
-(( $# == 1 )) || [[ $# == 2 && $1 == doctor && $2 == --json ]] || usage
+if [[ ${1:-} == update ]]; then
+  shift
+  update "$@"
+  exit
+fi
+(( $# == 1 )) || [[ $# == 2 && $1 == (doctor|diagnose) && $2 == --json ]] ||
+  usage
 case $1 in
   (doctor) doctor ${2:-} ;;
+  (diagnose)
+    source "$release/profiles/opencode/diagnostics.zsh" || die 'diagnostics unavailable; reinstall Agent Guard'
+    ag_diagnose ${2:-}
+    exit $? ;;
   (version) version ;;
-  (update) update ;;
   (uninstall) uninstall ;;
   (*) usage ;;
 esac
