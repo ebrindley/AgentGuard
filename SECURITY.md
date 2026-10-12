@@ -80,6 +80,10 @@ later unguarded sessions. This risk is accepted, as for editable project scripts
 and shared skills. Their execution in a guarded process tree remains confined.
 Editable child symlinks and config-selection environment variables never create
 new write grants. Root identity pinning preserves launch-time automatic grants.
+Automatic root links configured outside the guard grant their resolved roots at
+launch, subject to Guard List and guard-owned restrictions. This includes linked
+global skill roots; OpenCode does not deny credential folders unless the Guard
+List names them.
 A local MCP child inherits Seatbelt; services reached over the network do not.
 
 The OpenCode plugin and cc-safety-net are advisory. They refuse tool calls with
@@ -249,6 +253,8 @@ pi-sandbox-guard 7ad441f's with the recorded adoption differences, so:
   asks before the common spellings of pushes that rewrite or delete remote
   branches; as a pattern match it can miss some quoted or wrapped forms, such as
   escaped quotes inside `bash -c`. Planned: cc-safety-net for Pi at step 10d.
+  Redirects before Git subcommands, adjacent pipe operators, executable stdin
+  programs and `eval` can also miss asks. These remain checker limitations.
 - **The launcher trusts its own folder.** It reads its profile and preamble from
   `~/.local/bin`, beside itself, not from a release folder in the write-protected
   engine folder. Pi sessions cannot write `~/.local/bin`, the launcher refuses a
@@ -259,7 +265,7 @@ pi-sandbox-guard 7ad441f's with the recorded adoption differences, so:
   OMP folders a session may write comes from pi-sandbox-guard's observation of
   OMP 17.2.10 and was not rechecked against later OMP versions. Planned: rechecked
   against OMP 18.4.9 for step 10d.
-- **OpenCode's project config names are protected inside the project only.** A
+- **Project config names can arrive inside moved folders.** A
   Pi or OMP session cannot create or change `.opencode`, `opencode.json`,
   `opencode.jsonc`, `tui.json`, `tui.jsonc` or `.cc-safety-net` in its project,
   but it can build a folder that holds them elsewhere it can write, such as temp,
@@ -268,6 +274,9 @@ pi-sandbox-guard 7ad441f's with the recorded adoption differences, so:
   only in the project and launch folders, so where one of these names in a
   subfolder is a link, such as `packages/web/opencode.json` to another project
   file, the target stays writable. Planned: step 10d.
+  The same parent-folder move can bring `.pi`, `.omp`,
+  `.claude/{extensions,hooks,tools}`, `.codex/{extensions,hooks,tools}` or
+  `.gemini/extensions` into the project. Their direct path writes remain denied.
 - **An npm update can put a real `pi` back in `~/.local/bin`.** With npm's
   prefix at `~/.local`, an update of Pi can replace the launcher with npm's link;
   `pi`, and Agent Guard's `bin/pi`, which links to it, then start Pi unguarded.
@@ -287,6 +296,12 @@ pi-sandbox-guard 7ad441f's with the recorded adoption differences, so:
   then run at the next `git` run outside the guard; the analyzer asks before a
   `git config` command that changes it. Review changes before running them
   outside the guard. Not planned.
+  The default `.git/hooks` directory node is writable for `git init`, so a
+  session can also replace that directory with a prepared hooks folder. Direct
+  writes to active hook files remain denied.
+- **Credential denies cover named paths.** With `~/.ssh` linked into a project,
+  access through `~/.ssh` remains denied, but direct access to the project target
+  is not covered by that deny. Keep credential content outside writable roots.
 
 pi-sandbox-guard defects kept until step 10d, because the launcher, preamble and
 extension are reused unchanged apart from the recorded adoption differences:
@@ -364,6 +379,10 @@ checker does not inspect the peer's later tool calls; the parent OS sandbox
 continues to confine every local child process.
 Explicit Codex remote execution and OpenCode server attachment are refused;
 the guard cannot confine a server started outside the session.
+This refusal applies to peer wrappers. The main OpenCode launcher permits an
+operator-selected attachment and reports that the server has its own permissions.
+An unguarded server with the Guard plugin refuses unsafe tools unless bypass is
+explicitly enabled; a server without the plugin has no such refusal.
 
 Peer runtime grants are shared by every process in the session, including the
 outer agent. They cover runtime subdirectories and selected files, not whole
