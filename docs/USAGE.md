@@ -143,6 +143,10 @@ name; a changed wrapper is reported and left in place. `agent-guard doctor`
 checks each recorded hash and reports an earlier wrapper name that is still
 executable.
 
+Helpers run before Seatbelt with the account's full authority. The check validates
+the permitted wrapper syntax and helper paths; it does not prove helper arguments
+safe. Review download and output destinations before installing a wrapper.
+
 ## Peer CLIs
 
 Inside guarded OpenCode, Pi and OMP sessions, `codex`, `claude`,

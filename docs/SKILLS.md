@@ -27,6 +27,10 @@ stay protected against replacement; individual skills remain maintainable.
 
 Symlinks do not grant access to protected targets. Global configuration links
 are resolved at launch; restart after changing the layout outside the guard.
+Operator-created automatic root links grant their resolved directories, subject
+to DENY, READ ONLY and guard-owned restrictions. Editable links inside those
+roots receive no separate grant. Add sensitive target directories to DENY if
+OpenCode must not access them.
 Shared skills can affect instructions or scripts used by other agents in later
 sessions. Agent Guard does not contain a later independent Claude or Codex
 session.
