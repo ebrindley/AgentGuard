@@ -954,6 +954,22 @@ fi
 PROJECT="$(cd -P "$PROJECT" 2>/dev/null && pwd -P)" || {
   emit "cannot resolve project dir '$PROJECT'; refusing."; exit 1; }
 
+# .git/config is writable in a session. Anchor Git's selected work tree to the
+# physical checkout entry so core.worktree cannot grant a sibling or ancestor.
+# A .git file covers linked worktrees and separate-git-dir checkouts too.
+if [ "$PROJECT_VIA" = "git-toplevel" ]; then
+  _pi_checkout="${PWD:P}"
+  while [[ "$_pi_checkout" != / && ! -d "$_pi_checkout/.git" && ! -f "$_pi_checkout/.git" ]]; do
+    _pi_checkout="${_pi_checkout:h}"
+  done
+  if [ "$PROJECT" != "$_pi_checkout" ]; then
+    emit "Git selected '$PROJECT' instead of the checkout '$_pi_checkout'; refusing."
+    emit "  Review core.worktree, or set PI_PROJECT=<dir> to select an explicit boundary."
+    exit 1
+  fi
+  unset _pi_checkout
+fi
+
 # Refuse dangerous boundaries (the actual safety check). A fresh empty project dir
 # is fine; broad roots, system prefixes, and credential/home subtrees are not.
 # This matters more now that a non-git cwd falls back to $PWD: ANY directory you

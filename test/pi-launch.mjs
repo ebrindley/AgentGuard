@@ -131,6 +131,44 @@ const protectedFiles = {
 };
 
 try {
+  for (const runtime of ['pi', 'omp']) {
+    const a = account(`project-boundary-${runtime}`);
+    const launch = (cwd, project, env = {}) => session({ ...a, project: cwd },
+      ['/bin/sh', '-c', 'printf x > "$1"', 'sh', join(project, 'boundary-probe')],
+      { runtime, env: { PI_PROJECT: '', ...env } });
+    check(`${runtime}: Git discovery keeps the checkout boundary from a subfolder`, () => {
+      const sub = join(a.project, 'src');
+      mkdirSync(sub);
+      allowed(launch(sub, a.project), 'checkout root');
+    });
+    for (const target of [join(a.home, 'Projects/sibling'), dirname(a.project)]) {
+      check(`${runtime}: core.worktree cannot redirect Git discovery to ${basename(target)}`, () => {
+        mkdirSync(target, { recursive: true });
+        execFileSync('/usr/bin/git', ['-C', a.project, 'config', 'core.worktree', target]);
+        refused(launch(a.project, target), 'changed work tree', /instead of the checkout/);
+        execFileSync('/usr/bin/git', ['-C', a.project, 'config', '--unset', 'core.worktree']);
+      });
+    }
+    check(`${runtime}: explicit PI_PROJECT can select a different boundary`, () => {
+      const other = join(a.home, 'Projects/explicit');
+      mkdirSync(other);
+      allowed(launch(a.project, other, { PI_PROJECT: other }), 'explicit project');
+    });
+    check(`${runtime}: a non-Git launch uses its current folder`, () => {
+      const other = join(a.home, 'Projects/new');
+      mkdirSync(other);
+      allowed(launch(other, other), 'non-Git project');
+    });
+    check(`${runtime}: linked worktree discovery preserves its own boundary`, () => {
+      execFileSync('/usr/bin/git', ['-C', a.project, '-c', 'user.name=Fixture',
+        '-c', 'user.email=fixture@example.invalid', '-c', 'core.hooksPath=/dev/null',
+        'commit', '--allow-empty', '-qm', 'Fixture']);
+      const linked = join(a.home, 'Projects/linked');
+      execFileSync('/usr/bin/git', ['-C', a.project, 'worktree', 'add', '--detach', linked, 'HEAD']);
+      allowed(launch(linked, linked), 'linked worktree');
+    });
+  }
+
   // Difference 9: node pins keep path-based config denies attached to active state.
   for (const variant of ['pi', 'pi-relocated', 'omp', 'omp-profile']) {
     const a = account(`state-${variant}`);
