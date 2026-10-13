@@ -46,6 +46,15 @@ async function check(name, fn) {
   }
 }
 
+function timingDetails(verdict, started, options) {
+  return JSON.stringify({
+    elapsedMs: Math.round(performance.now() - started),
+    timeoutMs: options.timeoutMs,
+    reason: verdict.reason,
+    meta: verdict.meta,
+  });
+}
+
 const decisionCases = [
   { name: 'benign command -> allow', command: 'ls -la', expect: 'allow' },
   { name: 'catastrophic rm -rf / -> block', command: 'rm -rf /', expect: 'block' },
@@ -112,33 +121,45 @@ async function main() {
   await check('benign substitution fan-out stays within the production timeout', async () => {
     if (!pf.ok) return;
     const command = `echo ${'$(printf x) '.repeat(1000)}`;
-    const v = await analyzeCommand(command, { cwd: CWD, timeoutMs: 2000 });
-    assert.equal(v.decision, 'allow');
-    assert.equal(v.meta.timedOut, false);
+    const options = { cwd: CWD, timeoutMs: 2000 };
+    const started = performance.now();
+    const v = await analyzeCommand(command, options);
+    const details = timingDetails(v, started, options);
+    assert.equal(v.decision, 'allow', details);
+    assert.equal(v.meta.timedOut, false, details);
   });
 
   await check('repeated benign substitutions are memoized outside echo', async () => {
     if (!pf.ok) return;
     const command = `command printf '%s\\n' ${'$(printf x) '.repeat(25)}`;
-    const v = await analyzeCommand(command, { cwd: CWD, timeoutMs: 2000 });
-    assert.equal(v.decision, 'allow');
-    assert.equal(v.meta.timedOut, false);
+    const options = { cwd: CWD, timeoutMs: 2000 };
+    const started = performance.now();
+    const v = await analyzeCommand(command, options);
+    const details = timingDetails(v, started, options);
+    assert.equal(v.decision, 'allow', details);
+    assert.equal(v.meta.timedOut, false, details);
   });
 
   await check('distinct output-only substitutions stay within timeout', async () => {
     if (!pf.ok) return;
     const substitutions = Array.from({ length: 90 }, (_, i) => `$(git config k${i})`).join(' ');
-    const v = await analyzeCommand(`echo ${substitutions}`, { cwd: CWD, timeoutMs: 2000 });
-    assert.equal(v.decision, 'allow');
-    assert.equal(v.meta.timedOut, false);
+    const options = { cwd: CWD, timeoutMs: 2000 };
+    const started = performance.now();
+    const v = await analyzeCommand(`echo ${substitutions}`, options);
+    const details = timingDetails(v, started, options);
+    assert.equal(v.decision, 'allow', details);
+    assert.equal(v.meta.timedOut, false, details);
   });
 
   await check('benign brace-path fan-out stays within the production timeout', async () => {
     if (!pf.ok) return;
     const operands = Array.from({ length: 250 }, (_, i) => `/tmp/x${i}{a,b}`).join(' ');
-    const v = await analyzeCommand(`truncate ${operands}`, { cwd: CWD, timeoutMs: 2000 });
-    assert.equal(v.decision, 'allow');
-    assert.equal(v.meta.timedOut, false);
+    const options = { cwd: CWD, timeoutMs: 2000 };
+    const started = performance.now();
+    const v = await analyzeCommand(`truncate ${operands}`, options);
+    const details = timingDetails(v, started, options);
+    assert.equal(v.decision, 'allow', details);
+    assert.equal(v.meta.timedOut, false, details);
   });
 
   // --- Regression: FIX 3 — missing/invalid cwd MUST fail closed (block) ---

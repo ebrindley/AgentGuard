@@ -112,6 +112,11 @@
   ],
   "test_edits": [
     {
+      "file": "test/smoke.mjs",
+      "differences": [],
+      "change": "The four smoke timing cases include elapsed milliseconds, the configured timeout, the verdict reason and metadata in assertion failures. Their commands, deadlines and verdict assertions remain unchanged."
+    },
+    {
       "file": "scripts/test-sandbox-profile.sh",
       "differences": [1, 4, 9],
       "change": "sb, sb_omp and sb_pi_relocated pass the profile's AG_* parameters with inert values (the cache roots as HOME/.cache), read from the profile, since a missing parameter stops the profile from compiling. The relocated Pi fixture creates its root before confinement, as the launcher does, so the root pin does not deny first-launch runtime setup."

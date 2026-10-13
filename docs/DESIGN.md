@@ -1419,7 +1419,7 @@ From step 7c, `agent-guard wrapper add|remove|list` replaces `deploy:launchers -
 
 Planned for steps 7b and 7c:
 
-- **pi-sandbox-guard's suites** (`test/shim.mjs`, `test/adapter.mjs`, `test/degraded.mjs`, `test/corpus.mjs`, `test/smoke.mjs`, `scripts/test-sandbox-profile.sh`) run in CI against Agent Guard's copies, changed only where a recorded difference changes what they assert; `test/e2e-demo.mjs` stays a manual check. `scripts/test-ops.sh` retires: it tests the npm deploy, status and bind scripts that Agent Guard replaces, and its cases move into the installer tests.
+- **pi-sandbox-guard's suites** (`test/shim.mjs`, `test/adapter.mjs`, `test/degraded.mjs`, `test/corpus.mjs`, `test/smoke.mjs`, `scripts/test-sandbox-profile.sh`) run in CI against Agent Guard's copies, changed for recorded behavior differences and test diagnostics; `test/e2e-demo.mjs` stays a manual check. `scripts/test-ops.sh` retires: it tests the npm deploy, status and bind scripts that Agent Guard replaces, and its cases move into the installer tests.
 - **A file comparison** against 7ad441f that allows only the recorded changes.
 - **One case per difference**, including a Pi session whose project is `~/Agent Guard` being refused and a linked `~/.zshrc` whose target is in the project being write-denied; and, for OpenCode, a session with Pi installed that cannot write Pi's guard files, even under an ALLOW entry.
 - **A Pi migration test** like `test/migrate.sh`: a real 7ad441f install in a disposable home, failures and kills at every switch point, reruns, uninstall, wrappers, and both old guards on one Mac.
