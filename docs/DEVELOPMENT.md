@@ -182,7 +182,7 @@ must have no uncommitted changes and `COMMIT` holds its `HEAD`. `--dev` builds
 from any tree and writes `COMMIT` as `dev` unless the checkout is clean. Do not
 publish a `--dev` build.
 
-`zsh test/release.sh` builds `0.0.0-test`, compares the archive listing with the
+`zsh test/release.sh` builds `0.0.0-rc.0`, compares the archive listing with the
 release file list, checks the checksum, `VERSION`, `COMMIT` and `install.sh`,
 then runs `test/test.sh` against the unpacked archive. It needs the same
 conditions as `test/test.sh`.
