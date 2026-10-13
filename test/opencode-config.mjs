@@ -124,11 +124,13 @@ function legacy(name, orig, current = "allow") {
 }
 for (const orig of [null, "deny", "allow"]) {
   const f = legacy(`retire-${orig}`, orig)
+  const originalBytes = readFileSync(f.config, "utf8")
   shell(f, 'do_retire_edit', true)
   assert.equal(JSON.parse(readFileSync(f.config)).permission.edit ?? null, orig)
   assert.deepEqual(JSON.parse(readFileSync(f.record)), { [f.config]: { bash: f.ledger[f.config].bash } })
   shell(f, 'undo_retire_edit', true)
   assert.equal(JSON.parse(readFileSync(f.config)).permission.edit, "allow")
+  assert.equal(readFileSync(f.config, "utf8"), originalBytes)
   assert.deepEqual(JSON.parse(readFileSync(f.record)), f.ledger)
 }
 for (const orig of ["ask", { "*": "deny", "plan/*": "ask" }]) {
@@ -151,6 +153,7 @@ assert.deepEqual(JSON.parse(readFileSync(userChanged.record)), userChanged.ledge
 
 for (const point of ["edit-restored", "edit-retired"]) {
   const f = legacy(`resume-${point}`, null)
+  const originalBytes = readFileSync(f.config, "utf8")
   shell(f, `test_point() { [[ $1 != ${point} ]]; }; do_retire_edit && exit 1; exit 0`, true)
   assert.equal(JSON.parse(readFileSync(f.config)).permission.edit, undefined)
   shell(f, 'do_retire_edit', true)
@@ -158,13 +161,33 @@ for (const point of ["edit-restored", "edit-retired"]) {
   assert.deepEqual(JSON.parse(readFileSync(f.record)), { [f.config]: { bash: f.ledger[f.config].bash } })
   shell(f, 'undo_retire_edit', true)
   assert.equal(JSON.parse(readFileSync(f.config)).permission.edit, "allow")
+  assert.equal(readFileSync(f.config, "utf8"), originalBytes)
   assert.deepEqual(JSON.parse(readFileSync(f.record)), f.ledger)
 }
 const rollbackEdit = legacy("rollback-user-edit", null)
 shell(rollbackEdit, 'do_retire_edit', true)
 writeFileSync(rollbackEdit.config, JSON.stringify({ permission: { edit: "deny", bash: "allow" } }))
+const userBytes = readFileSync(rollbackEdit.config, "utf8")
 shell(rollbackEdit, 'undo_retire_edit', true)
 assert.equal(JSON.parse(readFileSync(rollbackEdit.config)).permission.edit, "deny")
+assert.equal(readFileSync(rollbackEdit.config, "utf8"), userBytes)
+
+const unrelatedEdit = legacy("rollback-unrelated-edit", null)
+shell(unrelatedEdit, 'do_retire_edit', true)
+const unrelatedConfig = JSON.parse(readFileSync(unrelatedEdit.config))
+unrelatedConfig.theme = "user-change"
+writeFileSync(unrelatedEdit.config, JSON.stringify(unrelatedConfig))
+shell(unrelatedEdit, 'undo_retire_edit', true)
+assert.deepEqual(JSON.parse(readFileSync(unrelatedEdit.config)), {
+  ...unrelatedConfig, permission: { ...unrelatedConfig.permission, edit: "allow" },
+})
+
+const unwrittenEdit = legacy("rollback-before-edit-write", null)
+const unwrittenBytes = readFileSync(unwrittenEdit.config, "utf8")
+shell(unwrittenEdit, 'ag_perm_restore() { return 1; }; do_retire_edit && exit 1; exit 0', true)
+shell(unwrittenEdit, 'undo_retire_edit', true)
+assert.equal(readFileSync(unwrittenEdit.config, "utf8"), unwrittenBytes)
+assert.deepEqual(JSON.parse(readFileSync(unwrittenEdit.record)), unwrittenEdit.ledger)
 
 const preference = fixture("approval-preference")
 const preferenceFile = join(preference.engine, "state/opencode-preferences.json")

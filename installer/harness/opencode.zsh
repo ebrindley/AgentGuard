@@ -295,10 +295,10 @@ undo_opencode_preference() {
 }
 
 # Retire only the old global edit write. The frozen ledger and per-file journal
-# distinguish a resumed restoration from an unrelated user edit. No file backup
-# is copied over configuration: rollback compares just the owned edit value.
+# distinguish a resumed restoration from an unrelated user edit. Rollback uses
+# original bytes only while the file exactly matches this restoration's output.
 do_retire_edit() {
-  local snapshot="$txn_dir/backup/retire-edit/file" f old st restore entry
+  local snapshot="$txn_dir/backup/retire-edit/file" f old st restore entry saved expected
   local -a files
   integer n
   ag_jlast retire-edit
@@ -329,6 +329,15 @@ do_retire_edit() {
         continue
       fi
       restore=1
+      ag_backup "retire-edit-$n" "$f" || return 1
+      saved="$txn_dir/backup/retire-edit-$n/file" expected="$txn_dir/backup/retire-edit-$n/expected"
+      /usr/bin/jq --argjson e "$old" 'if .permission.edit == $e.wrote then
+        if $e.orig == null then del(.permission.edit) else .permission.edit = $e.orig end
+        else . end' "$saved" > "$expected" || return 1
+      # ag_perm_restore leaves semantically unchanged files byte-identical.
+      if /usr/bin/jq -e --slurpfile n "$expected" '. == $n[0]' "$saved" >/dev/null; then
+        /bin/cp -- "$saved" "$expected" || return 1
+      fi
       ag_jnl retire-edit-file begun "$n restore=$restore" || return 1
     else
       ag_warnings+=("edit migration: $f user change preserved; retired Guard ownership")
@@ -355,7 +364,7 @@ do_retire_edit() {
 }
 
 undo_retire_edit() {
-  local snapshot="$txn_dir/backup/retire-edit/file" f old st restore entry
+  local snapshot="$txn_dir/backup/retire-edit/file" f old st restore entry saved expected
   local -a files
   integer n
   ag_jlast retire-edit
@@ -368,8 +377,13 @@ undo_retire_edit() {
     old=$(/usr/bin/jq -c --arg f "$f" '.[$f].edit' "$snapshot") || return 1
     ag_jfind retire-edit-file begun $n; ag_jval restore; restore=$REPLY
     if [[ $restore == 1 ]]; then
+      saved="$txn_dir/backup/retire-edit-$n/file" expected="$txn_dir/backup/retire-edit-$n/expected"
       if ! ag_opencode_config_writable "$f" || [[ ! -f $f ]]; then ag_unrestored+=("$f")
-      # Restore only the value this transaction wrote; preserve later edits.
+      elif [[ -f $saved ]] && /usr/bin/cmp -s -- "$f" "$saved"; then
+        : # The write never happened, or rollback already restored it.
+      elif [[ -f $saved && -f $expected ]] && /usr/bin/cmp -s -- "$f" "$expected"; then
+        replace_file "$f" "$saved" || ag_unrestored+=("$f")
+      # Later changes retain their contents; restore only the owned edit key.
       elif ! ag_perm_restore "$f" "$(/usr/bin/jq -cn --argjson e "$old" '{edit:{orig:$e.wrote,wrote:$e.orig}}')" "$ag_tstage/edit.$n.undo.json"; then
         ag_unrestored+=("$f")
       fi
