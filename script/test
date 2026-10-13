@@ -11,8 +11,13 @@ node -e 'if (process.versions.node.split(".")[0] !== "24") { console.error("Node
 root=${0:A:h:h}
 cd "$root" || exit 1
 started=$SECONDS
+print -r -- 'Gate scope: 3 fixed baseline files and 4 OpenCode configuration, health, diagnostics and permission files (sequential)'
 for file in test/golden.mjs test/skills-policy.mjs test/pi-launch.mjs; do
-  print -r -- "Gate: $file"
+  print -r -- "Gate fixed baseline: $file"
+  node "$file" || exit $?
+done
+for file in test/opencode-config.mjs test/plugin-health.mjs test/diagnostics.mjs test/permissions.mjs; do
+  print -r -- "Gate OpenCode focused: $file"
   node "$file" || exit $?
 done
 print -r -- "Gate passed in $((SECONDS - started)) seconds"

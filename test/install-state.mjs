@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { release } from './engines/zsh.mjs';
-import { mkdtempSync,mkdirSync,writeFileSync,symlinkSync,readFileSync,existsSync,lstatSync,cpSync,rmSync,readdirSync } from 'node:fs';
+import { mkdtempSync,mkdirSync,writeFileSync,symlinkSync,readFileSync,existsSync,lstatSync,cpSync,rmSync,readdirSync,readlinkSync } from 'node:fs';
 import { spawn,spawnSync } from 'node:child_process';
 const root=resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const run=mkdtempSync(root+'/test/.run-install-state-');
@@ -98,6 +98,47 @@ try {
     restore();
     check('same-version update without pending work succeeds',()=>{
       const r=command(entry,['update'],'update-current');assert.equal(r.status,0);assert.match(r.stdout,/is current/);
+    });
+    restore();
+    check('deferred edit restoration does not reinstall on repeated updates',()=>{
+      const config=home+'/.config/opencode/opencode.json',ledger=engine+'/state/permissions.json';
+      const settings=JSON.parse(readFileSync(config));settings.permission.edit='allow';writeFileSync(config,JSON.stringify(settings));
+      const ownership=JSON.parse(readFileSync(ledger));ownership[config].edit={orig:'ask',wrote:'allow'};writeFileSync(ledger,JSON.stringify(ownership));
+      const beforeConfig=readFileSync(config,'utf8'),beforeLedger=readFileSync(ledger,'utf8'),beforeRelease=readlinkSync(engine+'/current');
+      for(const suffix of ['first','second']){
+        const r=command(entry,['update'],'update-deferred-'+suffix);assert.equal(r.status,0,r.stdout+r.stderr);
+        assert.match(r.stdout,/is current; checking/);assert.doesNotMatch(r.stdout,/installing it again/);
+        assert.equal(readlinkSync(engine+'/current'),beforeRelease);
+        assert.equal(readFileSync(config,'utf8'),beforeConfig);assert.equal(readFileSync(ledger,'utf8'),beforeLedger);
+        assert.equal(existsSync(engine+'/state/txn'),false);
+      }
+    });
+    for(const args of [['--restore-edit-permissions'],['--approval-preference','auto']]){
+      restore();
+      check('newer installed release refuses explicit setup: '+args[0],()=>{
+        const newer={...JSON.parse(readFileSync(stamp)),tag:'v9.9.9'};writeFileSync(stamp,JSON.stringify(newer));
+        const before=readFileSync(stamp,'utf8');
+        const r=command(entry,['update',...args],'update-newer-'+args[0].slice(2));
+        assert.notEqual(r.status,0);assert.match(r.stderr,/requested setup options require the installer for v9\.9\.9/);
+        assert.doesNotMatch(r.stdout,/checking the installation|installing it again/);
+        assert.equal(readFileSync(stamp,'utf8'),before);assert.equal(existsSync(engine+'/state/txn'),false);
+      });
+    }
+  }
+  if(process.argv.includes('--update-recovery') || process.argv.length===2){
+    restore();
+    check('current-version checks use the surviving release after recovery',()=>{
+      const active=engine+'/'+readlinkSync(engine+'/current');
+      const candidate=engine+'/releases/0.0.1-20990101T000000Z';
+      cpSync(active,candidate,{recursive:true,dereference:false,verbatimSymlinks:true});
+      const q=s=>"'"+s.replaceAll("'","'\\''")+"'";
+      const lib=candidate+'/installer/lib.zsh';
+      writeFileSync(lib,readFileSync(lib,'utf8')+`\nag_recover() { /bin/mv ${q(candidate)} ${q(run+'/recovered-candidate')}; }\n`);
+      const r=command(candidate+'/bin/agent-guard',['update'],'update-recovered-release');
+      assert.equal(r.status,0,r.stdout+r.stderr);
+      assert.match(r.stdout,/is current; checking/);
+      assert.ok(!existsSync(candidate));
+      assert.doesNotMatch(r.stderr,/cannot load|no such file/);
     });
   }
   console.log(`${checks} checks, 0 failures; ${run}`);

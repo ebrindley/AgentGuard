@@ -42,6 +42,9 @@ files=(
   profiles/opencode/skills.zsh
   profiles/opencode/protected.sb
   profiles/opencode/plugin.js
+  profiles/opencode/permissions.js
+  profiles/opencode/permissions.jq
+  profiles/opencode/diagnostics.zsh
   profiles/opencode/opencode
   profiles/opencode/opencode-gui
   profiles/opencode/install.sh

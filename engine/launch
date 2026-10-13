@@ -4,9 +4,13 @@ emulate -L zsh
 setopt err_exit no_unset pipe_fail extended_glob
 
 mode=${1:-}
+log=
 (( $# )) && shift
 
 fail() {
+  if [[ -n ${log:-} && -d ${log:h} ]]; then
+    print -r -- "agent-guard-stage:${failure_stage:-initialization}" >> "$log" 2>/dev/null || true
+  fi
   print -ru2 -- "agent-guard: $*"
   if [[ $mode == gui ]]; then
     /usr/bin/osascript -e 'on run argv' -e 'display alert "Agent Guard" message (item 1 of argv) as critical' -e 'end run' "$*" >/dev/null 2>&1 || true
@@ -41,6 +45,7 @@ list="$list_dir/Guard List.txt"
 log="$list_dir/last-launch-opencode.log"
 here=$release
 profile_dir="$release/profiles/opencode"
+failure_stage=configuration
 
 # check staged tests a release that is not current yet, without the steps that
 # would publish its rules or create harness config.
@@ -349,6 +354,7 @@ if (( staged )); then
   trap '/bin/rm -rf -- "$session"; /bin/rmdir -- "$engine/state/opencode" 2>/dev/null || true' EXIT
 fi
 channel= replies=
+failure_stage=checker-preparation preparation_status=ready
 opencode_checker_snapshot "$session" || fail "cannot preserve the checker policy in $session"
 context="$session/permissions.json"
 /usr/bin/jq -n --argjson allow "$(jarr $allow)" --argjson readonly "$(jarr $user_readonly)" \
@@ -356,8 +362,8 @@ context="$session/permissions.json"
   --argjson skills "$(jarr $skill_roots)" --argjson configs "$(jarr $skill_configs)" \
   --argjson writable "$(jarr $writable $darwin_cache $config_roots)" \
   --argjson pins "$(jarr $pinned $state_pins $skill_pins)" \
-  --arg checker "$session/checker" --arg preparation "$channel" --arg preparationReplies "$replies" \
-  '{allow:$allow,readonly:$readonly,deny:$deny,protected:$protected,skills:$skills,configs:$configs,writable:$writable,pins:$pins,checker:$checker,preparation:$preparation,preparationReplies:$preparationReplies}' > "$context"
+  --arg checker "$session/checker" --arg preparation "$channel" --arg preparationReplies "$replies" --arg preparationStatus "$preparation_status" \
+  '{allow:$allow,readonly:$readonly,deny:$deny,protected:$protected,skills:$skills,configs:$configs,writable:$writable,pins:$pins,checker:$checker,preparation:$preparation,preparationReplies:$preparationReplies,preparationStatus:$preparationStatus}' > "$context"
 export AGENT_GUARD_CONTEXT="$context"
 if (( ! staged )); then
   /bin/cp "$context" "$engine/state/rules.json.$$"
@@ -368,6 +374,7 @@ sandbox=(/usr/bin/sandbox-exec -D "HOME=$home" -D "DARWIN_TEMP=$darwin_temp" -D 
 
 case $mode in
   (cli)
+    failure_stage=host-launch
     attached=0
     [[ ${1:-} == attach ]] && attached=1
     for arg in "$@"; do
@@ -379,6 +386,7 @@ case $mode in
     set -- -D GUI=0 "$REPLY" "$@"
     ;;
   (gui)
+    failure_stage=host-launch
     find_app || fail "OpenCode.app not found"
     app=$REPLY
     main=$(/usr/bin/plutil -extract CFBundleExecutable raw "$app/Contents/Info.plist")
