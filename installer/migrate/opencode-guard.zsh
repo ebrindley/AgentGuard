@@ -474,7 +474,7 @@ ag_retire_rules() {
 # are read back and compared first; state/ is removed last, so a rerun that finds
 # it gone needs no comparison.
 ag_retire_engine() {
-  local keys="$txn_dir/imported.json" expected="$ag_tstage/import-expected.json" retired snapshot
+  local keys="$txn_dir/imported.json" expected="$txn_dir/import-expected.json" retired snapshot
   if [[ -e $ocg/state || -L $ocg/state ]]; then
     ag_jlast retire-compare
     if [[ $REPLY != done ]]; then
