@@ -18,9 +18,12 @@ remain in the full macOS 15/26 matrix.
 The bootstrap GitHub check completed in 51 seconds on macOS 26 with Node 24.
 
 The GitHub `tests` check runs this gate for pull requests. After independent
-review, merge through GitHub's protected path with the reviewed head SHA;
-native auto-merge may wait for the required check. Local gate execution is useful
-for focused development, but is not required in addition to the hosted gate.
+review and required checks pass, use GitHub's protected squash merge for the
+reviewed head SHA. Native auto-merge is unavailable; merge normally after the
+required check passes. Set the squash subject to `<PR title> (#<number>)` and
+the body to blank, matching GitHub's `PR_TITLE` and `BLANK` defaults. Inspect the
+exact subject and body before merging. Local gate execution is useful for
+focused development, but is not required in addition to the hosted gate.
 
 The gate keeps the three baseline files and adds four offline OpenCode files:
 `test/opencode-config.mjs`, `test/plugin-health.mjs`, `test/diagnostics.mjs` and
