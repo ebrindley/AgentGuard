@@ -65,7 +65,7 @@ ag_diagnose() {
   local out p want got installed=unknown version=unknown active=unknown rid=unknown
   local stamp_state=absent consistent=true ownership='[]' ownership_state=absent preference=unspecified preference_state=absent
   local events='[]' event_state=absent latest=null rulebook=absent snapshot='{"state":"absent","observation":"cached"}' snapshot_at
-  local configs='[]' label classification klass summary report rel
+  local configs='[]' label classification klass summary report rel launch_failures='{"state":"unavailable"}' launch_stage launch_at
   local -a rows v config_files config_labels
   local -A files totals missing changed extra link_missing link_changed
   integer bad=0 excluded=0 now=${EPOCHSECONDS:-0}
@@ -76,7 +76,7 @@ ag_diagnose() {
   done
   # Restrict identifiers to the installer's release naming scheme. A custom
   # release name is not an export-safe label just because it contains no slash.
-  rid=$(/usr/bin/jq -nr --arg v "${release:t}" '$v | if test("^[0-9]+\\.[0-9]+\\.[0-9]+-[0-9]{8}T[0-9]{6}Z$") then . else "unknown" end')
+  rid=$(/usr/bin/jq -nr --arg v "${release:t}" '$v | if test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$") then . else "unknown" end')
   if [[ -L $engine/current ]]; then
     rel=${engine}/current
     [[ ${rel:A:h} == "$engine/releases" ]] && active=${rel:A:t}
@@ -88,16 +88,16 @@ ag_diagnose() {
       preference_state=valid
     fi
   fi
-  active=$(/usr/bin/jq -nr --arg v "$active" '$v | if test("^[0-9]+\\.[0-9]+\\.[0-9]+-[0-9]{8}T[0-9]{6}Z$") then . else "unknown" end')
+  active=$(/usr/bin/jq -nr --arg v "$active" '$v | if test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$") then . else "unknown" end')
   if [[ -e $stamp || -L $stamp ]]; then
     stamp_state=error
     if ag_diag_size "$stamp" 2097152 && /usr/bin/jq -e --arg current "$engine/current" --arg bin "$engine/bin" '
         type == "object" and (.files|type)=="object" and (.links|type)=="object"
         and (.files|length)<=10000 and (.links|length)<=1000
-        and all(.files|to_entries[]; (.key|test("^[^\\u0000-\\u001f\\u007f]+$")) and (.value|type)=="string" and (.value|test("^[a-f0-9]{64}$")))
-        and all(.links|to_entries[]; (.key|test("^[^\\u0000-\\u001f\\u007f]+$")) and (.value|type)=="string" and (.value|test("^[^\\u0000-\\u001f\\u007f]+$")))
-        and (.release|type)=="string" and (.release|test("^[0-9]+\\.[0-9]+\\.[0-9]+-[0-9]{8}T[0-9]{6}Z$"))
-        and (.version|type)=="string" and (.version|test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))
+        and all(.files|to_entries[]; (.key|explode|all(.>=32 and .!=127)) and (.value|type)=="string" and (.value|test("^[a-f0-9]{64}$")))
+        and all(.links|to_entries[]; (.key|explode|all(.>=32 and .!=127)) and (.value|type)=="string" and (.value|explode|all(.>=32 and .!=127)))
+        and (.release|type)=="string" and (.release|test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$"))
+        and (.version|type)=="string" and (.version|test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)$"))
         and (.version as $v | .release|startswith($v+"-"))
         and (.links|has($current) and has($bin))
       ' "$stamp" >/dev/null 2>&1; then
@@ -198,18 +198,27 @@ ag_diagnose() {
           ruleId:(.ruleId|enum(["guard.path.deny","guard.path.protected","guard.path.readonly","guard.path.unlisted","guard.path.invalid","unattributed","custom","secret.basename.env","git.reset-hard","rm.recursive-force-root-or-home","rm.recursive-force-outside-cwd"])),
           errno:(.errno|enum(["EPERM","EACCES","ENOENT","ENOTDIR","ELOOP"])),
           remediation:(.remediation|enum(["relaunch","reinstall","review-guard-list","review-policy","review-path","launch-guarded","none"])),
-          release:(.release|if type=="string" and test("^[0-9]+\\.[0-9]+\\.[0-9]+-[0-9]{8}T[0-9]{6}Z$") then . else "unknown" end)
+          release:(.release|if type=="string" and test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$") then . else "unknown" end)
         } | . + {ageSeconds:(if .timestamp==null then null else (($now-.timestamp/1000)|floor|if .<0 then 0 else . end) end)}]
       ' "$events_file" 2>/dev/null) || { events='[]'; event_state=error; }
       latest=$(/usr/bin/jq -cn --argjson e "$events" '[$e[].timestamp|select(.!=null)]|if length==0 then null else max end')
     fi
   fi
+  if ag_diag_size "$home/Agent Guard/last-launch-opencode.log" 1048576; then
+    launch_stage=$(/usr/bin/tail -64 "$home/Agent Guard/last-launch-opencode.log" 2>/dev/null |
+      /usr/bin/awk '/^agent-guard-stage:(initialization|configuration|checker-preparation|host-launch|plugin-readiness)$/ {stage=$0} END {sub(/^agent-guard-stage:/,"",stage); print stage}')
+    if [[ $launch_stage == (initialization|configuration|checker-preparation|host-launch|plugin-readiness) ]]; then
+      launch_at=$(/usr/bin/stat -f %m "$home/Agent Guard/last-launch-opencode.log" 2>/dev/null)
+      [[ $launch_at == <-> ]] || launch_at=0
+      launch_failures=$(/usr/bin/jq -cn --arg stage "$launch_stage" --argjson at "$launch_at" '{state:"cached",advisory:true,origin:"last-launch-log",stage:$stage,timestamp:($at*1000)}')
+    fi
+  fi
   (( bad )) && consistent=false
-  report=$(/usr/bin/jq -cn --argjson ok "$consistent" --arg rid "$rid" --arg installed "$installed" --arg active "$active" --arg version "$version" --arg stamp "$stamp_state" --argjson drift "$summary" --argjson excluded "$excluded" --argjson configs "$configs" --arg o "$ownership_state" --argjson ownership "$ownership" --arg preference "$preference" --arg ps "$preference_state" --arg r "$rulebook" --argjson snapshot "$snapshot" --arg ev "$event_state" --argjson events "$events" --argjson latest "$latest" --argjson now "$now" '
+  report=$(/usr/bin/jq -cn --argjson ok "$consistent" --arg rid "$rid" --arg installed "$installed" --arg active "$active" --arg version "$version" --arg stamp "$stamp_state" --argjson drift "$summary" --argjson excluded "$excluded" --argjson configs "$configs" --arg o "$ownership_state" --argjson ownership "$ownership" --arg preference "$preference" --arg ps "$preference_state" --arg r "$rulebook" --argjson snapshot "$snapshot" --argjson failures "$launch_failures" --arg ev "$event_state" --argjson events "$events" --argjson latest "$latest" --argjson now "$now" '
     {schemaVersion:1, collectedAt:($now*1000), readOnly:true,
      installation:{consistent:$ok, stamp:$stamp, loadedRelease:$rid, installedRelease:$installed, currentRelease:$active, installedVersion:$version, drift:$drift, excludedEntries:$excluded, observation:"static_file"},
      permissions:{ownershipState:$o, ownership:$ownership, globalConfigs:$configs, approvalPreference:{state:$ps, value:$preference, observation:"configured_intent"}, effectiveRules:{state:"not_observable", remediation:"run-doctor-or-session-status"}, desktopAutoMode:{state:"not_observable", remediation:"use-native-auto-accept"}},
-     components:{rulebook:{classification:$r, observation:"static_file", readiness:"not_probed"}, lastLaunchSnapshot:$snapshot, runtimeHealth:{state:"not_observable"}, sandbox:{state:"not_probed"}, engineInitialization:{state:"not_probed"}, launcherFailures:{state:"unavailable"}},
+     components:{rulebook:{classification:$r, observation:"static_file", readiness:"not_probed"}, lastLaunchSnapshot:$snapshot, runtimeHealth:{state:"not_observable"}, sandbox:{state:"not_probed"}, engineInitialization:{state:"not_probed"}, launcherFailures:$failures},
      recentFailures:{state:$ev, advisory:true, observation:"cached", latestTimestamp:$latest, events:$events},
      exitMeaning:"installation-consistency"}') || return 1
   if [[ ${1:-} == --json ]]; then

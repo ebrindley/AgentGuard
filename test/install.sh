@@ -294,8 +294,9 @@ rid_b=$(current_rid)
 label=S1
 bad=()
 for s in $samples; do
-  [[ $s == (#b)'launcher='([^[:space:]]##)' status=Agent Guard '[^[:space:]]##' ('([^\)]##)') is active.' &&
-     $match[1] == "$match[2]" && ( $match[1] == "$rid_a" || $match[1] == "$rid_b" ) ]] || bad+=("$s")
+  launched=${${s#launcher=}%% status=*}
+  print -r -- "${s#* status=}" | /usr/bin/jq -e --arg launched "$launched" --arg a "$rid_a" --arg b "$rid_b" '
+    .state == "active" and .sandbox.result == "confined" and .releases.loaded == $launched and ($launched == $a or $launched == $b)' >/dev/null 2>&1 || bad+=("$s")
 done
 (( $#samples >= 3 )) && pass "$#samples launches during the update" || fail "only $#samples launches during the update"
 (( $#bad == 0 )) && pass 'each was guarded and its plugin answered for the release that launched it, A or B' ||

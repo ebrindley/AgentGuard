@@ -36,6 +36,19 @@ export HOME="$run/home"
 node "$adapter" stage "$tested" "$root" "$HOME" || { print -ru2 'Cannot stage engine'; exit 1 }
 /bin/mkdir -p "$HOME"/{Projects/app/secret,Projects/archive/live,Projects/dotfiles,Documents/private,.config/opencode,bin}
 home=${HOME:A}
+# Resolve a native CLI once; an installed Guard shim from the caller's PATH
+# belongs to a different home and would recursively launch inside this fixture.
+native_cli=$(node -e '
+  const fs = require("node:fs"), path = require("node:path");
+  const candidates = [process.env.AG_TEST_OPENCODE, "/opt/homebrew/bin/opencode", "/usr/local/bin/opencode", ...process.env.PATH.split(":").map(p => path.join(p, "opencode"))];
+  const found = candidates.find(p => p && fs.existsSync(p) && !/\/Library\/Application Support\/(?:AgentGuard|OpenCodeGuard)\//.test(fs.realpathSync(p)));
+  if (!found) process.exit(1);
+  process.stdout.write(fs.realpathSync(found));
+') || { print -ru2 'Native OpenCode CLI required'; exit 1; }
+/bin/mkdir -p "$home/.opencode/bin"
+/bin/ln -s "$native_cli" "$home/.opencode/bin/opencode"
+path=("$home/.opencode/bin" $path)
+unset OPENCODE_CONFIG OPENCODE_CONFIG_DIR OPENCODE_CONFIG_CONTENT
 engine="$home/Library/Application Support/AgentGuard"
 launcher_argv=$(node "$adapter" launcher "$engine") || { print -ru2 'Cannot get engine launcher'; exit 1 }
 launcher=( "${(@f)launcher_argv}" )
@@ -138,7 +151,7 @@ check "release has LICENSE and notices" test -f "$release/LICENSE" -a -f "$relea
 check "check-config plugin links to the release's plugin.js" \
   test -L "$release/profiles/opencode/check-config/opencode/plugins/agent-guard.js" -a \
     "$release/profiles/opencode/check-config/opencode/plugins/agent-guard.js" -ef "$release/profiles/opencode/plugin.js"
-check "permission merge" /usr/bin/jq -e '.permission == {"bash":{"*":"allow","git *":"allow","rm *":"deny"},"task":"ask","edit":"allow","external_directory":"allow"} and (.permission.bash | keys_unsorted[0]) == "*"' "$cfg"
+check "permission maintenance preserves denies, rule order and native edit roles" /usr/bin/jq -e '.permission == {"bash":{"git *":"allow","*":"ask","rm *":"deny"},"task":"ask","external_directory":"allow"} and (.permission.bash | keys_unsorted[0]) == "git *"' "$cfg"
 check "plugin is a link to current's plugin.js" \
   test -L "$home/.config/opencode/plugins/agent-guard.js" -a "$(/usr/bin/readlink "$home/.config/opencode/plugins/agent-guard.js")" = "$engine/current/profiles/opencode/plugin.js"
 only_plugin() {
@@ -154,7 +167,7 @@ version_line() {
     [[ $out == "Agent Guard $version ("(v$version|checkout)", commit "[0-9A-Za-z]##"), release $rid, installed "[0-9-]##" "[0-9:]##" UTC" ]]
 }
 check "agent-guard version names the version and release and reports no drift" version_line
-refuses "agent-guard lists its commands" "usage: agent-guard doctor [--json]|version|update|uninstall|bind [OPTIONS]|wrapper add|remove|list" "$engine/bin/agent-guard"
+refuses "agent-guard lists its commands" "usage: agent-guard doctor|diagnose [--json]|version|update" "$engine/bin/agent-guard"
 check "rulebook agent-guard" /usr/bin/jq -e '.name == "agent-guard"' "$cc/agent-guard/rulebook.json"
 check "rule.json lists agent-guard and keeps the other rule" /usr/bin/jq -e '.rules == ["agent-guard", "custom"]' "$cc/rule.json"
 new_blocks() {
@@ -588,6 +601,7 @@ stub_ran "candidates inside either engine folder skipped" '1 - confined' \
   done
   # A copy of the plugin outside releases/ loads no cc-safety-net.
   /bin/cp "$release/profiles/opencode/plugin.js" "$home/Projects/plugin-copy.js"
+  /bin/cp "$release/profiles/opencode/permissions.js" "$release/profiles/opencode/permissions.jq" "$home/Projects/"
   sb "$(command -v node)" "$root/test/plugin.mjs" "$home/Projects/plugin-copy.js" outside || fails=$((fails + 1))
   /bin/mv "$engine/state" "$engine/state.real" && /bin/ln -s /System "$engine/state"
   node "$root/test/plugin.mjs" "$plugin" symlinked || fails=$((fails + 1))

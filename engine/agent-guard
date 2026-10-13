@@ -165,7 +165,7 @@ update() {
     # when release and ordinary maintenance are already current.
     (( rc == 1 && (restore_seen || preference_seen) )) && { rc=0; REPLY='the requested permission setup'; }
     case $rc in
-      (1) ag_unlock; print -r -- "Agent Guard ${tag#v} is current; checking the installation."; doctor ;;
+      (1) ag_unlock; print -r -- "Agent Guard ${tag#v} is current; checking the installation."; exec /bin/zsh -f "$engine/current/bin/agent-guard" doctor ;;
       (0) ;;
       (*) ag_unlock; exit 1 ;;
     esac
@@ -173,7 +173,7 @@ update() {
   elif [[ -n $cur ]] && older "$tag" "$cur"; then
     ag_unlock
     print -r -- "The installed release ($cur) is newer than the latest release ($tag); checking the installation."
-    doctor
+    exec /bin/zsh -f "$engine/current/bin/agent-guard" doctor
   else
     print -r -- "updating to Agent Guard ${tag#v}"
   fi

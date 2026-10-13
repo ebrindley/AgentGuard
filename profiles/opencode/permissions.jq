@@ -24,7 +24,10 @@ def summary($agent; $index; $sessionRules):
       rules: {allow: ([$rules[] | select(.action == "allow")] | length), ask: ([$rules[] | select(.action == "ask")] | length), deny: ([$rules[] | select(.action == "deny")] | length)},
       probes: {externalDirectory: decision($rules; "external_directory"; $outside), ordinaryEdit: decision($rules; "edit"; "sample.txt"),
         planningEdit: decision($rules; "edit"; ".opencode/plans/probe.md"), bashGitStatus: decision($rules; "bash"; "git status")},
-      editToolVisible: ([$rules[] | select(matches("edit"; .permission))] | last | (.pattern != "*" or .action != "deny"))};
+      editToolVisible: ([$rules[] | select(matches("edit"; .permission))] | last | (.pattern != "*" or .action != "deny"))}
+    + (if $ARGS.named.requested == "true" then {requested: {pathResolution:"lexical", guardAndSandbox:"apply_at_execution",
+        externalDirectoryRequired:($ARGS.named.externalRequired == "true"), externalDirectory:decision($rules;"external_directory";$ARGS.named.requestedExternal),
+        edit:decision($rules;"edit";$ARGS.named.requestedEdit), read:decision($rules;"read";$ARGS.named.requestedRead)}} else {} end);
 if (.agents | type == "array" and length <= 64) and all(.agents[];
     type == "object" and (.name | type == "string" and length <= 256) and (.permission | valid_rules))
 then . as $input | {

@@ -3,6 +3,7 @@ import { basename, dirname, join, resolve } from "node:path"
 import { homedir, tmpdir } from "node:os"
 import { randomBytes } from "node:crypto"
 import { fileURLToPath, pathToFileURL } from "node:url"
+import { permissionTool } from "./permissions.js"
 
 const HOME = realpathSync(homedir())
 const ENGINE = join(HOME, "Library/Application Support/AgentGuard")
@@ -13,6 +14,7 @@ const READS = new Set(["read", "glob", "grep", "list", "lsp"])
 const CONFIG = /\/\.cc-safety-net(\/|$)/
 const UNSAFE_NET_ENV = ["CC_SAFETY_NET_HOME", "CC_SAFETY_NET_WORKTREE", "SAFETY_NET_WORKTREE", "CC_SAFETY_NET_AUDIT_HOME"]
 const releaseID = value => typeof value === "string" && value.length <= 100 && /^[0-9A-Za-z.+-]+$/.test(value) && value !== "." && value !== ".." ? value : null
+const publicReleaseID = value => typeof value === "string" && /^(?:dev|\d+\.\d+\.\d+(?:-(?:rc|beta|alpha|pre)[.-]?\d+)?)-(?:\d{8}T\d{6}Z|fixture)$/.test(value) ? value : null
 const ERRNOS = new Set(["EPERM", "EACCES", "ENOENT", "ENOTDIR", "ELOOP"])
 const RULE_IDS = new Set(["guard.path.deny", "guard.path.protected", "guard.path.readonly", "guard.path.unlisted", "guard.path.invalid", "unattributed", "custom", "secret.basename.env", "git.reset-hard", "rm.recursive-force-root-or-home", "rm.recursive-force-outside-cwd"])
 const EVENT_FIELDS = {
@@ -32,7 +34,7 @@ function sanitizedEvent(event) {
     if (!values.has(event[key])) return null
     result[key] = event[key]
   }
-  result.release = releaseID(event.release)
+  result.release = publicReleaseID(event.release)
   return result
 }
 
@@ -67,7 +69,7 @@ const RELEASE = (() => {
 const VERSION = (() => {
   try {
     const value = readFileSync(join(RELEASE, "VERSION"), "utf8").trim()
-    return value.length <= 80 && /^(?:dev|\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)$/.test(value) ? value : null
+    return value.length <= 80 && /^(?:dev|\d+\.\d+\.\d+(?:-(?:rc|beta|alpha|pre)[.-]?\d+)?)$/.test(value) ? value : null
   } catch { return null }
 })()
 
@@ -306,7 +308,9 @@ async function guard(input) {
       }
     }
     try { await net["tool.execute.before"](info, output) } catch (error) {
-      recordEvent({ layer: "guard", stage: "safety-net", code: "safety-net-failed", remediation: "review-policy", tool: toolClass(tool), errno: ERRNOS.has(error.code) ? error.code : "unknown" })
+      const matched = typeof error.message === "string" ? error.message.slice(0, 8192).match(/^Rule: ([a-z0-9.-]{1,100})$/m)?.[1] : null
+      const ruleId = matched ? RULE_IDS.has(matched) ? matched : "custom" : "unattributed"
+      recordEvent({ layer: "guard", stage: "safety-net", code: "safety-net-failed", remediation: "review-policy", ruleId, tool: toolClass(tool), errno: ERRNOS.has(error.code) ? error.code : "unknown" })
       throw error
     }
     // Shell startup files can prepend native CLIs ahead of the session wrappers.
@@ -330,7 +334,7 @@ async function guard(input) {
       rules: { loaded: !!rules, source: rulesSource, semanticHealth: "not-probed" },
       safetyNet: { moduleLoaded, apiLoaded: !!checkCommand, hooksReady: !!net, semanticHealth: "not-probed" },
       preparation: { status: ["ready", "warning"].includes(rules?.preparationStatus) ? rules.preparationStatus : "not-observed", origin: "snapshot" },
-      releases: { loaded, launcher, installed, version: VERSION },
+      releases: { loaded: publicReleaseID(loaded), launcher: publicReleaseID(launcher), installed: publicReleaseID(installed), version: VERSION },
       restartNeeded: DELEGATE === false || !!(installed && loaded && installed !== loaded) || !!(launcher && loaded && launcher !== loaded),
       failures,
     }
@@ -345,7 +349,7 @@ async function guard(input) {
 
   return {
     ...(net ?? {}),
-    tool: { ...(net?.tool ?? {}), agent_guard_status: status },
+    tool: { ...(net?.tool ?? {}), agent_guard_status: status, ...(state === "active" ? { agent_guard_permissions: permissionTool(input) } : {}) },
     "tool.execute.before": before,
   }
 }

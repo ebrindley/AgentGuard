@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process"
-import { readFileSync } from "node:fs"
-import { dirname, join } from "node:path"
+import { readFileSync, statSync } from "node:fs"
+import { dirname, join, resolve, relative } from "node:path"
 import { homedir } from "node:os"
 import { fileURLToPath } from "node:url"
 
@@ -15,10 +15,14 @@ function candidates(agents) {
   const result = []
   for (const name of ["config.json", "opencode.json", "opencode.jsonc"]) {
     try {
-      const config = JSON.parse(readFileSync(join(homedir(), ".config/opencode", name), "utf8"))
+      const file = join(homedir(), ".config/opencode", name)
+      const info = statSync(file)
+      if (!info.isFile() || info.size > 1048576) continue
+      const config = JSON.parse(readFileSync(file, "utf8"))
       for (const [index, agent] of agents.entries()) {
         const perms = [config.permission, config.agent?.[agent.name]?.permission]
-        for (const [specific, permission] of perms.entries()) {
+        for (const [specific, original] of perms.entries()) {
+          const permission = actions.has(original) ? { "*": original } : original
           if (!permission || typeof permission !== "object" || Array.isArray(permission)) continue
           for (const key of Object.keys(permission).filter(k => known.has(k))) {
             const value = permission[key]
@@ -45,19 +49,31 @@ function candidates(agents) {
 export function permissionTool(input) {
   return {
     description: "Explain host-resolved agent and current-session permissions using fixed diagnostic probes. Sources are candidates; client auto-approval state is not observable.",
-    args: {},
-    async execute(_args, context) {
+    args: {
+      filePath: { type: "string", description: "Optional file or directory whose OpenCode permission rules should be explained; no content is read." },
+      pathKind: { type: "string", enum: ["file", "directory"], description: "The requested path kind; defaults to file." },
+    },
+    async execute(args, context) {
       try {
+        const requested = args?.filePath
+        if ((requested !== undefined && (typeof requested !== "string" || !requested || requested.length > 4096 || /[\0\r\n]/.test(requested))) ||
+          (args?.pathKind !== undefined && !["file", "directory"].includes(args.pathKind)))
+          return JSON.stringify({ ...unavailable(), availability: "invalid_request" })
         if (!input.client?.app?.agents) return JSON.stringify(unavailable())
         const response = await input.client.app.agents()
         const agents = response.data
         if (!Array.isArray(agents) || agents.length > 64) return JSON.stringify(unavailable())
         const sessions = []
+        let sessionObservation = "not_requested"
         const id = context?.sessionID
         if (typeof id === "string" && /^ses_[A-Za-z0-9]+$/.test(id) && input.client.session?.get) {
+          sessionObservation = "unavailable"
           try {
             const current = (await input.client.session.get({ path: { id } })).data
-            if (current) sessions.push({ agent: current.agent ?? context.agent, permission: current.permission ?? [], child: false })
+            if (current) {
+              sessions.push({ agent: current.agent ?? context.agent, permission: current.permission ?? [], child: false })
+              sessionObservation = "observed"
+            }
             if (input.client.session.children) {
               const children = (await input.client.session.children({ path: { id } })).data
               if (Array.isArray(children)) for (const child of children.slice(0, 15))
@@ -66,10 +82,22 @@ export function permissionTool(input) {
           } catch { /* Agent defaults remain observable if session lookup fails. */ }
         }
         const payload = { agents: agents.map(a => ({ name: a.name, mode: a.mode, permission: a.permission })), sessions }
-        const text = execFileSync("/usr/bin/jq", ["-c", "--arg", "scope", "project-session", "--arg", "outside", "/agent-guard-external-probe/*",
-          "--argjson", "observed", String(Date.now()), "-f", query], { input: JSON.stringify(payload), encoding: "utf8", timeout: 5000, maxBuffer: 1024 * 1024, stdio: ["pipe", "pipe", "ignore"] })
+        const parameters = ["-c", "--arg", "scope", "project-session", "--arg", "outside", "/agent-guard-external-probe/*", "--argjson", "observed", String(Date.now())]
+        if (requested !== undefined) {
+          const directory = context?.directory ?? input.directory
+          if (typeof directory !== "string") return JSON.stringify(unavailable())
+          const full = resolve(directory, requested.replace(/^~(?=\/|$)/, homedir()))
+          const within = base => typeof base === "string" && (full === base || full.startsWith(base === "/" ? "/" : base + "/"))
+          const external = !(within(directory) || (input.worktree !== "/" && within(input.worktree)))
+          parameters.push("--arg", "requested", "true", "--arg", "requestedEdit", relative(directory, full), "--arg", "requestedRead", full,
+            "--arg", "requestedExternal", join(args.pathKind === "directory" ? full : dirname(full), "*"), "--arg", "externalRequired", String(external))
+        }
+        const text = execFileSync("/usr/bin/jq", [...parameters, "-f", query], { input: JSON.stringify(payload), encoding: "utf8", timeout: 5000, maxBuffer: 1024 * 1024, stdio: ["pipe", "pipe", "ignore"] })
         const report = JSON.parse(text)
-        if (report.availability === "observed") report.sourceCandidates = candidates(payload.agents)
+        if (report.availability === "observed") {
+          report.sourceCandidates = candidates(payload.agents)
+          report.sessionObservation = sessionObservation
+        }
         return JSON.stringify(report)
       } catch { return JSON.stringify(unavailable()) }
     },

@@ -3,13 +3,13 @@
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { spawnSync } from "node:child_process"
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, lstatSync, readlinkSync, symlinkSync, writeFileSync } from "node:fs"
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, lstatSync, readlinkSync, symlinkSync, writeFileSync, realpathSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const source = resolve(process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), ".."))
-const run = mkdtempSync(join(tmpdir(), "agentguard-diagnostics-"))
+const run = realpathSync(mkdtempSync(join(tmpdir(), "agentguard-diagnostics-")))
 const marker = "PRIVATE_PAYLOAD_TOKEN_123"
 const rid = "0.3.0-20261012T120000Z"
 let failures = 0

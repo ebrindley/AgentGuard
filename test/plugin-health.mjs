@@ -12,7 +12,7 @@ const self = fileURLToPath(import.meta.url);
 const cases = ['healthy', 'rules-missing', 'engine-import', 'engine-init', 'api-import', 'hooks-missing', 'updated', 'unsafe-version'];
 if (process.argv[2] !== '--case') {
   const source = resolve(process.argv[2] ?? join(dirname(self), '../profiles/opencode/plugin.js'));
-  const root = fs.mkdtempSync(join(os.tmpdir(), 'agentguard-plugin-health-'));
+  const root = fs.realpathSync(fs.mkdtempSync(join(os.tmpdir(), 'agentguard-plugin-health-')));
   let failed = false;
   for (const name of cases) {
     const result = spawnSync(process.execPath, [self, '--case', root, source, name], { encoding: 'utf8' });
@@ -39,6 +39,7 @@ fs.writeFileSync(join(release, 'package.json'), '{"type":"module"}');
 fs.writeFileSync(join(release, 'RELEASE'), '1.0.0-fixture\n');
 fs.writeFileSync(join(release, 'VERSION'), name === 'unsafe-version' ? marker + '\n' : '1.0.0\n');
 fs.copyFileSync(source, join(release, 'profiles/opencode/plugin.js'));
+for (const file of ['permissions.js', 'permissions.jq']) fs.copyFileSync(join(dirname(source), file), join(release, 'profiles/opencode', file));
 fs.mkdirSync(join(checker, 'rules'), { recursive: true });
 fs.writeFileSync(join(checker, 'rules/rule.json'), '{}');
 const denied = join(directory, marker);

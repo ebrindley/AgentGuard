@@ -44,8 +44,7 @@ finish() {
   (( $#missing == 0 )) && pass "all $#migrate_points migration test points are exercised" || fail "migration test points not exercised: $missing"
   kill $server 2>/dev/null
   wait $server 2>/dev/null
-  /bin/chmod -R u+w "$run" 2>/dev/null
-  /bin/rm -rf "$run"
+  print -r -- "migration fixtures: $run"
   print -r -- "$checks checks, $fails failure(s)"
   (( fails == 0 ))
   exit
