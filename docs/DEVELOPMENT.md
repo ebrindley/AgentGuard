@@ -125,7 +125,7 @@ stores, `bin` folder and model catalog. The original source commit is
 
 `zsh test/pi.sh` tests Pi's guard. It runs pi-sandbox-guard's suites from
 `profiles/pi/test` and `profiles/pi/scripts` against Agent Guard's copy, changed
-only where a recorded difference changes what they assert; `test/pi-files.mjs`,
+for recorded behavior differences and test diagnostics; `test/pi-files.mjs`,
 which compares `profiles/pi` with pi-sandbox-guard 7ad441f and allows only the
 changes in `test/fixtures/differences/pi.json` and `pi.patch`; and
 `test/pi-launch.mjs`, which tests each recorded difference and the nested
