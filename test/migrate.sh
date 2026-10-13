@@ -44,8 +44,7 @@ finish() {
   (( $#missing == 0 )) && pass "all $#migrate_points migration test points are exercised" || fail "migration test points not exercised: $missing"
   kill $server 2>/dev/null
   wait $server 2>/dev/null
-  /bin/chmod -R u+w "$run" 2>/dev/null
-  /bin/rm -rf "$run"
+  print -r -- "migration fixtures: $run"
   print -r -- "$checks checks, $fails failure(s)"
   (( fails == 0 ))
   exit
@@ -256,8 +255,8 @@ for v in $versions; do
   [[ $(/usr/bin/plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist" 2>/dev/null) == io.github.ebrindley.agentguard && ! -e $old_app ]] &&
     pass "Agent Guard.app with bundle ID io.github.ebrindley.agentguard; no OpenCode Guard.app" || fail 'apps'
   /usr/bin/cmp -s "$state/opencode-guard-permissions.json" "$run/record-$v" &&
-    /usr/bin/jq -e --slurpfile o "$run/record-$v" '. == $o[0]' "$state/permissions.json" >/dev/null &&
-    pass "OpenCode Guard's record imported, and its unchanged copy kept" || fail 'imported record'
+    /usr/bin/jq -e --slurpfile o "$run/record-$v" '. == ($o[0] | map_values(del(.edit)) | with_entries(select(.value != {})))' "$state/permissions.json" >/dev/null &&
+    pass "OpenCode Guard's record imported, edit ownership retired, unchanged archive kept" || fail 'imported record'
   /usr/bin/jq -e '.from == "opencode-guard" and (.switched_at | type) == "number" and .retired == true' "$state/migration.json" >/dev/null &&
     pass 'switch time recorded; retirement finished' || fail 'migration.json'
   /usr/bin/cmp -s "$list" "$old_list" && pass 'A9 the imported list equals the old list byte for byte' || fail 'A9 imported list'
@@ -268,8 +267,9 @@ for v in $versions; do
   [[ ! -e $cc/opencode-guard ]] && /usr/bin/jq -e '(.rules | index("opencode-guard") == null) and (.transparent_wrappers | index("env") != null)' "$cc/rule.json" >/dev/null &&
     pass "retired: rulebook and rule.json entry gone, transparent_wrappers kept" || fail 'retired rulebook'
   [[ -f "$home/OpenCode Guard/Moved to Agent Guard.txt" && -f $old_list ]] && pass '~/OpenCode Guard kept, with the note' || fail '~/OpenCode Guard note'
-  [[ $(ocg_files | /usr/bin/grep -E '/\.config/opencode/(opencode|config)\.json ') == $(/usr/bin/grep -E '/\.config/opencode/(opencode|config)\.json ' "$run/ocg-$v.files") ]] &&
-    pass 'M9 no permission value was written' || fail 'M9 a config changed'
+  /usr/bin/jq -e --slurpfile o "$run/saved-ocg-$v/.config/opencode/opencode.json" '. == ($o[0] | del(.permission.edit))' "$cfg" >/dev/null &&
+    /usr/bin/jq -e --slurpfile o "$run/saved-ocg-$v/.config/opencode/config.json" '. == ($o[0] | del(.permission.edit))' "$cfg2" >/dev/null &&
+    pass 'M9 only old owned edit values are retired; other permissions and user changes preserved' || fail 'M9 config migration'
   /usr/bin/grep -qF "left as is: $cfg bash was changed after OpenCode Guard's install" "$out" && /usr/bin/grep -qF "kept $cfg external_directory" "$out" &&
     pass "the import reports kept and changed keys" || { fail 'import report'; show }
   /usr/bin/grep -q 'Dock item for OpenCode Guard.app' "$out" && pass 'says to replace the Dock item' || fail 'Dock message'
@@ -491,8 +491,8 @@ point= boot y
 rc=$?
 (( rc == 0 )) && pass 'migrated (exit 0)' || { fail "migration (exit $rc)"; show }
 /usr/bin/cmp -s "$state/opencode-guard-permissions.json" "$run/record-upgrade" &&
-  /usr/bin/jq -e --slurpfile o "$run/record-upgrade" '. == $o[0]' "$state/permissions.json" >/dev/null &&
-  pass "OpenCode Guard's record imported, and its unchanged copy kept" || fail 'imported record'
+  /usr/bin/jq -e --slurpfile o "$run/record-upgrade" '. == ($o[0] | map_values(del(.edit)) | with_entries(select(.value != {})))' "$state/permissions.json" >/dev/null &&
+  pass "OpenCode Guard's record imported, edit ownership retired, unchanged archive kept" || fail 'imported record'
 /usr/bin/cmp -s "$list" "$run/list-1.0.0" && pass "v1.0.0's list imported byte for byte" || fail 'imported list'
 probe_entry_points "$home" "$base" "$old_path"
 point= ag uninstall

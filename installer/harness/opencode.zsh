@@ -72,11 +72,16 @@ ag_classify_configs() {
     ag_opencode_config_writable "$f" || continue
     [[ -e $f ]] || continue
     if ! /usr/bin/jq -e 'type == "object"' "$f" >/dev/null 2>&1; then
-      ag_warnings+=("${f:t} not changed (comments or invalid JSON): set permission edit, bash and external_directory to allow yourself")
+      ag_warnings+=("${f:t} not changed (comments or invalid JSON): review bash and external_directory permissions; preserve agent edit restrictions and explicit denies")
     elif /usr/bin/jq -e '.permission | type == "string"' "$f" >/dev/null; then
       ag_warnings+=("${f:t} not changed (permission is a single value)")
+    elif ! /usr/bin/jq -e '(.permission // {}) | type == "object"' "$f" >/dev/null; then
+      ag_warnings+=("${f:t} not changed (unsupported permission shape)")
     else
       ag_configs+=("$f")
+      if /usr/bin/jq -e '.permission.edit == "allow" or .permission.edit == "ask" or ((.permission.edit | type) == "object")' "$f" >/dev/null 2>&1; then
+        ag_warnings+=("${f:t}: global edit policy can override Plan/Explore restrictions; verify agent-specific edit rules and Plan planning-file exceptions")
+      fi
     fi
   done
   if [[ ! -e $conf/config.json && ! -e $conf/opencode.json && ! -e $conf/opencode.jsonc ]] &&
@@ -155,9 +160,13 @@ ag_h_opencode_doctor() {
 }
 
 ag_h_opencode_report() {
+  local preference="$state/opencode-preferences.json"
   ag_say 'PATH: new terminal windows run opencode inside the guard'
   ag_say "GUI: $app (drag it to the Dock)"
   "$engine/current/launch" find-app >/dev/null 2>&1 || ag_warnings+=('OpenCode.app not found: install it, then open Agent Guard')
+  if [[ -f $preference ]] && /usr/bin/jq -e '.approvalPreference == "auto"' "$preference" >/dev/null 2>&1; then
+    ag_say 'OpenCode automatic approval is requested, not verified active: use opencode --auto or opencode run --auto; desktop: Auto-accept permissions. Explicit denies and Guard enforcement remain.'
+  fi
   return 0
 }
 
@@ -204,19 +213,25 @@ undo_plugin() {
 # the config is written, so an interrupted run never leaves an allow value that
 # uninstall cannot restore.
 ag_perm_new() {  # CUR OUT
-  /usr/bin/jq '.permission = ((.permission // {}) as $p | reduce ("edit", "bash", "external_directory") as $k ($p;
-      .[$k] = (if (.[$k] | type) == "object" then {"*": "allow"} + (.[$k] | del(.["*"])) else "allow" end)))' "$1" > "$2"
+  /usr/bin/jq '(.permission // {}) as $p
+    | if ($p | type) != "object" or $p["*"] == "deny" then . else
+      .permission = (reduce ("bash", "external_directory") as $k ($p;
+        if .[$k] == null or .[$k] == "ask" then .[$k] = "allow"
+        elif (.[$k] | type) == "object" and .[$k]["*"] == "ask"
+          and (all(.[$k][]; . != "deny")) then .[$k]["*"] = "allow"
+        else . end)) end' "$1" > "$2"
 }
 
 ag_perm_entry() {  # CUR NEW: REPLY = the record entry
   REPLY=$(/usr/bin/jq -cn --slurpfile c "$1" --slurpfile n "$2" '($c[0].permission // {}) as $p
-    | reduce ("edit", "bash", "external_directory") as $k ({};
-        .[$k] = {orig: (if $p | has($k) then $p[$k] else null end), wrote: $n[0].permission[$k]})')
+    | reduce ("bash", "external_directory") as $k ({};
+        if $p[$k] == $n[0].permission[$k] then . else
+        .[$k] = {orig: (if $p | has($k) then $p[$k] else null end), wrote: $n[0].permission[$k]} end)')
 }
 
-ag_perm_is() {  # CUR ENTRY orig|wrote: each of the three keys equals that side of ENTRY
+ag_perm_is() {  # CUR ENTRY orig|wrote: each recorded key equals that side of ENTRY
   /usr/bin/jq -e --argjson e "$2" --arg w "$3" '(.permission // {}) as $c
-    | all(("edit", "bash", "external_directory"); $c[.] == $e[.][$w])' "$1" >/dev/null 2>&1
+    | all($e | keys[]; $c[.] == $e[.][$w])' "$1" >/dev/null 2>&1
 }
 
 ag_perm_report() {  # FILE CUR ENTRY: names each key changed after install
@@ -253,9 +268,155 @@ ag_record_set() {  # FILE ENTRY|-: adds FILE's entry, or with -, removes it
   replace_file "$record" "$out"
 }
 
-# S6, in installs and updates only: a migration writes no permission value.
+# This records setup intent, never native approval state or a launch flag.
+do_opencode_preference() {
+  local pref="$state/opencode-preferences.json" tmp="$ag_tstage/opencode-preferences.json"
+  [[ -n ${ag_approval_preference:-} ]] || return 0
+  ag_jlast opencode-preference
+  [[ $REPLY == (done|undone) ]] && return 0
+  if [[ -z $REPLY ]]; then
+    if [[ -f $pref ]] && /usr/bin/jq -e --arg p "$ag_approval_preference" '. == {schemaVersion:1, approvalPreference:$p}' "$pref" >/dev/null 2>&1; then return 0; fi
+    ag_backup opencode-preference "$pref" && ag_jnl opencode-preference begun || return 1
+  fi
+  /usr/bin/jq -n --arg p "$ag_approval_preference" '{schemaVersion:1, approvalPreference:$p}' > "$tmp" && replace_file "$pref" "$tmp" || return 1
+  ag_jnl opencode-preference done
+}
+
+undo_opencode_preference() {
+  local pref="$state/opencode-preferences.json" backup="$txn_dir/backup/opencode-preference/file"
+  ag_jlast opencode-preference
+  [[ $REPLY == (begun|done) ]] || return 0
+  # A later owner's state is preserved, as with configuration permission writes.
+  if [[ -f $pref ]] && /usr/bin/jq -e --arg p "$ag_approval_preference" '. == {schemaVersion:1, approvalPreference:$p}' "$pref" >/dev/null 2>&1; then
+    if [[ -f $backup ]]; then replace_file "$pref" "$backup" || return 1
+    else /bin/rm -f -- "$pref" || return 1; fi
+  fi
+  ag_jnl opencode-preference undone
+}
+
+# Retire only the old global edit write. The frozen ledger and per-file journal
+# distinguish a resumed restoration from an unrelated user edit. Rollback uses
+# original bytes only while the file exactly matches this restoration's output.
+do_retire_edit() {
+  local snapshot="$txn_dir/backup/retire-edit/file" f old st restore entry saved expected
+  local -a files
+  integer n
+  ag_jlast retire-edit
+  [[ $REPLY == (done|undone) ]] && return 0
+  if [[ -z $REPLY ]]; then
+    [[ -f $record ]] || return 0
+    /usr/bin/jq -e 'any(.[]; (.edit // {} | has("wrote")))' "$record" >/dev/null 2>&1 || return 0
+    ag_backup retire-edit "$record" && ag_jnl retire-edit begun || return 1
+  fi
+  files=(${(f)"$(/usr/bin/jq -r 'to_entries[] | select(.value.edit // {} | has("wrote")) | .key' "$snapshot")"})
+  for (( n = 1; n <= $#files; n++ )); do
+    f=$files[n]
+    ag_jlast retire-edit-file $n; st=$REPLY
+    [[ $st == (done|undone) ]] && continue
+    old=$(/usr/bin/jq -c --arg f "$f" '.[$f].edit' "$snapshot") || return 1
+    if ! ag_opencode_config_writable "$f" || [[ ! -f $f ]] ||
+       ! /usr/bin/jq -e 'type == "object" and ((.permission // {}) | type == "object")' "$f" >/dev/null 2>&1; then
+      ag_warnings+=("edit migration deferred: $f (config-unavailable); original ownership retained")
+      continue
+    fi
+    restore=0
+    if [[ $st == begun ]]; then
+      ag_jfind retire-edit-file begun $n; ag_jval restore; restore=$REPLY
+    elif /usr/bin/jq -e --argjson e "$old" '(.permission // {}).edit == $e.wrote' "$f" >/dev/null; then
+      if [[ ${ag_restore_edit_permissions:-0} != 1 ]] && /usr/bin/jq -en --argjson e "$old" '
+          $e.orig == "ask" or (($e.orig | type) == "object" and any($e.orig[]; . == "ask"))' >/dev/null; then
+        ag_warnings+=("edit migration deferred: $f (approval-prompts-would-return); after choosing native auto-approval, rerun with --restore-edit-permissions")
+        continue
+      fi
+      restore=1
+      ag_backup "retire-edit-$n" "$f" || return 1
+      saved="$txn_dir/backup/retire-edit-$n/file" expected="$txn_dir/backup/retire-edit-$n/expected"
+      /usr/bin/jq --argjson e "$old" 'if .permission.edit == $e.wrote then
+        if $e.orig == null then del(.permission.edit) else .permission.edit = $e.orig end
+        else . end' "$saved" > "$expected" || return 1
+      # ag_perm_restore leaves semantically unchanged files byte-identical.
+      if /usr/bin/jq -e --slurpfile n "$expected" '. == $n[0]' "$saved" >/dev/null; then
+        /bin/cp -- "$saved" "$expected" || return 1
+      fi
+      ag_jnl retire-edit-file begun "$n restore=$restore" || return 1
+    else
+      ag_warnings+=("edit migration: $f user change preserved; retired Guard ownership")
+      ag_jnl retire-edit-file begun "$n restore=$restore" || return 1
+    fi
+    if [[ $restore == 1 ]]; then
+      # A recovery resumes the write only while it still owns the current value.
+      ag_perm_restore "$f" "$(/usr/bin/jq -cn --argjson e "$old" '{edit:$e}')" "$ag_tstage/edit.$n.json" || return 1
+      if ! /usr/bin/jq -e --argjson e "$old" '(.permission // {}).edit == $e.orig' "$f" >/dev/null; then
+        ag_warnings+=("edit migration: $f user change preserved during recovery")
+      fi
+    fi
+    test_point edit-restored || return 1
+    # Retire only an identical ownership entry; never replace concurrent state.
+    entry=$(/usr/bin/jq -c --arg f "$f" --argjson e "$old" '
+      .[$f] as $p | if $p.edit == $e then $p | del(.edit) else $p end' "$record") || return 1
+    if [[ $entry == '{}' ]]; then ag_record_set "$f" - || return 1
+    elif [[ $entry != null ]]; then ag_record_set "$f" "$entry" || return 1; fi
+    test_point edit-retired || return 1
+    ag_jnl retire-edit-file done "$n" || return 1
+    ag_say "permissions: retired Guard-owned edit setting in $f"
+  done
+  ag_jnl retire-edit done
+}
+
+undo_retire_edit() {
+  local snapshot="$txn_dir/backup/retire-edit/file" f old st restore entry saved expected
+  local -a files
+  integer n
+  ag_jlast retire-edit
+  [[ $REPLY == (begun|done) && -f $snapshot ]] || return 0
+  files=(${(f)"$(/usr/bin/jq -r 'to_entries[] | select(.value.edit // {} | has("wrote")) | .key' "$snapshot")"})
+  for (( n = $#files; n >= 1; n-- )); do
+    f=$files[n]
+    ag_jlast retire-edit-file $n; st=$REPLY
+    [[ $st == (begun|done) ]] || continue
+    old=$(/usr/bin/jq -c --arg f "$f" '.[$f].edit' "$snapshot") || return 1
+    ag_jfind retire-edit-file begun $n; ag_jval restore; restore=$REPLY
+    if [[ $restore == 1 ]]; then
+      saved="$txn_dir/backup/retire-edit-$n/file" expected="$txn_dir/backup/retire-edit-$n/expected"
+      if ! ag_opencode_config_writable "$f" || [[ ! -f $f ]]; then ag_unrestored+=("$f")
+      elif [[ -f $saved ]] && /usr/bin/cmp -s -- "$f" "$saved"; then
+        : # The write never happened, or rollback already restored it.
+      elif [[ -f $saved && -f $expected ]] && /usr/bin/cmp -s -- "$f" "$expected"; then
+        replace_file "$f" "$saved" || ag_unrestored+=("$f")
+      # Later changes retain their contents; restore only the owned edit key.
+      elif ! ag_perm_restore "$f" "$(/usr/bin/jq -cn --argjson e "$old" '{edit:{orig:$e.wrote,wrote:$e.orig}}')" "$ag_tstage/edit.$n.undo.json"; then
+        ag_unrestored+=("$f")
+      fi
+    fi
+    entry=$(/usr/bin/jq -c --arg f "$f" --argjson e "$old" '
+      (.[$f] // {}) | if has("edit") then . else .edit = $e end' "$record") || return 1
+    ag_record_set "$f" "$entry" || return 1
+    ag_jnl retire-edit-file undone "$n" || return 1
+  done
+  ag_jnl retire-edit undone
+}
+
+# Legacy retirement compares its immutable archive with live ownership. Only
+# keys whose retirement completed in this transaction may differ.
+ag_retired_edit_files() {
+  local snapshot="$txn_dir/backup/retire-edit/file"
+  local -a files retired
+  integer n
+  REPLY='[]'
+  [[ -f $snapshot ]] || return 0
+  files=(${(f)"$(/usr/bin/jq -r 'to_entries[] | select(.value.edit // {} | has("wrote")) | .key' "$snapshot")"})
+  for (( n = 1; n <= $#files; n++ )); do
+    ag_jlast retire-edit-file $n
+    [[ $REPLY == done ]] && retired+=("$files[n]")
+  done
+  REPLY=$(/usr/bin/jq -cn '$ARGS.positional' --args "${retired[@]}")
+}
+
+# S6 maintains only previously unrecorded permissions; imported entries keep
+# their first-install originals. Edit retirement is a separate journaled action.
 do_permissions() {
   local f n st cur new entry created
+  local -a changed_keys
   integer i
   for (( i = 1; i <= $#ag_configs; i++ )); do
     f=$ag_configs[i] n=$i
@@ -289,6 +450,7 @@ do_permissions() {
     else
       ag_perm_entry "$cur" "$new" || return 1
       entry=$REPLY
+      [[ $entry == '{}' ]] && continue
       if [[ -z $st ]]; then
         created=0
         [[ -e $f ]] || created=1
@@ -300,6 +462,8 @@ do_permissions() {
     test_point perm-recorded || return 1
     /bin/mkdir -p -- "${f:h}" && replace_file "$f" "$new" || return 1
     ag_sha "$f" && ag_jnl permissions done "$n $REPLY" || return 1
+    changed_keys=(${(f)"$(/usr/bin/jq -rn --argjson e "$entry" '$e | keys[]')"})
+    ag_say "permissions: $f updated ${(j:, :)changed_keys}; edit and explicit denies preserved"
   done
   return 0
 }

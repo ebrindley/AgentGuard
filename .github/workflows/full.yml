@@ -35,6 +35,19 @@ jobs:
         run: npm install -g opencode-ai@1.18.33 && opencode --version
       - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node test/golden.mjs
+      # Offline focused scopes also run in the seven-file local gate.
+      - name: OpenCode permission configuration
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node test/opencode-config.mjs
+      - name: OpenCode component health
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node test/plugin-health.mjs
+      - name: Read-only sanitized diagnostics
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node test/diagnostics.mjs
+      - name: Effective permission evaluation
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node test/permissions.mjs
       - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node test/peers.mjs
       - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
@@ -53,6 +66,9 @@ jobs:
         run: node test/skills-native.mjs server
       - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node test/skills-native.mjs gui
+      - name: Native OpenCode approval and agent permissions
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node test/opencode-permissions-native.mjs
       - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: zsh test/pi.sh
       - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}

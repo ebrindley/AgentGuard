@@ -12,7 +12,7 @@
 // Any other arguments run the sandbox probe: try to create ~/Documents/escaped, which a guard
 // denies, then create ~/Projects/app/launched. Exits 0 when launched was written.
 import { createServer } from 'node:http';
-import { existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -51,6 +51,26 @@ async function toolIds(directory) {
   return ids;
 }
 
+async function definitions(directory) {
+  const tools = [];
+  for (const hooks of await pluginHooks(directory)) for (const [id, tool] of Object.entries(hooks?.tool ?? {}))
+    tools.push({ id, description: tool.description ?? "", parameters: {} });
+  return tools;
+}
+
+function agents() {
+  const row = (permission, pattern, action) => ({ permission, pattern, action });
+  const all = row('*', '*', 'allow'), edit = row('edit', '*', 'deny');
+  const config = join(process.env.XDG_CONFIG_HOME || join(home, '.config'), 'opencode');
+  let permissions = {};
+  for (const name of ['config.json', 'opencode.json', 'opencode.jsonc']) {
+    try { const value = JSON.parse(readFileSync(join(config, name), 'utf8')).permission; if (value) permissions = { ...permissions, ...(typeof value === 'string' ? { '*': value } : value) }; } catch {}
+  }
+  const user = Object.entries(permissions).flatMap(([key, value]) => typeof value === 'string' ? [row(key, '*', value)] : Object.entries(value).map(([pattern, action]) => row(key, pattern.replace(/^~(?=\/|$)/, home), action)));
+  return [{name:'build',mode:'primary',permission:[all,...user]}, {name:'explore',mode:'subagent',permission:[row('*','*','deny'),row('read','*','allow'),row('external_directory','*','ask'),...user]},
+    {name:'plan',mode:'primary',permission:[all,edit,row('edit','.opencode/plans/*.md','allow'),...user]}];
+}
+
 if (args[0] === '--version') {
   console.log('0.0.0-fake');
 } else if (args[0] === 'status') {
@@ -66,6 +86,14 @@ if (args[0] === '--version') {
     if (url.pathname === '/global/event') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream' });
       return res.write(`data: ${JSON.stringify({ payload: { type: 'server.connected', properties: {} } })}\n\n`);
+    }
+    if (url.pathname === '/experimental/tool') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify(await definitions(url.searchParams.get('directory') || process.cwd())));
+    }
+    if (url.pathname === '/agent') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify(agents()));
     }
     if (url.pathname !== '/experimental/tool/ids') {
       res.writeHead(404);

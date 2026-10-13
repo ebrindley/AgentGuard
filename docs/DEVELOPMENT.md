@@ -22,6 +22,20 @@ review, merge through GitHub's protected path with the reviewed head SHA;
 native auto-merge may wait for the required check. Local gate execution is useful
 for focused development, but is not required in addition to the hosted gate.
 
+The gate keeps the three baseline files and adds four offline OpenCode files:
+`test/opencode-config.mjs`, `test/plugin-health.mjs`, `test/diagnostics.mjs` and
+`test/permissions.mjs`. Run a failing file by itself during development. The
+health fixture injects failures only into disposable modules and mocked probes;
+the diagnostic fixture compares all file bytes and links before/after collection.
+`node test/opencode-permissions-native.mjs` runs three native cases with a local
+model: Explore external reads and child linkage, Plan path exceptions, and
+automatic approval with Guard/secret/destructive denials. Pass `explore-default`,
+`plan-paths` or `auto-protection` to run only that case. It requires Node 24,
+the OpenCode CLI and an unguarded owner. Homes remain under `test/.run-*` with
+a Git root only in the active fixture project; sibling directories are external.
+The full hosted matrix runs these native cases on its pinned CLI. Native auto
+acceptance does not attest the desktop UI's stored auto-accept state.
+
 Poetic local CI is disabled. Its verification runner applies an outer macOS
 sandbox, which prevents these confinement fixtures from applying their own.
 A temporary-checkout fixture correction passed independently, but the actual

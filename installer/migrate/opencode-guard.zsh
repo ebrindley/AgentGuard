@@ -474,7 +474,7 @@ ag_retire_rules() {
 # are read back and compared first; state/ is removed last, so a rerun that finds
 # it gone needs no comparison.
 ag_retire_engine() {
-  local keys="$txn_dir/imported.json"
+  local keys="$txn_dir/imported.json" expected="$txn_dir/import-expected.json" retired snapshot
   if [[ -e $ocg/state || -L $ocg/state ]]; then
     ag_jlast retire-compare
     if [[ $REPLY != done ]]; then
@@ -483,9 +483,20 @@ ag_retire_engine() {
         ag_warn "$ocg_copy does not match $ocg_record, so $ocg/state is kept"
         return 1
       fi
-      if [[ -f $keys ]] && ! /usr/bin/jq -e --slurpfile o "$ocg_copy" --slurpfile k "$keys" '. as $r | all($k[0][]; . as $f | $r[$f] == $o[0][$f])' "$record" >/dev/null 2>&1; then
-        ag_warn "the entries imported into $record do not match $ocg_copy, so $ocg/state is kept"
-        return 1
+      if [[ -f $keys ]]; then
+        ag_retired_edit_files || return 1
+        retired=$REPLY snapshot="$txn_dir/backup/retire-edit/file"
+        if [[ $retired != '[]' ]]; then
+          /usr/bin/jq --argjson retired "$retired" --slurpfile s "$snapshot" '
+            reduce $retired[] as $f (.;
+              if .[$f].edit == $s[0][$f].edit then
+                del(.[$f].edit) | if .[$f] == {} then del(.[$f]) else . end
+              else . end)' "$ocg_copy" > "$expected" || return 1
+        else /bin/cp -- "$ocg_copy" "$expected" || return 1; fi
+        if ! /usr/bin/jq -e --slurpfile o "$expected" --slurpfile k "$keys" '. as $r | all($k[0][]; . as $f | $r[$f] == $o[0][$f])' "$record" >/dev/null 2>&1; then
+          ag_warn "the entries imported into $record do not match $ocg_copy or journaled edit retirement, so $ocg/state is kept"
+          return 1
+        fi
       fi
       ag_rjnl retire-compare done
     fi

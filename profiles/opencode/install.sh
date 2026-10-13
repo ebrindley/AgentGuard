@@ -4,7 +4,8 @@
 # is in the installer folder: lib.zsh, actions.zsh and the harness and migration
 # modules it names, next to this file in a release folder or state/txn, or at the
 # top of the tree.
-#   zsh install.sh [--projects DIR] [--gui]
+#   zsh install.sh [--projects DIR] [--gui] [--approval-preference auto|host]
+#                  [--restore-edit-permissions]
 #       From a checkout or an unpacked archive: copies the tree into the engine
 #       folder's stage/<txn>/tree, then runs that copy with --stage.
 #   install.sh --stage TXN [--projects DIR] [--gui] [--update]

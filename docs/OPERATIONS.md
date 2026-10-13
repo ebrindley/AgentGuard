@@ -1,6 +1,6 @@
 # Installation and maintenance
 
-These procedures describe stable 0.2.5. For everyday use, see the
+These procedures describe stable 0.2.5 unless marked unreleased. For everyday use, see the
 [user guide](USAGE.md).
 
 ## Release channels
@@ -46,6 +46,133 @@ write access to that folder; Pi and OMP ignore the Guard List. From a checkout
 or unpacked archive, `zsh install.sh [--projects DIR] [--gui]` installs that tree.
 An existing Guard List is kept. Quit running agents before migrating either
 older guard.
+
+## Unreleased OpenCode setup and diagnostics
+
+This section describes the source tree, not stable 0.2.5. The stable release
+download does not yet include these options or diagnostics. Pi/OMP policy is
+unchanged.
+
+### Preserve agent roles without routine approvals
+
+New installations manage two global OpenCode permission keys, `bash` and
+`external_directory`, instead of the previous three. They no longer write
+`edit: allow`, which could override Plan and Explore's native edit restrictions.
+Maintenance changes absent or ASK settings, preserves scalar and catchall DENYs,
+and leaves pattern order intact. A pattern map containing a DENY is left intact;
+specific ASK patterns are not broadly replaced. Explicit DENY conversions
+decrease to zero. The existing command/path checks and Seatbelt filesystem
+boundaries remain, and the required CI gate count remains one.
+
+Every install checks settings. Every update runs installation checks even when
+the release is current or newer than stable. Pending edit migration or an
+explicit setup choice invokes the existing installation transaction, with its
+gate and rollback. The global check does not establish readiness for arbitrary
+projects or the desktop backend, whose OpenCode version may differ from the CLI.
+
+Old Guard-owned `edit` entries are retired through the transaction journal. The
+installer restores the first-install value, or removes an originally absent
+key, only while the current value still matches Guard's write. It preserves
+later user edits and the original records for remaining managed keys. Imported
+OpenCode Guard records keep an unchanged archive. Recovery resumes interrupted
+retirement; rollback changes only values still owned by the transaction.
+
+Restoring an original ASK, including an ASK in a pattern map, is deferred by
+default with `approval-prompts-would-return`. After choosing and configuring
+native automatic approval, opt into that restoration explicitly:
+
+```sh
+zsh install.sh --approval-preference auto --restore-edit-permissions
+```
+
+Run this from an unreleased checkout or unpacked artifact, outside the guard.
+The corresponding unreleased updater accepts the same two options. Without
+`--restore-edit-permissions`, an `auto` preference alone does not authorize
+restoring ASK. Unreadable, commented or protected configuration remains unchanged
+with a reason; pending ownership remains available for a later retry.
+
+`--approval-preference auto|host` records intended setup in
+`state/opencode-preferences.json`; it neither changes OpenCode's live mode nor
+injects launch flags. An update without that option preserves the choice. Both
+options are frozen in the transaction plan for recovery. `host` leaves approval
+handling to the host; it does not turn an existing native auto mode off.
+
+For native automatic approval, launch the TUI with `opencode --auto`, or use
+`opencode run --auto …`. Do not assume other subcommands accept that flag. In
+the desktop app, use Auto-accept permissions (`Cmd+Shift+A`). Desktop setup
+is user-managed: Guard does not write private frontend storage or claim to
+observe its mode. Native auto handles applicable ASK decisions automatically;
+effective explicit DENYs and Guard enforcement remain.
+
+Approval mode and agent capabilities are separate. Verify that Explore retains
+its edit restrictions and that Plan rejects ordinary edits while permitting its
+planning files. Restoring an original global edit ALLOW or ASK can still leave a
+user-owned role conflict. Guard reports that conflict; it does not guess custom
+agent intent or rewrite roles. An edit-tool restriction alone does not establish
+a strict read-only shell.
+
+### Runtime health and permission explanation
+
+In OpenCode, `agent_guard_status` returns JSON with the sandbox observation,
+rules load, safety-net module/API/hooks readiness, preparation observation,
+loaded/launcher/installed release, restart need and fixed failure reasons.
+Status remains callable when a required component fails, provided the wrapper
+loaded; ordinary tool calls remain refused. API import failure now retains the
+existing refusing hooks rather than losing the plugin's enforcement. A failure
+before the wrapper loads still needs external diagnostics. Cached startup
+observations and unprobed semantic health are identified explicitly.
+
+`agent-guard doctor` checks the component readiness marker through the existing
+guarded host probe, without a model call. Merely registering the status tool is
+insufficient: degraded or unreadable readiness fails the check. It also reports
+global host-resolved Build/Plan/Explore decisions and role warnings, with project
+configuration disabled. These warnings are not a claim about a running project
+session or native approval mode.
+
+In a healthy project session, `agent_guard_permissions` reports host-resolved
+main-agent and subagent rules, plus observable current/child session overrides.
+It evaluates fixed probes for an external directory, an ordinary edit, a Plan
+planning-file edit and `git status`. These are representative inputs, not a
+permission audit of every path or command. Custom agents use safe aliases;
+rule identifiers and pattern classes are reported without exporting patterns.
+Matching global configuration entries are labeled source candidates, not proven
+file/line attribution: OpenCode's resolved rules do not retain that provenance.
+Native auto mode and whether a particular approval was human or automatic remain
+unobservable from these server observations.
+
+### Read-only support collection
+
+`agent-guard diagnose [--json]` collects release/link consistency, aggregate
+drift counts, global configuration classification, safe permission ownership,
+requested approval preference and bounded recent failure observations. It does
+not launch OpenCode, perform write probes, change settings, repair files or
+recover transactions. Use `doctor` separately for active checks.
+
+The report uses logical path classes, fixed codes and safe rule identifiers.
+It excludes full commands, arguments, credentials, environment dumps, exception
+text, raw logs and file contents. Cached snapshots and failures include available
+timestamps; advisory session-written events are not trusted audit evidence.
+Absent or unobservable runtime evidence is labeled rather than counted as healthy.
+
+Distinguish host permission ASK/DENY from a Guard rejection and a filesystem
+error. A recorded protected-path rejection can identify expected configuration
+protection; a fixed preparation or initialization stage can identify bootstrap
+failure. `EPERM` alone does not identify Seatbelt, and an unobserved shell failure
+has unknown attribution. The collector cannot reconstruct every host prompt or
+OS denial.
+
+Exit status is 0 for consistent installation files/links, 1 for inconsistent or
+unreadable installation state, and 2 for invalid arguments. A 0 does not attest
+runtime health, effective permissions or desktop approval mode.
+
+### Command display
+
+Repeated handling removes only exact Guard-generated leading PATH prefixes,
+including copied prefixes from older releases, then adds the current prefix
+once. User-written shell setup remains, and peer wrappers take precedence after
+shell startup. OpenCode still displays the executed `input.command`. A separate
+short display label with expanded execution details requires upstream renderer
+support; this source change does not claim that UI feature.
 
 ## Requirements
 
@@ -445,7 +572,7 @@ warnings and skipped checks as well as the exit status. Inside guarded OpenCode,
 `agent_guard_status` reports the loaded plugin's view of local confinement and
 its release. It does not attest remote services or other plugins' hook behavior.
 
-CC Safety Net 2.4.14's standalone `cc-safety-net doctor` looks for its package
+Bundled CC Safety Net's standalone `cc-safety-net doctor` looks for its package
 in OpenCode's plugin configuration. It does not recognize Agent Guard's
 file-based wrapper plugin, so it can report "No integration configured" even
 when Agent Guard is active. That result does not establish whether the guard

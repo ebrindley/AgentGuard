@@ -14,7 +14,7 @@ opencode_check() {
     # whose only plugin links to the release's plugin.js, so the live plugin is
     # not loaded. ~/.opencode is still read.
     local -a scope=(/usr/bin/env OPENCODE_DISABLE_PROJECT_CONFIG=1)
-    local label=
+    local label= definitions= readiness= permission_report= permission_at=0 ready=0
     if (( staged )); then
       scope=(/usr/bin/env -u OPENCODE_CONFIG -u OPENCODE_CONFIG_DIR -u OPENCODE_CONFIG_CONTENT
              OPENCODE_DISABLE_PROJECT_CONFIG=1 "XDG_CONFIG_HOME=$profile_dir/check-config")
@@ -46,6 +46,17 @@ opencode_check() {
       done
       # Plugin errors are published in the background; give them a moment.
       [[ $ids == *'"agent_guard_status"'* ]] && sleep 1
+      if [[ $ids == *'"agent_guard_status"'* ]] &&
+        definitions=$(/usr/bin/curl -sf --max-time 5 "$url/experimental/tool?directory=${session// /%20}/check-project&provider=agent-guard&model=agent-guard" 2>/dev/null); then
+        readiness=$(print -r -- "$definitions" | /usr/bin/jq -r '[.[] | select(.id == "agent_guard_status") | .description] | first // ""' 2>/dev/null) || readiness=
+        [[ $readiness == *'[agent-guard:ready]'* ]] && ready=1
+      fi
+      if (( ready && ! staged )); then
+        permission_at=$(/bin/date +%s)
+        permission_report=$(/usr/bin/curl -sf --max-time 5 "$url/agent?directory=${session// /%20}/check-project" 2>/dev/null |
+          /usr/bin/jq -c '{agents:.,sessions:[]}' |
+          /usr/bin/jq -c --arg scope global --arg outside '/agent-guard-external-probe/*' --argjson observed "$(( permission_at * 1000 ))" -f "$profile_dir/permissions.jq" 2>/dev/null) || permission_report=
+      fi
       if [[ -n $epid ]]; then kill $epid 2>/dev/null || true; wait $epid 2>/dev/null || true; fi
       kill $pid 2>/dev/null || true
       wait $pid 2>/dev/null || true
@@ -59,8 +70,9 @@ opencode_check() {
       # the user's configuration: their failures are warnings, so they cannot roll
       # back an install or update. The guard's own plugin must load in every mode.
       local sev=FAIL
-      [[ ${AGENT_GUARD_GATE:-} == 1 && $ids == *'"agent_guard_status"'* ]] && sev=warn
+      [[ ${AGENT_GUARD_GATE:-} == 1 && $ready == 1 ]] && sev=warn
       if [[ $ids != *'"agent_guard_status"'* ]]; then print "FAIL plugins not loaded in OpenCode$label"; ok=0
+      elif (( ! ready )); then print "FAIL Guard readiness degraded or unverified in OpenCode$label"; record 'agent-guard-stage:plugin-readiness'; ok=0
       elif (( listening && ! $#failed )); then print "ok   plugins loaded in OpenCode$label"
       else
         print "ok   guard plugin loaded in OpenCode$label"
@@ -71,6 +83,17 @@ opencode_check() {
         print -r -- "$sev plugin not loaded in OpenCode$label: $f"
         [[ $sev == warn ]] || ok=0
       done
+      if (( ready && ! staged )); then
+        if [[ -n $permission_report ]] && print -r -- "$permission_report" | /usr/bin/jq -e '.availability == "observed"' >/dev/null 2>&1; then
+          print -r -- "$permission_report" | /usr/bin/jq -r '.agents[] | select(.agent == "build" or .agent == "plan" or .agent == "explore")
+            | (if .probes.externalDirectory.action != "allow" or .probes.bashGitStatus.action != "allow" or (.agent == "explore" and .editToolVisible) or (.agent == "plan" and .probes.ordinaryEdit.action != "deny") then "warn" else "ok  " end)
+              + " permissions global " + .agent + ": external_directory=" + .probes.externalDirectory.action + "; ordinary_edit=" + .probes.ordinaryEdit.action
+              + "; planning_edit=" + .probes.planningEdit.action + "; bash_git_status=" + .probes.bashGitStatus.action + "; source=host-resolved (origin unknown)"'
+        else
+          print 'warn global effective permissions unverified (unsupported host response)'
+        fi
+        print 'note OpenCode client/desktop auto-approval mode is not observable from the server'
+      fi
     else
       print "skip plugin check (opencode CLI not found)"
     fi
