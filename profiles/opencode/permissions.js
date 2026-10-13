@@ -85,11 +85,13 @@ export function permissionTool(input) {
         const parameters = ["-c", "--arg", "scope", "project-session", "--arg", "outside", "/agent-guard-external-probe/*", "--argjson", "observed", String(Date.now())]
         if (requested !== undefined) {
           const directory = context?.directory ?? input.directory
-          if (typeof directory !== "string") return JSON.stringify(unavailable())
+          const worktree = context?.worktree ?? input.worktree
+          if (typeof directory !== "string" || typeof worktree !== "string" || !worktree.startsWith("/") || /[\0\r\n]/.test(worktree))
+            return JSON.stringify(unavailable())
           const full = resolve(directory, requested.replace(/^~(?=\/|$)/, homedir()))
           const within = base => typeof base === "string" && (full === base || full.startsWith(base === "/" ? "/" : base + "/"))
-          const external = !(within(directory) || (input.worktree !== "/" && within(input.worktree)))
-          parameters.push("--arg", "requested", "true", "--arg", "requestedEdit", relative(directory, full), "--arg", "requestedRead", full,
+          const external = !(within(directory) || (worktree !== "/" && within(worktree)))
+          parameters.push("--arg", "requested", "true", "--arg", "requestedEdit", relative(worktree, full), "--arg", "requestedRead", full,
             "--arg", "requestedExternal", join(args.pathKind === "directory" ? full : dirname(full), "*"), "--arg", "externalRequired", String(external))
         }
         const text = execFileSync("/usr/bin/jq", [...parameters, "-f", query], { input: JSON.stringify(payload), encoding: "utf8", timeout: 5000, maxBuffer: 1024 * 1024, stdio: ["pipe", "pipe", "ignore"] })

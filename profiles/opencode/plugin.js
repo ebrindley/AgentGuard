@@ -45,9 +45,11 @@ function recordEvent(fields) {
     const file = join(HOME, ".cc-safety-net/logs/agent-guard-events.json")
     let events = []
     if (existsSync(file) && statSync(file).size <= 65536) {
-      const previous = JSON.parse(readFileSync(file, "utf8"))
-      if (previous.schemaVersion === 1 && previous.advisory === true && Array.isArray(previous.events))
-        events = previous.events.slice(-31).map(sanitizedEvent).filter(Boolean)
+      try {
+        const previous = JSON.parse(readFileSync(file, "utf8"))
+        if (previous.schemaVersion === 1 && previous.advisory === true && Array.isArray(previous.events))
+          events = previous.events.slice(-31).map(sanitizedEvent).filter(Boolean)
+      } catch { /* Discard invalid advisory history and retain this observation. */ }
     }
     const event = sanitizedEvent({ timestamp: Date.now(), tool: "other", ruleId: "unattributed", errno: "unknown", release: RELEASE ? basename(RELEASE) : null, ...fields })
     if (event) writeFileSync(file, JSON.stringify({ schemaVersion: 1, advisory: true, events: [...events, event] }) + "\n")

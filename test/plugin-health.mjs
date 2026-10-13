@@ -113,6 +113,17 @@ if (ready) {
   assert.ok(observed.some(event => event.layer === 'guard' && event.ruleId === 'guard.path.protected' && event.errno === 'EPERM'));
   assert.ok(observed.some(event => event.layer === 'guard' && event.code === 'command-denied' && event.ruleId === 'custom'));
   assert.equal(observed.some(event => event.layer === 'sandbox'), false, 'uncorrelated EPERM must not imply Seatbelt');
+  if (name === 'healthy') {
+    fs.writeFileSync(join(logs, 'agent-guard-events.json'), marker + ' truncated advisory JSON');
+    await assert.rejects(before({ tool: 'read' }, { args: { filePath: denied } }), /DENY list/);
+    const repairedText = fs.readFileSync(join(logs, 'agent-guard-events.json'), 'utf8');
+    assert.equal(repairedText.includes(marker), false, 'corrupt history must not suppress sanitized future observations');
+    const repaired = JSON.parse(repairedText);
+    assert.equal(repaired.schemaVersion, 1);
+    assert.equal(repaired.advisory, true);
+    assert.equal(repaired.events.length, 1);
+    assert.equal(repaired.events[0].ruleId, 'guard.path.deny');
+  }
   // Event retention must remain bounded after repeated refusals.
   for (let count = 0; count < 35; count++)
     await assert.rejects(before({ tool: 'read' }, { args: { filePath: denied } }));
