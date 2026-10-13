@@ -19,7 +19,7 @@ assert.equal(version.status, 0, version.stderr)
 const modes = ["explore-default", "plan-paths", "auto-protection"]
 const selected = process.argv[2] ? [process.argv[2]] : modes
 assert.ok(selected.every(mode => modes.includes(mode)), "expected explore-default, plan-paths, or auto-protection")
-const run = realpathSync(mkdtempSync(join(tmpdir(), "agentguard-native-permissions-")))
+const run = realpathSync(mkdtempSync(join(root, "test/.run-opencode-permissions-native-")))
 const quote = value => "'" + value.replaceAll("'", "'\\''") + "'"
 const reports = []
 console.log(`OpenCode ${version.stdout.trim()}; fixture: ${run}`)
@@ -59,9 +59,7 @@ export const PermissionObserver = async () => {
     ["read", { filePath: plain }],
     ["read", { filePath: deniedFile }],
     ["read", { filePath: secret }],
-    // Explicit Git context preserves the existing destructive-command rule in
-    // this disposable temp repo, rather than exercising its temp-root allowance.
-    ["bash", { command: "git --git-dir=.git reset --hard", workdir: project, description: "Probe destructive command rejection" }],
+    ["bash", { command: "git reset --hard", workdir: project, description: "Probe destructive command rejection" }],
   ] : [["read", { filePath: plain }]]
   const planCalls = [
     ["write", { filePath: join(project, "ordinary.txt"), content: "MUST-NOT-WRITE" }],
