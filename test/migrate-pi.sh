@@ -738,11 +738,11 @@ fake_omp "$omp_bin"
 psg_install || { fail "pi-sandbox-guard's deploy scripts (exit $?)"; show }
 point= ag update
 rc=$?
-(( rc == 0 )) && ! /usr/bin/grep -q 'is current\.' "$out" && /usr/bin/grep -qF 'migrating from pi-sandbox-guard' "$out" &&
+(( rc == 0 )) && ! /usr/bin/grep -qF 'is current; checking the installation.' "$out" && /usr/bin/grep -qF 'migrating from pi-sandbox-guard' "$out" &&
   /usr/bin/jq -e '.harnesses == ["opencode", "pi"]' "$state/stamp.json" >/dev/null && pass 'update migrates pi-sandbox-guard' || { fail "update (exit $rc)"; show }
 point= ag update
 rc=$?
-(( rc == 0 )) && /usr/bin/grep -q 'is current\.' "$out" && pass 'the next update finds nothing pending' || { fail "second update (exit $rc)"; show }
+(( rc == 0 )) && /usr/bin/grep -qF 'is current; checking the installation.' "$out" && pass 'the next update finds nothing pending' || { fail "second update (exit $rc)"; show }
 # A Pi installed after Agent Guard is a newly found harness: update installs it.
 label='update at the same version, Pi found'
 restore opencode-only
