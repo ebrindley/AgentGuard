@@ -1,11 +1,11 @@
 #!/bin/zsh
-# Builds the 0.0.0-test release, checks its contents and checksum, then runs
+# Builds the 0.0.0-rc.0 release, checks its contents and checksum, then runs
 # test.sh against the unpacked archive. Runs outside any sandbox, from a checkout.
 emulate -L zsh
 setopt no_unset pipe_fail
 
 source_root=${0:A:h:h}
-version=0.0.0-test
+version=0.0.0-rc.0
 name="agent-guard-$version"
 archive="$source_root/dist/$name.tar.gz"
 fails=0
@@ -23,7 +23,7 @@ expected=(
   VERSION COMMIT install.sh LICENSE
   engine/launch engine/account.zsh engine/agent-guard engine/profile.sb engine/vendor/THIRD-PARTY-NOTICES
   engine/peers.zsh engine/peer-runtime.sb
-  profiles/opencode/{harness.zsh,hooks.zsh,skills.zsh,protected.sb,plugin.js,opencode,opencode-gui,install.sh,uninstall.sh}
+  profiles/opencode/{harness.zsh,hooks.zsh,skills.zsh,protected.sb,plugin.js,permissions.js,permissions.jq,diagnostics.zsh,opencode,opencode-gui,install.sh,uninstall.sh}
   installer/{lib.zsh,actions.zsh,harness/{opencode,pi}.zsh,migrate/{opencode-guard,pi-sandbox-guard}.zsh}
   profiles/opencode/assets/AgentGuard.icns
   profiles/pi/{LICENSE,launchers/{pi,example-custom},sandbox/{pi-sandbox.sb,pi-sandbox-preamble.zsh}}
@@ -53,7 +53,7 @@ run=$(/usr/bin/mktemp -d "$source_root/test/.run-release-XXXXXX")
 /usr/bin/tar -xzf "$archive" -C "$run" || fail "unpack"
 print -r -- "integration checks against the unpacked archive:"
 /bin/zsh "$source_root/test/test.sh" --source "$run/$name" || fails=$((fails + 1))
-/bin/rm -rf "$run"
+print -r -- "release fixtures: $run"
 
 print -r -- "$fails release failure(s)"
 (( fails == 0 ))
