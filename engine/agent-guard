@@ -172,6 +172,7 @@ update() {
     print -r -- "Agent Guard ${tag#v} is installed; installing it again for $REPLY"
   elif [[ -n $cur ]] && older "$tag" "$cur"; then
     ag_unlock
+    (( restore_seen || preference_seen )) && die "The installed release ($cur) is newer than stable ($tag); requested setup options require the installer for $cur. Requested setup options were not applied."
     print -r -- "The installed release ($cur) is newer than the latest release ($tag); checking the installation."
     exec /bin/zsh -f "$engine/current/bin/agent-guard" doctor
   else

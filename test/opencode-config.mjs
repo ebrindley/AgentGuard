@@ -122,6 +122,34 @@ function legacy(name, orig, current = "allow") {
   writeFileSync(f.record, JSON.stringify(f.ledger))
   return f
 }
+
+function pending(f, expected) {
+  shell(f, `
+    ag_harness_modules=() ag_migration_modules=()
+    ag_stamp_harnesses() { reply=(); }
+    ag_detect() { :; }
+    ag_pending
+    [[ $? == ${expected ? 0 : 1} ]]
+  `, true)
+}
+for (const [name, orig, current, expected] of [
+  ["pending-retirable", null, "allow", true],
+  ["pending-deferred", "ask", "allow", false],
+  ["pending-pattern-deferred", { "*": "deny", "plan/*": "ask" }, "allow", false],
+  ["pending-user-change", "ask", "deny", true],
+]) {
+  const f = legacy(name, orig, current)
+  const before = readFileSync(f.record, "utf8")
+  pending(f, expected)
+  assert.equal(readFileSync(f.record, "utf8"), before)
+}
+const pendingInvalid = legacy("pending-invalid", null)
+writeFileSync(pendingInvalid.config, "{ commented or malformed")
+pending(pendingInvalid, false)
+const pendingProtected = legacy("pending-protected", null)
+shell(pendingProtected, '/bin/mv "$conf/config.json" "$engine/state/protected-config.json"; /bin/ln -s "$engine/state/protected-config.json" "$conf/config.json"', true)
+pending(pendingProtected, false)
+
 for (const orig of [null, "deny", "allow"]) {
   const f = legacy(`retire-${orig}`, orig)
   const originalBytes = readFileSync(f.config, "utf8")

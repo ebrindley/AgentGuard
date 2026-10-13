@@ -555,8 +555,8 @@ ag_txn_plan() {
 # that the stamp does not list. REPLY names them. Returns 0 when pending, 1
 # when current, and 2 when migration detection failed (with its diagnostic).
 ag_pending() {
-  local m h
-  local -a stamped what
+  local m h f entry
+  local -a stamped what edit_files
   ag_stamp_harnesses
   stamped=($reply)
   ag_detect || return 2
@@ -573,8 +573,21 @@ ag_pending() {
     ag_hook_opt h $h title
     what+=("$REPLY")
   done
-  if [[ -f $record ]] && /usr/bin/jq -e 'any(.[]; (.edit // {} | has("wrote")))' "$record" >/dev/null 2>&1; then
-    what+=('OpenCode edit permission migration')
+  if [[ -f $record ]]; then
+    edit_files=(${(f)"$(/usr/bin/jq -r 'to_entries[] | select(.value.edit // {} | has("wrote")) | .key' "$record" 2>/dev/null)"})
+    for f in $edit_files; do
+      # Deferred or inaccessible ownership remains diagnostic information, not
+      # a reason to reinstall the same release on every update.
+      ag_opencode_config_writable "$f" >/dev/null 2>&1 || continue
+      [[ -f $f && -r $f && -w ${f:A} && -w ${f:A:h} ]] || continue
+      entry=$(/usr/bin/jq -c --arg f "$f" '.[$f].edit' "$record" 2>/dev/null) || continue
+      if /usr/bin/jq -e --argjson e "$entry" 'type == "object" and ((.permission // {}) | type == "object")
+          and ((.permission // {}).edit != $e.wrote or
+            ($e.orig != "ask" and (if ($e.orig | type) == "object" then all($e.orig[]; . != "ask") else true end)))' "$f" >/dev/null 2>&1; then
+        what+=('OpenCode edit permission migration')
+        break
+      fi
+    done
   fi
   REPLY=${(j:, :)what}
   (( $#what ))
