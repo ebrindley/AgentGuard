@@ -12,6 +12,7 @@ const SAFE_UNGUARDED = new Set(["invalid", "question", "todowrite", "webfetch", 
 const READS = new Set(["read", "glob", "grep", "list", "lsp"])
 const CONFIG = /\/\.cc-safety-net(\/|$)/
 const UNSAFE_NET_ENV = ["CC_SAFETY_NET_HOME", "CC_SAFETY_NET_WORKTREE", "SAFETY_NET_WORKTREE", "CC_SAFETY_NET_AUDIT_HOME"]
+const releaseID = value => typeof value === "string" && value.length <= 100 && /^[0-9A-Za-z.+-]+$/.test(value) && value !== "." && value !== ".." ? value : null
 
 // The release folder this file really lives in, whatever link OpenCode loaded it
 // through. cc-safety-net and the version come from that release; a copy outside
@@ -104,6 +105,25 @@ async function loadSafetyNet(input) {
   }
 }
 
+const shellQuote = value => "'" + value.replaceAll("'", "'\\''") + "'"
+
+function normalizedCommand(command) {
+  // Exact Guard exports only, including commands copied from a pinned release.
+  // Never parse or remove arbitrary user shell setup.
+  const prefix = `export PATH=${shellQuote(RELEASES).slice(0, -1)}`
+  while (command.startsWith(prefix)) {
+    const end = command.indexOf("\n")
+    if (end < 0) break
+    const line = command.slice(0, end)
+    const suffix = "/peers':$PATH"
+    if (!line.endsWith(suffix)) break
+    const id = line.slice(prefix.length, -suffix.length)
+    if (!releaseID(id) || line !== `export PATH=${shellQuote(join(RELEASES, id, "peers"))}:$PATH`) break
+    command = command.slice(end + 1)
+  }
+  return command
+}
+
 function patchPaths(text) {
   if (typeof text !== "string") return []
   return [...text.matchAll(/^\*\*\* (?:Add File|Update File|Delete File|Move to):(.*)$/gm)].map(m => m[1].trim())
@@ -173,6 +193,7 @@ async function guard(input) {
     }
     if (!net && DELEGATE === false) throw new Error("Agent Guard was updated; quit and reopen OpenCode.")
     if (!net) throw new Error("Agent Guard: cc-safety-net failed to load; reinstall Agent Guard.")
+    if (tool === "bash" && typeof args.command === "string") args.command = normalizedCommand(args.command)
     if (READS.has(tool)) checkRead(args.filePath ?? args.path ?? directory)
     if (tool === "edit" || tool === "write") checkWrite(args.filePath)
     if (tool === "apply_patch") {
@@ -191,7 +212,7 @@ async function guard(input) {
     await net["tool.execute.before"]?.(info, output)
     // Shell startup files can prepend native CLIs ahead of the session wrappers.
     if (tool === "bash" && typeof args.command === "string" && RELEASE && existsSync(join(RELEASE, "peers"))) {
-      const peers = "'" + join(RELEASE, "peers").replaceAll("'", "'\\''") + "'"
+      const peers = shellQuote(join(RELEASE, "peers"))
       args.command = `export PATH=${peers}:$PATH\n${args.command}`
     }
   }
