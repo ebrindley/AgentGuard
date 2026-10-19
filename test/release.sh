@@ -23,7 +23,7 @@ expected=(
   VERSION COMMIT install.sh LICENSE
   engine/launch engine/account.zsh engine/agent-guard engine/profile.sb engine/vendor/THIRD-PARTY-NOTICES
   engine/peers.zsh engine/peer-runtime.sb
-  profiles/opencode/{harness.zsh,hooks.zsh,skills.zsh,protected.sb,plugin.js,permissions.js,permissions.jq,diagnostics.zsh,opencode,opencode-gui,install.sh,uninstall.sh}
+  profiles/opencode/{harness.zsh,hooks.zsh,runtime.zsh,skills.zsh,protected.sb,plugin.js,v2.js,permissions.js,permissions.jq,diagnostics.zsh,opencode,opencode-gui,install.sh,uninstall.sh}
   installer/{lib.zsh,actions.zsh,harness/{opencode,pi}.zsh,migrate/{opencode-guard,pi-sandbox-guard}.zsh}
   profiles/opencode/assets/AgentGuard.icns
   profiles/pi/{LICENSE,launchers/{pi,example-custom},sandbox/{pi-sandbox.sb,pi-sandbox-preamble.zsh}}

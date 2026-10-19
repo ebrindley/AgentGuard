@@ -7,6 +7,26 @@ and homes described below. For installed checks, see
 
 ## Tests
 
+### OpenCode 1 and 2
+
+The V1 native suites remain pinned to 1.18.33. V2 uses `@opencode/cli@2.0.32`.
+`test/plugin-health.mjs` runs the same eight readiness/refusal cases through both
+APIs. `test/opencode-runtime.mjs` covers command routing. For native V2 checks,
+set `AG_TEST_OPENCODE` to its executable and run
+`node test/opencode-v2-native.mjs [cli|gui|doctor]` with Node 24 outside an
+existing sandbox. The GUI fixture follows the packaged desktop's shared-service
+contract using the real bundled CLI; it does not attest renderer behavior.
+All homes, providers and model responses are local fixtures.
+
+Each host still registers one Guard tool-before hook and uses the same command
+checker and filesystem rules. V2 adds one adapter registration and one read-only
+RPC registration with status and permission methods. No path grants or policy
+verdicts change. Runtime selection adds one major-version compatibility check;
+desktop ownership checks grow from one (app) to two (app and service).
+The required hosted check remains one; its sequential file
+scope grows from seven to eight. Full background matrix jobs grow from four to
+six by adding V2 on macOS 15 and 26. The release aggregate requires all six.
+
 ### Fast landing and background validation
 
 `script/test` is the required macOS gate: profile characterization,
@@ -25,9 +45,10 @@ the body to blank, matching GitHub's `PR_TITLE` and `BLANK` defaults. Inspect th
 exact subject and body before merging. Local gate execution is useful for
 focused development, but is not required in addition to the hosted gate.
 
-The gate keeps the three baseline files and adds four offline OpenCode files:
-`test/opencode-config.mjs`, `test/plugin-health.mjs`, `test/diagnostics.mjs` and
-`test/permissions.mjs`. Run a failing file by itself during development. The
+The gate keeps the three baseline files and adds five offline OpenCode files:
+`test/opencode-config.mjs`, `test/plugin-health.mjs`, `test/diagnostics.mjs`,
+`test/permissions.mjs` and `test/opencode-runtime.mjs`. Run a failing file by
+itself during development. The
 health fixture injects failures only into disposable modules and mocked probes;
 the diagnostic fixture compares all file bytes and links before/after collection.
 `node test/opencode-permissions-native.mjs` runs three native cases with a local

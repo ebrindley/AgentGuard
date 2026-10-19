@@ -24,7 +24,7 @@ cpSync(join(root, "profiles/opencode/templates/cc-safety-net/rules/agent-guard/r
 writeFileSync(join(home, ".cc-safety-net/rules/rule.json"), '{"version":1,"rules":["agent-guard"],"overrides":{},"transparent_wrappers":["env","timeout"]}')
 const list = join(home, "Agent Guard/Guard List.txt")
 writeFileSync(list, `ALLOW\n${home}/Projects\nREAD ONLY\n${home}/Projects/reference\n${home}/.config/opencode/read-only\n${process.argv[2] === "readonly" ? home + "/.claude/skills\n" : ""}DENY\n${home}/.config/opencode/private\n`)
-writeFileSync(join(home, "fakebin/opencode"), '#!/bin/sh\nexec "$@"\n', { mode: 0o755 })
+writeFileSync(join(home, "fakebin/opencode"), '#!/bin/sh\nif [ "$1" = --version ]; then echo 1.19.3; exit; fi\nexec "$@"\n', { mode: 0o755 })
 const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, ".config"), XDG_DATA_HOME: join(home, ".local/share"), XDG_STATE_HOME: join(home, ".local/state"), PATH: join(home, "fakebin") + ":" + process.env.PATH,
               AGENT_GUARD_CONTEXT: "", AGENT_GUARD_RELEASE: "", AGENT_GUARD_SANDBOXED: "", OPENCODE_SANDBOXED: "",
               CC_SAFETY_NET_PARANOID_RM: "", SAFETY_NET_PARANOID_RM: "", CC_SAFETY_NET_LEVEL: "strict" }

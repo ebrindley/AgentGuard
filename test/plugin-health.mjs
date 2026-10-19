@@ -14,8 +14,8 @@ if (process.argv[2] !== '--case') {
   const source = resolve(process.argv[2] ?? join(dirname(self), '../profiles/opencode/plugin.js'));
   const root = fs.realpathSync(fs.mkdtempSync(join(os.tmpdir(), 'agentguard-plugin-health-')));
   let failed = false;
-  for (const name of cases) {
-    const result = spawnSync(process.execPath, [self, '--case', root, source, name], { encoding: 'utf8' });
+  for (const host of ['v1', 'v2']) for (const name of cases) {
+    const result = spawnSync(process.execPath, [self, '--case', root, source, name, host], { encoding: 'utf8' });
     process.stdout.write(result.stdout);
     process.stderr.write(result.stderr);
     if (result.status !== 0) failed = true;
@@ -24,8 +24,8 @@ if (process.argv[2] !== '--case') {
   process.exit(failed ? 1 : 0);
 }
 
-const [, , , root, source, name] = process.argv;
-const home = join(root, name);
+const [, , , root, source, name, host] = process.argv;
+const home = join(root, `${host}-${name}`);
 const engine = join(home, 'Library/Application Support/AgentGuard');
 const release = join(engine, 'releases/1.0.0-fixture');
 const directory = join(home, 'Projects/app');
@@ -39,7 +39,7 @@ fs.writeFileSync(join(release, 'package.json'), '{"type":"module"}');
 fs.writeFileSync(join(release, 'RELEASE'), '1.0.0-fixture\n');
 fs.writeFileSync(join(release, 'VERSION'), name === 'unsafe-version' ? marker + '\n' : '1.0.0\n');
 fs.copyFileSync(source, join(release, 'profiles/opencode/plugin.js'));
-for (const file of ['permissions.js', 'permissions.jq']) fs.copyFileSync(join(dirname(source), file), join(release, 'profiles/opencode', file));
+for (const file of ['permissions.js', 'permissions.jq', 'v2.js']) fs.copyFileSync(join(dirname(source), file), join(release, 'profiles/opencode', file));
 fs.mkdirSync(join(checker, 'rules'), { recursive: true });
 fs.writeFileSync(join(checker, 'rules/rule.json'), '{}');
 const denied = join(directory, marker);
@@ -84,8 +84,43 @@ fs.realpathSync = (path, ...args) => {
   return realpath(path, ...args);
 };
 syncBuiltinESMExports();
-const { AgentGuard } = await import(pathToFileURL(join(release, 'profiles/opencode/plugin.js')).href);
-const hooks = await AgentGuard({ directory });
+const { AgentGuard, default: definition } = await import(pathToFileURL(join(release, 'profiles/opencode/plugin.js')).href);
+let hooks;
+if (host === 'v2') {
+  const tools = {}, rpc = {};
+  let execute;
+  await definition.setup({
+    location: { directory, project: { canonical: directory } },
+    agent: { list: async () => ({ data: [{ id: 'build', permissions: [{ action: 'shell', resource: '*', effect: 'allow' }] }] }) },
+    tool: {
+      hook: async (name, callback) => { assert.equal(name, 'execute.before'); execute = callback; },
+      transform: async callback => callback({ add: tool => { tools[tool.name] = tool; } }),
+    },
+    rpc: { register: async (_definition, handlers) => Object.assign(rpc, handlers) },
+  });
+  hooks = {
+    tool: Object.fromEntries(Object.entries(tools).map(([name, tool]) => [name, { ...tool, execute: async args => (await tool.execute(args, {})).content }])),
+    'tool.execute.before': async (info, output) => {
+      const input = { ...output.args };
+      const tool = ({ bash: 'shell', apply_patch: 'patch' })[info.tool] ?? info.tool;
+      if (['read', 'write', 'edit'].includes(tool)) { input.path = input.filePath; delete input.filePath; }
+      const event = { ...info, tool, input };
+      await execute(event);
+      if (tool === 'shell') output.args.command = event.input.command;
+    },
+  };
+  assert.equal((await rpc.status()).state, ['healthy', 'updated', 'unsafe-version'].includes(name) ? 'active' : 'degraded');
+  if (name === 'healthy') {
+    const permissions = await rpc.permissions();
+    assert.equal(permissions.availability, 'observed');
+    assert.equal(permissions.agents[0].probes.bashGitStatus.action, 'allow');
+    const patch = { tool: 'patch', input: { patchText: `*** Begin Patch\n*** Add File: ${protectedFile}\n+x\n*** End Patch` } };
+    await assert.rejects(execute(patch), /protected/);
+  }
+} else {
+  assert.equal(definition.server, AgentGuard);
+  hooks = await AgentGuard({ directory });
+}
 const before = hooks['tool.execute.before'];
 await before({ tool: 'agent_guard_status' }, { args: {} });
 const status = hooks.tool.agent_guard_status;
@@ -141,4 +176,4 @@ assert.equal(events.advisory, true);
 assert.ok(events.events.length <= 32);
 assert.ok(Buffer.byteLength(eventsText) <= 65536);
 if (ready) assert.ok(events.events.some(event => event.layer === 'guard' && event.ruleId === 'guard.path.deny' && event.errno === 'EPERM'));
-console.log(`ok plugin health ${name}: status callable, readiness accurate, events sanitized`);
+console.log(`ok plugin health ${host} ${name}: status callable, readiness accurate, events sanitized`);

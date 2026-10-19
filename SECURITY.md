@@ -21,7 +21,7 @@ best-effort basis. There is no bug bounty.
 ## Supported versions
 
 Fixes go into the latest release only; older releases do not receive backports.
-The latest stable release is 0.2.5 (OpenCode, Pi and OMP).
+The latest stable release is 0.2.7 (OpenCode, Pi and OMP).
 `agent-guard update` follows stable releases and leaves a newer installed version
 unchanged. See [release channels](docs/OPERATIONS.md#release-channels) for tagged
 installers; they do not include later commits. The OpenCode policy below describes
@@ -42,6 +42,15 @@ Guard's engine (step 10d of the plan in [docs/DESIGN.md](docs/DESIGN.md#12-plan)
 Statements about Pi below apply to OMP too unless they name one runtime.
 
 ### OpenCode
+
+The source tree adds OpenCode 2.0.32 support; stable 0.2.7 remains V1-only.
+V2 terminal sessions use private servers where supported. V2 desktop and
+commands without a private-server flag use a service started inside the same
+Seatbelt profile as their client. Guard refuses an incumbent shared service and
+stops its owned service when the client exits. Explicit main-launcher server
+attachments retain their separate-server limitation; peer attachments are refused.
+The V2 adapter preserves the existing path and command policy. See
+[OpenCode versions](docs/USAGE.md#opencode-versions).
 
 The launcher runs OpenCode under a profile generated from the Guard List
 (`~/Agent Guard/Guard List.txt`) at each launch. Under that profile the agent
