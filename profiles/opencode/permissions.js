@@ -83,6 +83,7 @@ export function permissionTool(input) {
         }
         const payload = { agents: agents.map(a => ({ name: a.name, mode: a.mode, permission: a.permission })), sessions }
         const parameters = ["-c", "--arg", "scope", "project-session", "--arg", "outside", "/agent-guard-external-probe/*", "--argjson", "observed", String(Date.now())]
+        parameters.push("--arg", "planningEdit", input.permissionResources?.planningEdit ?? ".opencode/plans/probe.md")
         if (requested !== undefined) {
           const directory = context?.directory ?? input.directory
           const worktree = context?.worktree ?? input.worktree
@@ -91,7 +92,9 @@ export function permissionTool(input) {
           const full = resolve(directory, requested.replace(/^~(?=\/|$)/, homedir()))
           const within = base => typeof base === "string" && (full === base || full.startsWith(base === "/" ? "/" : base + "/"))
           const external = !(within(directory) || (worktree !== "/" && within(worktree)))
-          parameters.push("--arg", "requested", "true", "--arg", "requestedEdit", relative(worktree, full), "--arg", "requestedRead", full,
+          const resources = input.permissionResources?.requested({ directory, worktree, full, external })
+            ?? { read: full, edit: relative(worktree, full) }
+          parameters.push("--arg", "requested", "true", "--arg", "requestedEdit", resources.edit, "--arg", "requestedRead", resources.read,
             "--arg", "requestedExternal", join(args.pathKind === "directory" ? full : dirname(full), "*"), "--arg", "externalRequired", String(external))
         }
         const text = execFileSync("/usr/bin/jq", [...parameters, "-f", query], { input: JSON.stringify(payload), encoding: "utf8", timeout: 5000, maxBuffer: 1024 * 1024, stdio: ["pipe", "pipe", "ignore"] })
