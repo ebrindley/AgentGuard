@@ -44,7 +44,9 @@ Statements about Pi below apply to OMP too unless they name one runtime.
 ### OpenCode
 
 Stable 2026.10.20 supports OpenCode 1.18.33 and newer V1 releases, plus
-OpenCode 2.0.32. OpenCode 2.1.1 qualification is pending.
+OpenCode 2.0.32 and 2.1.1. The 2.1.1 qualification covers macOS 26.7.1 arm64
+with isolated application and service data. First-launch onboarding and
+production-account upgrades remain unqualified.
 V2 terminal sessions use private servers where supported. V2 desktop and
 commands without a private-server flag use a service started inside the same
 Seatbelt profile as their client. Guard refuses an incumbent shared service and
