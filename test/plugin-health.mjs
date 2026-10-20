@@ -90,7 +90,7 @@ if (host === 'v2') {
   const tools = {}, rpc = {};
   let execute;
   await definition.setup({
-    location: { directory, project: { canonical: directory } },
+    location: { directory, project: { directory, canonical: directory } },
     agent: { list: async () => ({ data: [{ id: 'build', permissions: [{ action: 'shell', resource: '*', effect: 'allow' }] }] }) },
     tool: {
       hook: async (name, callback) => { assert.equal(name, 'execute.before'); execute = callback; },

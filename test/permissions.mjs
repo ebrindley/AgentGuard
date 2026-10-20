@@ -4,6 +4,7 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs"
 import { permissionTool } from "../profiles/opencode/permissions.js"
+import { setup } from "../profiles/opencode/v2.js"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const home = mkdtempSync(join(root, "test/.run-permissions-"))
@@ -56,4 +57,54 @@ const malformed = permissionTool({ client: { app: { agents: async () => ({ data:
 const invalid = await malformed.execute({})
 assert.equal(JSON.parse(invalid).availability, "unsupported")
 assert.doesNotMatch(invalid, /PRIVATE_SECRET/)
+
+async function v2Tool(directory, project, canonical = project) {
+  const tools = {}
+  const plan = join(home, ".opencode/plan")
+  const external = join(home, "external/allowed.txt")
+  await setup({
+    location: { directory, project: { directory: project, canonical } },
+    agent: { list: async () => ({ data: [
+      { id: "build", mode: "primary", permissions: [
+        { action: "*", resource: "*", effect: "allow" },
+        { action: "external_directory", resource: "*", effect: "ask" },
+        { action: "read", resource: "protected.txt", effect: "deny" },
+        { action: "read", resource: "../protected.txt", effect: "deny" },
+        { action: "edit", resource: "*", effect: "deny" },
+        { action: "edit", resource: "src/*", effect: "allow" },
+        { action: "edit", resource: external, effect: "allow" },
+      ] },
+      { id: "plan", mode: "primary", permissions: [
+        { action: "*", resource: "*", effect: "allow" },
+        { action: "edit", resource: "*", effect: "deny" },
+        { action: "edit", resource: join(plan, "*"), effect: "allow" },
+      ] },
+    ] }) },
+    tool: { hook: async () => {}, transform: async callback => callback({ add: tool => { tools[tool.name] = tool } }) },
+    rpc: { register: async () => {} },
+  }, async input => ({ tool: {
+    agent_guard_status: { args: {}, execute: async () => '{"state":"active"}' },
+    agent_guard_permissions: permissionTool(input),
+  }, "tool.execute.before": async () => {} }))
+  return async args => JSON.parse((await tools.agent_guard_permissions.execute(args, {})).content)
+}
+const v2Root = await v2Tool(workspace, workspace)
+const v2Read = await v2Root({ filePath: "protected.txt" })
+assert.equal(v2Read.agents[0].requested.read.action, "deny", "V2 internal read resources are location-relative")
+assert.equal(v2Read.agents[1].probes.planningEdit.action, "allow", "V2 probes the home planning directory")
+const v2Nested = await v2Tool(nestedDirectory, workspace)
+assert.equal((await v2Nested({ filePath: "src/a.txt" })).agents[0].requested.edit.action, "allow")
+const v2Sibling = await v2Nested({ filePath: "../protected.txt" })
+assert.equal(v2Sibling.agents[0].requested.read.action, "deny")
+assert.equal(v2Sibling.agents[0].requested.externalDirectoryRequired, false)
+const v2External = await v2Nested({ filePath: join(home, "external/allowed.txt") })
+assert.equal(v2External.agents[0].requested.edit.action, "allow", "V2 external edit resources are absolute")
+assert.equal(v2External.agents[0].requested.externalDirectoryRequired, true)
+assert.equal(v2External.agents[0].requested.externalDirectory.action, "ask")
+assert.equal((await v2Nested({ filePath: "~/.opencode/plan/probe.md" })).agents[1].requested.edit.action, "allow")
+const linkedProject = join(home, "linked-worktree")
+const v2Linked = await v2Tool(join(linkedProject, "nested"), linkedProject, workspace)
+assert.equal((await v2Linked({ filePath: join(workspace, "outside.txt") })).agents[0].requested.externalDirectoryRequired, true,
+  "the canonical main checkout is external to a linked worktree")
+assert.equal((await v2Linked({ filePath: "../protected.txt" })).agents[0].requested.externalDirectoryRequired, false)
 console.log("ok permissions: role exceptions, inherited session rules, source limitations and privacy")
