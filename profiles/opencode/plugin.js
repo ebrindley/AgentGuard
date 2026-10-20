@@ -357,3 +357,14 @@ async function guard(input) {
 }
 
 export const AgentGuard = DELEGATE || guard
+
+// V1 selects server(); V2 selects setup(). The implementations share policy,
+// while the adapter translates the host's tool and permission contracts.
+export default {
+  id: "agent-guard",
+  server: AgentGuard,
+  async setup(context) {
+    const { setup } = await import("./v2.js")
+    return setup(context, AgentGuard)
+  },
+}

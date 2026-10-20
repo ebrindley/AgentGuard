@@ -1,12 +1,12 @@
 # Installation and maintenance
 
-These procedures describe stable 0.2.5 unless marked unreleased. For everyday use, see the
+These procedures describe stable 0.2.7 unless marked unreleased. For everyday use, see the
 [user guide](USAGE.md).
 
 ## Release channels
 
 The latest stable release is
-[0.2.5](https://github.com/ebrindley/AgentGuard/releases/tag/v0.2.5), for OpenCode,
+[0.2.7](https://github.com/ebrindley/AgentGuard/releases/tag/v0.2.7), for OpenCode,
 Pi and Oh My Pi (OMP). Run the installer from Terminal outside any agent session
 or sandbox:
 
@@ -47,11 +47,13 @@ or unpacked archive, `zsh install.sh [--projects DIR] [--gui]` installs that tre
 An existing Guard List is kept. Quit running agents before migrating either
 older guard.
 
-## Unreleased OpenCode setup and diagnostics
+<a id="unreleased-opencode-setup-and-diagnostics"></a>
 
-This section describes the source tree, not stable 0.2.5. The stable release
-download does not yet include these options or diagnostics. Pi/OMP policy is
-unchanged.
+## OpenCode setup and diagnostics
+
+These setup options and diagnostics ship in 0.2.7. OpenCode 2 compatibility is
+source-only until the next release; see [OpenCode versions](USAGE.md#opencode-versions).
+Pi/OMP policy is unchanged.
 
 ### Preserve agent roles without routine approvals
 
@@ -85,8 +87,8 @@ native automatic approval, opt into that restoration explicitly:
 zsh install.sh --approval-preference auto --restore-edit-permissions
 ```
 
-Run this from an unreleased checkout or unpacked artifact, outside the guard.
-The corresponding unreleased updater accepts the same two options. Without
+Run this from a checkout or unpacked artifact, outside the guard.
+The updater accepts the same two options. Without
 `--restore-edit-permissions`, an `auto` preference alone does not authorize
 restoring ASK. Unreadable, commented or protected configuration remains unchanged
 with a reason; pending ownership remains available for a later retry.

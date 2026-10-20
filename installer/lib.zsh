@@ -731,7 +731,7 @@ ag_new_rid() {
 ag_assemble() {
   local r="$ag_stage/release" t=$ag_tree p="$ag_tree/profiles/opencode" f
   local -a zsh_files=(launch account.zsh install.sh uninstall.sh bin/opencode bin/opencode-gui bin/agent-guard
-                      profiles/opencode/harness.zsh profiles/opencode/hooks.zsh)
+                      profiles/opencode/harness.zsh profiles/opencode/hooks.zsh profiles/opencode/runtime.zsh)
   /bin/rm -rf -- "$r"
   /bin/mkdir -p -- "$r/bin" "$r/profiles/opencode/check-config/opencode/plugins" "$engine/releases" || return 1
   /bin/cp -- "$t/engine/launch" "$t/engine/profile.sb" "$t/engine/account.zsh" "$p/install.sh" "$p/uninstall.sh" \
@@ -743,7 +743,7 @@ ag_assemble() {
   /bin/cp -R -- "$t/engine/peers" "$r/peers" || return 1
   # The release's install.sh, which agent-guard and uninstall.sh source, loads these.
   /bin/cp -R -- "$t/installer" "$r/installer" || return 1
-  /bin/cp -- "$p/harness.zsh" "$p/hooks.zsh" "$p/protected.sb" "$p/skills.zsh" "$p/plugin.js" "$p/permissions.js" "$p/permissions.jq" "$p/diagnostics.zsh" "$r/profiles/opencode/" || return 1
+  /bin/cp -- "$p/harness.zsh" "$p/hooks.zsh" "$p/runtime.zsh" "$p/protected.sb" "$p/skills.zsh" "$p/plugin.js" "$p/v2.js" "$p/permissions.js" "$p/permissions.jq" "$p/diagnostics.zsh" "$r/profiles/opencode/" || return 1
   /bin/cp -R -- "$p/templates" "$p/assets" "$r/profiles/opencode/" || return 1
   # check staged points OpenCode's config folder here; its only plugin is this
   # release's. OpenCode 1.18.33 loads no config, and so no plugin, when it cannot

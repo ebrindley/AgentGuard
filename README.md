@@ -4,15 +4,13 @@ Agent Guard limits where coding agents can write on macOS using the operating
 system sandbox (Seatbelt). The sandbox covers the agent and its child processes;
 plugins and command analyzers provide additional checks.
 
-The stable release, [0.2.5](https://github.com/ebrindley/AgentGuard/releases/tag/v0.2.5),
+The stable release, [0.2.7](https://github.com/ebrindley/AgentGuard/releases/tag/v0.2.7),
 supports OpenCode, Pi and Oh My Pi (OMP). Agent Guard replaces OpenCode Guard
 and pi-sandbox-guard. Pi and OMP use a separate project-based policy.
 
-The source tree also contains unreleased OpenCode permission migration and
-diagnostics. These changes preserve agent edit restrictions, check installations
-on every update, and provide a sanitized read-only support report. They are not
-included in the stable download above; see
-[unreleased setup and diagnostics](docs/OPERATIONS.md#unreleased-opencode-setup-and-diagnostics).
+The source tree also supports OpenCode 2 CLI and desktop, alongside OpenCode 1.
+That compatibility is not included in stable 0.2.7. V2 uses a different plugin
+API and server lifecycle; see [OpenCode versions](docs/USAGE.md#opencode-versions).
 
 ## Supported agents and protection
 
@@ -66,8 +64,9 @@ prints `OS sandbox ON`. For OpenCode's desktop app, open
 guard's active release.
 
 Read `doctor`'s warnings and skips: it is an installation check, not a full
-security audit. Without the OpenCode CLI, the plugin check is skipped; a pass
-does not verify the desktop app's plugin. See [diagnostic coverage](docs/OPERATIONS.md#diagnostic-coverage).
+security audit. The source-tree check can use OpenCode 2's bundled desktop CLI and probes it
+separately when it differs from the terminal CLI. A CLI probe does not attest
+the live desktop service. See [diagnostic coverage](docs/OPERATIONS.md#diagnostic-coverage).
 
 ## Configure OpenCode
 
@@ -114,7 +113,7 @@ Run these commands from Terminal outside an agent session:
 | Command | Purpose |
 |---|---|
 | `agent-guard doctor` | Check installed components; note warnings and skips |
-| `agent-guard diagnose [--json]` (unreleased) | Collect sanitized installation and cached failure observations without launching an agent or writing files |
+| `agent-guard diagnose [--json]` | Collect sanitized installation and cached failure observations without launching an agent or writing files |
 | `agent-guard version` | Show the installed release and recorded file changes |
 | `agent-guard update` | Install the latest stable release |
 | `agent-guard uninstall` | Remove the guard; retain `~/Agent Guard` |
@@ -122,7 +121,7 @@ Run these commands from Terminal outside an agent session:
 `update` follows stable releases and leaves a newer installed version unchanged.
 See [release channels](docs/OPERATIONS.md#release-channels) for tagged installs.
 
-In the unreleased setup, `--approval-preference auto|host` records your intended
+The `--approval-preference auto|host` records your intended
 OpenCode approval mode; it does not enable it. For automatic approval, use
 `opencode --auto`, `opencode run --auto …`, or the desktop's Auto-accept
 permissions action (`Cmd+Shift+A`). Explicit OpenCode denies, Guard checks and

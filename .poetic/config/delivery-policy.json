@@ -28,7 +28,9 @@
           "suites (macos-15)",
           "suites (macos-26)",
           "migrate-pi (macos-15)",
-          "migrate-pi (macos-26)"
+          "migrate-pi (macos-26)",
+          "opencode-v2 (macos-15)",
+          "opencode-v2 (macos-26)"
         ],
         "events": [
           "push",
