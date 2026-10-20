@@ -4,12 +4,12 @@ Agent Guard limits where coding agents can write on macOS using the operating
 system sandbox (Seatbelt). The sandbox covers the agent and its child processes;
 plugins and command analyzers provide additional checks.
 
-The stable release, [0.2.7](https://github.com/ebrindley/AgentGuard/releases/tag/v0.2.7),
+The stable release, [2026.10.20](https://github.com/ebrindley/AgentGuard/releases/tag/v2026.10.20),
 supports OpenCode, Pi and Oh My Pi (OMP). Agent Guard replaces OpenCode Guard
 and pi-sandbox-guard. Pi and OMP use a separate project-based policy.
 
-The source tree also supports OpenCode 2 CLI and desktop, alongside OpenCode 1.
-That compatibility is not included in stable 0.2.7. V2 uses a different plugin
+OpenCode 1 and 2 CLI and desktop use shared Guard checks.
+V2 uses a different plugin
 API and server lifecycle; see [OpenCode versions](docs/USAGE.md#opencode-versions).
 
 ## Supported agents and protection
@@ -64,7 +64,7 @@ prints `OS sandbox ON`. For OpenCode's desktop app, open
 guard's active release.
 
 Read `doctor`'s warnings and skips: it is an installation check, not a full
-security audit. The source-tree check can use OpenCode 2's bundled desktop CLI and probes it
+security audit. The check can use OpenCode 2's bundled desktop CLI and probes it
 separately when it differs from the terminal CLI. A CLI probe does not attest
 the live desktop service. See [diagnostic coverage](docs/OPERATIONS.md#diagnostic-coverage).
 
