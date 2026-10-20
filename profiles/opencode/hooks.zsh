@@ -21,12 +21,17 @@ opencode_check() {
       label=' (staged)'
     fi
     if next_cli; then
+      local cli=$REPLY
+      opencode_major "$cli"
+      if [[ $REPLY == 2 ]]; then
+        opencode_check_v2 "$cli"
+      else
       # OpenCode loads the configured plugins at the first request for a folder.
       # It reports a plugin that fails to install, resolve or import as an event,
       # and one whose init fails only in its log, so the check listens to both.
       /bin/mkdir -p "$session/check-project"
       out="$engine/state/.serve.$$" events="$engine/state/.events.$$"
-      AGENT_GUARD_SANDBOXED=1 AGENT_GUARD_RELEASE=${release:t} $scope $sandbox -D GUI=0 "$REPLY" serve --print-logs --log-level ERROR --hostname 127.0.0.1 --port $(( 20000 + RANDOM % 30000 )) > "$out" 2>&1 &
+      AGENT_GUARD_SANDBOXED=1 AGENT_GUARD_RELEASE=${release:t} $scope $sandbox -D GUI=0 "$cli" serve --print-logs --log-level ERROR --hostname 127.0.0.1 --port $(( 20000 + RANDOM % 30000 )) > "$out" 2>&1 &
       pid=$!
       print -r -- $pid > "$engine/state/.serve.pid"
       ids= epid= listening=0
@@ -94,8 +99,22 @@ opencode_check() {
         fi
         print 'note OpenCode client/desktop auto-approval mode is not observable from the server'
       fi
+      fi
     else
       print "skip plugin check (opencode CLI not found)"
+    fi
+    # A desktop upgrade can leave a different major version on PATH. Probe its
+    # bundled backend as well; a CLI pass does not establish desktop readiness.
+    local bundled=
+    if find_app && [[ -x $REPLY/Contents/Resources/opencode-cli ]]; then
+      bundled="$REPLY/Contents/Resources/opencode-cli"
+      if [[ ${bundled:A} != ${${cli:-}:A} ]]; then
+        opencode_major "$bundled"
+        if [[ $REPLY == 2 ]]; then
+          label=' (desktop bundled CLI)'
+          opencode_check_v2 "$bundled"
+        fi
+      fi
     fi
     # Live only: OpenCode Guard's plugin would enforce its own rules next to this one.
     if (( ! staged )); then
@@ -125,4 +144,52 @@ opencode_check() {
         fi
       fi
     fi
+}
+
+opencode_check_v2() {
+  local cli=$1 out="$engine/state/.serve.$$" pid url= result= plugins= query i
+  local password="agent-guard-probe-$$-$RANDOM-$RANDOM" sev=FAIL
+  /bin/mkdir -p "$session/check-project"
+  query=$(/usr/bin/jq -rn --arg p "$session/check-project" '$p|@uri')
+  AGENT_GUARD_SANDBOXED=1 AGENT_GUARD_RELEASE=${release:t} OPENCODE_PASSWORD=$password \
+    $scope $sandbox -D GUI=0 "$cli" serve --hostname 127.0.0.1 --port 0 > "$out" 2>&1 &
+  pid=$!
+  for i in {1..60}; do
+    kill -0 $pid 2>/dev/null || break
+    url=$(/usr/bin/grep -o 'http://127\.0\.0\.1:[0-9]*' "$out" 2>/dev/null | head -1) || true
+    if [[ -n $url ]]; then
+      result=$(/usr/bin/curl -sf --max-time 5 -u "opencode:$password" -H 'Content-Type: application/json' \
+        -d '{"input":{}}' "$url/api/rpc/agent-guard/status?location%5Bdirectory%5D=$query" 2>/dev/null) && break
+    fi
+    sleep 0.25
+  done
+  if print -r -- "$result" | /usr/bin/jq -e '.output | .state=="active" and .sandbox.result=="confined" and .safetyNet.hooksReady==true' >/dev/null 2>&1; then
+    print "ok   Guard readiness in OpenCode V2$label"
+    [[ ${AGENT_GUARD_GATE:-} == 1 ]] && sev=warn
+    plugins=$(/usr/bin/curl -sf --max-time 5 -u "opencode:$password" "$url/api/plugin?location%5Bdirectory%5D=$query" 2>/dev/null) || plugins=
+    if ! print -r -- "$plugins" | /usr/bin/jq -e '.data | type=="array" and all(.[]; .state.status=="active")' >/dev/null 2>&1; then
+      print "$sev configured plugins failed or unverified in OpenCode V2$label"
+      [[ $sev == warn ]] || ok=0
+    else
+      print "ok   plugins loaded in OpenCode V2$label"
+    fi
+    if (( ! staged )); then
+      permission_report=$(/usr/bin/curl -sf --max-time 5 -u "opencode:$password" -H 'Content-Type: application/json' \
+        -d '{"input":{}}' "$url/api/rpc/agent-guard/permissions?location%5Bdirectory%5D=$query" 2>/dev/null | /usr/bin/jq -c .output) || permission_report=
+      if print -r -- "$permission_report" | /usr/bin/jq -e '.availability=="observed"' >/dev/null 2>&1; then
+        print -r -- "$permission_report" | /usr/bin/jq -r '.agents[] | select(.agent=="build" or .agent=="plan" or .agent=="explore")
+          | "note permissions global V2 " + .agent + ": external_directory=" + .probes.externalDirectory.action + "; ordinary_edit=" + .probes.ordinaryEdit.action + "; planning_edit=" + .probes.planningEdit.action + "; shell_git_status=" + .probes.bashGitStatus.action'
+      else
+        print 'warn global V2 effective permissions unverified'
+      fi
+      print 'note OpenCode V2 private probe; shared service and desktop approval mode are not attested'
+    fi
+  else
+    print "FAIL Guard readiness degraded or unverified in OpenCode V2$label"
+    record 'agent-guard-stage:plugin-readiness'
+    ok=0
+  fi
+  kill $pid 2>/dev/null || true
+  wait $pid 2>/dev/null || true
+  /bin/rm -f "$out"
 }

@@ -72,7 +72,7 @@ function agents() {
 }
 
 if (args[0] === '--version') {
-  console.log('0.0.0-fake');
+  console.log('1.0.0-fake');
 } else if (args[0] === 'status') {
   for (const hooks of await pluginHooks(process.cwd())) {
     const tool = hooks?.tool?.agent_guard_status;

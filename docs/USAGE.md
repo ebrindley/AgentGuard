@@ -1,6 +1,6 @@
 # Using Agent Guard
 
-This guide describes release 0.2.5, which supports OpenCode, Pi and OMP.
+This guide describes release 0.2.7, which supports OpenCode, Pi and OMP.
 See [release channels](OPERATIONS.md#release-channels) for installation.
 
 ## Start OpenCode
@@ -22,6 +22,39 @@ what that check verifies and what it skips.
 The sandbox covers the agent and its child processes. Network access remains
 unrestricted, and permitted project files can still be changed or deleted.
 Review changes before executing them outside the guard.
+
+## OpenCode versions
+
+Stable 0.2.7 supports OpenCode 1. The source tree targets OpenCode 1.18.33 and
+newer V1 releases, plus OpenCode 2.0.32 CLI and desktop. Keep shared configuration in the V1 format
+when both versions use it; V2 normalizes supported V1 settings in memory.
+Native V2-only settings are not a configuration migration for V1.
+
+| Interface | OpenCode 1 | OpenCode 2 |
+|---|---|---|
+| Terminal | Existing CLI runs under Seatbelt | Interactive and server-backed commands use `--standalone`; commands without that flag use a launcher-owned service |
+| Desktop | App and its child backend run under Seatbelt | Guard starts the bundled CLI's service under Seatbelt, then starts the app and stops that service when the app exits |
+| Plugin | V1 hooks and tool arguments | V2 hooks translate tool names and file arguments into the same Guard checks |
+| Diagnostics | V1 server endpoints | V2 status RPC and plugin list; desktop bundled CLI checked separately when different |
+
+Open the desktop through `~/Applications/Agent Guard.app`. If V2 already has a
+shared service, close its clients and run `opencode service stop` outside the
+guard before opening Agent Guard. The launcher neither adopts nor stops an
+incumbent service. Quit the app, rather than only closing its window, to end its
+owned service. Loss of that service closes the client; reopen Agent Guard to
+start a fresh service. Restart to apply a changed Guard List.
+
+The terminal launcher uses the first native `opencode` on PATH, then its usual
+fallback locations. If none exists, it can use the desktop's bundled
+`Contents/Resources/opencode-cli`. The desktop always uses its own bundled V2
+backend, so installing a V2 app does not select V2 for a terminal with V1 on PATH.
+
+An explicit `--server` or V1 attachment selects a server with its own permissions;
+client confinement does not establish server protection. Peer launch wrappers
+refuse these attachments. V2 service start/restart and ACP login are maintenance
+operations to run outside the guard; use `opencode serve` to start a foreground
+guarded server. `doctor` uses a private probe, not the service attached to an
+existing desktop window, and does not call a model.
 
 ## Configure OpenCode
 

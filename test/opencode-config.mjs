@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs"
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { spawnSync } from "node:child_process"
@@ -236,4 +236,11 @@ const oldPreference = JSON.stringify({ schemaVersion: 1, approvalPreference: "ho
 writeFileSync(preferenceExistingFile, oldPreference)
 shell(preferenceExisting, 'ag_approval_preference=auto; do_opencode_preference; undo_opencode_preference', true)
 assert.equal(readFileSync(preferenceExistingFile, "utf8"), oldPreference)
+const assembled = fixture("assembled-runtime")
+const tree = join(assembled.home, "tree")
+mkdirSync(tree)
+for (const name of ["engine", "profiles", "installer", "LICENSE", "install.sh"]) cpSync(join(root, name), join(tree, name), { recursive: true })
+writeFileSync(join(tree, "VERSION"), "1.0.0\n")
+shell(assembled, 'ag_tree="$home/tree" ag_stage="$home/stage" ag_version=1.0.0 ag_commit=fixture ag_rid_new=1.0.0-fixture; ag_harnesses=(opencode); ag_assemble')
+for (const name of ["runtime.zsh", "v2.js"]) assert.equal(readFileSync(join(assembled.engine, "releases/1.0.0-fixture/profiles/opencode", name), "utf8"), readFileSync(join(root, "profiles/opencode", name), "utf8"))
 console.log(`ok OpenCode maintenance: ${checks} cases; ${run}`)

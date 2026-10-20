@@ -60,6 +60,7 @@ fi
 source "$profile_dir/harness.zsh"
 source "$profile_dir/hooks.zsh"
 source "$profile_dir/skills.zsh"
+source "$profile_dir/runtime.zsh"
 
 note() {
   print -r -- "$*" >> "$log"
@@ -96,6 +97,10 @@ next_cli() {
   for f in $cli_search; do
     [[ -x $f ]] && ! in_guard "$f" && { REPLY=$f; return 0 }
   done
+  if find_app && [[ -x $REPLY/Contents/Resources/opencode-cli ]]; then
+    REPLY="$REPLY/Contents/Resources/opencode-cli"
+    return 0
+  fi
   return 1
 }
 
@@ -120,7 +125,18 @@ unset $env_unset
 if [[ ${AGENT_GUARD_SANDBOXED:-} == 1 || ${OPENCODE_SANDBOXED:-} == 1 ]] && ! /usr/bin/sandbox-exec -p '(version 1)(allow default)' /usr/bin/true 2>/dev/null; then
   [[ $mode == cli ]] || fail "already inside the guard; run this from Terminal, outside any guard or sandbox"
   next_cli || fail "opencode not found"
-  exec "$REPLY" "$@"
+  cli=$REPLY
+  sandbox=()
+  # This branch already inherits the outer sandbox; a second Seatbelt profile
+  # cannot be applied. The version probe must keep that inherited confinement.
+  version=$("$cli" --version 2>/dev/null) || fail 'cannot read nested OpenCode version'
+  if [[ $version == (opencode\ v2.*|2.*|v2.*) ]]; then
+    managed=0
+    opencode_cli_args "$@"
+    (( ! managed )) || fail 'run this V2 command from Terminal outside the existing guard'
+    set -- "${reply[@]}"
+  fi
+  exec "$cli" "$@"
 fi
 export HOME=$home
 [[ -r $list ]] || fail "cannot read $list"
@@ -371,6 +387,7 @@ if (( ! staged )); then
 fi
 
 sandbox=(/usr/bin/sandbox-exec -D "HOME=$home" -D "DARWIN_TEMP=$darwin_temp" -D "DARWIN_CACHE=$darwin_cache" -p "$profile")
+managed=0 managed_cli=
 
 case $mode in
   (cli)
@@ -383,7 +400,14 @@ case $mode in
     done
     (( attached )) && note "attached client is sandboxed; the server executes tools under its own permissions"
     next_cli || fail "opencode not found"
-    set -- -D GUI=0 "$REPLY" "$@"
+    cli=$REPLY
+    opencode_major "$cli"
+    if [[ $REPLY == 2 ]]; then
+      opencode_cli_args "$@"
+      set -- "${reply[@]}"
+      (( ! managed )) || managed_cli=$cli
+    fi
+    set -- -D GUI=0 "$cli" "$@"
     ;;
   (gui)
     failure_stage=host-launch
@@ -391,6 +415,11 @@ case $mode in
     app=$REPLY
     main=$(/usr/bin/plutil -extract CFBundleExecutable raw "$app/Contents/Info.plist")
     /usr/bin/pgrep -x "$main" >/dev/null && fail "OpenCode is already running. Quit it, then open Agent Guard."
+    if [[ -x $app/Contents/Resources/opencode-cli ]]; then
+      cli="$app/Contents/Resources/opencode-cli"
+      opencode_major "$cli"
+      if [[ $REPLY == 2 ]]; then managed=1 managed_cli=$cli; fi
+    fi
     set -- -D GUI=1 "$app/Contents/MacOS/$main" $gui_args "$@"
     ;;
   (profile)
@@ -416,4 +445,5 @@ esac
 export AGENT_GUARD_SANDBOXED=1 AGENT_GUARD_RELEASE=${release:t}
 export AGENT_GUARD_PEER_PATH=${AGENT_GUARD_PEER_PATH:-$PATH}
 path=("$release/peers" $path)
+(( ! managed )) || opencode_managed "$managed_cli" "$@"
 exec $sandbox "$@"

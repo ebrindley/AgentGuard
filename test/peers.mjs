@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cpSync, mkdirSync, mkdtempSync, renameSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -21,7 +21,7 @@ writeFileSync(join(home, 'Agent Guard/Guard List.txt'), `ALLOW\n${project}\nREAD
 const quote = s => "'" + s.replaceAll("'", "'\\''") + "'";
 const peers = ['codex', 'claude', 'cursor-agent', 'grok', 'opencode'];
 for (const name of peers) {
-  const prefix = name === 'opencode' ? 'if [[ ${1:-} == /* ]]; then exec "$@"; fi\n' : '';
+  const prefix = name === 'opencode' ? 'if [[ ${1:-} == --version ]]; then print 1.19.3; exit; fi\nif [[ ${1:-} == /* ]]; then exec "$@"; fi\n' : '';
   writeFileSync(join(bin, name), '#!/bin/zsh -f\n' + prefix + 'print -l -- "$@"\n', { mode: 0o755 });
 }
 const standIn = join(run, 'runtime');
@@ -73,7 +73,7 @@ for (const parent of ['opencode', 'pi', 'omp']) {
   const literal = launch(parent, 'claude -- --settings');
   assert.equal(literal.status, 0, literal.stderr);
   assert.deepEqual(literal.stdout.trim().split('\n').slice(-2), ['--', '--settings']);
-  for (const command of ['codex --remote exec', 'opencode run --attach=http://localhost:4096', 'opencode attach http://localhost:4096']) {
+  for (const command of ['codex --remote exec', 'opencode run --attach=http://localhost:4096', 'opencode attach http://localhost:4096', 'opencode run --server=http://localhost:4096']) {
     const r = launch(parent, command);
     assert.equal(r.status, 2, r.stderr);
     assert.match(r.stderr, /must execute locally/);
@@ -98,11 +98,21 @@ for (const parent of ['opencode', 'pi', 'omp']) {
   process.stdout.write(shell.stdout);
   console.log(`ok ${parent}: explicit restrictions, runtime writes and containment`);
 }
+const opencodeFile = join(bin, 'opencode');
+const v1Stub = readFileSync(opencodeFile, 'utf8');
+writeFileSync(opencodeFile, v1Stub.replace('print 1.19.3', 'print 2.0.32').replace('if [[ ${1:-} == /* ]]', '[[ ${1:-} == --standalone ]] && shift\nif [[ ${1:-} == /* ]]'));
+for (const parent of ['opencode', 'pi', 'omp']) {
+  const result = launch(parent, 'opencode run --model fixture hello');
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(result.stdout.trim().split('\n'), ['run', '--standalone', '--model', 'fixture', 'hello']);
+}
+writeFileSync(opencodeFile, v1Stub);
+console.log('ok V2 peer commands use private servers under all parent policies');
 mkdirSync(join(home, '.opencode/bin'), { recursive: true });
 renameSync(join(bin, 'opencode'), join(home, '.opencode/bin/opencode'));
 const fallback = launch('pi', 'opencode --version');
 assert.equal(fallback.status, 0, fallback.stderr);
-assert.equal(fallback.stdout, '--version\n');
+assert.equal(fallback.stdout, '1.19.3\n');
 console.log('ok OpenCode discovery outside PATH');
 const outside = spawnSync(join(release, 'peers/codex'), ['--model', 'fixture'], { env, encoding: 'utf8' });
 assert.equal(outside.status, 0, outside.stderr);

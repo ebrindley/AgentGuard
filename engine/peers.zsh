@@ -22,7 +22,7 @@ agent_guard_peer() {
   for arg in "${args[@]}"; do
     [[ $arg == -- ]] && break
     case $name:$arg in
-      codex:--remote|codex:--remote=*|opencode:--attach|opencode:--attach=*)
+      codex:--remote|codex:--remote=*|opencode:--attach|opencode:--attach=*|opencode:--server|opencode:--server=*)
         print -ru2 -- "agent-guard: $name must execute locally inside the parent sandbox"
         return 2 ;;
       codex:--sandbox|codex:-s|cursor-agent:--sandbox|grok:--sandbox)
@@ -94,6 +94,17 @@ agent_guard_peer() {
       fi
       (( sandbox )) && exec "$target" "${args[@]}"
       exec "$target" --sandbox off "${args[@]}" ;;
-    opencode) exec "$target" "${args[@]}" ;;
+    opencode)
+      local version managed=0
+      local -a reply
+      version=$("$target" --version 2>/dev/null) || return 1
+      if [[ $version == (opencode\ v2.*|2.*|v2.*) ]]; then
+        source "$root/profiles/opencode/runtime.zsh"
+        fail() { print -ru2 -- "agent-guard: $*"; exit 2; }
+        opencode_cli_args "${args[@]}"
+        (( ! managed )) || fail 'run this V2 command from Terminal outside the parent sandbox'
+        args=("${reply[@]}")
+      fi
+      exec "$target" "${args[@]}" ;;
   esac
 }
