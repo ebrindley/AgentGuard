@@ -508,12 +508,12 @@ for marker in AGENT_GUARD_SANDBOXED OPENCODE_SANDBOXED; do
     sb /usr/bin/env "$marker=1" "${launcher[@]}" check
 
   /bin/rm -f "$home/Projects/app/launched" "$home/Documents/escaped" "$home/Projects/app/nested-home"
-  print -r -- $'#!/bin/sh\ntouch "$HOME/Documents/escaped"\n[ "$CC_SAFETY_NET_LEVEL" = strict ] && touch "$HOME/Projects/app/launched"' > "$home/fakebin/opencode"
+  print -r -- $'#!/bin/sh\n[ "${1:-}" = --version ] && { echo 1.18.33; exit 0; }\ntouch "$HOME/Documents/escaped"\n[ "$CC_SAFETY_NET_LEVEL" = strict ] && touch "$HOME/Projects/app/launched"' > "$home/fakebin/opencode"
   /bin/chmod 755 "$home/fakebin/opencode"
   /usr/bin/env PATH="$home/fakebin:$PATH" "$marker=1" "$engine/bin/opencode" >/dev/null 2>&1
   [[ -e $home/Projects/app/launched && ! -e $home/Documents/escaped ]] && pass "launch cli sandboxes despite $marker, scoped checker strict" || fail "launch cli sandbox with $marker"
 
-  print -r -- $'#!/bin/sh\nprintf "%s\\n" "$HOME" > "$NESTED_HOME_RESULT"' > "$home/fakebin/opencode"
+  print -r -- $'#!/bin/sh\n[ "${1:-}" = --version ] && { echo 1.18.33; exit 0; }\nprintf "%s\\n" "$HOME" > "$NESTED_HOME_RESULT"' > "$home/fakebin/opencode"
   HOME="$child_home" NESTED_HOME_RESULT="$home/Projects/app/nested-home" \
     PATH="$home/fakebin:$PATH" sb /usr/bin/env "$marker=1" "${launcher[@]}" cli >/dev/null 2>&1
   check "nested launch with $marker preserves child HOME" /usr/bin/grep -Fxq "$child_home" "$home/Projects/app/nested-home"
@@ -524,7 +524,7 @@ done
 /bin/cp "$source_root/test/fixtures/opencode-guard-1.0.3/launch" "$source_root/test/fixtures/opencode-guard-1.0.3/profile.sb" "$old_engine/"
 print -r -- $'#!/bin/zsh\nexec "${0:A:h:h}/launch" cli "$@"' > "$old_engine/bin/opencode"
 /bin/cp "$list" "$home/OpenCode Guard/Guard List.txt"
-print -r -- $'#!/bin/sh\ntouch "$HOME/Documents/stub-escaped" 2>/dev/null && c=escaped || c=confined\nprintf "%s %s %s\\n" "${AGENT_GUARD_SANDBOXED:--}" "${OPENCODE_SANDBOXED:--}" "$c" >> "$HOME/Projects/app/stub-runs"' > "$home/stub/opencode"
+print -r -- $'#!/bin/sh\n[ "${1:-}" = --version ] && { echo 1.18.33; exit 0; }\ntouch "$HOME/Documents/stub-escaped" 2>/dev/null && c=escaped || c=confined\nprintf "%s %s %s\\n" "${AGENT_GUARD_SANDBOXED:--}" "${OPENCODE_SANDBOXED:--}" "$c" >> "$HOME/Projects/app/stub-runs"' > "$home/stub/opencode"
 /bin/chmod 755 "$old_engine/launch" "$old_engine/bin/opencode" "$home/stub/opencode"
 # Runs a command for at most 20 seconds, so a launcher loop fails instead of hanging.
 bounded() {
@@ -586,7 +586,7 @@ stub_ran "candidates inside either engine folder skipped" '1 - confined' \
   # A launch from the previous release loads that release's plugin through current,
   # which names the new one. The fake CLI runs its arguments.
   /bin/mkdir -p "$home/execbin"
-  print -r -- $'#!/bin/sh\nexec "$@"' > "$home/execbin/opencode"
+  print -r -- $'#!/bin/sh\n[ "${1:-}" = --version ] && { echo 1.18.33; exit 0; }\nexec "$@"' > "$home/execbin/opencode"
   /bin/chmod 755 "$home/execbin/opencode"
   launch_prev_argv=$(node "$adapter" launcher "$engine" "$prev") || fail "adapter launcher for a release"
   (cd "$home/Projects/app" && PATH="$home/execbin:$PATH" "${(@f)launch_prev_argv}" cli \
