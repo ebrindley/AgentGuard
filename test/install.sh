@@ -52,17 +52,14 @@ list="$home/Agent Guard/Guard List.txt"
 out="$run/out"
 original='{"model":"m","permission":{"bash":{"ls *":"allow","*":"ask"},"task":"ask"}}'
 
-# The fake CLI, first on PATH, and a copy whose --version fails (a post-switch failure).
+# The fake CLI, first on PATH.
 node_bin=${$(command -v node):A}
 fake="$source_root/test/fake-opencode.mjs"
-fakebin="$run/fakebin" failbin="$run/failbin"
-/bin/mkdir -p "$fakebin" "$failbin"
+fakebin="$run/fakebin"
+/bin/mkdir -p "$fakebin"
 print -r -- "#!/bin/sh
 exec '$node_bin' '$fake' \"\$@\"" > "$fakebin/opencode"
-print -r -- "#!/bin/sh
-[ \"\$1\" = --version ] && exit 3
-exec '$node_bin' '$fake' \"\$@\"" > "$failbin/opencode"
-/bin/chmod 755 "$fakebin/opencode" "$failbin/opencode"
+/bin/chmod 755 "$fakebin/opencode"
 system_path=/usr/bin:/bin:/usr/sbin:/sbin
 base="$fakebin:$system_path"
 tpath=$base
@@ -259,10 +256,10 @@ for p in $update_points; do
 done
 
 # --- A6: a kill during a rollback; the next run continues the rollback whatever
-# its caller. The rollback follows a failed launch check (the CLI's --version fails).
+# its caller. The rollback follows a failed post-switch launch check.
 label=A6
 restore A
-tpath="$failbin:$system_path" point=kill:rollback ag update
+point='fail:launch-check kill:rollback' ag update
 rc=$?
 (( rc == 137 )) && /usr/bin/grep -qx 'rollback begun' "$state/txn/journal" 2>/dev/null &&
   pass 'killed after journaling rollback begun' || { fail "killed in the rollback (exit $rc)"; show }
