@@ -1,3 +1,6 @@
+import { homedir } from "node:os"
+import { join, relative } from "node:path"
+
 const legacyAction = action => ({ shell: "bash", subagent: "task" })[action] ?? action
 const legacyRules = rules => Array.isArray(rules) ? rules.map(rule => ({
   permission: legacyAction(rule.action), pattern: rule.resource, action: rule.effect,
@@ -7,9 +10,17 @@ const legacySession = session => ({ ...session, permission: legacyRules(session.
 
 export async function setup(context, guard) {
   const directory = context.location.directory
+  const worktree = context.location.project.directory
   const hooks = await guard({
     directory,
-    worktree: context.location.project.canonical,
+    worktree,
+    permissionResources: {
+      planningEdit: join(homedir(), ".opencode/plan/probe.md"),
+      requested({ directory, full, external }) {
+        const resource = external ? full : relative(directory, full) || "."
+        return { read: resource, edit: resource }
+      },
+    },
     client: {
       app: { agents: async () => ({ data: (await context.agent.list()).data.map(legacyAgent) }) },
       session: {
@@ -23,8 +34,13 @@ export async function setup(context, guard) {
     const input = event.input
     const args = input && typeof input === "object" && !Array.isArray(input) ? { ...input } : {}
     if (["read", "write", "edit"].includes(event.tool)) args.filePath = args.path
+    if (event.tool === "shell" && typeof args.workdir === "string" && /^~(?:\/|$)/.test(args.workdir))
+      args.workdir = join(homedir(), args.workdir.slice(2))
     await hooks["tool.execute.before"]({ ...event, tool }, { args })
-    if (event.tool === "shell" && typeof args.command === "string") event.input = { ...input, command: args.command }
+    if (event.tool === "shell" && typeof args.command === "string") event.input = {
+      ...input, command: args.command,
+      ...(typeof args.workdir === "string" ? { workdir: args.workdir } : {}),
+    }
   })
   await context.tool.transform(editor => {
     for (const [name, tool] of Object.entries(hooks.tool ?? {})) {
@@ -34,7 +50,7 @@ export async function setup(context, guard) {
         input: { type: "object", properties: tool.args ?? {}, additionalProperties: false },
         options: { codemode: false },
         async execute(args, execution) {
-          return { content: await tool.execute(args, { ...execution, directory, worktree: context.location.project.canonical }) }
+          return { content: await tool.execute(args, { ...execution, directory, worktree }) }
         },
       })
     }

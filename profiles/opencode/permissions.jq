@@ -23,7 +23,7 @@ def summary($agent; $index; $sessionRules):
   | {agent: agent_label($agent.name; $index), mode: (if ($agent.mode | IN("primary", "subagent", "all")) then $agent.mode else "unknown" end),
       rules: {allow: ([$rules[] | select(.action == "allow")] | length), ask: ([$rules[] | select(.action == "ask")] | length), deny: ([$rules[] | select(.action == "deny")] | length)},
       probes: {externalDirectory: decision($rules; "external_directory"; $outside), ordinaryEdit: decision($rules; "edit"; "sample.txt"),
-        planningEdit: decision($rules; "edit"; ".opencode/plans/probe.md"), bashGitStatus: decision($rules; "bash"; "git status")},
+        planningEdit: decision($rules; "edit"; ($ARGS.named.planningEdit // ".opencode/plans/probe.md")), bashGitStatus: decision($rules; "bash"; "git status")},
       editToolVisible: ([$rules[] | select(matches("edit"; .permission))] | last | (.pattern != "*" or .action != "deny"))}
     + (if $ARGS.named.requested == "true" then {requested: {pathResolution:"lexical", guardAndSandbox:"apply_at_execution",
         externalDirectoryRequired:($ARGS.named.externalRequired == "true"), externalDirectory:decision($rules;"external_directory";$ARGS.named.requestedExternal),

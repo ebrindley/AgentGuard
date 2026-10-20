@@ -31,7 +31,7 @@ for (const mode of selected) {
   writeFileSync(join(home, "Agent Guard/Guard List.txt"), `ALLOW\n${home}/Projects\nREAD ONLY\n${readonly}\nDENY\n${denied}\n`)
   writeFileSync(join(denied, "secret.txt"), "DENIED-FIXTURE-CONTENT")
   const calls = [
-    ["shell", { command: `touch ${quote(join(project, "shell-allowed"))}`, workdir: project }],
+    ["shell", { command: `touch ${quote(join(project, "shell-allowed"))}`, workdir: "~/Projects/app" }],
     ["write", { path: join(project, "allowed.txt"), content: "allowed" }],
     ["write", { path: join(readonly, "refused.txt"), content: "refused" }],
     ["patch", { patchText: `*** Begin Patch\n*** Add File: ${join(readonly, "patch.txt")}\n+refused\n*** End Patch` }],
