@@ -1,12 +1,12 @@
 # Installation and maintenance
 
-These procedures describe stable 0.2.7 unless marked unreleased. For everyday use, see the
+These procedures describe stable 2026.10.20 unless marked unreleased. For everyday use, see the
 [user guide](USAGE.md).
 
 ## Release channels
 
 The latest stable release is
-[0.2.7](https://github.com/ebrindley/AgentGuard/releases/tag/v0.2.7), for OpenCode,
+[2026.10.20](https://github.com/ebrindley/AgentGuard/releases/tag/v2026.10.20), for OpenCode,
 Pi and Oh My Pi (OMP). Run the installer from Terminal outside any agent session
 or sandbox:
 
@@ -51,8 +51,8 @@ older guard.
 
 ## OpenCode setup and diagnostics
 
-These setup options and diagnostics ship in 0.2.7. OpenCode 2 compatibility is
-source-only until the next release; see [OpenCode versions](USAGE.md#opencode-versions).
+These setup options and diagnostics are included in 2026.10.20, which adds
+OpenCode 2 compatibility; see [OpenCode versions](USAGE.md#opencode-versions).
 Pi/OMP policy is unchanged.
 
 ### Preserve agent roles without routine approvals
