@@ -25,8 +25,8 @@ Review changes before executing them outside the guard.
 
 ## OpenCode versions
 
-Stable 0.2.7 supports OpenCode 1. The source tree adds OpenCode 2.0.32 CLI and
-desktop support without removing V1. Keep shared configuration in the V1 format
+Stable 0.2.7 supports OpenCode 1. The source tree targets OpenCode 1.18.33 and
+newer V1 releases, plus OpenCode 2.0.32 CLI and desktop. Keep shared configuration in the V1 format
 when both versions use it; V2 normalizes supported V1 settings in memory.
 Native V2-only settings are not a configuration migration for V1.
 
@@ -41,7 +41,8 @@ Open the desktop through `~/Applications/Agent Guard.app`. If V2 already has a
 shared service, close its clients and run `opencode service stop` outside the
 guard before opening Agent Guard. The launcher neither adopts nor stops an
 incumbent service. Quit the app, rather than only closing its window, to end its
-owned service. Restart to apply a changed Guard List.
+owned service. Loss of that service closes the client; reopen Agent Guard to
+start a fresh service. Restart to apply a changed Guard List.
 
 The terminal launcher uses the first native `opencode` on PATH, then its usual
 fallback locations. If none exists, it can use the desktop's bundled

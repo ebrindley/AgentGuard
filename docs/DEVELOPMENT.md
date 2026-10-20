@@ -13,16 +13,21 @@ The V1 native suites remain pinned to 1.18.33. V2 uses `@opencode/cli@2.0.32`.
 `test/plugin-health.mjs` runs the same eight readiness/refusal cases through both
 APIs. `test/opencode-runtime.mjs` covers command routing. For native V2 checks,
 set `AG_TEST_OPENCODE` to its executable and run
-`node test/opencode-v2-native.mjs [cli|gui|doctor]` with Node 24 outside an
+`node test/opencode-v2-native.mjs` with Node 24 outside an
 existing sandbox. The GUI fixture follows the packaged desktop's shared-service
 contract using the real bundled CLI; it does not attest renderer behavior.
 All homes, providers and model responses are local fixtures.
+Pass `cli`, `gui`, `doctor`, `managed-cli`, `gui-signal` or `gui-server-stop` to
+select one case. The managed cases cover leading global flags, client shutdown,
+SIGTERM and loss of the original service.
 
 Each host still registers one Guard tool-before hook and uses the same command
 checker and filesystem rules. V2 adds one adapter registration and one read-only
 RPC registration with status and permission methods. No path grants or policy
 verdicts change. Runtime selection adds one major-version compatibility check;
 desktop ownership checks grow from one (app) to two (app and service).
+Managed launches add one child-exit signal handler to end the client and its
+original service together; the filesystem and command policy is unchanged.
 The required hosted check remains one; its sequential file
 scope grows from seven to eight. Full background matrix jobs grow from four to
 six by adding V2 on macOS 15 and 26. The release aggregate requires all six.

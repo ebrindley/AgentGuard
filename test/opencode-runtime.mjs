@@ -40,4 +40,7 @@ for (const args of [["service", "start"], ["service", "restart"], ["acp", "--log
 assert.deepEqual(prepare(["run", "--", "--server"]).args, ["run", "--standalone", "--", "--server"])
 assert.deepEqual(prepare(["run", "--standalone", "hello"]).args, ["run", "--standalone", "hello"])
 assert.deepEqual(prepare(["run", "--", "--standalone"]).args, ["run", "--standalone", "--", "--standalone"])
+assert.deepEqual(prepare(["--print-logs", "run", "hello"]).args, ["--print-logs", "run", "--standalone", "hello"])
+assert.equal(prepare(["--print-logs", "mcp", "list"]).managed, true)
+for (const args of [["auth"], ["session"], ["--print-logs", "auth"]]) assert.deepEqual(prepare(args).args, args)
 console.log("ok OpenCode V2 command routing: private servers, managed clients, explicit attachments and maintenance")

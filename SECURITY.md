@@ -47,7 +47,8 @@ The source tree adds OpenCode 2.0.32 support; stable 0.2.7 remains V1-only.
 V2 terminal sessions use private servers where supported. V2 desktop and
 commands without a private-server flag use a service started inside the same
 Seatbelt profile as their client. Guard refuses an incumbent shared service and
-stops its owned service when the client exits. Explicit main-launcher server
+stops its owned service when the client exits. Losing the original service ends
+the client. Explicit main-launcher server
 attachments retain their separate-server limitation; peer attachments are refused.
 The V2 adapter preserves the existing path and command policy. See
 [OpenCode versions](docs/USAGE.md#opencode-versions).
