@@ -9,6 +9,40 @@ opencode_state_roots() {
   cache_roots=(${cache_given:A})
 }
 
+# A check's server and event reader run in the background, where a
+# non-interactive shell ignores SIGINT, so the check stops them itself on a
+# signal. The record holds the server's and this shell's start times, so
+# recovery (installer/lib.zsh) can stop the server of a check killed outright
+# without stopping one that is still running.
+opencode_check_started() {  # SERVER-PID
+  local owner server
+  check_server=$1 check_events=
+  owner=$(/bin/ps -o lstart= -p $$ 2>/dev/null) && server=$(/bin/ps -o lstart= -p $1 2>/dev/null) &&
+    print -rl -- $1 "${(j: :)${=server}}" "${(j: :)${=owner}}" > "$engine/state/.serve.$$.pid" || true
+  # The launcher's emulate -L sets local_traps, which would drop these traps
+  # when this function returns.
+  setopt local_options no_local_traps
+  trap 'opencode_check_interrupted 129' HUP
+  trap 'opencode_check_interrupted 130' INT
+  trap 'opencode_check_interrupted 143' TERM
+}
+
+opencode_check_stop() {
+  local p
+  for p in ${check_events:-} ${check_server:-}; do
+    kill $p 2>/dev/null || true
+    wait $p 2>/dev/null || true
+  done
+  check_events= check_server=
+  /bin/rm -f -- "$engine/state/.serve.$$.pid"
+}
+
+opencode_check_interrupted() {  # STATUS
+  opencode_check_stop
+  /bin/rm -f -- "$engine/state/.serve.$$" "$engine/state/.events.$$"
+  exit $1
+}
+
 opencode_check() {
     # check staged replaces the global config folder with one inside the release
     # whose only plugin links to the release's plugin.js, so the live plugin is
@@ -33,7 +67,7 @@ opencode_check() {
       out="$engine/state/.serve.$$" events="$engine/state/.events.$$"
       AGENT_GUARD_SANDBOXED=1 AGENT_GUARD_RELEASE=${release:t} $scope $sandbox -D GUI=0 "$cli" serve --print-logs --log-level ERROR --hostname 127.0.0.1 --port $(( 20000 + RANDOM % 30000 )) > "$out" 2>&1 &
       pid=$!
-      print -r -- $pid > "$engine/state/.serve.pid"
+      opencode_check_started $pid
       ids= epid= listening=0
       local -a failed
       for i in {1..40}; do
@@ -41,7 +75,7 @@ opencode_check() {
         url=$(/usr/bin/grep -o 'http://127\.0\.0\.1:[0-9]*' "$out" 2>/dev/null | head -1) || true
         if [[ -n $url && -z $epid ]]; then
           /usr/bin/curl -sN "$url/global/event" > "$events" 2>/dev/null &
-          epid=$!
+          epid=$! check_events=$!
           for j in {1..20}; do /usr/bin/grep -q '"server.connected"' "$events" 2>/dev/null && { listening=1; break }; sleep 0.1; done
           sleep 0.2
         fi
@@ -62,15 +96,13 @@ opencode_check() {
           /usr/bin/jq -c '{agents:.,sessions:[]}' |
           /usr/bin/jq -c --arg scope global --arg outside '/agent-guard-external-probe/*' --argjson observed "$(( permission_at * 1000 ))" -f "$profile_dir/permissions.jq" 2>/dev/null) || permission_report=
       fi
-      if [[ -n $epid ]]; then kill $epid 2>/dev/null || true; wait $epid 2>/dev/null || true; fi
-      kill $pid 2>/dev/null || true
-      wait $pid 2>/dev/null || true
+      opencode_check_stop
       msgs=$(/usr/bin/sed -n 's/^data: //p' "$events" 2>/dev/null |
         /usr/bin/jq -rR 'fromjson? | select(.payload.type == "session.error") | .payload.properties.error.data.message // empty' 2>/dev/null) || true
       logs=$(<"$out") || true
       failed=(${(M)${(f)msgs}:#(Failed to install plugin |Failed to load plugin |Plugin )*}
               ${${(M)${(f)logs}:#*message=\"failed to load plugin\" *}#*message=\"failed to load plugin\" })
-      /bin/rm -f "$out" "$events" "$engine/state/.serve.pid"
+      /bin/rm -f "$out" "$events"
       # The installer's checks set AGENT_GUARD_GATE=1. There the other plugins are
       # the user's configuration: their failures are warnings, so they cannot roll
       # back an install or update. The guard's own plugin must load in every mode.
@@ -154,6 +186,7 @@ opencode_check_v2() {
   AGENT_GUARD_SANDBOXED=1 AGENT_GUARD_RELEASE=${release:t} OPENCODE_PASSWORD=$password \
     $scope $sandbox -D GUI=0 "$cli" serve --hostname 127.0.0.1 --port 0 > "$out" 2>&1 &
   pid=$!
+  opencode_check_started $pid
   for i in {1..60}; do
     kill -0 $pid 2>/dev/null || break
     url=$(/usr/bin/grep -o 'http://127\.0\.0\.1:[0-9]*' "$out" 2>/dev/null | head -1) || true
@@ -189,7 +222,6 @@ opencode_check_v2() {
     record 'agent-guard-stage:plugin-readiness'
     ok=0
   fi
-  kill $pid 2>/dev/null || true
-  wait $pid 2>/dev/null || true
+  opencode_check_stop
   /bin/rm -f "$out"
 }
