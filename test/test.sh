@@ -618,8 +618,9 @@ print -r -- "${next:t}" > "$next/RELEASE"
 /bin/rm -f "$engine/state/rules.json" "$home/.config/opencode/.gitignore"
 out=$("$next/launch" check staged 2>&1) && [[ $out == *"ok   plugins loaded in OpenCode (staged)"* ]] &&
   pass "check staged passes for a staged release" || { fail "check staged passes for a staged release"; print -r -- "$out" }
-check "check staged writes no rules.json, no OpenCode config and no serve pid" \
-  test ! -e "$engine/state/rules.json" -a ! -e "$home/.config/opencode/.gitignore" -a ! -e "$engine/state/.serve.pid"
+leftover=("$engine/state"/.(serve|events).*(DN))
+check "check staged writes no rules.json, no OpenCode config and leaves no check server files" \
+  test ! -e "$engine/state/rules.json" -a ! -e "$home/.config/opencode/.gitignore" -a $#leftover -eq 0
 /usr/bin/sed -i '' 's/agent_guard_status: status/agent_guard_status_off: status/' "$next/profiles/opencode/plugin.js"
 refuses "check staged fails when the staged plugin lacks the status tool" "FAIL plugins not loaded in OpenCode (staged)" \
   "$next/launch" check staged

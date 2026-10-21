@@ -204,13 +204,33 @@ ag_remove_engine() {
 # The copy is whatever release opened the transaction, so a transaction left
 # open by an earlier release is finished by that release's code.
 ag_recover() {
-  local caller=$1 keep=${2:-} pid= c= s
+  local caller=$1 keep=${2:-} pid= c= p= s f owner
+  local -a rec
+  # Plugin checks (profiles/opencode/hooks.zsh) record their server in
+  # .serve.<owner>.pid. A check whose shell is gone leaves its server running:
+  # stop it, unless that shell is still running its check. Releases up to
+  # 2026.10.20 recorded only the server's pid, in .serve.pid; such a server's
+  # shell is gone once launchd (pid 1) is its parent.
   if [[ -f $state/.serve.pid ]]; then
     { pid=$(<"$state/.serve.pid") } 2>/dev/null
-    [[ $pid == <-> ]] && c=$(/bin/ps -o command= -p $pid 2>/dev/null) && [[ $c == *'serve --hostname 127.0.0.1'* ]] &&
+    [[ $pid == <-> ]] && c=$(/bin/ps -o command= -p $pid 2>/dev/null) && p=$(/bin/ps -o ppid= -p $pid 2>/dev/null) || c= p=
+    if [[ $c != *' serve '*'--hostname 127.0.0.1'* ]]; then
+      /bin/rm -f -- "$state/.serve.pid"
+    elif [[ ${p//[[:space:]]/} == 1 ]]; then
       kill $pid 2>/dev/null
-    /bin/rm -f -- "$state/.serve.pid" "$state"/.serve.<->(N)
+      /bin/rm -f -- "$state/.serve.pid"
+    fi
   fi
+  for f in "$state"/.serve.<->.pid(N); do
+    owner=${${f:t:r}#.serve.} rec=()
+    { rec=("${(@f)$(<"$f")}") } 2>/dev/null
+    ag_start_of $owner && [[ $REPLY == "${rec[3]:-}" ]] && continue
+    [[ ${rec[1]:-} == <-> ]] && ag_start_of $rec[1] && [[ $REPLY == "${rec[2]:-}" ]] && kill $rec[1] 2>/dev/null
+    /bin/rm -f -- "$f"
+  done
+  for f in "$state"/.(serve|events).<->(N); do
+    [[ -e $state/.serve.${f:e}.pid ]] || ag_start_of ${f:e} || /bin/rm -f -- "$f"
+  done
   /bin/rm -rf -- "$state/txn.new" "$state"/.txn-done-*(N)
   if [[ -d $txn_dir ]]; then
     [[ -f $txn_dir/install.sh ]] || { ag_err "$txn_dir holds no copy of the installer; nothing changed"; return 1 }

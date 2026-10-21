@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { spawnSync } from "node:child_process"
+import { spawn, spawnSync } from "node:child_process"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const run = mkdtempSync(join(root, "test/.run-opencode-config-"))
@@ -243,4 +243,58 @@ for (const name of ["engine", "profiles", "installer", "LICENSE", "install.sh"])
 writeFileSync(join(tree, "VERSION"), "1.0.0\n")
 shell(assembled, 'ag_tree="$home/tree" ag_stage="$home/stage" ag_version=1.0.0 ag_commit=fixture ag_rid_new=1.0.0-fixture; ag_harnesses=(opencode); ag_assemble')
 for (const name of ["runtime.zsh", "v2.js"]) assert.equal(readFileSync(join(assembled.engine, "releases/1.0.0-fixture/profiles/opencode", name), "utf8"), readFileSync(join(root, "profiles/opencode", name), "utf8"))
+
+// Recovery stops the server of a check whose shell is gone, including one an
+// earlier release recorded in .serve.pid, but not the server of a running check.
+const recovery = fixture("check-recovery")
+const node = "'" + process.execPath.replaceAll("'", "'\\''") + "'"
+shell(recovery, `
+  spawn() { REPLY=$("$@" >/dev/null 2>&1 & print $!) }
+  started() { REPLY=$(/bin/ps -o lstart= -p $1) && REPLY=\${(j: :)\${=REPLY}} }
+  gone() { local i; for i in {1..30}; do kill -0 $1 2>/dev/null || return 0; sleep 0.1; done; return 1 }
+  spawn /bin/sleep 300; orphan=$REPLY; started $orphan; orphan_start=$REPLY
+  spawn /bin/sleep 300; live=$REPLY; started $live; live_start=$REPLY
+  spawn ${node} -e 'setTimeout(() => {}, 300000)' serve --print-logs --log-level ERROR --hostname 127.0.0.1 --port 1; legacy=$REPLY
+  spawn /usr/bin/true; dead=$REPLY; gone $dead
+  ${node} -e 'setTimeout(() => {}, 300000)' serve --print-logs --log-level ERROR --hostname 127.0.0.1 --port 1 >/dev/null 2>&1 &
+  owned=$!
+  print -r -- $owned > "$state/.serve.pid"
+  ag_recover test
+  kill -0 $owned && [[ -e $state/.serve.pid ]] || { print 'recovery stopped a running check recorded in .serve.pid'; exit 1 }
+  kill $owned
+  started $$; print -rl -- $live "$live_start" "$REPLY" > "$state/.serve.$$.pid"
+  print -rl -- $orphan "$orphan_start" "Thu Jan  1 00:00:00 1970" > "$state/.serve.$dead.pid"
+  print -r -- $legacy > "$state/.serve.pid"
+  touch "$state/.serve.$$" "$state/.serve.$dead" "$state/.events.$dead"
+  ag_recover test
+  gone $orphan || { print 'abandoned check server still running'; exit 1 }
+  gone $legacy || { print 'server recorded in .serve.pid still running'; exit 1 }
+  kill -0 $live || { print 'running check lost its server'; exit 1 }
+  kill $live
+  [[ -e $state/.serve.$$.pid && -e $state/.serve.$$ ]] || { print 'running check lost its files'; exit 1 }
+  [[ ! -e $state/.serve.pid && ! -e $state/.serve.$dead.pid && ! -e $state/.serve.$dead && ! -e $state/.events.$dead ]] ||
+    { print 'abandoned check files remain'; exit 1 }
+`)
+
+// An interrupted check stops its server and removes its files.
+const interrupted = fixture("check-interrupt")
+const stub = join(interrupted.home, "sandbox"), quiet = join(interrupted.home, "opencode")
+writeFileSync(stub, '#!/bin/sh\nshift 2\nexec "$@"\n', { mode: 0o755 })
+writeFileSync(quiet, "#!/bin/sh\nexec /bin/sleep 300\n", { mode: 0o755 })
+const check = spawn("/bin/zsh", ["-fc", `
+  emulate -L zsh
+  setopt err_exit no_unset pipe_fail extended_glob
+  source "$1/profiles/opencode/hooks.zsh"
+  engine=$2 session=$3 release=$3 label= staged=1 ok=1 scope=() sandbox=("$4")
+  opencode_check_v2 "$5"
+`, "check-test", root, interrupted.engine, join(interrupted.home, "session"), stub, quiet], { stdio: "ignore" })
+const exited = new Promise(resolve => check.on("exit", code => resolve(code)))
+const checkRecord = join(interrupted.engine, `state/.serve.${check.pid}.pid`)
+for (let i = 0; i < 100 && !existsSync(checkRecord); i++) await new Promise(resolve => setTimeout(resolve, 100))
+const server = Number(readFileSync(checkRecord, "utf8").split("\n")[0])
+check.kill("SIGTERM")
+assert.equal(await exited, 143)
+assert.throws(() => process.kill(server, 0), { code: "ESRCH" })
+assert.ok(!existsSync(checkRecord) && !existsSync(join(interrupted.engine, `state/.serve.${check.pid}`)))
+checks++
 console.log(`ok OpenCode maintenance: ${checks} cases; ${run}`)
