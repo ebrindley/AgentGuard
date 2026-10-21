@@ -193,6 +193,9 @@
   (literal (string-append (param "PI_AGENT_STATE") "/APPEND_SYSTEM.md"))
   (literal (string-append (param "PI_AGENT_STATE") "/models.json"))
   (literal (string-append (param "PI_AGENT_STATE") "/mcp.json"))
+  ;; Pi prepends bin to every Bash command's PATH; startup moves tools/{fd,rg} there.
+  (subpath (string-append (param "PI_AGENT_STATE") "/bin"))
+  (subpath (string-append (param "PI_AGENT_STATE") "/tools"))
   ;; The shared extension remains at the canonical Pi path even when Pi runtime
   ;; state is relocated. Keep these denies pinned as well as state-relative.
   (subpath (string-append (param "HOME") "/.pi/agent/extensions"))
