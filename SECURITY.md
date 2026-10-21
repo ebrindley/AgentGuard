@@ -112,7 +112,7 @@ List. Under it the agent can write only to the project (`PI_PROJECT`, else the
 Git top level, else the launch folder), temp, Pi's state folder apart from its
 configuration, the OMP runtime folders the profile lists, `~/.npm`, `~/.cache`
 and `~/Library/Caches`. It cannot write Pi's or OMP's configuration, extensions,
-packages, skills or system prompts, a project's `.pi` and `.omp` folders or the
+packages, downloaded tools, skills or system prompts, a project's `.pi` and `.omp` folders or the
 extension, hook and tool folders OMP loads from `.claude`, `.codex`, `.gemini`
 and `.opencode`, the project's active Git hooks, or credential paths. It cannot
 read `~/.ssh`, `~/.aws/credentials`, `~/.aws/config`, `~/.docker/config.json`,

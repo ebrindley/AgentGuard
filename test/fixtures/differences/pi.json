@@ -1,7 +1,7 @@
 {
   "source": "pi-sandbox-guard",
   "commit": "7ad441f",
-  "reason": "profiles/pi carries pi-sandbox-guard 7ad441f's Pi profile with the protections Agent Guard adds to Pi sessions (docs/DESIGN.md section 11). Every change to a vendored file is in the patch and listed here; test/pi-files.mjs checks both, test/pi-launch.mjs tests differences 1 to 5, 7 and 9, test/pi-commands.sh difference 6 and the corpus difference 8.",
+  "reason": "profiles/pi carries pi-sandbox-guard 7ad441f's Pi profile with the protections Agent Guard adds to Pi sessions (docs/DESIGN.md section 11). Every change to a vendored file is in the patch and listed here; test/pi-files.mjs checks both, test/pi-launch.mjs tests differences 1 to 5, 7, 9 and 13, test/pi-commands.sh difference 6 and the corpus difference 8.",
   "patch": "pi.patch",
   "files": {
     "LICENSE": { "mode": "644", "blob": "18a32b25985be476250a26c9e8c47f823ae92172", "commit": "b60240a", "note": "From b60240a, the pi-sandbox-guard commit after 7ad441f that changed only LICENSE's copyright line, to name pi-sandbox-guard contributors." },
@@ -109,6 +109,11 @@
       "id": 12,
       "change": "Write-deny mcp.json at the active Pi state root, as models.json is. Pi loads that file's MCP servers at every session start and runs each stdio server's command; OMP's mcp.json and .mcp.json were already denied. Pi's /mcp manager cannot save server changes from a guarded session.",
       "files": ["sandbox/pi-sandbox.sb"]
+    },
+    {
+      "id": 13,
+      "change": "Write-deny bin and tools at the active Pi state root. Pi 1.3.0 puts bin first on every Bash command's PATH and prefers its rg and fd, and moves tools/fd and tools/rg into bin at startup, so a planted file there would run in later sessions. A guarded session cannot download a missing rg or fd; Pi warns and continues. The preamble creates bin before confinement with the Pi state root, because Pi's startup migration of a legacy tools/rg or tools/fd stops Pi when it cannot create a missing bin.",
+      "files": ["sandbox/pi-sandbox.sb", "sandbox/pi-sandbox-preamble.zsh"]
     }
   ],
   "test_notes": [
@@ -123,8 +128,8 @@
     },
     {
       "file": "scripts/test-sandbox-profile.sh",
-      "differences": [1, 4, 9, 12],
-      "change": "sb, sb_omp and sb_pi_relocated pass the profile's AG_* parameters with inert values (the cache roots as HOME/.cache), read from the profile, since a missing parameter stops the profile from compiling. The relocated Pi fixture creates its root before confinement, as the launcher does, so the root pin does not deny first-launch runtime setup. check_user_state_protection also checks mcp.json at each Pi and OMP state root."
+      "differences": [1, 4, 9, 12, 13],
+      "change": "sb, sb_omp and sb_pi_relocated pass the profile's AG_* parameters with inert values (the cache roots as HOME/.cache), read from the profile, since a missing parameter stops the profile from compiling. The relocated Pi fixture creates its root before confinement, as the launcher does, so the root pin does not deny first-launch runtime setup. check_user_state_protection also checks mcp.json, bin and tools at each Pi and OMP state root."
     },
     {
       "file": "test/shim.mjs",
