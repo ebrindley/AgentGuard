@@ -12,8 +12,11 @@
   (literal (peer-home "/.codex/models_cache.json"))
   (literal (peer-home "/.codex/session_index.jsonl"))
   (literal (peer-home "/.codex/.sqlite-maintenance.lock"))
+  ;; Named stores directly in ~/.codex only: memories_N and goals_N carry
+  ;; instructions into later sessions.
   (require-all (subpath (peer-home "/.codex"))
-    (regex #"/[^/]+_[0-9]+\\.sqlite(-wal|-shm)?$"))
+    (require-not (regex #"/\.codex/[^/]+/"))
+    (regex #"/\.codex/(state|logs|queue|thread_history)_[0-9]+\.sqlite(-wal|-shm)?$"))
   (subpath (peer-home "/.claude/debug"))
   (subpath (peer-home "/.claude/projects"))
   (subpath (peer-home "/.claude/sessions"))
