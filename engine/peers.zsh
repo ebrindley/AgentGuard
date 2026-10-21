@@ -51,7 +51,14 @@ agent_guard_peer() {
     fi
     [[ $arg != *sandbox_mode* ]] && sandbox=1
   done
-  if [[ $name == opencode && ${args[1]:-} == attach ]]; then
+  # OpenCode's global options, such as --print-logs and --pure, may precede its
+  # subcommand; of those, only --log-level takes a separate value.
+  integer at=1
+  while [[ $name == opencode && ${args[at]:-} == -?* && ${args[at]} != -- ]]; do
+    [[ ${args[at]} == --log-level ]] && (( at++ ))
+    (( at++ ))
+  done
+  if [[ $name == opencode && ${args[at]:-} == attach ]]; then
     print -ru2 -- 'agent-guard: OpenCode must execute locally inside the parent sandbox'; return 2
   fi
   case $name in

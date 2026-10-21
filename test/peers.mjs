@@ -73,7 +73,9 @@ for (const parent of ['opencode', 'pi', 'omp']) {
   const literal = launch(parent, 'claude -- --settings');
   assert.equal(literal.status, 0, literal.stderr);
   assert.deepEqual(literal.stdout.trim().split('\n').slice(-2), ['--', '--settings']);
-  for (const command of ['codex --remote exec', 'opencode run --attach=http://localhost:4096', 'opencode attach http://localhost:4096', 'opencode run --server=http://localhost:4096']) {
+  for (const command of ['codex --remote exec', 'opencode run --attach=http://localhost:4096', 'opencode attach http://localhost:4096', 'opencode run --server=http://localhost:4096',
+                         'opencode --print-logs attach http://localhost:4096', 'opencode --log-level ERROR attach http://localhost:4096',
+                         'opencode --print-logs --pure attach http://localhost:4096']) {
     const r = launch(parent, command);
     assert.equal(r.status, 2, r.stderr);
     assert.match(r.stderr, /must execute locally/);
@@ -105,6 +107,9 @@ for (const parent of ['opencode', 'pi', 'omp']) {
   const result = launch(parent, 'opencode run --model fixture hello');
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(result.stdout.trim().split('\n'), ['run', '--standalone', '--model', 'fixture', 'hello']);
+  const attach = launch(parent, 'opencode --print-logs attach http://localhost:4096');
+  assert.equal(attach.status, 2, attach.stderr);
+  assert.match(attach.stderr, /must execute locally/);
 }
 writeFileSync(opencodeFile, v1Stub);
 console.log('ok V2 peer commands use private servers under all parent policies');
