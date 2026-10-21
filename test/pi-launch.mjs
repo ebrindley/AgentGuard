@@ -197,6 +197,10 @@ try {
         denied(write(a, join(state, 'plugins/probe.js'), options), 'plugin');
       }
     });
+    if (!variant.startsWith('omp')) check(`difference 13: ${variant} creates a write-denied bin`, () => {
+      assert.ok(existsSync(join(agent, 'bin')), 'bin not created');
+      denied(write(a, join(agent, 'bin/rg'), options), 'bin');
+    });
     check(`difference 9: ${variant} roots cannot be removed, moved or replaced`, () => {
       const replacement = join(scratch, `state-replacement-${variant}`);
       mkdirSync(replacement);

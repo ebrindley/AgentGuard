@@ -21,7 +21,7 @@ index 2f94258..d86d372 100755
  fi
  
 diff --git a/sandbox/pi-sandbox-preamble.zsh b/sandbox/pi-sandbox-preamble.zsh
-index 9b7c788..a53d353 100644
+index 9b7c788..cadb126 100644
 --- a/sandbox/pi-sandbox-preamble.zsh
 +++ b/sandbox/pi-sandbox-preamble.zsh
 @@ -48,6 +48,7 @@ unset _PI_GIT_ENV_NAME
@@ -266,7 +266,7 @@ index 9b7c788..a53d353 100644
    exit 1
  fi
  unset _pi_config_bases _pi_config_offender
-@@ -1084,12 +1217,65 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
+@@ -1084,12 +1217,67 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
      # the recorded interpreter, and both --detect and a bare --pi re-derive node via
      # detect_node, which takes the first PATH hit with no write-root filter — so
      # either would re-record the same unsafe path and fail identically next launch.
@@ -279,8 +279,10 @@ index 9b7c788..a53d353 100644
  
 +# Difference 9 pins state nodes, including their creation. Prepare only the active
 +# runtime's roots before confinement; mkdir -p also creates a named profile's root.
++# Difference 13 denies Pi's bin, and Pi's startup migration of a legacy tools/rg or
++# tools/fd stops Pi when it cannot create a missing bin, so make it here.
 +if [[ $PI_SANDBOX_RUNTIME == pi ]]; then
-+  /bin/mkdir -p "$PI_AGENT_STATE" || {
++  /bin/mkdir -p "$PI_AGENT_STATE/bin" || {
 +    emit "cannot create '$PI_AGENT_STATE'; refusing to launch."
 +    exit 1
 +  }
@@ -333,7 +335,7 @@ index 9b7c788..a53d353 100644
  emit "OS sandbox ON. Runtime [$PI_SANDBOX_RUNTIME]. Project [$PROJECT_VIA]: $PROJECT"
  emit "  active Git hooks denied: $ACTIVE_HOOKS"
  if [ "$PI_SANDBOX_RUNTIME" = "pi" ]; then
-@@ -1112,6 +1298,15 @@ fi
+@@ -1112,6 +1300,15 @@ fi
  export PI_SANDBOX_PROFILE_DIGEST PI_SANDBOX_PROJECT_BOUNDARY
  export PI_SANDBOX_ACTIVE_HOOKS_BOUNDARY PI_SANDBOX_AGENT_STATE_BOUNDARY
  
@@ -349,7 +351,7 @@ index 9b7c788..a53d353 100644
  PI_SANDBOX_CMD=(
    "$SANDBOX_EXEC"
    -D "PROJECT=$PROJECT"
-@@ -1122,5 +1317,6 @@ PI_SANDBOX_CMD=(
+@@ -1122,5 +1319,6 @@ PI_SANDBOX_CMD=(
    -D "OMP_AGENT_STATE=$OMP_AGENT_STATE"
    -D "OMP_STATE_ROOT=$OMP_STATE_ROOT"
    -D "OMP_BASE_ROOT=$OMP_BASE_ROOT"
@@ -358,7 +360,7 @@ index 9b7c788..a53d353 100644
 +  -p "$AG_PEER_PROFILE"
  )
 diff --git a/sandbox/pi-sandbox.sb b/sandbox/pi-sandbox.sb
-index f560a31..4b1d6e8 100644
+index f560a31..ae558b3 100644
 --- a/sandbox/pi-sandbox.sb
 +++ b/sandbox/pi-sandbox.sb
 @@ -113,6 +113,8 @@
@@ -396,15 +398,18 @@ index f560a31..4b1d6e8 100644
    (subpath (string-append (param "PI_AGENT_STATE") "/extensions"))
    (literal (string-append (param "PI_AGENT_STATE") "/settings.json"))
    (literal (string-append (param "PI_AGENT_STATE") "/auth.json"))
-@@ -180,6 +192,7 @@
+@@ -180,6 +192,10 @@
    (literal (string-append (param "PI_AGENT_STATE") "/SYSTEM.md"))
    (literal (string-append (param "PI_AGENT_STATE") "/APPEND_SYSTEM.md"))
    (literal (string-append (param "PI_AGENT_STATE") "/models.json"))
 +  (literal (string-append (param "PI_AGENT_STATE") "/mcp.json"))
++  ;; Pi prepends bin to every Bash command's PATH; startup moves tools/{fd,rg} there.
++  (subpath (string-append (param "PI_AGENT_STATE") "/bin"))
++  (subpath (string-append (param "PI_AGENT_STATE") "/tools"))
    ;; The shared extension remains at the canonical Pi path even when Pi runtime
    ;; state is relocated. Keep these denies pinned as well as state-relative.
    (subpath (string-append (param "HOME") "/.pi/agent/extensions"))
-@@ -323,3 +336,142 @@
+@@ -323,3 +339,142 @@
    (literal (string-append (param "HOME") "/.pi/agent/security-events.log"))
    ;; .env files anywhere (incl. project) — the one project-wide secret deny.
    (regex #"/\.env($|\.)"))
@@ -548,7 +553,7 @@ index f560a31..4b1d6e8 100644
 +  (literal (param "OMP_BASE_ROOT"))
 +  (literal (string-append (param "OMP_BASE_ROOT") "/profiles")))
 diff --git a/scripts/test-sandbox-profile.sh b/scripts/test-sandbox-profile.sh
-index 4dcdf9c..cf9b819 100755
+index 4dcdf9c..7bcfc7c 100755
 --- a/scripts/test-sandbox-profile.sh
 +++ b/scripts/test-sandbox-profile.sh
 @@ -99,6 +99,17 @@ printf 'omp-hook\n' > "$FAKEHOME/.omp/agent/hooks/pre-tool.sh"
@@ -601,12 +606,13 @@ index 4dcdf9c..cf9b819 100755
  sb_pi_relocated /bin/sh -c "mkdir -p '$FAKEHOME/.pi/alternate-agent/sessions' && echo s > '$FAKEHOME/.pi/alternate-agent/sessions/x'" \
    || die "relocated Pi session state write denied"
  if sb_pi_relocated /bin/sh -c "touch '$FAKEHOME/.pi/agent/extensions/relocation-tamper'" 2>/dev/null; then
-@@ -337,7 +352,7 @@ fi
+@@ -337,7 +352,8 @@ fi
  check_user_state_protection() {
    local runner="$1" state_root="$2" relative target
    for relative in npm/node_modules/probe/marker.txt git/probe/marker.txt \
 -    skills/probe/SKILL.md SYSTEM.md APPEND_SYSTEM.md models.json
-+    skills/probe/SKILL.md SYSTEM.md APPEND_SYSTEM.md models.json mcp.json
++    skills/probe/SKILL.md SYSTEM.md APPEND_SYSTEM.md models.json mcp.json \
++    bin/marker.txt tools/marker.txt
    do
      target="$state_root/$relative"
      mkdir -p "$(dirname "$target")"

@@ -1225,8 +1225,10 @@ unset _pi_launch_element
 
 # Difference 9 pins state nodes, including their creation. Prepare only the active
 # runtime's roots before confinement; mkdir -p also creates a named profile's root.
+# Difference 13 denies Pi's bin, and Pi's startup migration of a legacy tools/rg or
+# tools/fd stops Pi when it cannot create a missing bin, so make it here.
 if [[ $PI_SANDBOX_RUNTIME == pi ]]; then
-  /bin/mkdir -p "$PI_AGENT_STATE" || {
+  /bin/mkdir -p "$PI_AGENT_STATE/bin" || {
     emit "cannot create '$PI_AGENT_STATE'; refusing to launch."
     exit 1
   }
