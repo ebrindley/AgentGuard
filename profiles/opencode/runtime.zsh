@@ -29,7 +29,7 @@ opencode_cli_args() {
   done
   (( standalone )) && return
   case $command in
-    (serve|--version|-v|--help|-h|upgrade|update|uninstall) return ;;
+    (serve|--version|-v|--help|-h|upgrade|update|uninstall) return 0 ;;
     (service)
       [[ $subcommand != (start|restart) ]] || fail 'start the V2 server with opencode serve; shared-service maintenance runs outside Agent Guard'
       return ;;
@@ -38,10 +38,10 @@ opencode_cli_args() {
       return ;;
     (run|mini|models|stats|api|reload) reply=("${prefix[@]}" "$command" --standalone "${rest[@]:1}") ;;
     (auth|session)
-      [[ -n $subcommand && $subcommand != (--help|-h) ]] || return
+      [[ -n $subcommand && $subcommand != (--help|-h) ]] || return 0
       reply=("${prefix[@]}" "$command" "$subcommand" --standalone "${rest[@]:2}") ;;
     (debug)
-      [[ $subcommand != paths ]] || return
+      [[ $subcommand != paths ]] || return 0
       managed=1 ;;
     (plugin|mcp|pair) managed=1 ;;
     (*) reply=("${prefix[@]}" --standalone "${rest[@]}") ;;
