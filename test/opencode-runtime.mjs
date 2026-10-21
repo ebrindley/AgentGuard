@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url"
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 function prepare(args) {
   const result = spawnSync("/bin/zsh", ["-fc", `
-    setopt no_unset
+    setopt err_exit no_unset pipe_fail extended_glob
     source "$1"
     shift
     fail() { print -ru2 -- "$*"; exit 2; }
