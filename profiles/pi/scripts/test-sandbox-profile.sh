@@ -352,7 +352,7 @@ fi
 check_user_state_protection() {
   local runner="$1" state_root="$2" relative target
   for relative in npm/node_modules/probe/marker.txt git/probe/marker.txt \
-    skills/probe/SKILL.md SYSTEM.md APPEND_SYSTEM.md models.json
+    skills/probe/SKILL.md SYSTEM.md APPEND_SYSTEM.md models.json mcp.json
   do
     target="$state_root/$relative"
     mkdir -p "$(dirname "$target")"

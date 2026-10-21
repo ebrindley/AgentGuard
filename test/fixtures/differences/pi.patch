@@ -358,7 +358,7 @@ index 9b7c788..a53d353 100644
 +  -p "$AG_PEER_PROFILE"
  )
 diff --git a/sandbox/pi-sandbox.sb b/sandbox/pi-sandbox.sb
-index f560a31..cedde23 100644
+index f560a31..4b1d6e8 100644
 --- a/sandbox/pi-sandbox.sb
 +++ b/sandbox/pi-sandbox.sb
 @@ -113,6 +113,8 @@
@@ -396,7 +396,15 @@ index f560a31..cedde23 100644
    (subpath (string-append (param "PI_AGENT_STATE") "/extensions"))
    (literal (string-append (param "PI_AGENT_STATE") "/settings.json"))
    (literal (string-append (param "PI_AGENT_STATE") "/auth.json"))
-@@ -323,3 +335,142 @@
+@@ -180,6 +192,7 @@
+   (literal (string-append (param "PI_AGENT_STATE") "/SYSTEM.md"))
+   (literal (string-append (param "PI_AGENT_STATE") "/APPEND_SYSTEM.md"))
+   (literal (string-append (param "PI_AGENT_STATE") "/models.json"))
++  (literal (string-append (param "PI_AGENT_STATE") "/mcp.json"))
+   ;; The shared extension remains at the canonical Pi path even when Pi runtime
+   ;; state is relocated. Keep these denies pinned as well as state-relative.
+   (subpath (string-append (param "HOME") "/.pi/agent/extensions"))
+@@ -323,3 +336,142 @@
    (literal (string-append (param "HOME") "/.pi/agent/security-events.log"))
    ;; .env files anywhere (incl. project) — the one project-wide secret deny.
    (regex #"/\.env($|\.)"))
@@ -540,7 +548,7 @@ index f560a31..cedde23 100644
 +  (literal (param "OMP_BASE_ROOT"))
 +  (literal (string-append (param "OMP_BASE_ROOT") "/profiles")))
 diff --git a/scripts/test-sandbox-profile.sh b/scripts/test-sandbox-profile.sh
-index 4dcdf9c..56fc28d 100755
+index 4dcdf9c..cf9b819 100755
 --- a/scripts/test-sandbox-profile.sh
 +++ b/scripts/test-sandbox-profile.sh
 @@ -99,6 +99,17 @@ printf 'omp-hook\n' > "$FAKEHOME/.omp/agent/hooks/pre-tool.sh"
@@ -593,6 +601,15 @@ index 4dcdf9c..56fc28d 100755
  sb_pi_relocated /bin/sh -c "mkdir -p '$FAKEHOME/.pi/alternate-agent/sessions' && echo s > '$FAKEHOME/.pi/alternate-agent/sessions/x'" \
    || die "relocated Pi session state write denied"
  if sb_pi_relocated /bin/sh -c "touch '$FAKEHOME/.pi/agent/extensions/relocation-tamper'" 2>/dev/null; then
+@@ -337,7 +352,7 @@ fi
+ check_user_state_protection() {
+   local runner="$1" state_root="$2" relative target
+   for relative in npm/node_modules/probe/marker.txt git/probe/marker.txt \
+-    skills/probe/SKILL.md SYSTEM.md APPEND_SYSTEM.md models.json
++    skills/probe/SKILL.md SYSTEM.md APPEND_SYSTEM.md models.json mcp.json
+   do
+     target="$state_root/$relative"
+     mkdir -p "$(dirname "$target")"
 diff --git a/src/index.mjs b/src/index.mjs
 index d997be1..93f8d29 100644
 --- a/src/index.mjs

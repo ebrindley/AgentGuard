@@ -104,6 +104,11 @@
       "id": 11,
       "change": "When Git selects the project boundary, require it to match the physical checkout root found through the nearest .git directory or file. A session-writable core.worktree cannot redirect the next launch to a sibling or ancestor. Explicit PI_PROJECT retains operator-selected boundaries; linked worktrees and non-Git folders remain supported.",
       "files": ["sandbox/pi-sandbox-preamble.zsh"]
+    },
+    {
+      "id": 12,
+      "change": "Write-deny mcp.json at the active Pi state root, as models.json is. Pi loads that file's MCP servers at every session start and runs each stdio server's command; OMP's mcp.json and .mcp.json were already denied. Pi's /mcp manager cannot save server changes from a guarded session.",
+      "files": ["sandbox/pi-sandbox.sb"]
     }
   ],
   "test_notes": [
@@ -118,8 +123,8 @@
     },
     {
       "file": "scripts/test-sandbox-profile.sh",
-      "differences": [1, 4, 9],
-      "change": "sb, sb_omp and sb_pi_relocated pass the profile's AG_* parameters with inert values (the cache roots as HOME/.cache), read from the profile, since a missing parameter stops the profile from compiling. The relocated Pi fixture creates its root before confinement, as the launcher does, so the root pin does not deny first-launch runtime setup."
+      "differences": [1, 4, 9, 12],
+      "change": "sb, sb_omp and sb_pi_relocated pass the profile's AG_* parameters with inert values (the cache roots as HOME/.cache), read from the profile, since a missing parameter stops the profile from compiling. The relocated Pi fixture creates its root before confinement, as the launcher does, so the root pin does not deny first-launch runtime setup. check_user_state_protection also checks mcp.json at each Pi and OMP state root."
     },
     {
       "file": "test/shim.mjs",
