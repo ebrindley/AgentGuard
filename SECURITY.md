@@ -99,6 +99,20 @@ global skill roots; OpenCode does not deny credential folders unless the Guard
 List names them.
 A local MCP child inherits Seatbelt; services reached over the network do not.
 
+Install and update follow a link at OpenCode's global `config.json`,
+`opencode.json` or `opencode.jsonc`, so configuration can live in a dotfiles
+folder. A guarded session can write `~/.config/opencode`, so before the next
+install or update it can replace one of those files with a link to another JSON
+object file, including one outside ALLOW. When the permission record has no
+entry for that path, the installer rewrites the target as reformatted JSON and
+changes its `permission.bash` and `permission.external_directory` from `ask` or
+unset to `allow`. It keeps explicit denies, leaves a file whose `"*"` permission
+is `deny` alone, and writes nothing when no change is needed. Retiring earlier
+edit rules and uninstall's restore also follow the current link for paths the
+record lists. Guard files, shell startup files and recorded wrappers are refused
+as targets. This risk is accepted; the installer cannot tell a dotfiles link
+from one a session made.
+
 The OpenCode plugin and cc-safety-net are advisory. They refuse tool calls with
 a clear message, but nothing depends on them for safety. The Seatbelt profile is
 the boundary.
@@ -407,8 +421,14 @@ Peer runtime grants are shared by every process in the session, including the
 outer agent. They cover runtime subdirectories and selected files, not whole
 peer configuration directories. Peer configuration, credential files and CLI
 installations receive no new write grants. Claude's mixed `~/.claude.json` is
-not granted. The added OpenCode data/state grants under Pi and OMP carry the
-existing `auth.json` remote-configuration limitation described above.
+not granted. Some granted runtime folders hold memory for later sessions:
+Claude Code loads a project's auto-memory from `~/.claude/projects`, and Grok
+keeps its memory in `~/.grok/memory` and `~/.grok/memory-v2`. The grants cover
+every project, so a session confined to one project can write memory that a
+later unguarded Claude Code session loads for another project, and can change
+Grok's memory. This risk is accepted. The added OpenCode data/state grants under Pi
+and OMP carry the existing `auth.json` remote-configuration limitation described
+above.
 
 OpenCode and Pi have different read policies. Disabling a peer's inner sandbox
 leaves the parent's read policy in force; it does not reproduce the peer's
