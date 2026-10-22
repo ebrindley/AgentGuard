@@ -17,10 +17,13 @@ print -r -- '{"theme":"system","permission":{"bash":"ask","edit":"deny"}}' > "$H
 cp "$HOME/.config/opencode/opencode.json" "$output/config-before.json"
 print -r -- '{"theme":"system","permission":{"bash":"allow","external_directory":"allow","edit":"deny"}}' > "$output/config-expected.json"
 if [[ $scenario == upgrade ]]; then
+  node -e 'const fs=require("fs");for(const file of process.argv.slice(1)){const config=JSON.parse(fs.readFileSync(file));config.$schema="https://opencode.ai/config.json";fs.writeFileSync(file,JSON.stringify(config))}' "$HOME/.config/opencode/opencode.json" "$output/config-before.json" "$output/config-expected.json"
   npm install --prefix "$RUNNER_TEMP/opencode-v1" opencode-ai@1.18.33 > "$output/npm-v1.log" 2>&1
   path=("$RUNNER_TEMP/opencode-v1/node_modules/.bin" $path)
   /bin/zsh -c "$(/usr/bin/curl -fsSL https://github.com/ebrindley/AgentGuard/releases/download/v2026.10.20/install.sh)" install.sh --projects "$HOME/Projects" 2>&1 | tee "$output/old-install.log"
   [[ $(/usr/bin/jq -r .version "$engine/state/stamp.json") == 2026.10.20 ]]
+  cp "$HOME/.config/opencode/opencode.json" "$output/config-after-old.json"
+  node -e 'const fs=require("fs"),assert=require("assert/strict");assert.deepEqual(JSON.parse(fs.readFileSync(process.argv[1])),JSON.parse(fs.readFileSync(process.argv[2])))' "$output/config-expected.json" "$output/config-after-old.json"
   print -r -- '# acceptance settings marker' >> "$HOME/Agent Guard/Guard List.txt"
   cp "$HOME/Agent Guard/Guard List.txt" "$output/list-before.txt"
 fi
