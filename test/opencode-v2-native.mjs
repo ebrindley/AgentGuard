@@ -6,6 +6,7 @@ import { spawn, spawnSync } from "node:child_process"
 import { createServer } from "node:http"
 import { createConnection } from "node:net"
 import { randomUUID } from "node:crypto"
+import { homedir, tmpdir } from "node:os"
 import * as adapter from "./engines/zsh.mjs"
 
 assert.equal(process.versions.node.split(".")[0], "24")
@@ -14,7 +15,9 @@ const cli = realpathSync(process.env.AG_TEST_OPENCODE)
 const modes = ["cli", "gui", "doctor", "managed-cli", "gui-signal", "gui-server-stop", "routing"]
 const selected = process.argv[2] ? [process.argv[2]] : modes
 assert.ok(selected.every(mode => modes.includes(mode)))
-const run = realpathSync(mkdtempSync(join(root, "test/.run-opencode-v2-")))
+const accountHome = realpathSync(homedir())
+const run = realpathSync(mkdtempSync(join(tmpdir(), "agentguard-v2-")))
+assert.ok(!run.startsWith(accountHome + "/"), "native V2 fixtures must be outside the account home")
 const quote = value => "'" + value.replaceAll("'", "'\\''") + "'"
 console.log(`OpenCode V2 fixture: ${run}`)
 
@@ -23,6 +26,8 @@ for (const mode of selected) {
   const project = join(home, "Projects/app"), readonly = join(home, "Projects/reference"), denied = join(home, "Projects/private")
   const engine = join(home, "Library/Application Support/AgentGuard"), config = join(home, ".config/opencode")
   for (const path of [tree, project, readonly, denied, join(home, "Agent Guard"), join(home, "fakebin"), join(config, "plugins")]) mkdirSync(path, { recursive: true })
+  const git = spawnSync("git", ["init", "--quiet", "--template=", project], { encoding: "utf8" })
+  assert.equal(git.status, 0, git.stderr)
   adapter.stage(root, tree, home)
   const release = adapter.layout(tree, engine)
   const launch = join(release, "launch")
@@ -207,6 +212,15 @@ for (const mode of selected) {
   writeFileSync(join(run, mode, "stdout"), output)
   writeFileSync(join(run, mode, "stderr"), error)
   writeFileSync(join(run, mode, "requests.json"), JSON.stringify(requests))
+  if (mode === "cli") {
+    const watched = [...error.matchAll(/message="watcher subscribe" path=(?:"([^"]+)"|(\S+))/g)].map(match => match[1] ?? match[2])
+    writeFileSync(join(run, mode, "watched-paths.json"), JSON.stringify(watched, null, 2))
+    assert.ok(watched.includes(config), "fixture config discovery must be observable")
+    assert.ok(watched.includes(join(home, ".claude/skills")), "fixture skill discovery must be observable")
+    for (const path of watched) {
+      assert.ok(path !== accountHome && !path.startsWith(accountHome + "/"), `fixture discovered a real account path: ${path}`)
+    }
+  }
   if (mode === "gui-server-stop" || mode === "gui-signal") {
     const service = spawnSync(cli, ["service", "status"], { env, encoding: "utf8", timeout: 10000 })
     if (service.stdout.trim() !== "stopped") spawnSync(cli, ["service", "stop"], { env, timeout: 10000 })
