@@ -1,6 +1,6 @@
 # Using Agent Guard
 
-This guide describes release 2026.10.20, which supports OpenCode, Pi and OMP.
+This guide describes release 2026.10.21, which supports OpenCode, Pi and OMP.
 See [release channels](OPERATIONS.md#release-channels) for installation.
 
 ## Start OpenCode
@@ -25,10 +25,15 @@ Review changes before executing them outside the guard.
 
 ## OpenCode versions
 
-Stable 2026.10.20 targets OpenCode 1.18.33 and newer V1 releases,
-plus OpenCode 2.0.32 CLI and desktop. Keep shared configuration in the V1 format
+Stable 2026.10.21 targets OpenCode 1.18.33 and newer V1 releases,
+plus OpenCode 2.0.32 and 2.1.1 CLI and desktop backends. Keep shared configuration in the V1 format
 when both versions use it; V2 normalizes supported V1 settings in memory.
 Native V2-only settings are not a configuration migration for V1.
+
+Native compatibility fixtures exercise CLI tool policy and the desktop backend's
+service lifecycle. They do not attest renderer behavior, first-launch onboarding,
+or the desktop's stored approval mode. See [supported versions](../SECURITY.md#opencode)
+for qualification limits.
 
 | Interface | OpenCode 1 | OpenCode 2 |
 |---|---|---|
