@@ -1,12 +1,12 @@
 # Installation and maintenance
 
-These procedures describe stable 2026.10.20 unless marked unreleased. For everyday use, see the
+These procedures describe stable 2026.10.21 unless marked unreleased. For everyday use, see the
 [user guide](USAGE.md).
 
 ## Release channels
 
 The latest stable release is
-[2026.10.20](https://github.com/ebrindley/AgentGuard/releases/tag/v2026.10.20), for OpenCode,
+[2026.10.21](https://github.com/ebrindley/AgentGuard/releases/tag/v2026.10.21), for OpenCode,
 Pi and Oh My Pi (OMP). Run the installer from Terminal outside any agent session
 or sandbox:
 
@@ -659,6 +659,11 @@ Inside the guard these writes are denied, and a package missing at start or at
 `/reload` cannot be installed. Pi's OAuth logins stop at their first refresh
 inside a session, because `auth.json` is write-protected; pi-sandbox-guard
 behaves the same.
+
+Pi's global `bin` and legacy `tools` folders are also write-protected. If `rg`
+or `fd` is missing, run the real Pi executable outside the guard to let it
+download the tool, then restart guarded Pi. A guarded session cannot perform
+that download and may continue without the missing tool.
 
 An update of a Pi installed with npm's prefix at `~/.local` can put npm's `pi`
 back in `~/.local/bin` in place of the launcher; `pi` then starts Pi unguarded.
