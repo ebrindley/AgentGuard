@@ -16,10 +16,17 @@ set `AG_TEST_OPENCODE` to its executable and run
 `node test/opencode-v2-native.mjs` with Node 24 outside an
 existing sandbox. The GUI fixture follows the packaged desktop's shared-service
 contract using the real bundled CLI; it does not attest renderer behavior.
-All homes, providers and model responses are local fixtures.
-Pass `cli`, `gui`, `doctor`, `managed-cli`, `gui-signal` or `gui-server-stop` to
+All homes, providers and model responses are local fixtures. Native V2 homes
+are under an `agentguard-v2-*` folder in the OS temporary directory, outside the
+real account home. Each active project has its own Git root, so discovery does
+not walk into the source repository or the account's global skill directories.
+The CLI case records watched paths and checks that discovery stays outside the
+real account home. Logs remain in the printed fixture folder.
+Pass `cli`, `gui`, `doctor`, `managed-cli`, `gui-signal`, `gui-server-stop` or `routing` to
 select one case. The managed cases cover leading global flags, client shutdown,
 SIGTERM and loss of the original service.
+The routing case checks command output, status release identifiers and restart
+state, probe process/listener cleanup, and preservation of an incumbent service.
 
 Each host still registers one Guard tool-before hook and uses the same command
 checker and filesystem rules. V2 adds one adapter registration and one read-only
