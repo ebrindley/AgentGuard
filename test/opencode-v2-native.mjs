@@ -4,12 +4,14 @@ import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { spawn, spawnSync } from "node:child_process"
 import { createServer } from "node:http"
+import { createConnection } from "node:net"
+import { randomUUID } from "node:crypto"
 import * as adapter from "./engines/zsh.mjs"
 
 assert.equal(process.versions.node.split(".")[0], "24")
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const cli = realpathSync(process.env.AG_TEST_OPENCODE)
-const modes = ["cli", "gui", "doctor", "managed-cli", "gui-signal", "gui-server-stop"]
+const modes = ["cli", "gui", "doctor", "managed-cli", "gui-signal", "gui-server-stop", "routing"]
 const selected = process.argv[2] ? [process.argv[2]] : modes
 assert.ok(selected.every(mode => modes.includes(mode)))
 const run = realpathSync(mkdtempSync(join(root, "test/.run-opencode-v2-")))
@@ -70,6 +72,104 @@ for (const mode of selected) {
     TMPDIR: process.env.TMPDIR, LANG: "en_US.UTF-8", XDG_CONFIG_HOME: join(home, ".config"),
     XDG_DATA_HOME: join(home, ".local/share"), XDG_STATE_HOME: join(home, ".local/state"),
     OPENCODE_MODELS_URL: url + "/models", OPENCODE_DISABLE_MODELS_FETCH: "1" }
+  if (mode === "routing") {
+    const password = randomUUID(), servers = [], results = []
+    const pause = ms => new Promise(resolve => setTimeout(resolve, ms))
+    const groupExists = pid => {
+      try { process.kill(-pid, 0); return true } catch (error) { if (error.code === "ESRCH") return false; throw error }
+    }
+    const listening = address => new Promise(resolve => {
+      const socket = createConnection({ host: "127.0.0.1", port: Number(new URL(address).port) })
+      const finish = value => { socket.destroy(); resolve(value) }
+      socket.once("connect", () => finish(true)); socket.once("error", () => finish(false))
+      socket.setTimeout(1000, () => finish(false))
+    })
+    const start = (command, args, label) => {
+      const child = spawn(command, args, { cwd: project, env: { ...env, OPENCODE_PASSWORD: password }, detached: true, stdio: ["ignore", "pipe", "pipe"] })
+      const server = { child, label, output: "", address: null, stopped: false }
+      server.closed = new Promise(resolve => child.once("exit", (code, signal) => resolve({ code, signal })))
+      child.stdout.on("data", data => { server.output += data })
+      child.stderr.on("data", data => { server.output += data })
+      servers.push(server)
+      return server
+    }
+    const ready = async server => {
+      for (let attempt = 0; attempt < 80; attempt++) {
+        server.address = server.output.match(/http:\/\/127\.0\.0\.1:\d+/)?.[0] ?? null
+        if (server.address && await listening(server.address)) return server.address
+        if (server.child.exitCode !== null || server.child.signalCode !== null) break
+        await pause(250)
+      }
+      assert.fail(`${server.label} did not listen: ${server.output}`)
+    }
+    const stop = async server => {
+      if (server.stopped) return
+      if (groupExists(server.child.pid)) process.kill(-server.child.pid, "SIGTERM")
+      for (let attempt = 0; attempt < 100 && groupExists(server.child.pid); attempt++) await pause(50)
+      const graceful = !groupExists(server.child.pid)
+      if (!graceful) process.kill(-server.child.pid, "SIGKILL")
+      const exit = await server.closed
+      server.stopped = true
+      results.push({ server: server.label, address: server.address, exit, groupGone: !groupExists(server.child.pid), listenerGone: server.address ? !await listening(server.address) : null })
+      assert.ok(graceful, `${server.label} left its process group running`)
+      if (server.address) assert.equal(await listening(server.address), false, `${server.label} left its listener running`)
+    }
+    try {
+      const incumbent = start(cli, ["serve", "--service", "--hostname", "127.0.0.1"], "incumbent")
+      const incumbentAddress = await ready(incumbent)
+      const cases = [
+        [["--version"], 0, /(?:opencode )?v?2\./], [["--help"], 0, /opencode.*(?:flags|command)/is],
+        [["serve", "--help"], 0, /opencode serve/], [["auth", "--help"], 0, /opencode auth/],
+        [["session", "--help"], 0, /opencode session/], [["debug", "paths"], 0, /^home\s+/m],
+        [["service", "status"], 0, incumbentAddress],
+        [["service", "start"], 1, /start the V2 server with opencode serve/],
+        [["service", "restart"], 1, /start the V2 server with opencode serve/],
+        [["acp", "--login"], 1, /run V2 ACP login outside Agent Guard/],
+      ]
+      for (const [args, expected, pattern] of cases) {
+        const result = spawnSync("/bin/zsh", [launch, "cli", ...args], { cwd: project, env, encoding: "utf8", timeout: 20000 })
+        const text = result.stdout + result.stderr
+        results.push({ args, status: result.status, output: text })
+        assert.equal(result.status, expected, text)
+        if (typeof pattern === "string") assert.equal(result.stdout.trim(), pattern)
+        else assert.match(text, pattern)
+        if (args[0] === "debug") assert.equal(result.stdout.match(/^home\s+(.+)$/m)?.[1], home)
+      }
+      const probe = start("/bin/zsh", [launch, "cli", "serve", "--hostname", "127.0.0.1", "--port", "0"], "probe")
+      const address = await ready(probe)
+      assert.notEqual(address, incumbentAddress)
+      const response = await fetch(`${address}/api/rpc/agent-guard/status?location%5Bdirectory%5D=${encodeURIComponent(project)}`, {
+        method: "POST", headers: { authorization: `Basic ${Buffer.from(`opencode:${password}`).toString("base64")}`, "content-type": "application/json" },
+        body: '{"input":{}}', signal: AbortSignal.timeout(10000),
+      })
+      assert.equal(response.status, 200)
+      const status = (await response.json()).output
+      writeFileSync(join(run, mode, "status.json"), JSON.stringify(status, null, 2))
+      assert.equal(status.state, "active")
+      assert.equal(status.sandbox.result, "confined")
+      assert.equal(status.safetyNet.hooksReady, true)
+      assert.deepEqual(status.releases, { loaded: release.split("/").at(-1), launcher: release.split("/").at(-1), installed: release.split("/").at(-1), version: "0.0.0" })
+      assert.equal(status.restartNeeded, false)
+      await stop(probe)
+      assert.ok(groupExists(incumbent.child.pid), "incumbent process group was stopped")
+      assert.equal(await listening(incumbentAddress), true, "incumbent listener was stopped")
+      const service = spawnSync(cli, ["service", "status"], { env, encoding: "utf8", timeout: 10000 })
+      assert.equal(service.status, 0, service.stderr)
+      assert.equal(service.stdout.trim(), incumbentAddress)
+      assert.equal(index, 0, "routing probes must not call a model")
+    } finally {
+      let cleanupError
+      for (const server of [...servers].reverse()) {
+        try { await stop(server) } catch (error) { cleanupError ??= error }
+        finally { writeFileSync(join(run, mode, `${server.label}.log`), server.output) }
+      }
+      model.closeAllConnections(); model.close()
+      writeFileSync(join(run, mode, "routing.json"), JSON.stringify(results, null, 2))
+      if (cleanupError) throw cleanupError
+    }
+    console.log("ok OpenCode V2 routing: output, release identity, process and listener cleanup, incumbent preserved")
+    continue
+  }
   let route = "cli", args = ["--print-logs", "run", "--auto", "--model", "guardfixture/test", "--format", "json", "Perform the fixture calls"]
   if (mode.startsWith("gui")) {
     // The desktop fixture follows V2's actual service discovery contract. The
