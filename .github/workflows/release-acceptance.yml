@@ -1,0 +1,50 @@
+name: Published release acceptance
+on:
+  push:
+    branches: [test/release-20261021-acceptance]
+permissions:
+  contents: read
+jobs:
+  acceptance:
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [fresh, upgrade]
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '24'
+      - run: zsh test/published-release.zsh ${{ matrix.scenario }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Preserve failure diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          output="$RUNNER_TEMP/agentguard-acceptance"
+          engine="$HOME/Library/Application Support/AgentGuard"
+          mkdir -p "$output"
+          for name in last-launch-opencode.log 'Guard List.txt'; do
+            if [[ -f "$HOME/Agent Guard/$name" ]]; then
+              cp "$HOME/Agent Guard/$name" "$output/$name"
+            fi
+          done
+          if [[ -f "$engine/state/stamp.json" ]]; then
+            jq '{version,tag,commit,release,harnesses}' "$engine/state/stamp.json" > "$output/failed-stamp.json" || true
+          fi
+          if [[ -f "$HOME/.config/opencode/opencode.json" ]]; then
+            jq '{theme,permission}' "$HOME/.config/opencode/opencode.json" > "$output/failed-config.json" || true
+          fi
+          if [[ -d "$engine/state/txn" ]]; then
+            find "$engine/state/txn" -type f > "$output/transaction-files.txt"
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: published-release-${{ matrix.scenario }}
+          path: ${{ runner.temp }}/agentguard-acceptance
