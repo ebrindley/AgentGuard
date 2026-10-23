@@ -171,20 +171,43 @@ if (( ${installed[(Ie)pi]} )) && [[ -e $f || -L $f ]]; then
   pi_wrappers=(${${(M)${(f)out}:#[A-Za-z0-9._-]##}:#(.|..)})
 fi
 
+# An entry's meaning must not depend on filesystem state a session can write:
+# a quoted entry is taken literally, an unquoted one has its Finder escapes
+# removed, and neither choice consults the disk. Every symlink the resolution
+# passes through is reported in link_nodes so the caller can pin it.
 normalize() {
-  local p=$1 component resolved=/
-  [[ $p == (\"*\"|\'*\') ]] && p=${p[2,-2]}
-  [[ -e $p || $p != *\\* ]] || p=${(Q)p}
+  local p=$1 component target resolved=/ quoted=0 hops=0
+  local -a parts
+  if [[ $p == (\"*\"|\'*\') ]]; then p=${p[2,-2]}; quoted=1; fi
+  if (( ! quoted )) && [[ $p == *\\* ]]; then p=${(Q)p}; fi
   [[ $p == '~' || $p == '~/'* ]] && p=$home${p#\~}
   [[ $p == /* ]] || return 1
-  # Resolve each component before applying ..; :A collapses .. before links.
+  # Follow one link at a time, so every link on the way is recorded, and apply
+  # .. to what is already resolved. Resolving a whole chain in one step would
+  # leave the links inside it unrecorded and so replaceable.
   # Missing suffixes remain usable for DENY and READ ONLY entries.
-  for component in "${(@s:/:)p}"; do
+  parts=("${(@s:/:)p}")
+  while (( $#parts )); do
+    component=$parts[1]
+    shift parts
     case $component in
       (''|.) continue ;;
-      (..) resolved=${resolved:h} ;;
-      (*) resolved="${resolved%/}/$component"; resolved=${resolved:P} ;;
+      (..) resolved=${resolved:h}; continue ;;
     esac
+    target="${resolved%/}/$component"
+    if [[ -L $target ]]; then link_nodes+=("$target"); fi
+    # A dangling link keeps its own name, as the rules for a missing target say,
+    # so it is recorded but not followed.
+    if [[ -L $target && -e $target ]] && (( hops < 32 )); then
+      (( ++hops ))
+      component=$(/usr/bin/readlink -- "$target") || return 1
+      # A relative target resolves against the link's own folder, which
+      # resolved already names; an absolute one restarts from the root.
+      [[ $component == /* ]] && resolved=/
+      parts=("${(@s:/:)component}" "${(@)parts}")
+      continue
+    fi
+    resolved=$target
   done
   REPLY=$resolved
 }
@@ -195,6 +218,7 @@ essential=(/ $home $home/Library $home/.config $home/.local $home/.cache
            /usr /bin /sbin /System /Library /private /dev /opt /Applications)
 sensitive=($home/Library/Application\ Support $home/.config $home/.local)
 typeset -a allow readonly deny scoped
+typeset -aU link_nodes
 section=
 while IFS= read -r line || [[ -n $line ]]; do
   line=${${line%$'\r'}##[[:space:]]##}
@@ -239,6 +263,9 @@ user_readonly=($readonly)
 opencode_skill_globals
 typeset -a rules
 typeset -U pinned
+# A link an entry resolves through decides what that entry covers, so replacing
+# it would re-aim the operator's rule at the next launch. Pin each one.
+pinned+=($link_nodes)
 for entry in ${(o)scoped}; do
   kind=${${entry#*$'\t'}%%$'\t'*}
   p=${entry##*$'\t'}
