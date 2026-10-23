@@ -41,6 +41,10 @@ are guarded by different code with different rules until Pi moves onto Agent
 Guard's engine (step 10d of the plan in [docs/DESIGN.md](docs/DESIGN.md#12-plan)).
 Statements about Pi below apply to OMP too unless they name one runtime.
 
+The trust assumptions behind the boundaries described here, the damage classes
+they address and the layer that covers each are in
+[the threat model](docs/THREAT-MODEL.md).
+
 ### OpenCode
 
 Stable 2026.10.21 supports OpenCode 1.18.33 and newer V1 releases, plus
