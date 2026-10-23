@@ -435,6 +435,20 @@ operator-selected attachment and reports that the server has its own permissions
 An unguarded server with the Guard plugin refuses unsafe tools unless bypass is
 explicitly enabled; a server without the plugin has no such refusal.
 
+Peer wrappers do not mediate IPC with processes started outside the session.
+Claude Code runs background sessions (`--bg`, agent view) under a supervisor
+that may already be running outside Agent Guard; a session it starts would run
+outside the parent profile. In Claude Code 2.1.309 the client creates the
+session's job folder under its configuration folder (`~/.claude/jobs`, or
+`jobs` under `CLAUDE_CONFIG_DIR`) before dispatch. When that folder is outside
+the write grants, as `~/.claude/jobs` is, a guarded `claude --bg` fails with
+EPERM, including when an unguarded supervisor is running. The same version
+contains a flag-gated storage path (`tengu_hover_rest`) in which the client
+does not create the folder; its backend is empty in 2.1.309, and a version that
+enables it removes this barrier. Whether a request sent directly to the
+supervisor's control socket under `/private/tmp/cc-daemon-<uid>/` is refused is
+not established.
+
 Peer runtime grants are shared by every process in the session, including the
 outer agent. They cover runtime subdirectories and selected files, not whole
 peer configuration directories. Peer configuration, credential files and CLI
