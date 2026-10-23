@@ -7,6 +7,10 @@ ag_h_opencode_init() {
   plugins="$conf/plugins"
   plugin="$plugins/agent-guard.js"
   plugin_target="$engine/current/profiles/opencode/plugin.js"
+  # OpenCode 2's service config on its release channel (latest), read from
+  # $XDG_CONFIG_HOME/opencode or OPENCODE_CONFIG_DIR when set; like the configs
+  # above, the installer uses the default folder.
+  service_conf="$conf/service.json"
 }
 
 ag_h_opencode_title() { REPLY=OpenCode }
@@ -243,16 +247,25 @@ ag_perm_report() {  # FILE CUR ENTRY: names each key changed after install
   done
 }
 
+# ag_record_path FILE: REPLY = the JSON path of FILE's recorded keys: the top
+# level of the service config, permission in every other config.
+ag_record_path() {
+  if [[ $1 == "$service_conf" ]]; then REPLY='[]'; else REPLY='["permission"]'; fi
+}
+
 # ag_perm_restore FILE ENTRY TMP: puts back each orig value where FILE still holds
 # the recorded wrote value (null deletes the key); a key with no recorded wrote
 # value is left as is. FILE is rewritten only when that changes its content, so a
 # file the user changed back is not reformatted.
 ag_perm_restore() {
   ag_opencode_config_writable "$1" || return 1
-  /usr/bin/jq --argjson e "$2" 'reduce ($e | to_entries[]) as $x (.;
-      if ($x.value // {} | has("wrote")) and .permission[$x.key] == $x.value.wrote then
-        (if $x.value.orig == null then del(.permission[$x.key]) else .permission[$x.key] = $x.value.orig end)
-      else . end)' "$1" > "$3" 2>/dev/null || return 1
+  ag_record_path "$1"
+  # TMP is private: the service config holds OpenCode's service password.
+  ( umask 077; /usr/bin/jq --argjson e "$2" --argjson p "$REPLY" 'reduce ($e | to_entries[]) as $x (.;
+      ($p + [$x.key]) as $k
+      | if ($x.value // {} | has("wrote")) and getpath($k) == $x.value.wrote then
+        (if $x.value.orig == null then delpaths([$k]) else setpath($k; $x.value.orig) end)
+      else . end)' "$1" > "$3" 2>/dev/null ) || return 1
   /usr/bin/jq -e --slurpfile n "$3" '. == $n[0]' "$1" >/dev/null 2>&1 && return 0
   replace_file "$1" "$3"
 }
@@ -510,6 +523,92 @@ undo_permissions() {
     ag_jnl permissions undone "$n"
   done
   return 0
+}
+
+# OpenCode 2's shared service opt-out (design section 15, D11): disabled: true in
+# its service config, once per Mac. The record entry is the "once": a file with an
+# entry is never written again, so a value the user sets or removes later stays.
+# A key the user already set is recorded with no wrote value and left as is. The
+# file holds the service password: it is changed by key, never copied into the
+# backup, and its contents are never printed. A missing file is created, since
+# OpenCode adds the password when its service first needs it.
+do_opencode_service() {
+  local f=$service_conf st entry= created new="$ag_tstage/service.json"
+  ag_jlast opencode-service
+  st=$REPLY
+  [[ $st == (done|undone) ]] && return 0
+  if [[ -f $record ]] && /usr/bin/jq -e --arg f "$f" 'has($f)' "$record" >/dev/null 2>&1; then
+    [[ -z $st ]] && return 0
+    entry=$(/usr/bin/jq -c --arg f "$f" '.[$f]' "$record") || return 1
+  fi
+  if [[ -z $entry ]]; then
+    if ! ag_opencode_config_writable "$f"; then
+      [[ -z $st ]] || ag_jnl opencode-service done
+      return
+    fi
+    if [[ -e $f ]]; then
+      if ! entry=$(/usr/bin/jq -ce 'if type != "object" then error
+          elif has("disabled") then {disabled: {orig: .disabled}}
+          else {disabled: {orig: null, wrote: true}} end' "$f" 2>/dev/null); then
+        ag_warnings+=("${f:t} not changed (unreadable or invalid JSON): OpenCode's shared service still starts automatically")
+        [[ -z $st ]] || ag_jnl opencode-service done
+        return
+      fi
+    else
+      entry='{"disabled":{"orig":null,"wrote":true}}'
+    fi
+    if [[ -z $st ]]; then
+      created=0
+      [[ -e $f ]] || created=1
+      ag_backup opencode-service && ag_jnl opencode-service begun "created=$created" || return 1
+    fi
+    ag_record_set "$f" "$entry" || return 1
+    /bin/sync
+  fi
+  test_point opencode-service || return 1
+  if /usr/bin/jq -en --argjson e "$entry" '$e.disabled | has("wrote")' >/dev/null; then
+    # Only an absent key is written, so a resumed run does not write twice.
+    /bin/rm -f -- "$new"
+    if [[ ! -e $f ]]; then
+      /usr/bin/jq -n '{disabled: true}' > "$new" || return 1
+    elif /usr/bin/jq -e 'type == "object" and (has("disabled") | not)' "$f" >/dev/null 2>&1; then
+      ( umask 077; /usr/bin/jq '.disabled = true' "$f" > "$new" 2>/dev/null ) || return 1
+    fi
+    if [[ -f $new ]]; then
+      /bin/mkdir -p -- "${f:h}" && ( umask 077; replace_file "$f" "$new" ) || { /bin/rm -f -- "$new"; return 1 }
+      /bin/rm -f -- "$new"
+    fi
+    ag_say "OpenCode shared service: automatic start turned off (pairing unavailable); run 'opencode service set disabled false' to turn it back on"
+  else
+    ag_say 'OpenCode shared service: automatic start left as you set it'
+  fi
+  ag_jnl opencode-service done
+}
+
+# Puts back only a value this run wrote and nobody changed since, and removes the
+# entry this run added; a file that cannot be restored keeps its entry.
+undo_opencode_service() {
+  local f=$service_conf entry= created
+  ag_jlast opencode-service
+  [[ $REPLY == (begun|done) ]] || return 0
+  ag_jfind opencode-service begun
+  ag_jval created
+  created=$REPLY
+  if [[ -f $record ]] && /usr/bin/jq -e --arg f "$f" 'has($f)' "$record" >/dev/null 2>&1; then
+    entry=$(/usr/bin/jq -c --arg f "$f" '.[$f]' "$record") || return 1
+  fi
+  if [[ -n $entry && -e $f ]] && /usr/bin/jq -en --argjson e "$entry" '$e.disabled | has("wrote")' >/dev/null; then
+    if ! ag_opencode_config_writable "$f"; then
+      ag_unrestored+=("$f")
+    elif [[ $created == 1 ]] && /usr/bin/jq -e '. == {disabled: true}' "$f" >/dev/null 2>&1; then
+      /bin/rm -f -- "$f" || ag_unrestored+=("$f")
+    elif ! ag_perm_restore "$f" "$entry" "$ag_tstage/service.undo.json"; then
+      ag_unrestored+=("$f")
+    fi
+    /bin/rm -f -- "$ag_tstage/service.undo.json"
+  fi
+  if [[ -n $entry ]] && (( ! ${ag_unrestored[(Ie)$f]} )); then ag_record_set "$f" - || ag_unrestored+=("$f"); fi
+  ag_jnl opencode-service undone
 }
 
 # --- Uninstall (design section 6, Uninstall).

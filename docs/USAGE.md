@@ -69,6 +69,28 @@ operations to run outside the guard; use `opencode serve` to start a foreground
 guarded server. `doctor` uses a private probe, not the service attached to an
 existing desktop window, and does not call a model.
 
+## OpenCode shared service
+
+OpenCode 2 starts a shared background service for commands run without
+`--standalone` and leaves it running after the command ends. While it runs,
+`Agent Guard.app` refuses to start. The installer therefore turns the service's
+automatic start off once per Mac, by setting `disabled: true` in
+`~/.config/opencode/service.json`. A direct `opencode` command then runs a
+private server that ends with it. The installer prints which it did: turned off,
+or left as you set it when the file already had `disabled`.
+
+- Pairing (`opencode pair`) needs the shared service and is unavailable while it
+  is off.
+- To turn sharing back on, run `opencode service set disabled false` outside the
+  guard, or `opencode service enable` once OpenCode ships
+  [anomalyco/opencode#53374](https://github.com/anomalyco/opencode/pull/53374).
+  Agent Guard records that it set the value and does not set it again, even when
+  you remove the key.
+- The desktop app ignores the setting and still starts its own service, and so
+  does `opencode service start`. Guarded launches do not depend on it.
+- `agent-guard uninstall` removes the key while it is still `true`; a value you
+  changed stays.
+
 ## Configure OpenCode
 
 Inside guarded OpenCode you can maintain ordinary configuration, plugins, MCPs,

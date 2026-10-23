@@ -211,6 +211,17 @@ target check; an unrestored value remains in the recovery record. This adds one
 shared configuration-target check where there was none; it changes no runtime
 filesystem grants.
 
+The first install, update or migration also turns off OpenCode 2's automatic
+shared service ([OpenCode shared service](USAGE.md#opencode-shared-service)): it
+sets `disabled: true` in `~/.config/opencode/service.json`, creating the file
+with mode 0600 when it is missing, and records that in the permission record. It
+changes only that key, keeps the file's mode and never prints the file, which
+holds the service password. A `disabled` value already there is recorded and
+left. An unreadable or invalid file is left as it is with a warning and tried
+again by the next run. Once recorded, later runs leave the file alone. The
+installer writes the default path even when `XDG_CONFIG_HOME` or
+`OPENCODE_CONFIG_DIR` points OpenCode elsewhere.
+
 The installer refuses, before any change, inside a guard or another sandbox,
 while another install runs and over an install made before release folders (run
 its `uninstall.sh` in the engine folder first). Over OpenCode Guard or
@@ -218,9 +229,10 @@ pi-sandbox-guard it migrates (below). It assembles the new release in
 `~/Library/Application Support/AgentGuard/releases/<version>-<UTC time>`, builds
 the app, and tests that release with `launch check staged` before it changes
 anything outside the engine folder and `~/Agent Guard`. It then switches the
-rulebook, the app, `current`, the plugin link, the OpenCode permission values
-and the PATH blocks, and runs the gate: `agent-guard doctor` and a launch of
-`opencode --version` through the new PATH shim. With Pi's guard, the staged
+rulebook, the app, `current`, the plugin link, the OpenCode permission values,
+OpenCode's shared service opt-out and the PATH blocks, and runs the gate:
+`agent-guard doctor` and a launch of `opencode --version` through the new PATH
+shim. With Pi's guard, the staged
 checks also test the new Pi files, the switch also replaces the Pi files at
 their paths ([Pi and OMP](USAGE.md#pi-and-omp)), and the gate includes `doctor`'s Pi
 checks, which run `pi --version` and `omp --version`. If any check fails, it puts
@@ -504,7 +516,8 @@ loaded; `/reload` loads the extension now on disk.
   the guard and saved replacement entries; restore the stamp from a backup
   before retrying.
   Valid 0.1.x stamps without a harness list still mean OpenCode alone. It removes PATH blocks, restores the permission values
-  the installer changed (unless you changed them since), then removes the app,
+  the installer changed and removes the shared service opt-out's `disabled: true`
+  (unless you changed them since), then removes the app,
   the rulebook, after a migration the forwarders, then the plugin and the engine
   folder. `~/Agent Guard` stays. A value it could not restore is reported, and
   the permission record is saved to `~/Agent Guard/permissions-backup.json` first
