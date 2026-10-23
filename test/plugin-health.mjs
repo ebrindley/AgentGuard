@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process';
 // Fault injection stays in this disposable-home fixture. It observes readiness
 // and refusal behavior without launching OpenCode or invoking a model.
 const self = fileURLToPath(import.meta.url);
-const cases = ['healthy', 'rules-missing', 'engine-import', 'engine-init', 'api-import', 'hooks-missing', 'updated', 'unsafe-version'];
+const cases = ['healthy', 'rules-missing', 'engine-import', 'engine-init', 'api-import', 'hooks-missing', 'updated', 'unsafe-version', 'outer-sandbox'];
 if (process.argv[2] !== '--case') {
   const source = resolve(process.argv[2] ?? join(dirname(self), '../profiles/opencode/plugin.js'));
   const root = fs.realpathSync(fs.mkdtempSync(join(os.tmpdir(), 'agentguard-plugin-health-')));
@@ -64,6 +64,10 @@ fs.symlinkSync(installed, join(engine, 'current'));
 process.env.AGENT_GUARD_RELEASE = '1.0.0-fixture';
 delete process.env.AGENT_GUARD_CONTEXT;
 delete process.env.AGENT_GUARD_BYPASS;
+// outer-sandbox: the launcher stepped aside under another tool's sandbox, which
+// also denies the probe's write (EPERM below) and leaves an older rules.json.
+if (name === 'outer-sandbox') process.env.AGENT_GUARD_OUTER_SANDBOX = '1';
+else delete process.env.AGENT_GUARD_OUTER_SANDBOX;
 os.homedir = () => home;
 const open = fs.openSync;
 fs.openSync = (path, ...args) => {
@@ -109,7 +113,7 @@ if (host === 'v2') {
       if (tool === 'shell') output.args.command = event.input.command;
     },
   };
-  assert.equal((await rpc.status()).state, ['healthy', 'updated', 'unsafe-version'].includes(name) ? 'active' : 'degraded');
+  assert.equal((await rpc.status()).state, name === 'outer-sandbox' ? 'inactive' : ['healthy', 'updated', 'unsafe-version'].includes(name) ? 'active' : 'degraded');
   if (name === 'healthy') {
     const permissions = await rpc.permissions();
     assert.equal(permissions.availability, 'observed');
@@ -129,6 +133,15 @@ const health = JSON.parse(raw);
 assert.equal(raw.includes(marker), false, 'health must omit private errors and paths');
 assert.equal(status.description.includes(marker), false);
 assert.equal(health.sandbox.result, 'confined');
+if (name === 'outer-sandbox') {
+  assert.equal(health.state, 'inactive');
+  assert.equal(health.rules.loaded, false);
+  for (const [tool, args] of [['bash', { command: 'pwd' }], ['read', { filePath: join(directory, 'README.md') }], ['write', { filePath: join(directory, 'allowed.txt') }]])
+    await assert.rejects(before({ tool }, { args }), /started without the guard/);
+  await before({ tool: 'todowrite' }, { args: {} });
+  console.log(`ok plugin health ${host} ${name}: the outer-sandbox variable overrides the probe and refuses as unguarded`);
+  process.exit(0);
+}
 const ready = ['healthy', 'updated', 'unsafe-version'].includes(name);
 assert.equal(health.state, ready ? 'active' : 'degraded');
 assert.equal(status.description.includes(ready ? '[agent-guard:ready]' : '[agent-guard:degraded]'), true);
