@@ -139,6 +139,7 @@ are documented in [operations](docs/OPERATIONS.md#commands).
 - [Operations](docs/OPERATIONS.md): installation, migrations, diagnostics and recovery.
 - [Development](docs/DEVELOPMENT.md): tests and release building.
 - [Security policy](SECURITY.md): full boundaries, limitations and private reporting.
+- [Threat model](docs/THREAT-MODEL.md): trust assumptions and the damage classes the guard addresses.
 - [Design](docs/DESIGN.md): architecture and planned changes.
 
 Issues are welcome; external pull requests are not accepted. See
