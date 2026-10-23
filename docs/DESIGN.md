@@ -144,10 +144,10 @@ The contract. "Planned" fields do not exist in the built engine. "Runtime" field
 | `gui_args` | Arguments added in `gui` mode | `--no-sandbox` (Electron; Chromium's sandbox cannot nest) | None |
 | `state_grants` | Planned. Runtime-data writes relative to the state roots, rendered with the allows (Rule order) | None | All of the active Pi root; OMP's positive allowlist |
 | `state_config` | Planned, step 10c. Root-relative configuration paths and names, write-denied under every root level (Every installed harness) | None | Pi's and OMP's configuration lists |
-| `protected_paths` | Harness paths write-denied in the final deny block | `~/.config/opencode`, `~/.opencode` | None; Pi's configuration is `state_config` |
+| `protected_paths` | Harness paths write-denied in the final deny block | The plugin link `~/.config/opencode/plugins/agent-guard.js`, its staging name `.agent-guard.js.partial` and `~/.opencode/bin`; the rest of `~/.config/opencode` and `~/.opencode` is writable (section 1) | None; Pi's configuration is `state_config` |
 | `protected` | Paths whose symlink targets are resolved and protected at launch | `protected_paths` plus `~/.cc-safety-net` | `~/.pi/agent/extensions`, `settings.json`, `auth.json`, `trust.json` |
-| `protected_names` | Names whose symlinks directly in the launch folder are resolved at launch; built, the matching SBPL name rules are in `protected_fragment`. Planned, step 10c: each entry carries `on_link` (Symlinks) | `.opencode`, `opencode.json`, `opencode.jsonc`, `tui.json`, `tui.jsonc`; `on_link = "protect-target"` | `.pi` and `.omp` with `on_link = "refuse"`; `.claude` and `.codex` `extensions`, `hooks` and `tools`, `.gemini/extensions`, `.opencode/plugins` |
-| `protected_fragment` | SBPL added at the end of the final deny block. Retires at step 8 | `protected.sb`: the name regexes and `.cc-safety-net` | None |
+| `protected_names` | Names whose symlinks directly in the launch folder are resolved at launch; built, the matching SBPL name rules are in `protected_fragment`. Planned, step 10c: each entry carries `on_link` (Symlinks) | None (section 1) | `.pi` and `.omp` with `on_link = "refuse"`; `.claude` and `.codex` `extensions`, `hooks` and `tools`, `.gemini/extensions`, `.opencode/plugins` |
+| `protected_fragment` | SBPL added at the end of the final deny block. Retires at step 8 | `protected.sb`: `.cc-safety-net` | None |
 | `nested` | Planned, step 10c. `"same-boundary"` for every profile (section 7, Nested launch); `"inherit"` is the built behavior | `"inherit"`, as built, until its nested-launch release (section 11, OpenCode's releases), which removes the field | `"same-boundary"`, the default |
 | `env_unset`, `env_set` | Environment changes, applied in every mode. The engine sets its nesting marker itself, and the variables that come with Git hooks and the credential set; profiles do not list them | Unset `ELECTRON_RUN_AS_NODE`, `OPENCODE_SIDECAR_V2`, `CC_SAFETY_NET_HOME`, `CC_SAFETY_NET_WORKTREE`, `SAFETY_NET_WORKTREE`; set `CC_SAFETY_NET_PARANOID_RM=1`, which its deletes release replaces with `CC_SAFETY_NET_LEVEL=strict` (section 5, Recursive deletes) | Set `CC_SAFETY_NET_LEVEL=strict`, plus OpenCode's interim delete settings until Pi's deletes change (section 5, Recursive deletes). The Git selector unsets come with Git hooks, and `SSH_AUTH_SOCK`, `GPG_AGENT_INFO` and `NPM_CONFIG_USERCONFIG` with the credential set, for every profile |
 | `path` | Planned, step 10c. The harness `PATH`: `"inherit"` or a pinned list | `"inherit"`, as built | Pinned |
@@ -177,9 +177,10 @@ writable=("$home/.local/share/opencode" "$home/.local/state/opencode" "$home/.ca
           "$home/Library/Caches" "$home/.npm" "$home/.bun/install/cache" "$home/.cc-safety-net/logs")
 writable_gui=("$home/Library/Application Support/ai.opencode.desktop"
               "$home/Library/Saved Application State/ai.opencode.desktop.savedState")
-protected_paths=("$home/.config/opencode" "$home/.opencode")
+protected_paths=("$home/.config/opencode/plugins/agent-guard.js"
+                 "$home/.config/opencode/plugins/.agent-guard.js.partial" "$home/.opencode/bin")
 protected=($protected_paths "$home/.cc-safety-net")
-protected_names=(.opencode opencode.json opencode.jsonc tui.json tui.jsonc)
+protected_names=()
 protected_fragment=protected.sb
 gui_args=(--no-sandbox)
 env_unset=(ELECTRON_RUN_AS_NODE OPENCODE_SIDECAR_V2 CC_SAFETY_NET_HOME CC_SAFETY_NET_WORKTREE SAFETY_NET_WORKTREE)
@@ -191,9 +192,7 @@ check_hook=opencode_check
 `profiles/opencode/protected.sb`:
 
 ```
-  (regex #"/\.opencode(/|$)")
-  (regex #"/(opencode|tui)\.jsonc?$")
-  (require-all (regex #"/\.cc-safety-net(/|$)") (require-not (subpath (h "/.cc-safety-net/logs"))))
+  (require-all (regex #"/\.cc-safety-net(/|$)") (require-not (skill-content)) (require-not (subpath (h "/.cc-safety-net/logs"))))
 ```
 
 At step 8 `protected.sb` becomes policy-model data, its name rules and the `~/.cc-safety-net/logs` exception, rendered to the same bytes.
@@ -338,7 +337,7 @@ Seatbelt applies the last matching rule, so the list cannot reopen a protected p
 
 ### Protected paths and names
 
-Protected paths and names are write-denied, including creation, rename and removal. A missing config file created by the agent and run at the next start was [CVE-2026-25725](https://nvd.nist.gov/vuln/detail/CVE-2026-25725) in Claude Code. OpenCode's names match anywhere on disk, including temp and OpenCode's own writable folders; the only exception is `~/.cc-safety-net/logs`. pi-sandbox-guard matches its names only inside the project (PR #8). Planned for Pi: `.pi`, `.omp`, `.claude/{extensions,hooks,tools}`, `.codex/{extensions,hooks,tools}`, `.gemini/extensions` and `.opencode/plugins` match anywhere on disk too, except at or inside a Pi or OMP root, whose configuration the root rules cover (Every installed harness), so `.omp` does not cover OMP's state in `~/.omp`. Matching everywhere also closes a route the project-only rule leaves open: building a `.pi` folder in `/private/tmp` and moving its parent into a project. A name must still be narrow enough not to cover other state the harness writes. Narrow exceptions are policy-model exceptions (The policy model), as `~/.cc-safety-net/logs` is from step 8.
+Protected paths and names are write-denied, including creation, rename and removal. A missing config file created by the agent and run at the next start was [CVE-2026-25725](https://nvd.nist.gov/vuln/detail/CVE-2026-25725) in Claude Code. OpenCode's one protected name, `.cc-safety-net`, matches anywhere on disk, including temp and OpenCode's own writable folders; the exceptions are `~/.cc-safety-net/logs` and skill content. pi-sandbox-guard matches its names only inside the project (PR #8). Planned for Pi: `.pi`, `.omp`, `.claude/{extensions,hooks,tools}`, `.codex/{extensions,hooks,tools}`, `.gemini/extensions` and `.opencode/plugins` match anywhere on disk too, except at or inside a Pi or OMP root, whose configuration the root rules cover (Every installed harness), so `.omp` does not cover OMP's state in `~/.omp`. Matching everywhere also closes a route the project-only rule leaves open: building a `.pi` folder in `/private/tmp` and moving its parent into a project. A name must still be narrow enough not to cover other state the harness writes. Narrow exceptions are policy-model exceptions (The policy model), as `~/.cc-safety-net/logs` is from step 8.
 
 ### Symlinks
 
@@ -541,7 +540,7 @@ The OpenCode plugin as built (`profiles/opencode/plugin.js`):
 
 - **Guard probe.** It creates a file in the engine's `state/` folder. EPERM means guarded. Success, any other error, a missing folder or a symlinked folder means unguarded.
 - **Unguarded refusal.** Unguarded, it refuses every tool except `invalid`, `question`, `todowrite`, `webfetch`, `websearch`, `plan_exit` and the status tool, with a message to quit and open Agent Guard or run `opencode` from a new terminal. `AGENT_GUARD_BYPASS=1` lifts the refusal; OpenCode Guard's `OPENCODE_GUARD_BYPASS` does not. This also covers any launcher that bypasses the guard, including custom wrappers.
-- **Path checks.** Guarded, it refuses every tool if cc-safety-net fails to load. `read`, `glob`, `grep`, `list` and `lsp` are refused under DENY. `edit`, `write` and each path in `apply_patch` are refused when the path is protected (the engine folder, OpenCode Guard's engine folder, the list folder, `~/.config/opencode`, `~/.cc-safety-net` or a protected name on the path as typed or as resolved), under DENY or outside ALLOW and temp. Writes are refused when `state/rules.json` could not be read.
+- **Path checks.** Guarded, it refuses every tool if cc-safety-net fails to load. `read`, `glob`, `grep`, `list` and `lsp` are refused under DENY. `edit`, `write` and each path in `apply_patch` are refused when the path is protected (the engine folder, OpenCode Guard's engine folder, the list folder, `~/.cc-safety-net`, the `protected_paths` entries and their link targets, or `.cc-safety-net` outside skill content on the path as typed or as resolved), under DENY or outside ALLOW and temp. Writes are refused when `state/rules.json` could not be read.
 - **Release.** The plugin finds its release from its own real path (`realpathSync` of `import.meta.url`), whatever link OpenCode loaded it through. A copy whose real path is not inside a release folder in `releases/` loads no cc-safety-net: guarded, it refuses every tool, and it registers no status tool, so `check` fails.
 - **Launch release.** Before anything else, the plugin reads `AGENT_GUARD_RELEASE`, which the launcher sets to its own release ID. OpenCode loads the plugin through `current`, so after an update a session started from the previous release would otherwise load the new release's plugin. If the value matches `[0-9A-Za-z.+-]+` (not `.` or `..`), differs from the plugin's own release and names a folder in `releases/` that holds `RELEASE` and whose `profiles/opencode/plugin.js` really lives there, the plugin imports that file and returns its plugin function instead of its own. That module is then in its own release, so it does not hand over again. If the named release is missing or fails to load, the plugin loads no cc-safety-net: guarded, it refuses every tool with "Agent Guard was updated; quit and reopen OpenCode."; unguarded, it refuses as usual. Any other value, and an unset variable (a bare `opencode`), leave the plugin on its own release. Only folders in the write-protected `releases/` qualify, so the variable cannot pick code from a writable place.
 - **Shell commands** go to cc-safety-net 2.4.14, loaded from `vendor/` of the release the plugin resolves into. The profile sets `CC_SAFETY_NET_PARANOID_RM=1` and unsets `CC_SAFETY_NET_HOME`, `CC_SAFETY_NET_WORKTREE` and `SAFETY_NET_WORKTREE`. Guarded, the plugin also deletes those three from its own environment and sets `CC_SAFETY_NET_PARANOID_RM=1` before it loads cc-safety-net; unguarded, it leaves the environment alone. The installer adds an Agent Guard rulebook; from OpenCode's hooks release it also blocks `core.hooksPath` changes (section 3, Git hooks).
