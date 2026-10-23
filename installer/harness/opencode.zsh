@@ -260,11 +260,12 @@ ag_record_path() {
 ag_perm_restore() {
   ag_opencode_config_writable "$1" || return 1
   ag_record_path "$1"
-  /usr/bin/jq --argjson e "$2" --argjson p "$REPLY" 'reduce ($e | to_entries[]) as $x (.;
+  # TMP is private: the service config holds OpenCode's service password.
+  ( umask 077; /usr/bin/jq --argjson e "$2" --argjson p "$REPLY" 'reduce ($e | to_entries[]) as $x (.;
       ($p + [$x.key]) as $k
       | if ($x.value // {} | has("wrote")) and getpath($k) == $x.value.wrote then
         (if $x.value.orig == null then delpaths([$k]) else setpath($k; $x.value.orig) end)
-      else . end)' "$1" > "$3" 2>/dev/null || return 1
+      else . end)' "$1" > "$3" 2>/dev/null ) || return 1
   /usr/bin/jq -e --slurpfile n "$3" '. == $n[0]' "$1" >/dev/null 2>&1 && return 0
   replace_file "$1" "$3"
 }
@@ -546,7 +547,7 @@ do_opencode_service() {
       return
     fi
     if [[ -e $f ]]; then
-      if ! entry=$(/usr/bin/jq -c 'if type != "object" then error
+      if ! entry=$(/usr/bin/jq -ce 'if type != "object" then error
           elif has("disabled") then {disabled: {orig: .disabled}}
           else {disabled: {orig: null, wrote: true}} end' "$f" 2>/dev/null); then
         ag_warnings+=("${f:t} not changed (unreadable or invalid JSON): OpenCode's shared service still starts automatically")
