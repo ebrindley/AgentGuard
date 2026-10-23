@@ -26,7 +26,8 @@ Review changes before executing them outside the guard.
 ## OpenCode versions
 
 Stable 2026.10.21 targets OpenCode 1.18.33 and newer V1 releases,
-plus OpenCode 2.0.32 and 2.1.1 CLI and desktop backends. Keep shared configuration in the V1 format
+plus OpenCode 2.0.32 and 2.1.1 CLI and desktop backends. The native V2
+fixtures also pass with the OpenCode 2.1.4 CLI. Keep shared configuration in the V1 format
 when both versions use it; V2 normalizes supported V1 settings in memory.
 Native V2-only settings are not a configuration migration for V1.
 
@@ -48,6 +49,13 @@ guard before opening Agent Guard. The launcher neither adopts nor stops an
 incumbent service. Quit the app, rather than only closing its window, to end its
 owned service. Loss of that service closes the client; reopen Agent Guard to
 start a fresh service. Restart to apply a changed Guard List.
+
+OpenCode's service opt-out, `"disabled": true` in
+`~/.config/opencode/service.json`, does not change the desktop: the app ignores
+it and still uses the service Guard starts. With the opt-out on, `mcp`, `plugin`
+and `debug` start their own private server, so Guard's service goes unused for
+them, and `pair` is unavailable. Guard treats a `service status` of `disabled`,
+proposed upstream in anomalyco/opencode#53374, the same as `stopped`.
 
 The terminal launcher uses the first native `opencode` on PATH, then its usual
 fallback locations. If none exists, it can use the desktop's bundled

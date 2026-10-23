@@ -12,7 +12,7 @@ import * as adapter from "./engines/zsh.mjs"
 assert.equal(process.versions.node.split(".")[0], "24")
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const cli = realpathSync(process.env.AG_TEST_OPENCODE)
-const modes = ["cli", "gui", "doctor", "managed-cli", "gui-signal", "gui-server-stop", "routing"]
+const modes = ["cli", "gui", "gui-disabled", "doctor", "managed-cli", "gui-signal", "gui-server-stop", "routing"]
 const selected = process.argv[2] ? [process.argv[2]] : modes
 assert.ok(selected.every(mode => modes.includes(mode)))
 const accountHome = realpathSync(homedir())
@@ -68,7 +68,8 @@ for (const mode of selected) {
   await new Promise(resolve => reservation.listen(0, "127.0.0.1", resolve))
   const servicePort = reservation.address().port
   await new Promise(resolve => reservation.close(resolve))
-  writeFileSync(join(config, "service.json"), JSON.stringify({ port: servicePort }))
+  // gui-disabled turns on the service opt-out, which the desktop ignores.
+  writeFileSync(join(config, "service.json"), JSON.stringify(mode === "gui-disabled" ? { port: servicePort, disabled: true } : { port: servicePort }))
   writeFileSync(join(config, "opencode.json"), JSON.stringify({
     permission: { bash: "allow", external_directory: "allow", edit: "allow" },
     provider: { guardfixture: { name: "Fixture", npm: "@ai-sdk/openai-compatible", options: { baseURL: url + "/v1", apiKey: "fixture" }, models: { test: { name: "Fixture", tool_call: true, limit: { context: 16384, output: 1024 } } } } },
@@ -177,15 +178,20 @@ for (const mode of selected) {
   }
   let route = "cli", args = ["--print-logs", "run", "--auto", "--model", "guardfixture/test", "--format", "json", "Perform the fixture calls"]
   if (mode.startsWith("gui")) {
-    // The desktop fixture follows V2's actual service discovery contract. The
-    // bundled CLI starts the server; the client supplies no standalone flag.
+    // The desktop fixture follows V2's service contract: the bundled CLI starts
+    // the server and the client connects to the address service status reports
+    // with the service password, as the desktop's Service.ensure does. CLI discovery alone would pick a
+    // private server when the service opt-out is on. The server-stop case then
+    // reconnects through discovery, which may spawn a replacement service.
     const app = join(home, "Applications/OpenCode.app/Contents")
     mkdirSync(join(app, "MacOS"), { recursive: true })
     mkdirSync(join(app, "Resources"), { recursive: true })
     symlinkSync(cli, join(app, "Resources/opencode-cli"))
     writeFileSync(join(app, "Info.plist"), '<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>GuardV2Fixture</string></dict></plist>')
     const reconnect = mode === "gui-server-stop" ? `${quote(cli)} service stop\n` : ""
-    const command = mode === "gui-signal" ? `touch ${quote(join(project, "client-ready"))}\nexec /bin/sleep 60` : `${reconnect}exec ${quote(cli)} run --auto --model guardfixture/test --format json 'Perform the fixture calls'`
+    const connect = mode === "gui-server-stop" ? "" : `server=$(${quote(cli)} service status) || exit 1\nprintf %s "$server" > ${quote(join(project, "server-url"))}\nOPENCODE_PASSWORD=$(/usr/bin/plutil -extract password raw -o - ${quote(join(config, "service.json"))}) || exit 1\nexport OPENCODE_PASSWORD\n`
+    const target = mode === "gui-server-stop" ? "" : ' --server "$server"'
+    const command = mode === "gui-signal" ? `touch ${quote(join(project, "client-ready"))}\nexec /bin/sleep 60` : `${reconnect}${connect}exec ${quote(cli)} run${target} --auto --model guardfixture/test --format json 'Perform the fixture calls'`
     writeFileSync(join(app, "MacOS/GuardV2Fixture"), `#!/bin/sh\n${command}\n`, { mode: 0o755 })
     const harness = join(release, "profiles/opencode/harness.zsh")
     writeFileSync(harness, readFileSync(harness, "utf8").replace('app_paths=(/Applications/OpenCode.app "$home/Applications/OpenCode.app")', 'app_paths=("$home/Applications/OpenCode.app")').replace('app_bundle_id=ai.opencode.desktop', 'app_bundle_id=invalid.test'))
@@ -254,8 +260,10 @@ for (const mode of selected) {
     assert.doesNotMatch(responses, /DENIED-FIXTURE-CONTENT/)
     assert.match(responses, /\\"state\\":\\"active\\"/)
     assert.match(responses, /\\"availability\\":\\"observed\\"/)
+    if (mode.startsWith("gui")) assert.equal(readFileSync(join(project, "server-url"), "utf8"), `http://127.0.0.1:${servicePort}`, "the desktop must use the launcher's server")
+    if (mode === "gui-disabled") assert.equal(JSON.parse(readFileSync(join(config, "service.json"), "utf8")).disabled, true)
     const service = spawnSync(cli, ["service", "status"], { env, encoding: "utf8", timeout: 10000 })
-    assert.equal(service.stdout.trim(), "stopped", "private or GUI-owned server must not survive its owner")
+    assert.match(service.stdout.trim(), mode === "gui-disabled" ? /^(stopped|disabled)$/ : /^stopped$/, "private or GUI-owned server must not survive its owner")
   }
   console.log(`ok OpenCode V2 ${mode}: ${mode === "doctor" ? "model-free readiness" : "tool policy and server lifetime"}`)
 }

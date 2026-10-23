@@ -50,7 +50,9 @@ they address and the layer that covers each are in
 Stable 2026.10.21 supports OpenCode 1.18.33 and newer V1 releases, plus
 OpenCode 2.0.32 and 2.1.1. The 2.1.1 qualification covers macOS 26.7.1 arm64
 with isolated application and service data. First-launch onboarding and
-production-account upgrades remain unqualified.
+production-account upgrades remain unqualified. The native V2 fixtures also pass
+with the OpenCode 2.1.4 CLI on macOS 26.7.1 arm64; its desktop application is
+not qualified.
 V2 terminal sessions use private servers where supported. V2 desktop and
 commands without a private-server flag use a service started inside the same
 Seatbelt profile as their client. Guard refuses an incumbent shared service and
