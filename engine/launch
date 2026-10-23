@@ -136,9 +136,11 @@ fi
 if [[ -n $inside ]]; then
   if [[ $inside == other ]]; then
     # Write nothing outside and set no marker: the existing sandbox decides what
-    # may be written, and nothing tells a loaded plugin this launch is guarded.
+    # may be written. The plugin's guard probe can fail under that sandbox too,
+    # so AGENT_GUARD_OUTER_SANDBOX tells it the session is unguarded.
     log=
     note() { print -ru2 -- "agent-guard: $*" }
+    export AGENT_GUARD_OUTER_SANDBOX=1
     [[ $mode == cli ]] || fail "already inside another sandbox, where Agent Guard cannot apply its own; open this outside that sandbox"
     print -ru2 -- "agent-guard: already inside another sandbox; Agent Guard's sandbox is not applied and OpenCode runs under the existing one"
   else
@@ -490,6 +492,7 @@ esac
 # The plugin loads through current, which an update can move; AGENT_GUARD_RELEASE
 # tells it to use this release.
 export AGENT_GUARD_SANDBOXED=1 AGENT_GUARD_RELEASE=${release:t}
+unset AGENT_GUARD_OUTER_SANDBOX
 export AGENT_GUARD_PEER_PATH=${AGENT_GUARD_PEER_PATH:-$PATH}
 path=("$release/peers" $path)
 (( ! managed )) || opencode_managed "$managed_cli" "$@"

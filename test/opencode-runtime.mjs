@@ -141,15 +141,17 @@ try {
   const engine = join(home, "Library/Application Support/AgentGuard")
   layout(source, engine)
   writeFileSync(join(home, "Agent Guard/Guard List.txt"), `ALLOW\n${join(home, "Projects")}\nREAD ONLY\nDENY\n`)
-  // A V2 CLI that records the marker and its arguments, and exits 7.
-  writeFileSync(join(bin, "opencode"), `#!/bin/sh\n[ "$1" = --version ] && { echo 2.1.4; exit 0; }\nprintf '%s\\n' "\${AGENT_GUARD_SANDBOXED:--}" "$@" > ${JSON.stringify(record)}\nexit 7\n`)
+  // A V2 CLI that records the marker, the outer-sandbox variable and its
+  // arguments, and exits 7.
+  writeFileSync(join(bin, "opencode"), `#!/bin/sh\n[ "$1" = --version ] && { echo 2.1.4; exit 0; }\nprintf '%s\\n' "\${AGENT_GUARD_SANDBOXED:--}" "\${AGENT_GUARD_OUTER_SANDBOX:--}" "$@" > ${JSON.stringify(record)}\nexit 7\n`)
   chmodSync(join(bin, "opencode"), 0o755)
   const log = join(home, "Agent Guard/last-launch-opencode.log")
-  const launch = (outer, args) => {
+  const launch = (outer, args, env = {}) => {
     rmSync(record, { force: true })
-    return spawnSync("/usr/bin/sandbox-exec", ["-p", outer, "/bin/zsh", join(engine, "current/launch"), ...args], {
+    const argv = [...(outer ? ["/usr/bin/sandbox-exec", "-p", outer] : []), "/bin/zsh", join(engine, "current/launch"), ...args]
+    return spawnSync(argv[0], argv.slice(1), {
       cwd: join(home, "Projects/app"), encoding: "utf8",
-      env: { PATH: `${bin}:/usr/bin:/bin:/usr/sbin:/sbin`, HOME: home, TMPDIR: temp },
+      env: { PATH: `${bin}:/usr/bin:/bin:/usr/sbin:/sbin`, HOME: home, TMPDIR: temp, ...env },
     })
   }
   const recorded = () => existsSync(record) ? readFileSync(record, "utf8").trimEnd().split("\n") : null
@@ -166,11 +168,11 @@ try {
     }
     const r = launch(outer, ["cli", "hello"])
     assert.equal(r.status, 7, `${name}: ${r.stderr}`)
-    assert.deepEqual(recorded(), ["-", "--standalone", "hello"], name)
+    assert.deepEqual(recorded(), ["-", "1", "--standalone", "hello"], name)
     assert.equal(r.stderr.match(new RegExp(stepAside, "g"))?.length, 1, r.stderr)
     assert.ok(!existsSync(log), `${name}: launch log written`)
     assert.ok(!existsSync(join(engine, "state")), `${name}: engine state written`)
-    console.log(`ok launch cli inside ${name} runs the CLI with --standalone, writes nothing and sets no marker`)
+    console.log(`ok launch cli inside ${name} runs the CLI with --standalone, writes nothing, sets no marker and marks the outer sandbox`)
   }
   {
     const r = launch(poetic, ["cli", "mcp", "list"])
@@ -186,6 +188,15 @@ try {
     assert.doesNotMatch(r.stderr, /inside the guard/)
     assert.ok(!existsSync(log) && !existsSync(join(engine, "state")), `${mode}: state written`)
     console.log(`ok launch ${mode} inside another sandbox refuses and names it`)
+  }
+  {
+    // A guarded launch never passes the outer-sandbox variable on.
+    const r = launch(null, ["cli", "hello"], { AGENT_GUARD_OUTER_SANDBOX: "1" })
+    assert.equal(r.status, 7, r.stderr)
+    assert.deepEqual(recorded(), ["1", "-", "--standalone", "hello"])
+    rmSync(join(engine, "state"), { recursive: true, force: true })
+    rmSync(log, { force: true })
+    console.log("ok a guarded launch drops the outer-sandbox variable")
   }
   {
     // The probe fails, but not with sandbox_apply: no step-aside.

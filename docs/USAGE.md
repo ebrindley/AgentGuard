@@ -239,8 +239,9 @@ another agent's command sandbox or a tool that wraps OpenCode in
 launcher then prints one note and runs the real OpenCode under the existing
 sandbox, with `--standalone` on V2 as usual. That sandbox confines OpenCode, not
 Agent Guard's: the Guard List is not read, nothing is written to
-`~/Agent Guard` or the engine folder, and the plugin gets no marker or
-per-launch rules.
+`~/Agent Guard` or the engine folder, and the plugin treats the session as
+unguarded, refusing tools as it does for a bare `opencode` unless
+`AGENT_GUARD_BYPASS=1` is set.
 Commands that need a launcher-owned service (V2 `mcp`, `plugin`, `debug` and
 `pair`) are refused, and so are the desktop app and the launcher's self-check. The
 launcher recognizes another sandbox only by macOS refusing to apply a second
