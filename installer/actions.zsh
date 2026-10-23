@@ -143,6 +143,7 @@ ag_registry() {
     switch   opencode-preference harness:opencode       all      do_opencode_preference undo_opencode_preference
     switch   retire-edit      harness:opencode          all      do_retire_edit        undo_retire_edit
     switch   permissions      harness:opencode          plain    do_permissions        undo_permissions
+    switch   opencode-service harness:opencode          all      do_opencode_service   undo_opencode_service
     switch   rc               engine                    all      do_rc                 undo_rc
     switch   app              engine                    migrate  do_app                undo_app
     switch   app-old          migrate:opencode-guard    migrate  do_app_old            undo_app_old

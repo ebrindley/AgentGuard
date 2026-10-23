@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs"
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { spawn, spawnSync } from "node:child_process"
@@ -236,6 +236,98 @@ const oldPreference = JSON.stringify({ schemaVersion: 1, approvalPreference: "ho
 writeFileSync(preferenceExistingFile, oldPreference)
 shell(preferenceExisting, 'ag_approval_preference=auto; do_opencode_preference; undo_opencode_preference', true)
 assert.equal(readFileSync(preferenceExistingFile, "utf8"), oldPreference)
+// OpenCode 2's shared service opt-out. The fake password must never reach output.
+const password = "fake-service-password-0123"
+function service(name, contents) {
+  const f = fixture(name)
+  f.service = join(f.home, ".config/opencode/service.json")
+  f.record = join(f.engine, "state/permissions.json")
+  if (contents !== undefined) writeFileSync(f.service, typeof contents === "string" ? contents : JSON.stringify(contents), { mode: 0o600 })
+  return f
+}
+function serviceRun(f, body, fresh = true) {
+  const result = shell(f, `${fresh ? ': > "$txn_dir/journal"' : ""}
+    ${body}
+    print -l -- $ag_warnings $ag_unrestored`, true)
+  const journal = readFileSync(join(f.engine, "state/txn/journal"), "utf8")
+  for (const text of [result.stdout, result.stderr, journal]) assert.ok(!text.includes(password), text)
+  return result.stdout
+}
+const serviceRecord = f => existsSync(f.record) ? JSON.parse(readFileSync(f.record))[f.service] : undefined
+const mode = file => statSync(file).mode & 0o777
+const owned = { disabled: { orig: null, wrote: true } }
+
+const serviceAbsent = service("service-absent", { password, port: 4096, env: { A: "1" } })
+assert.match(serviceRun(serviceAbsent, "do_opencode_service"), /automatic start turned off/)
+assert.deepEqual(JSON.parse(readFileSync(serviceAbsent.service)), { password, port: 4096, env: { A: "1" }, disabled: true })
+assert.equal(mode(serviceAbsent.service), 0o600)
+assert.deepEqual(serviceRecord(serviceAbsent), owned)
+const written = readFileSync(serviceAbsent.service, "utf8")
+assert.doesNotMatch(serviceRun(serviceAbsent, "do_opencode_service"), /OpenCode shared service/)
+assert.equal(readFileSync(serviceAbsent.service, "utf8"), written)
+writeFileSync(serviceAbsent.service, JSON.stringify({ password, port: 4096 }))
+serviceRun(serviceAbsent, "do_opencode_service")
+assert.deepEqual(JSON.parse(readFileSync(serviceAbsent.service)), { password, port: 4096 })
+assert.deepEqual(serviceRecord(serviceAbsent), owned)
+
+for (const value of [true, false]) {
+  const f = service(`service-${value}`, { password, disabled: value })
+  const before = readFileSync(f.service, "utf8")
+  assert.match(serviceRun(f, "do_opencode_service"), /left as you set it/)
+  assert.equal(readFileSync(f.service, "utf8"), before)
+  assert.deepEqual(serviceRecord(f), { disabled: { orig: value } })
+  serviceRun(f, 'ag_h_opencode_uninstall_restore "$ag_tstage"')
+  assert.equal(readFileSync(f.service, "utf8"), before)
+  assert.equal(serviceRecord(f), undefined)
+}
+
+const serviceMissing = service("service-missing")
+serviceRun(serviceMissing, "do_opencode_service")
+assert.deepEqual(JSON.parse(readFileSync(serviceMissing.service)), { disabled: true })
+assert.equal(mode(serviceMissing.service), 0o600)
+assert.deepEqual(serviceRecord(serviceMissing), owned)
+serviceRun(serviceMissing, "undo_opencode_service", false)
+assert.equal(existsSync(serviceMissing.service), false)
+assert.equal(serviceRecord(serviceMissing), undefined)
+
+const serviceInvalid = service("service-invalid", `{ "password": "${password}", broken`)
+assert.match(serviceRun(serviceInvalid, "do_opencode_service"), /service.json not changed \(unreadable or invalid JSON\)/)
+assert.equal(readFileSync(serviceInvalid.service, "utf8"), `{ "password": "${password}", broken`)
+assert.equal(serviceRecord(serviceInvalid), undefined)
+
+// Interrupted after the record write: a resumed run writes, a rollback leaves
+// the file as it was and drops the entry; a rollback after the write removes
+// only the written key.
+const serviceResume = service("service-resume", { password, port: 4096 })
+const serviceBytes = readFileSync(serviceResume.service, "utf8")
+serviceRun(serviceResume, "test_point() { [[ $1 != opencode-service ]]; }; do_opencode_service && exit 1; exit 0")
+assert.equal(readFileSync(serviceResume.service, "utf8"), serviceBytes)
+assert.deepEqual(serviceRecord(serviceResume), owned)
+serviceRun(serviceResume, "do_opencode_service", false)
+assert.equal(JSON.parse(readFileSync(serviceResume.service)).disabled, true)
+serviceRun(serviceResume, "undo_opencode_service", false)
+assert.deepEqual(JSON.parse(readFileSync(serviceResume.service)), { password, port: 4096 })
+assert.equal(mode(serviceResume.service), 0o600)
+assert.equal(serviceRecord(serviceResume), undefined)
+const serviceRollback = service("service-rollback", { password })
+serviceRun(serviceRollback, "test_point() { [[ $1 != opencode-service ]]; }; do_opencode_service && exit 1; undo_opencode_service")
+assert.deepEqual(JSON.parse(readFileSync(serviceRollback.service)), { password })
+assert.equal(serviceRecord(serviceRollback), undefined)
+
+// Uninstall restores only the value it wrote.
+const serviceUninstall = service("service-uninstall", { password, hostname: "127.0.0.1" })
+serviceRun(serviceUninstall, "do_opencode_service")
+serviceRun(serviceUninstall, 'ag_h_opencode_uninstall_restore "$ag_tstage"')
+assert.deepEqual(JSON.parse(readFileSync(serviceUninstall.service)), { password, hostname: "127.0.0.1" })
+assert.equal(mode(serviceUninstall.service), 0o600)
+assert.equal(serviceRecord(serviceUninstall), undefined)
+const serviceChanged = service("service-changed", { password })
+serviceRun(serviceChanged, "do_opencode_service")
+writeFileSync(serviceChanged.service, JSON.stringify({ password, disabled: false }))
+serviceRun(serviceChanged, 'ag_h_opencode_uninstall_restore "$ag_tstage"')
+assert.deepEqual(JSON.parse(readFileSync(serviceChanged.service)), { password, disabled: false })
+assert.equal(serviceRecord(serviceChanged), undefined)
+
 const assembled = fixture("assembled-runtime")
 const tree = join(assembled.home, "tree")
 mkdirSync(tree)

@@ -630,11 +630,12 @@ rc=$?
   pass 'opening a transaction while one is open fails and leaves the open one as it was' || { fail "ag_txn_open (exit $rc)"; show }
 
 # Every test point in the shipped scripts is exercised: here, in test/bootstrap.sh
-# (after-download, after-verify), in test/migrate.sh ($migrate_points, test/lib.zsh)
+# (after-download, after-verify), in test/opencode-config.mjs (edit-restored,
+# edit-retired, opencode-service), in test/migrate.sh ($migrate_points, test/lib.zsh)
 # or in test/migrate-pi.sh ($pi_points); each of those fails for any it does not
 # exercise.
 label=coverage
-covered=($update_points $uninstall_points rollback after-unpack after-download after-verify edit-restored edit-retired $migrate_points $pi_points)
+covered=($update_points $uninstall_points rollback after-unpack after-download after-verify edit-restored edit-retired opencode-service $migrate_points $pi_points)
 points=(${(f)"$(/usr/bin/grep -ohE 'test_point [a-z0-9-]+' "$source_root"/profiles/opencode/{install,uninstall}.sh "$source_root"/installer/**/*.zsh "$source_root"/scripts/bootstrap.zsh "$source_root"/engine/agent-guard | /usr/bin/sort -u)"})
 missing=()
 for p in ${points#test_point }; do (( ${covered[(Ie)$p]} )) || missing+=("$p"); done
