@@ -1,0 +1,17 @@
+#!/bin/zsh
+# Landing route for a reviewed pull request; see docs/DEVELOPMENT.md.
+emulate -L zsh
+setopt no_unset pipe_fail
+(( $# == 1 )) || { print -ru2 'usage: script/land <pr-number>'; exit 2; }
+number=$1
+[[ $number == <-> ]] || { print -ru2 'land: pull request number must be digits'; exit 2; }
+command -v gh >/dev/null || { print -ru2 'land: gh is required'; exit 1; }
+root=${0:A:h:h}
+cd "$root" || exit 1
+title=$(gh pr view "$number" --json title --jq .title) || exit 1
+head=$(gh pr view "$number" --json headRefOid --jq .headRefOid) || exit 1
+script/check-subject "$title" "$number" || exit $?
+# The body stays empty: the rule allows no body, so none is composed.
+print -r -- "land: #$number at $head"
+gh pr merge "$number" --squash --subject "$title (#$number)" --body '' \
+  --match-head-commit "$head" --delete-branch || exit $?

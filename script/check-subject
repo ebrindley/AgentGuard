@@ -1,0 +1,19 @@
+#!/bin/zsh
+# Squash subject rule from docs/DEVELOPMENT.md, shared by script/land and the PR gate.
+emulate -L zsh
+setopt no_unset pipe_fail
+(( $# == 2 )) || { print -ru2 'usage: script/check-subject <pr-title> <pr-number>'; exit 2; }
+title=$1
+number=$2
+[[ $number == <-> ]] || { print -ru2 'check-subject: pull request number must be digits'; exit 2; }
+subject="$title (#$number)"
+# The suffix ends in a parenthesis, so the period check belongs on the title.
+[[ -n $title ]] || { print -ru2 'check-subject: title is empty'; exit 1; }
+[[ $title != *. ]] || {
+  print -ru2 "check-subject: title ends in a period: $subject"; exit 1
+}
+(( ${#subject} < 72 )) || {
+  print -ru2 "check-subject: subject is ${#subject} characters, must be under 72: $subject"
+  exit 1
+}
+print -r -- "check-subject: ${#subject} characters: $subject"

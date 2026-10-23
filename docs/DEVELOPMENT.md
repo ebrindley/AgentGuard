@@ -54,7 +54,10 @@ review and required checks pass, use GitHub's protected squash merge for the
 reviewed head SHA. Native auto-merge is unavailable; merge normally after the
 required check passes. Set the squash subject to `<PR title> (#<number>)` and
 the body to blank, matching GitHub's `PR_TITLE` and `BLANK` defaults. Inspect the
-exact subject and body before merging. Local gate execution is useful for
+exact subject and body before merging. `script/land <pr-number>` applies that
+rule: it builds the subject from the title, checks it with `script/check-subject`
+and merges at the reviewed head with an empty body. The `tests` check runs the
+same subject check on the pull request title. Local gate execution is useful for
 focused development, but is not required in addition to the hosted gate.
 
 The gate keeps the three baseline files and adds five offline OpenCode files:
