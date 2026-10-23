@@ -1,9 +1,10 @@
 import assert from "node:assert/strict"
-import { spawnSync } from "node:child_process"
-import { mkdtempSync, readFileSync, rmSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { execFileSync, spawnSync } from "node:child_process"
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir, userInfo } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { layout, stage } from "./engines/zsh.mjs"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 function prepare(args) {
@@ -122,3 +123,79 @@ for (const response of ["0:stopped", "0:disabled", "1:", "0:starting"]) {
   assert.equal(result.probes, 61)
 }
 console.log("ok OpenCode V2 service status: running, inactive and unknown for the incumbent check and readiness wait")
+
+// Launches inside a sandbox Agent Guard did not create (decision D10). Runs
+// outside any sandbox; the outer sandbox is applied here with sandbox-exec.
+const cache = join(userInfo().homedir, "Library/Caches")
+mkdirSync(cache, { recursive: true })
+const run = realpathSync(mkdtempSync(join(cache, "agent-guard-runtime-")))
+const temp = realpathSync(execFileSync("/usr/bin/getconf", ["DARWIN_USER_TEMP_DIR"], { encoding: "utf8" }).trim())
+const scratch = realpathSync(mkdtempSync(join(temp, "agent-guard-runtime-")))
+try {
+  const home = join(run, "home")
+  const source = join(run, "source")
+  const bin = join(run, "bin")
+  const record = join(scratch, "argv")
+  for (const d of [join(home, "Agent Guard"), join(home, "Projects/app"), source, bin]) mkdirSync(d, { recursive: true })
+  stage(root, source, home)
+  const engine = join(home, "Library/Application Support/AgentGuard")
+  layout(source, engine)
+  writeFileSync(join(home, "Agent Guard/Guard List.txt"), `ALLOW\n${join(home, "Projects")}\nREAD ONLY\nDENY\n`)
+  // A V2 CLI that records the marker and its arguments, and exits 7.
+  writeFileSync(join(bin, "opencode"), `#!/bin/sh\n[ "$1" = --version ] && { echo 2.1.4; exit 0; }\nprintf '%s\\n' "\${AGENT_GUARD_SANDBOXED:--}" "$@" > ${JSON.stringify(record)}\nexit 7\n`)
+  chmodSync(join(bin, "opencode"), 0o755)
+  const log = join(home, "Agent Guard/last-launch-opencode.log")
+  const launch = (outer, args) => {
+    rmSync(record, { force: true })
+    return spawnSync("/usr/bin/sandbox-exec", ["-p", outer, "/bin/zsh", join(engine, "current/launch"), ...args], {
+      cwd: join(home, "Projects/app"), encoding: "utf8",
+      env: { PATH: `${bin}:/usr/bin:/bin:/usr/sbin:/sbin`, HOME: home, TMPDIR: temp },
+    })
+  }
+  const recorded = () => existsSync(record) ? readFileSync(record, "utf8").trimEnd().split("\n") : null
+  const stepAside = /agent-guard: already inside another sandbox; Agent Guard's sandbox is not applied and OpenCode runs under the existing one/
+  const allowAll = "(version 1)(allow default)"
+  // Poetic's case: the outer sandbox denies writes to the list folder and the
+  // engine. It also denies osascript, so a gui refusal shows no alert here.
+  const poetic = `(version 1)(allow default)(deny file-write* (subpath ${JSON.stringify(join(home, "Agent Guard"))}) (subpath ${JSON.stringify(engine)}))(deny process-exec (literal "/usr/bin/osascript"))`
+  const nests = spawnSync("/usr/bin/sandbox-exec", ["-p", allowAll, "/usr/bin/sandbox-exec", "-p", allowAll, "/usr/bin/true"]).status === 0
+  for (const [name, outer] of [["an allow-everything sandbox", allowAll], ["a sandbox denying the list folder", poetic]]) {
+    if (outer === allowAll && nests) {
+      console.log(`skip launch cli inside ${name}: this macOS applies a second profile there, so the launch is not confined`)
+      continue
+    }
+    const r = launch(outer, ["cli", "hello"])
+    assert.equal(r.status, 7, `${name}: ${r.stderr}`)
+    assert.deepEqual(recorded(), ["-", "--standalone", "hello"], name)
+    assert.equal(r.stderr.match(new RegExp(stepAside, "g"))?.length, 1, r.stderr)
+    assert.ok(!existsSync(log), `${name}: launch log written`)
+    assert.ok(!existsSync(join(engine, "state")), `${name}: engine state written`)
+    console.log(`ok launch cli inside ${name} runs the CLI with --standalone, writes nothing and sets no marker`)
+  }
+  {
+    const r = launch(poetic, ["cli", "mcp", "list"])
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /run this V2 command from Terminal outside the existing guard/)
+    assert.equal(recorded(), null)
+    console.log("ok launch cli inside another sandbox refuses a command that needs a managed service")
+  }
+  for (const mode of ["gui", "check"]) {
+    const r = launch(poetic, [mode])
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /agent-guard: already inside another sandbox, where Agent Guard cannot apply its own/)
+    assert.doesNotMatch(r.stderr, /inside the guard/)
+    assert.ok(!existsSync(log) && !existsSync(join(engine, "state")), `${mode}: state written`)
+    console.log(`ok launch ${mode} inside another sandbox refuses and names it`)
+  }
+  {
+    // The probe fails, but not with sandbox_apply: no step-aside.
+    const r = launch(`(version 1)(allow default)(deny process-exec (literal "/usr/bin/sandbox-exec"))`, ["cli", "hello"])
+    assert.notEqual(r.status, 0)
+    assert.equal(recorded(), null, "the CLI ran")
+    assert.doesNotMatch(r.stderr, /another sandbox/)
+    console.log("ok a probe failure other than sandbox_apply does not step aside")
+  }
+} finally {
+  rmSync(run, { recursive: true, force: true })
+  rmSync(scratch, { recursive: true, force: true })
+}
