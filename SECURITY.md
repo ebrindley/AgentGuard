@@ -252,6 +252,14 @@ behind linked ancestors. These changes follow the 0.2.0 prerelease.
   such as `~/.pi/agent` linked into a dotfiles folder, stays writable, and so do
   OMP's other roots (`~/.omp-*`, `~/.omp.*`, `~/.omp_*`). Pi and OMP load what is
   written there at their next start. Planned: step 10c.
+- **The shared service opt-out is a default, not a protection.** The installer
+  sets `disabled: true` in `~/.config/opencode/service.json` so that direct
+  `opencode` commands stop leaving OpenCode 2's shared service running
+  ([OpenCode shared service](docs/USAGE.md#opencode-shared-service)). A guarded
+  session can write that file and turn sharing back on. A direct, unguarded
+  `opencode` command still runs its private server outside the sandbox while the
+  command lasts; the opt-out only stops that server from staying behind. Not
+  planned.
 - **Anything in an ALLOW folder can be changed or deleted.** That includes git
   hooks, build scripts and other files that run later outside the guard, for
   example when you run `git commit` or a build in an unguarded terminal. Review

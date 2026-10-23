@@ -255,8 +255,10 @@ for v in $versions; do
   [[ $(/usr/bin/plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist" 2>/dev/null) == io.github.ebrindley.agentguard && ! -e $old_app ]] &&
     pass "Agent Guard.app with bundle ID io.github.ebrindley.agentguard; no OpenCode Guard.app" || fail 'apps'
   /usr/bin/cmp -s "$state/opencode-guard-permissions.json" "$run/record-$v" &&
-    /usr/bin/jq -e --slurpfile o "$run/record-$v" '. == ($o[0] | map_values(del(.edit)) | with_entries(select(.value != {})))' "$state/permissions.json" >/dev/null &&
-    pass "OpenCode Guard's record imported, edit ownership retired, unchanged archive kept" || fail 'imported record'
+    /usr/bin/jq -e --slurpfile o "$run/record-$v" --arg s "$home/.config/opencode/service.json" '
+      .[$s] == {disabled: {orig: null, wrote: true}}
+      and del(.[$s]) == ($o[0] | map_values(del(.edit)) | with_entries(select(.value != {})))' "$state/permissions.json" >/dev/null &&
+    pass "OpenCode Guard's record imported, edit ownership retired, unchanged archive kept, service opt-out recorded" || fail 'imported record'
   /usr/bin/jq -e '.from == "opencode-guard" and (.switched_at | type) == "number" and .retired == true' "$state/migration.json" >/dev/null &&
     pass 'switch time recorded; retirement finished' || fail 'migration.json'
   /usr/bin/cmp -s "$list" "$old_list" && pass 'A9 the imported list equals the old list byte for byte' || fail 'A9 imported list'
@@ -491,8 +493,10 @@ point= boot y
 rc=$?
 (( rc == 0 )) && pass 'migrated (exit 0)' || { fail "migration (exit $rc)"; show }
 /usr/bin/cmp -s "$state/opencode-guard-permissions.json" "$run/record-upgrade" &&
-  /usr/bin/jq -e --slurpfile o "$run/record-upgrade" '. == ($o[0] | map_values(del(.edit)) | with_entries(select(.value != {})))' "$state/permissions.json" >/dev/null &&
-  pass "OpenCode Guard's record imported, edit ownership retired, unchanged archive kept" || fail 'imported record'
+  /usr/bin/jq -e --slurpfile o "$run/record-upgrade" --arg s "$home/.config/opencode/service.json" '
+    .[$s] == {disabled: {orig: null, wrote: true}}
+    and del(.[$s]) == ($o[0] | map_values(del(.edit)) | with_entries(select(.value != {})))' "$state/permissions.json" >/dev/null &&
+  pass "OpenCode Guard's record imported, edit ownership retired, unchanged archive kept, service opt-out recorded" || fail 'imported record'
 /usr/bin/cmp -s "$list" "$run/list-1.0.0" && pass "v1.0.0's list imported byte for byte" || fail 'imported list'
 probe_entry_points "$home" "$base" "$old_path"
 point= ag uninstall
