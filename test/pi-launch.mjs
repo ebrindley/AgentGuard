@@ -680,7 +680,7 @@ try {
         rmSync(join(home, '.pi/agent/extensions/pi-sandbox-guard/.guard-node'));
       }
     });
-    check('nesting: Agent Guard\'s OpenCode launcher inside Pi fails at its first write, to ~/Agent Guard', () => {
+    check('nesting: Agent Guard\'s OpenCode launcher inside Pi steps aside and writes nothing (decision D10)', () => {
       const source = join(run, 'engine-source');
       mkdirSync(source);
       stage(root, source, home);
@@ -688,11 +688,17 @@ try {
       layout(source, engine);
       mkdirSync(join(home, 'Agent Guard'));
       writeFileSync(join(home, 'Agent Guard/Guard List.txt'), 'ALLOW -\nREAD ONLY -\nDENY -\n');
-      const r = session(a, ['/bin/zsh', join(engine, 'current/launch'), 'cli', '--version']);
+      const cli = join(run, 'opencode-bin');
+      mkdirSync(cli);
+      writeFileSync(join(cli, 'opencode'), '#!/bin/sh\necho "stand-in $*"\n');
+      chmodSync(join(cli, 'opencode'), 0o755);
+      const r = session(a, ['/usr/bin/env', `PATH=${cli}:/usr/bin:/bin`, '/bin/zsh', join(engine, 'current/launch'), 'cli', '--version']);
       assert.ok(started(r), r.stderr);
-      assert.notEqual(r.status, 0);
-      assert.match(r.stderr, /operation not permitted: .*Agent Guard\/last-launch-opencode\.log/);
+      assert.equal(r.status, 0, r.stderr);
+      assert.equal(r.stdout, 'stand-in --version\n');
+      assert.match(r.stderr, /already inside another sandbox; Agent Guard's sandbox is not applied/);
       assert.ok(!existsSync(join(home, 'Agent Guard/last-launch-opencode.log')), 'launch log written');
+      assert.ok(!existsSync(join(engine, 'state')), 'engine state written');
     });
   }
 } finally {

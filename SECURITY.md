@@ -209,6 +209,10 @@ behind linked ancestors. These changes follow the 0.2.0 prerelease.
   OpenCode, the project for Pi and OMP.
 - Provider tokens and other secrets the harness itself uses.
 - A VM, container or separate user identity.
+- OpenCode started inside a sandbox Agent Guard did not create. The terminal
+  launcher runs it under that sandbox without Agent Guard's profile, so that
+  sandbox's rules confine it, not the Guard List
+  ([Inside another sandbox](docs/USAGE.md#inside-another-sandbox)).
 
 ## Known limitations in 0.2.2
 

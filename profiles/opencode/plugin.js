@@ -178,7 +178,11 @@ function patchPaths(text) {
 async function guard(input) {
   const { directory } = input
   const sandbox = sandboxed()
-  const guarded = sandbox.result === "confined"
+  // The launcher sets AGENT_GUARD_OUTER_SANDBOX=1 when it runs OpenCode under
+  // another tool's sandbox without its own profile (DESIGN.md section 15, D10).
+  // That sandbox can deny the probe's write too, so the session stays unguarded.
+  const outer = process.env.AGENT_GUARD_OUTER_SANDBOX === "1"
+  const guarded = !outer && sandbox.result === "confined"
   const selectedRules = process.env.AGENT_GUARD_CONTEXT
   const rulesSource = selectedRules?.startsWith(join(STATE, "opencode") + "/") ? "snapshot" : "global"
   const failures = []
@@ -188,11 +192,11 @@ async function guard(input) {
     recordEvent(value)
   }
   let rulesErrno = "unknown"
-  const rules = loadRules(errno => { rulesErrno = errno })
+  const rules = outer ? null : loadRules(errno => { rulesErrno = errno })
   if (sandbox.result === "unknown") failure("sandbox-probe", "sandbox-unverified", "launch-guarded")
   if (!RELEASE) failure("initialization", "release-unavailable", "reinstall")
   if (DELEGATE === false) failure("initialization", "launcher-release-unavailable", "relaunch")
-  if (!rules) failure("rules-load", "rules-unavailable", "relaunch", rulesErrno)
+  if (!rules && !outer) failure("rules-load", "rules-unavailable", "relaunch", rulesErrno)
   if (guarded) {
     for (const name of UNSAFE_NET_ENV) delete process.env[name]
     if (process.env.CC_SAFETY_NET_LEVEL !== "paranoid") process.env.CC_SAFETY_NET_LEVEL = "strict"
@@ -322,7 +326,7 @@ async function guard(input) {
     }
   }
 
-  const state = !guarded ? sandbox.result === "unconfined" ? "inactive" : "unknown" :
+  const state = !guarded ? outer || sandbox.result === "unconfined" ? "inactive" : "unknown" :
     RELEASE && DELEGATE !== false && rules && net && checkCommand ? "active" : "degraded"
   const health = () => {
     const loaded = RELEASE ? basename(RELEASE) : null

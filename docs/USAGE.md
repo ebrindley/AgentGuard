@@ -224,12 +224,28 @@ real OMP qualification requires an OMP installation.
   any sandbox it cannot verify as its own.
 - Inside a Pi or OMP session, `opencode` from the session's PATH runs the real
   OpenCode under that session's sandbox, as with pi-sandbox-guard. Agent
-  Guard's `opencode` called by its full path fails at its first write.
+  Guard's `opencode` called by its full path steps aside, as below.
 - `omp` inside a Pi session and `pi` inside an OMP session refuse.
 - A runtime started inside its own session, such as `pi` inside a Pi session,
   exits with `HOME_CANON: parameter not set`. This is a pi-sandbox-guard defect,
   present in the current Pi guard whenever `.guard-node` exists, which every
   Agent Guard install records. It fails closed: nothing starts.
+
+### Inside another sandbox
+
+When `opencode` starts inside a sandbox Agent Guard did not create, such as
+another agent's command sandbox or a tool that wraps OpenCode in
+`sandbox-exec`, macOS cannot apply Agent Guard's profile as well. The terminal
+launcher then prints one note and runs the real OpenCode under the existing
+sandbox, with `--standalone` on V2 as usual. That sandbox confines OpenCode, not
+Agent Guard's: the Guard List is not read, nothing is written to
+`~/Agent Guard` or the engine folder, and the plugin treats the session as
+unguarded, refusing tools as it does for a bare `opencode` unless
+`AGENT_GUARD_BYPASS=1` is set.
+Commands that need a launcher-owned service (V2 `mcp`, `plugin`, `debug` and
+`pair`) are refused, and so are the desktop app and the launcher's self-check. The
+launcher recognizes another sandbox only by macOS refusing to apply a second
+profile; any other failure of that probe stops the launch as before.
 
 ## OpenCode skills
 

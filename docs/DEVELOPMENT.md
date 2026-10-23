@@ -11,8 +11,9 @@ and homes described below. For installed checks, see
 
 The V1 native suites remain pinned to 1.18.33. V2 uses `@opencode/cli@2.0.32`.
 `test/plugin-health.mjs` runs the same eight readiness/refusal cases through both
-APIs. `test/opencode-runtime.mjs` covers command routing and the classification of
-`service status` output. For native V2 checks,
+APIs. `test/opencode-runtime.mjs` covers command routing, the classification of
+`service status` output and terminal launches inside another sandbox. For native
+V2 checks,
 set `AG_TEST_OPENCODE` to its executable and run
 `node test/opencode-v2-native.mjs` with Node 24 outside an
 existing sandbox. The GUI fixture follows the packaged desktop's shared-service

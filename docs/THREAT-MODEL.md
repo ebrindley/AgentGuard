@@ -159,6 +159,19 @@ version gates do not defend the cache and `.npmrc` limitation.
 **Secrets the harness itself holds.** Provider tokens the harness needs are
 outside the guard's reach by design.
 
+**OpenCode inside a sandbox Agent Guard did not create.** The terminal launcher
+steps aside there (DESIGN.md section 15, D10): it runs OpenCode under the existing
+sandbox without its own profile and without reading the Guard List. This turns a
+launch failure into a pass-through, so it is recorded here. Repository fact:
+`engine/launch` takes this path only when its `sandbox-exec` probe fails with
+`sandbox_apply: Operation not permitted` and no engine marker is set, and macOS
+cannot apply a second profile (section 6). No Agent Guard protection is lost:
+these launches failed before OpenCode started. Accepted risk: such a session is
+confined only as far as the enclosing sandbox's rules reach, which may cover
+fewer of the classes in section 1 than Agent Guard's profile; the tool that
+applied that sandbox owns its policy. Any other probe failure keeps the normal
+path, which fails before OpenCode runs.
+
 **A VM, container or separate identity.** Agent Guard is a profile over one
 account and is not an isolation substitute.
 

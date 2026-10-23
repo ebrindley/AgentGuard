@@ -121,9 +121,31 @@ unset $env_unset
 [[ ${CC_SAFETY_NET_LEVEL:-} == paranoid ]] || export CC_SAFETY_NET_LEVEL=strict
 
 # The engine's nesting marker is exported just before exec. OpenCode Guard's
-# marker also counts as already guarded until step 11.
-if [[ ${AGENT_GUARD_SANDBOXED:-} == 1 || ${OPENCODE_SANDBOXED:-} == 1 ]] && ! /usr/bin/sandbox-exec -p '(version 1)(allow default)' /usr/bin/true 2>/dev/null; then
-  [[ $mode == cli ]] || fail "already inside the guard; run this from Terminal, outside any guard or sandbox"
+# marker also counts as already guarded until step 11. Without a marker, only
+# the error macOS reports for applying a second profile shows another tool's
+# sandbox (decision D10, docs/DESIGN.md section 15); a probe that fails for any
+# other reason takes the normal path and fails there.
+inside=
+if ! probe=$(/usr/bin/sandbox-exec -p '(version 1)(allow default)' /usr/bin/true 2>&1); then
+  if [[ ${AGENT_GUARD_SANDBOXED:-} == 1 || ${OPENCODE_SANDBOXED:-} == 1 ]]; then
+    inside=guard
+  elif [[ $probe == *'sandbox_apply: Operation not permitted'* ]]; then
+    inside=other
+  fi
+fi
+if [[ -n $inside ]]; then
+  if [[ $inside == other ]]; then
+    # Write nothing outside and set no marker: the existing sandbox decides what
+    # may be written. The plugin's guard probe can fail under that sandbox too,
+    # so AGENT_GUARD_OUTER_SANDBOX tells it the session is unguarded.
+    log=
+    note() { print -ru2 -- "agent-guard: $*" }
+    export AGENT_GUARD_OUTER_SANDBOX=1
+    [[ $mode == cli ]] || fail "already inside another sandbox, where Agent Guard cannot apply its own; open this outside that sandbox"
+    print -ru2 -- "agent-guard: already inside another sandbox; Agent Guard's sandbox is not applied and OpenCode runs under the existing one"
+  else
+    [[ $mode == cli ]] || fail "already inside the guard; run this from Terminal, outside any guard or sandbox"
+  fi
   next_cli || fail "opencode not found"
   cli=$REPLY
   sandbox=()
@@ -470,6 +492,7 @@ esac
 # The plugin loads through current, which an update can move; AGENT_GUARD_RELEASE
 # tells it to use this release.
 export AGENT_GUARD_SANDBOXED=1 AGENT_GUARD_RELEASE=${release:t}
+unset AGENT_GUARD_OUTER_SANDBOX
 export AGENT_GUARD_PEER_PATH=${AGENT_GUARD_PEER_PATH:-$PATH}
 path=("$release/peers" $path)
 (( ! managed )) || opencode_managed "$managed_cli" "$@"
