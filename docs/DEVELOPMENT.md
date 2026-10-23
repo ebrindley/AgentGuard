@@ -11,20 +11,25 @@ and homes described below. For installed checks, see
 
 The V1 native suites remain pinned to 1.18.33. V2 uses `@opencode/cli@2.0.32`.
 `test/plugin-health.mjs` runs the same eight readiness/refusal cases through both
-APIs. `test/opencode-runtime.mjs` covers command routing. For native V2 checks,
+APIs. `test/opencode-runtime.mjs` covers command routing and the classification of
+`service status` output. For native V2 checks,
 set `AG_TEST_OPENCODE` to its executable and run
 `node test/opencode-v2-native.mjs` with Node 24 outside an
 existing sandbox. The GUI fixture follows the packaged desktop's shared-service
-contract using the real bundled CLI; it does not attest renderer behavior.
+contract using the real bundled CLI: its stand-in client reads the address from
+`service status` and connects with `--server`. It does not attest renderer
+behavior.
 All homes, providers and model responses are local fixtures. Native V2 homes
 are under an `agentguard-v2-*` folder in the OS temporary directory, outside the
 real account home. Each active project has its own Git root, so discovery does
 not walk into the source repository or the account's global skill directories.
 The CLI case records watched paths and checks that discovery stays outside the
 real account home. Logs remain in the printed fixture folder.
-Pass `cli`, `gui`, `doctor`, `managed-cli`, `gui-signal`, `gui-server-stop` or `routing` to
+Pass `cli`, `gui`, `gui-disabled`, `doctor`, `managed-cli`, `gui-signal`, `gui-server-stop` or `routing` to
 select one case. The managed cases cover leading global flags, client shutdown,
-SIGTERM and loss of the original service.
+SIGTERM and loss of the original service. `gui-disabled` repeats `gui` with
+`"disabled": true` in the fixture's service configuration and checks that the
+client still used the launcher's service.
 The routing case checks command output, status release identifiers and restart
 state, probe process/listener cleanup, and preservation of an incumbent service.
 
@@ -33,6 +38,13 @@ checker and filesystem rules. V2 adds one adapter registration and one read-only
 RPC registration with status and permission methods. No path grants or policy
 verdicts change. Runtime selection adds one major-version compatibility check;
 desktop ownership checks grow from one (app) to two (app and service).
+The service check and the readiness wait share one classification of
+`service status`: a URL is running, `stopped` or `disabled` is inactive, and
+anything else, including a failed probe, is unknown. Before the service starts,
+running or unknown refuses the launch; afterwards only running ends the
+readiness wait. These remain the managed launch's two status refusals; a
+failed probe at the incumbent check now reports an unrecognized status instead
+of a separate inspection failure.
 Managed launches add one child-exit signal handler to end the client and its
 original service together; the filesystem and command policy is unchanged.
 The required hosted check remains one; its sequential file

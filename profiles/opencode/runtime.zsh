@@ -48,13 +48,31 @@ opencode_cli_args() {
   esac
 }
 
+# Classifies `service status` in REPLY: running for one server URL, inactive
+# for stopped or disabled (the service opt-out with no server), and unknown for
+# anything else, including a failed probe. Raw output is never echoed because
+# it is not known to be free of secrets.
+opencode_service_state() {
+  local output
+  REPLY=unknown
+  output=$($sandbox -D GUI=0 "$1" service status 2>/dev/null) || return 0
+  if [[ $output =~ '^[[:space:]]*https?://[^[:space:]]+[[:space:]]*$' ]]; then
+    REPLY=running
+  elif [[ $output =~ '^[[:space:]]*(stopped|disabled)[[:space:]]*$' ]]; then
+    REPLY=inactive
+  fi
+}
+
 # Desktop and CLI commands without --standalone use a foreground service owned
 # by this launcher. An incumbent is never silently adopted or stopped.
 opencode_managed() {
-  local cli=$1 existing rc=0 i
+  local cli=$1 rc=0 i
   shift
-  existing=$($sandbox -D GUI=0 "$cli" service status 2>/dev/null) || fail 'cannot inspect the V2 background service'
-  [[ $existing == stopped ]] || fail 'OpenCode V2 has a background service. Close its clients, run opencode service stop outside Agent Guard, then reopen Agent Guard.'
+  opencode_service_state "$cli"
+  case $REPLY in
+    (running) fail 'OpenCode V2 has a background service. Close its clients, run opencode service stop outside Agent Guard, then reopen Agent Guard.' ;;
+    (unknown) fail 'OpenCode V2 reported an unrecognized service status. Run opencode service status outside Agent Guard to inspect it.' ;;
+  esac
   $sandbox -D GUI=0 "$cli" serve --service --hostname 127.0.0.1 > "$session/server.log" 2>&1 &
   typeset -g opencode_server_pid=$! opencode_client_pid= opencode_client_done=0
   # The server writes its own log under its normal writable state root. This
@@ -64,11 +82,11 @@ opencode_managed() {
   trap 'exit 143' TERM HUP
   for i in {1..60}; do
     kill -0 $opencode_server_pid 2>/dev/null || fail 'OpenCode V2 server exited before readiness; check its launch log'
-    existing=$($sandbox -D GUI=0 "$cli" service status 2>/dev/null) || existing=stopped
-    [[ $existing != stopped ]] && break
+    opencode_service_state "$cli"
+    [[ $REPLY == running ]] && break
     sleep 0.25
   done
-  [[ $existing != stopped ]] || fail 'OpenCode V2 server did not become ready'
+  [[ $REPLY == running ]] || fail 'OpenCode V2 server did not become ready'
   # The app may reconnect by spawning a detached replacement. End the client
   # when its original server exits, so a lost service ends this launch's lease.
   trap opencode_client_exited CHLD
