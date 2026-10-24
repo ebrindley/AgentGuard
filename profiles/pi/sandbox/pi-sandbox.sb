@@ -270,6 +270,14 @@
   (literal (string-append (param "HOME") "/.npmrc"))
   (subpath (string-append (param "HOME") "/.secrets")))
 
+;; Pi reads project settings under a proper-lockfile directory lock. Only the
+;; directory node is writable; settings, symlinks and lock contents stay denied.
+(allow file-write*
+  (require-all
+    (subpath (param "PROJECT"))
+    (regex #"/\.pi/settings\.json\.lock$")
+    (vnode-type DIRECTORY)))
+
 ;; Re-allow the minimum `git init` / submodule-init needs inside the now-denied
 ;; hooks subtrees (last-match-wins, so this overrides the subtree denies above
 ;; but not for the active hook files it does NOT re-allow):
