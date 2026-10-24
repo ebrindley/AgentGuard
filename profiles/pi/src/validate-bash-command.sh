@@ -2871,8 +2871,21 @@ case "$dangerous_scan_text" in
         dangerous_scan_text="$dangerous_scan_text"$'\n'"$_dst_stripped" ;;
 esac
 
+# Permission arguments can contain $(...) and ${...}. Keep pre-grouping text
+# so the grouping rewrite does not turn those arguments into separators.
+permission_scan_text="$execution_scan_text"
+case "$permission_scan_text" in
+    *\\*|*\"*|*\'*)
+        _permission_stripped="${permission_scan_text//\\/}"; _permission_stripped="${_permission_stripped//\"/}"; _permission_stripped="${_permission_stripped//\'/}"
+        permission_scan_text="$permission_scan_text"$'\n'"$_permission_stripped" ;;
+esac
+case "$permission_scan_text" in
+    *chmod*|*chown*) permission_scan_text="$(neutralize_command_substs "$permission_scan_text" | awk "$SEGMENT_AWK")" ;;
+esac
 for pattern in "${dangerous_patterns[@]}"; do
-    if echo "$dangerous_scan_text" | grep -E "$pattern" &>/dev/null; then
+    scan_text="$dangerous_scan_text"
+    case "$pattern" in chmod*|chown*) scan_text="$permission_scan_text" ;; esac
+    if echo "$scan_text" | grep -E "$pattern" &>/dev/null; then
         log_security_event "BLOCKED" "$pattern" "$command"
         echo "❌ BLOCKED: Dangerous command pattern: $command" >&2
         echo "   Pattern matched: $pattern" >&2

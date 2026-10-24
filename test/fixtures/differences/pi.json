@@ -119,6 +119,11 @@
       "id": 14,
       "change": "Permit the directory node of project .pi/settings.json.lock so Pi can acquire its directory lock when reading settings. Regular files, symlinks, lock contents, other configuration locks and paths outside PROJECT receive no grant. Settings and surrounding configuration remain protected.",
       "files": ["sandbox/pi-sandbox.sb"]
+    },
+    {
+      "id": 15,
+      "change": "Keep recursive chmod/chown flags and protected targets within one command. A later read of a system directory after a shell separator is not an operand of an earlier permission change. The protected-root patterns themselves remain in force.",
+      "files": ["src/validate-bash-command.sh"]
     }
   ],
   "test_notes": [
@@ -143,8 +148,8 @@
     },
     {
       "file": "test/corpus/corpus.json",
-      "differences": [8],
-      "change": "Ten cases after git clean -fdx: eight push forms that ask (--force, -uf, --force-with-lease=..., a + refspec, a : refspec, -d, --mirror, git -C repo push --force) and two that stay allowed (git push -u origin feature, git push --follow-tags origin main:main)."
+      "differences": [8, 15],
+      "change": "Ten cases after git clean -fdx: eight push forms that ask (--force, -uf, --force-with-lease=..., a + refspec, a : refspec, -d, --mirror, git -C repo push --force) and two that stay allowed (git push -u origin feature, git push --follow-tags origin main:main). Twelve command-boundary cases cover benign chmod/chown compounds and retained protected-root blocks."
     }
   ]
 }
