@@ -56,3 +56,8 @@
   (literal "/usr/sbin/diskutil")
   (literal "/bin/launchctl")
   (literal "/usr/bin/sudo"))
+
+;; Desktop processes have no use for administrator prompts, and the app updater
+;; raises them. Kept last so no earlier rule re-allows it.
+(if (string=? (param "GUI") "1")
+  (deny mach-lookup (global-name "com.apple.authd")))

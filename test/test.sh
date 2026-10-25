@@ -276,6 +276,12 @@ expect no ".opencode/.gitignore in READ ONLY" sb /bin/sh -c ": > '$home/Projects
 expect no "exec open"                     sb /usr/bin/open -h
 expect no "exec codesign"                 sb /usr/bin/codesign -h
 expect no "exec diskutil"                 sb /usr/sbin/diskutil list
+# Without -u, security authorize never shows UI: with the lookup allowed it answers
+# "interaction not allowed" (-60007); with authd denied it answers nothing.
+authorize="/usr/bin/security authorize system.privilege.admin"
+[[ $(sb ${=authorize} 2>&1) == *-60007* ]] && pass "authorization service reachable in CLI mode" || fail "authorization service reachable in CLI mode"
+gui_out=$(/usr/bin/sandbox-exec -D "HOME=$home" -D "DARWIN_TEMP=$temp" -D "DARWIN_CACHE=$cache" -D GUI=1 -p "$profile" ${=authorize} 2>&1)
+[[ -z $gui_out ]] && pass "authorization service denied in GUI mode" || fail "authorization service denied in GUI mode ($gui_out)"
 expect no "write project .cc-safety-net"  sb /bin/mkdir -p "$home/Projects/app/.cc-safety-net"
 expect ok "write cc-safety-net logs"      sb /usr/bin/touch "$home/.cc-safety-net/logs/x"
 expect ok "write temp"                    sb /usr/bin/touch "$temp/.agent-guard-test"

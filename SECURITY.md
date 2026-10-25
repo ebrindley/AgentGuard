@@ -94,6 +94,11 @@ A relocated cache gets no new grant from `XDG_CACHE_HOME`. Cache code can affect
 a later unguarded process; that persistence risk is accepted for this workload,
 as it is for ordinary project scripts. Guard's release and policy stay protected.
 
+In the desktop app's profile, processes cannot look up the macOS authorization
+service (`com.apple.authd`), so nothing in a guarded app, including its updater,
+can raise an administrator password prompt. The update fails without one. The
+command-line profile does not have this rule.
+
 Ordinary configuration and extensions can execute code and persist changes into
 later unguarded sessions. This risk is accepted, as for editable project scripts
 and shared skills. Their execution in a guarded process tree remains confined.
@@ -387,7 +392,9 @@ For OpenCode:
   protected path or name;
 - start OpenCode unguarded through an Agent Guard entry point (the `opencode`
   command, the app, or a forwarder left after the move from OpenCode Guard)
-  without the plugin's refusal.
+  without the plugin's refusal;
+- for the desktop app, look up `com.apple.authd` and so raise an administrator
+  authorization prompt.
 
 For Pi and OMP:
 
