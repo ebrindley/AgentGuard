@@ -69,6 +69,42 @@ operations to run outside the guard; use `opencode serve` to start a foreground
 guarded server. `doctor` uses a private probe, not the service attached to an
 existing desktop window, and does not call a model.
 
+## OpenCode Desktop behavior
+
+Observed with OpenCode Desktop 2.1.4 on macOS unless noted. Statements about
+OpenCode's code come from reading its bundle, not from running it.
+
+- Closing the last window does not quit OpenCode. It stays in the Dock; click
+  its icon to get a window back, or quit with Cmd-Q. Opening Agent Guard while
+  OpenCode is running shows "OpenCode is already open"; the launcher cannot tell
+  whether that OpenCode is guarded, so the message covers both cases.
+- OpenCode checks for updates at launch and every ten minutes. Inside the guard
+  it cannot replace the app: on 2026-10-24, 2.1.1 staging 2.1.4 raised an
+  administrator prompt, and cancelling it was logged as `OSStatus error -60006`.
+  Quit OpenCode, update it outside the guard, then reopen it through Agent
+  Guard. For the Homebrew cask, run `brew upgrade --cask opencode-desktop`. The
+  cask declares `auto_updates`, but Homebrew 7.0.10 upgrades a cask named on the
+  command line without `--greedy` (`Cask::Upgrade.outdated_casks` in its
+  source). The other route is the download from opencode.ai.
+- Links do not open. The guard denies `lsopen`, OpenCode drops the failure, and
+  the click does nothing. For OpenCode Console sign-in, use "Copy sign-in link"
+  and paste it into a browser. Sign-in for other providers shows a device code
+  or an "open in browser" button, with no link to copy. Instead, choose the
+  provider's API key method where it offers one, or run `opencode auth login` in
+  a terminal. In the 2.1.4 CLI that command prints the sign-in URL and
+  instructions before it tries to open the page. This is read from the CLI's
+  code and was not run. That the desktop then sees the saved credential is an
+  inference.
+- A prompt "'Agent Guard' would like to access the Microphone" appeared 155 ms
+  after an agent reply finished, which is when OpenCode plays its "agent
+  finished" sound. The sound is on by default (Settings, General, Sound
+  effects, Agent), and OpenCode's helpers carry the audio-input entitlement.
+  This version's desktop code does not capture audio. Its only `getUserMedia`
+  call asks for a camera, in a web-only QR scanner. Inference: on an output
+  device that has a microphone, macOS treats the sound playback as a microphone
+  request. The prompt names Agent Guard because Agent Guard starts OpenCode.
+  Choose Don't Allow, or turn off the "agent finished" sound.
+
 ## OpenCode shared service
 
 OpenCode 2 starts a shared background service for commands run without

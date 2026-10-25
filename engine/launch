@@ -463,7 +463,7 @@ case $mode in
     find_app || fail "OpenCode.app not found"
     app=$REPLY
     main=$(/usr/bin/plutil -extract CFBundleExecutable raw "$app/Contents/Info.plist")
-    /usr/bin/pgrep -x "$main" >/dev/null && fail "OpenCode is already running. Quit it, then open Agent Guard."
+    /usr/bin/pgrep -x "$main" >/dev/null && fail "OpenCode is already open. If you opened it from Agent Guard, click OpenCode in the Dock to show its window. Otherwise quit OpenCode, then open Agent Guard."
     if [[ -x $app/Contents/Resources/opencode-cli ]]; then
       cli="$app/Contents/Resources/opencode-cli"
       opencode_major "$cli"
