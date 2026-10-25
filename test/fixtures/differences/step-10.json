@@ -1,0 +1,6 @@
+{
+  "step": 10,
+  "reason": "Deny the authorization service to guarded desktop processes, so an updater cannot raise an administrator prompt.",
+  "after": "  (literal \"/usr/bin/sudo\"))\n",
+  "insert": "\n;; Desktop processes have no use for administrator prompts, and the app updater\n;; raises them. Kept last so no earlier rule re-allows it.\n(if (string=? (param \"GUI\") \"1\")\n  (deny mach-lookup (global-name \"com.apple.authd\")))\n"
+}
