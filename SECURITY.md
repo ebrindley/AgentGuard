@@ -97,7 +97,9 @@ as it is for ordinary project scripts. Guard's release and policy stay protected
 In the desktop app's profile, processes cannot look up the macOS authorization
 service (`com.apple.authd`), so nothing in a guarded app, including its updater,
 can raise an administrator password prompt. The update fails without one. The
-command-line profile does not have this rule.
+same profile denies the `device-microphone` operation, so a guarded app cannot
+capture audio input and macOS shows no microphone prompt naming Agent Guard.
+Sound playback is unaffected. The command-line profile has neither rule.
 
 Ordinary configuration and extensions can execute code and persist changes into
 later unguarded sessions. This risk is accepted, as for editable project scripts
@@ -399,7 +401,7 @@ For OpenCode:
   command, the app, or a forwarder left after the move from OpenCode Guard)
   without the plugin's refusal;
 - for the desktop app, look up `com.apple.authd` and so raise an administrator
-  authorization prompt.
+  authorization prompt, or capture audio input through `device-microphone`.
 
 For Pi and OMP:
 

@@ -57,7 +57,10 @@
   (literal "/bin/launchctl")
   (literal "/usr/bin/sudo"))
 
-;; Desktop processes have no use for administrator prompts, and the app updater
-;; raises them. Kept last so no earlier rule re-allows it.
+;; Desktop processes have no use for administrator prompts or microphone input,
+;; and the app updater and the "agent finished" sound raise those prompts. Kept
+;; last so no earlier rule re-allows them.
 (if (string=? (param "GUI") "1")
-  (deny mach-lookup (global-name "com.apple.authd")))
+  (begin
+    (deny mach-lookup (global-name "com.apple.authd"))
+    (deny device-microphone)))
