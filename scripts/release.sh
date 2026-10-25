@@ -52,6 +52,7 @@ files=(
   profiles/opencode/install.sh
   profiles/opencode/uninstall.sh
   profiles/opencode/assets/AgentGuard.icns
+  profiles/opencode/assets/AgentGuard.entitlements
   installer/lib.zsh
   installer/actions.zsh
   installer/harness/opencode.zsh

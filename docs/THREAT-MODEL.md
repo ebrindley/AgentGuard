@@ -242,6 +242,16 @@ touch.
   That is a recorded failure of a process that has no legitimate need for such a
   prompt. Other Mach services stay reachable, and a claim about one of them needs
   its own recorded failure.
+- `Agent Guard.app` is signed with the hardened runtime and with every
+  resource-access entitlement except audio input. macOS then refuses the
+  microphone, without a prompt, to processes whose privacy requests it
+  attributes to the app. The recorded failure is a microphone prompt naming
+  Agent Guard when OpenCode Desktop played its "agent finished" sound on an
+  output device with inputs (observed 2026-10-24 and 2026-10-25). A Seatbelt
+  `device-microphone` deny did not stop it, because `coreaudiod` makes the
+  request outside the sandbox. The cost is that no process the app starts can
+  use the microphone. The other resource-access entitlements keep their prompts
+  unchanged.
 - Guard List entries are compared as written, after escape and link resolution.
   Unicode normalization differences between an entry and the path on disk are in
   scope under class 6 and have not been tested.

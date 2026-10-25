@@ -169,18 +169,34 @@ usage='OpenCode asked for this while running inside Agent Guard. Agent Guard doe
   /usr/bin/jq -e --arg t "$usage" '[to_entries[] | select(.key | endswith("UsageDescription"))] | length == 11 and all(.value == $t)' >/dev/null &&
   /usr/bin/codesign --verify --strict "$app" 2>/dev/null &&
   pass 'all 11 usage strings carry the new text and the signature verifies' || fail 'usage strings or signature'
-# A change to the privacy text alone is enough for ag_app_decide to rebuild an existing app.
+/usr/bin/codesign -dv "$app" 2>&1 | /usr/bin/grep -qE '^CodeDirectory .* flags=0x[0-9a-f]+\([^)]*runtime' &&
+  /usr/bin/codesign -d --entitlements - --xml "$app" 2>/dev/null | /usr/bin/plutil -convert json -o - - |
+  /usr/bin/jq -e 'keys == ["com.apple.security.automation.apple-events", "com.apple.security.device.camera",
+    "com.apple.security.personal-information.addressbook", "com.apple.security.personal-information.calendars",
+    "com.apple.security.personal-information.location", "com.apple.security.personal-information.photos-library"]
+    and all(.[]; . == true)' >/dev/null &&
+  pass 'the app has the hardened runtime and every resource-access entitlement but audio input' || fail 'hardened runtime or entitlements'
+# A change to the privacy text, the signing options or the entitlements alone rebuilds an
+# existing app; without the entitlements file, ag_app_decide fails.
 decided=$( (
   source "$source_root/installer/lib.zsh"
-  ag_tree=$source_root engine="$run/decide/engine" bundle_id=test.bundle app="$run/decide/App.app" stamp="$run/decide/stamp.json"
+  t="$run/decide/tree"
+  /bin/mkdir -p "$t/profiles/opencode" && /bin/cp -R "$source_root/profiles/opencode/assets" "$t/profiles/opencode/" || exit 1
+  ag_tree=$t engine="$run/decide/engine" bundle_id=test.bundle app="$run/decide/App.app" stamp="$run/decide/stamp.json"
   /bin/mkdir -p "$app"
-  ag_app_decide || exit 1
-  print -r -- "{\"app_inputs\":\"$ag_app_inputs\"}" > "$stamp"
-  ag_app_decide; print -n "$ag_app_rebuild "
+  keep() { ag_app_decide || exit 1; print -r -- "{\"app_inputs\":\"$ag_app_inputs\"}" > "$stamp" }
+  keep; ag_app_decide; print -n "$ag_app_rebuild "
   ag_app_usage_text() { REPLY='another sentence' }
-  ag_app_decide; print -n $ag_app_rebuild
+  ag_app_decide; print -n "$ag_app_rebuild "
+  keep; ag_app_sign_options() { reply=() }
+  ag_app_decide; print -n "$ag_app_rebuild "
+  keep; print >> "$t/profiles/opencode/assets/AgentGuard.entitlements"
+  ag_app_decide; print -n "$ag_app_rebuild "
+  /bin/rm -f "$t/profiles/opencode/assets/AgentGuard.entitlements"
+  ag_app_decide 2>/dev/null; print -n $?
 ) )
-[[ $decided == '0 1' ]] && pass 'only a change to the privacy text rebuilds an app whose stamp matches' || fail "ag_app_decide: '$decided'"
+[[ $decided == '0 1 1 1 1' ]] && pass 'privacy text, signing options and entitlements each rebuild a matching app; a missing entitlements file fails' ||
+  fail "ag_app_decide: '$decided'"
 save A
 snapshot "$home" > "$run/A.snapshot"
 
