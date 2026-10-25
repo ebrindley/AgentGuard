@@ -245,13 +245,24 @@ try {
       assert.equal(launch(null, ["cli", "hello"]).status, 7)
       until(() => !existsSync(again), "pruning did not run after the stamp aged")
       console.log("ok the stamp throttles pruning")
-      const names = () => execFileSync("/bin/ls", [sessions], { encoding: "utf8" }).split("\n").filter(Boolean)
-      const before = names()
-      const r = launch(null, ["profile"])
-      assert.equal(r.status, 0, r.stderr)
-      assert.match(r.stdout, /\(version 1\)/)
-      assert.deepEqual(names().filter(n => !before.includes(n)), [])
-      console.log("ok launch profile leaves no session folder")
+      // Every launch points state/rules.json at its own folder before pruning, so a
+      // pointer to another folder only arises when launches overlap. Run the
+      // launcher's own function against such a file.
+      const referenced = folder("referenc", { owner: [dead, liveStart] })
+      const unreferenced = folder("unrefere", { owner: [dead, liveStart] })
+      writeFileSync(join(engine, "state/rules.json"), JSON.stringify({ checker: join(referenced, "checker") }))
+      const fn = readFileSync(join(engine, "current/launch"), "utf8").match(/^prune_sessions\(\) \{\n[\s\S]*?\n\}\n/m)[0]
+      const pruned = spawnSync("/bin/zsh", ["-fc", `setopt err_exit no_unset pipe_fail extended_glob\nengine=$1 session=$2\n${fn}\nprune_sessions`, "prune", engine, join(sessions, "none")], { encoding: "utf8" })
+      assert.equal(pruned.status, 0, pruned.stderr)
+      assert.ok(existsSync(referenced), "the folder state/rules.json points to was removed")
+      assert.ok(!existsSync(unreferenced), "an identical unreferenced folder was kept")
+      for (const rules of ["not json", "[]", "{}", '{"checker":3}']) {
+        const d = folder("badrules", { owner: [dead, liveStart] })
+        writeFileSync(join(engine, "state/rules.json"), rules)
+        assert.equal(spawnSync("/bin/zsh", ["-fc", `setopt err_exit no_unset pipe_fail extended_glob\nengine=$1 session=$2\n${fn}\nprune_sessions`, "prune", engine, join(sessions, "none")]).status, 0)
+        assert.ok(!existsSync(d), `pruning stopped on state/rules.json ${rules}`)
+      }
+      console.log("ok pruning keeps the folder state/rules.json points to and tolerates an unusable file")
     } finally { live.kill() }
     rmSync(join(engine, "state"), { recursive: true, force: true })
     rmSync(log, { force: true })

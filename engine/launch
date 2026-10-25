@@ -418,13 +418,10 @@ session=$(/usr/bin/mktemp -d "$engine/state/opencode/${release:t}.XXXXXXXX")
 # this record.
 owner_start=$(/bin/ps -o lstart= -p $$ 2>/dev/null) || owner_start=
 [[ -z $owner_start ]] || print -r -- "$$"$'\n'"${(j: :)${=owner_start}}" > "$session/owner"
-# A launch that ends here (refusal, profile, check) leaves nothing behind; exec
-# discards the trap. A snapshot left behind by a staged check would also keep a
+# No process outlives a staged check, and a snapshot left behind would keep a
 # failed install from removing the new engine folder.
 if (( staged )); then
   trap '/bin/rm -rf -- "$session"; /bin/rmdir -- "$engine/state/opencode" 2>/dev/null || true' EXIT
-else
-  trap '/bin/rm -rf -- "$session"' EXIT
 fi
 channel= replies=
 failure_stage=checker-preparation preparation_status=ready
@@ -500,17 +497,20 @@ esac
 # Session folders of ended launches. Pruning runs here, outside the sandbox and
 # in the background so it never delays or fails a launch, when the stamp is more
 # than a day old. A folder with an owner record goes when the owner is gone and
-# the folder is a day old; one without goes when it predates the last boot.
+# the folder is a day old; one without goes when it predates the last boot. The
+# folder state/rules.json points into stays, because readers follow that file.
 prune_sessions() {
-  local d rec start boot now mtime
+  local d rec start boot now mtime checker
   setopt no_err_exit
   zmodload zsh/datetime zsh/stat 2>/dev/null || return 0
   boot=$(/usr/sbin/sysctl -n kern.boottime 2>/dev/null) || return 0
   boot=${${boot#*sec = }%%,*}
   [[ $boot == <-> ]] || return 0
   now=$EPOCHSECONDS
+  checker=$(/usr/bin/jq -r '.checker | strings' "$engine/state/rules.json" 2>/dev/null) || checker=
   for d in "$engine/state/opencode"/*.????????(N); do
     [[ -d $d && ! -L $d && $d != "$session" ]] || continue
+    [[ -z $checker || $d != ${checker:h} ]] || continue
     zstat -A mtime +mtime -- "$d" 2>/dev/null || continue
     rec=()
     [[ -f $d/owner ]] && rec=("${(@f)$(<"$d/owner" 2>/dev/null)}")
