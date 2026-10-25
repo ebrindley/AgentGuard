@@ -197,6 +197,10 @@ log is `last-launch-opencode.log`, not `last-launch.log`.
 
 ## Pi and OMP
 
+Pi can read project settings that require a `settings.json.lock` directory.
+Only that directory node is writable; its contents and project configuration
+remain protected.
+
 Run `pi` or `omp` from a project folder. The launcher prints `OS sandbox ON`
 and runs the agent and its child processes under the operating system sandbox
 (Seatbelt). The project is `PI_PROJECT` when set, otherwise the Git top level,

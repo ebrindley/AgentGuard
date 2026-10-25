@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { userInfo } from 'node:os';
 import { layout, stage } from './engines/zsh.mjs';
+import { checkSettingsLocks } from './pi-settings-lock.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const pi = join(root, 'profiles/pi');
@@ -131,6 +132,7 @@ const protectedFiles = {
 };
 
 try {
+  check('difference 14: project settings directory locks preserve configuration protection', () => checkSettingsLocks(profile));
   for (const runtime of ['pi', 'omp']) {
     const a = account(`project-boundary-${runtime}`);
     const launch = (cwd, project, env = {}) => session({ ...a, project: cwd },

@@ -360,7 +360,7 @@ index 9b7c788..cadb126 100644
 +  -p "$AG_PEER_PROFILE"
  )
 diff --git a/sandbox/pi-sandbox.sb b/sandbox/pi-sandbox.sb
-index f560a31..ae558b3 100644
+index f560a31..119b2f3 100644
 --- a/sandbox/pi-sandbox.sb
 +++ b/sandbox/pi-sandbox.sb
 @@ -113,6 +113,8 @@
@@ -409,7 +409,16 @@ index f560a31..ae558b3 100644
    ;; The shared extension remains at the canonical Pi path even when Pi runtime
    ;; state is relocated. Keep these denies pinned as well as state-relative.
    (subpath (string-append (param "HOME") "/.pi/agent/extensions"))
-@@ -323,3 +339,142 @@
+@@ -256,0 +273,8 @@
++;; Pi reads project settings under a proper-lockfile directory lock. Only the
++;; directory node is writable; settings, symlinks and lock contents stay denied.
++(allow file-write*
++  (require-all
++    (subpath (param "PROJECT"))
++    (regex #"/\.pi/settings\.json\.lock$")
++    (vnode-type DIRECTORY)))
++
+@@ -323,3 +347,142 @@
    (literal (string-append (param "HOME") "/.pi/agent/security-events.log"))
    ;; .env files anywhere (incl. project) — the one project-wide secret deny.
    (regex #"/\.env($|\.)"))
