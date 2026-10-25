@@ -243,6 +243,13 @@ load is a warning in these checks, not a failure
 stamp and remove release folders older than the previous one, which stays for
 OpenCode sessions started from it.
 
+`Agent Guard.app` is rebuilt only when its script, bundle ID, icon or privacy text
+changes, or when it is missing. macOS treats the app as the responsible process
+for OpenCode's privacy requests and shows the app's usage strings in them, so all
+11 `NS*UsageDescription` keys in its `Info.plist` say that OpenCode asked for the
+access and that Agent Guard does not use it itself. A rebuild gives the app a new
+ad hoc signature, and macOS may then ask its privacy questions again.
+
 What an install does depends on what it finds on the Mac; `agent-guard update`
 does the same when it installs:
 

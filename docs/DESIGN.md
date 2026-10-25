@@ -111,7 +111,7 @@ Other installed paths:
 | `~/Agent Guard/` | `Guard List.txt` and the launch log |
 | `~/.config/opencode/plugins/agent-guard.js` | Symlink to `$engine/current/profiles/opencode/plugin.js`, placed through the temporary name `.agent-guard.js.partial`, which OpenCode does not load (section 10, rule 2). The same rename of `current` switches the launcher and the plugin. |
 | `~/.cc-safety-net/rules/agent-guard/` | The rulebook, named `agent-guard`, plus an entry in `~/.cc-safety-net/rules/rule.json` |
-| `~/Applications/Agent Guard.app` | An AppleScript applet that runs `"$engine/bin/opencode-gui"`, a path that does not change between releases; ad-hoc signed |
+| `~/Applications/Agent Guard.app` | An AppleScript applet that runs `"$engine/bin/opencode-gui"`, a path that does not change between releases; its 11 usage-description strings say that OpenCode asked for the access and Agent Guard does not use it; ad-hoc signed |
 | `.zprofile`, `.zshrc`, `.bash_profile` if present | A PATH block between `# >>> agent-guard >>>` and `# <<< agent-guard <<<` that puts `$engine/bin` first. The text does not change between releases. |
 
 None of these names is shared with OpenCode Guard, and neither are the status tool, bypass variable, message prefix, nesting marker or app bundle ID (`io.github.ebrindley.agentguard`); the names are listed in section 12, step 3. The launcher still honors OpenCode Guard's nesting marker until step 11 and skips any executable inside its engine folder. An install that finds any part of OpenCode Guard migrates it (section 10). After a migration, `~/Library/Application Support/OpenCodeGuard/bin/opencode` and `opencode-gui` are forwarders, links to `$engine/bin/opencode` and `opencode-gui`, until a boot after the switch (section 10).

@@ -720,13 +720,23 @@ ag_projects_check() {
 }
 
 # The app runs a path that does not change between releases, so it is rebuilt only
-# when its inputs (script, bundle ID, icon) differ from the stamp's, or it is missing.
+# when its inputs (script, bundle ID, privacy text, icon) differ from the stamp's, or it is missing.
 ag_app_script() { REPLY="do shell script quoted form of \"$engine/bin/opencode-gui\" & \" >/dev/null 2>&1 &\"" }
+
+# macOS shows the applet's usage strings in the privacy prompts that OpenCode's
+# processes raise, because the applet is their responsible process. These are the
+# keys osacompile writes; each gets the same text in place of its template text.
+ag_app_usage_keys() {
+  reply=(NSAppleEventsUsageDescription NSAppleMusicUsageDescription NSCalendarsUsageDescription
+    NSCameraUsageDescription NSContactsUsageDescription NSHomeKitUsageDescription NSMicrophoneUsageDescription
+    NSPhotoLibraryUsageDescription NSRemindersUsageDescription NSSiriUsageDescription NSSystemAdministrationUsageDescription)
+}
+ag_app_usage_text() { REPLY='OpenCode asked for this while running inside Agent Guard. Agent Guard does not use it itself.' }
 
 ag_app_decide() {
   local icon="$ag_tree/profiles/opencode/assets/AgentGuard.icns" s old=
   ag_app_script
-  s=$( { print -r -- "$REPLY"; print -r -- "$bundle_id"; /usr/bin/shasum -a 256 < "$icon" } | /usr/bin/shasum -a 256 ) ||
+  s=$( { print -r -- "$REPLY"; print -r -- "$bundle_id"; ag_app_usage_text; print -r -- "$REPLY"; /usr/bin/shasum -a 256 < "$icon" } | /usr/bin/shasum -a 256 ) ||
     { ag_err "cannot hash $icon"; return 1 }
   ag_app_inputs=${s%% *}
   [[ -f $stamp ]] && old=$(/usr/bin/jq -r '.app_inputs // empty' "$stamp" 2>/dev/null)
@@ -789,7 +799,7 @@ ag_rule_merge() {  # IN OUT TEMPLATE
 
 # P5: validates the rulebook and the merged rule.json; builds the app when needed.
 ag_build() {
-  local rel="$engine/releases/$ag_rid_new" s="$ag_stage/Agent Guard.app" tpl id
+  local rel="$engine/releases/$ag_rid_new" s="$ag_stage/Agent Guard.app" tpl id k
   tpl="$rel/profiles/opencode/templates/cc-safety-net/rules"
   /usr/bin/jq -e '.name == "agent-guard"' "$tpl/agent-guard/rulebook.json" >/dev/null 2>&1 ||
     { ag_err "the release's rulebook is not valid"; return 1 }
@@ -806,6 +816,11 @@ ag_build() {
   /bin/cp -- "$rel/profiles/opencode/assets/AgentGuard.icns" "$s/Contents/Resources/applet.icns" || return 1
   /bin/rm -f -- "$s/Contents/Resources/Assets.car"
   /usr/bin/plutil -remove CFBundleIconName "$s/Contents/Info.plist" >/dev/null 2>&1
+  ag_app_usage_text
+  ag_app_usage_keys
+  for k in $reply; do
+    /usr/bin/plutil -replace "$k" -string "$REPLY" "$s/Contents/Info.plist" || return 1
+  done
   /usr/bin/codesign --force --sign - "$s" 2>/dev/null || { ag_err 'cannot sign the app'; return 1 }
   /usr/bin/codesign --verify --strict "$s" 2>/dev/null || { ag_err 'the built app fails codesign --verify --strict'; return 1 }
   id=$(/usr/bin/plutil -extract CFBundleIdentifier raw "$s/Contents/Info.plist") && [[ $id == "$bundle_id" ]] ||
