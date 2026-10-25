@@ -409,7 +409,10 @@ index f560a31..119b2f3 100644
    ;; The shared extension remains at the canonical Pi path even when Pi runtime
    ;; state is relocated. Keep these denies pinned as well as state-relative.
    (subpath (string-append (param "HOME") "/.pi/agent/extensions"))
-@@ -256,0 +273,8 @@
+@@ -254,6 +270,14 @@
+   (literal (string-append (param "HOME") "/.npmrc"))
+   (subpath (string-append (param "HOME") "/.secrets")))
+ 
 +;; Pi reads project settings under a proper-lockfile directory lock. Only the
 +;; directory node is writable; settings, symlinks and lock contents stay denied.
 +(allow file-write*
@@ -418,6 +421,9 @@ index f560a31..119b2f3 100644
 +    (regex #"/\.pi/settings\.json\.lock$")
 +    (vnode-type DIRECTORY)))
 +
+ ;; Re-allow the minimum `git init` / submodule-init needs inside the now-denied
+ ;; hooks subtrees (last-match-wins, so this overrides the subtree denies above
+ ;; but not for the active hook files it does NOT re-allow):
 @@ -323,3 +347,142 @@
    (literal (string-append (param "HOME") "/.pi/agent/security-events.log"))
    ;; .env files anywhere (incl. project) — the one project-wide secret deny.
@@ -641,10 +647,40 @@ index d997be1..93f8d29 100644
    );
  }
 diff --git a/src/validate-bash-command.sh b/src/validate-bash-command.sh
-index 5c20996..6dfe2e9 100755
+index 5c20996..099c604 100755
 --- a/src/validate-bash-command.sh
 +++ b/src/validate-bash-command.sh
-@@ -3792,6 +3792,15 @@ warning_patterns=(
+@@ -2871,8 +2871,28 @@ case "$dangerous_scan_text" in
+         dangerous_scan_text="$dangerous_scan_text"$'\n'"$_dst_stripped" ;;
+ esac
+ 
++# Permission arguments can contain $(...) and ${...}. Keep pre-grouping text
++# so the grouping rewrite does not turn those arguments into separators.
++permission_scan_text="$execution_scan_text"
++_permission_stripped=""
++case "$permission_scan_text" in
++    *\\*|*\"*|*\'*)
++        _permission_stripped="${execution_scan_text//\\/}"; _permission_stripped="${_permission_stripped//\"/}"; _permission_stripped="${_permission_stripped//\'/}"
++        permission_scan_text="$permission_scan_text"$'\n'"$_permission_stripped" ;;
++esac
++case "$permission_scan_text" in
++    *chmod*|*chown*)
++        permission_scan_text="$(neutralize_command_substs "$execution_scan_text")"
++        # Each copy needs fresh quote state before command splitting.
++        if [[ -n "$_permission_stripped" ]]; then
++            permission_scan_text="$permission_scan_text"$'\n'"$(neutralize_command_substs "$_permission_stripped")"
++        fi
++        permission_scan_text="$(printf '%s' "$permission_scan_text" | awk "$SEGMENT_AWK")" ;;
++esac
+ for pattern in "${dangerous_patterns[@]}"; do
+-    if echo "$dangerous_scan_text" | grep -E "$pattern" &>/dev/null; then
++    scan_text="$dangerous_scan_text"
++    case "$pattern" in chmod*|chown*) scan_text="$permission_scan_text" ;; esac
++    if echo "$scan_text" | grep -E "$pattern" &>/dev/null; then
+         log_security_event "BLOCKED" "$pattern" "$command"
+         echo "❌ BLOCKED: Dangerous command pattern: $command" >&2
+         echo "   Pattern matched: $pattern" >&2
+@@ -3792,6 +3812,15 @@ warning_patterns=(
      # Git destructive operations
      "git[[:space:]]+reset[[:space:]]+--hard"
      "git[[:space:]]+clean[[:space:]]+-[a-zA-Z]*f"
@@ -661,7 +697,7 @@ index 5c20996..6dfe2e9 100755
      # git config keys are CASE-INSENSITIVE and the key can be quote-split
      # (core."hooksPath"), neither of which a flat ERE handles.
 diff --git a/test/corpus/corpus.json b/test/corpus/corpus.json
-index 53ef527..c6a96a9 100644
+index 53ef527..9824a78 100644
 --- a/test/corpus/corpus.json
 +++ b/test/corpus/corpus.json
 @@ -112,6 +112,24 @@
@@ -689,6 +725,27 @@ index 53ef527..c6a96a9 100644
      { "command": "find . -name \"*.tmp\" -delete", "expect": "ask" },
      { "command": "export PATH=/tmp/bin:$PATH", "expect": "ask", "note": "critical env manipulation -> warn tier (exit 1)" },
      { "command": "unset DYLD_LIBRARY_PATH", "expect": "ask" },
+@@ -397,6 +415,19 @@
+     { "command": "git config --unset core.hooksPath", "expect": "allow", "note": "reads and the REMEDIATION do not repoint anything; gating them trains click-through without adding cover" },
+     { "command": "git config set core.hooksPath /tmp/evil", "expect": "ask", "note": "git >= 2.46 `config set` subcommand: without it the parser read `set` as the key and allowed the repoint" },
+     { "command": "git config --file .git/config core.hooksPath /tmp/evil", "expect": "ask", "note": "value-taking option must be consumed, or its value is counted as the key" },
+-    { "command": "git config get core.hooksPath", "expect": "allow", "note": "subcommand spelling of a read stays allow, same as --get" }
++    { "command": "git config get core.hooksPath", "expect": "allow", "note": "subcommand spelling of a read stays allow, same as --get" },
++    {"command": "chmod -R 755 dist && ls /usr/local/bin", "cwd": "{REPO}", "expect": "allow", "note": "Command boundary: permission patterns do not cross a separate command"},
++    {"command": "chown -R 123 dist && ls /etc", "cwd": "{REPO}", "expect": "allow", "note": "Command boundary: permission patterns do not cross a separate command"},
++    {"command": "chmod -R 755 dist; printf '%s' /etc", "cwd": "{REPO}", "expect": "allow", "note": "Command boundary: permission patterns do not cross a separate command"},
++    {"command": "chmod -R 755 dist | ls /etc", "cwd": "{REPO}", "expect": "allow", "note": "Command boundary: permission patterns do not cross a separate command"},
++    {"command": "chmod -R 755 /etc", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: permission patterns do not cross a separate command"},
++    {"command": "chmod 755 -R /etc", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: permission patterns do not cross a separate command"},
++    {"command": "chown -R 123 /etc", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: permission patterns do not cross a separate command"},
++    {"command": "chmod -R 755 dist && chown -R 123 /etc", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: permission patterns do not cross a separate command"},
++    {"command": "chmod -R 755 'dist;docs' /etc", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: quoted separators remain part of an operand"},
++    {"command": "chown -R 123 'dist|docs' /etc", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: quoted separators remain part of an operand"},
++    {"command": "chown -R $(whoami) /usr/local", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: ordinary substitutions do not separate a protected operand from its flags"},
++    {"command": "chown -R ${USER} /usr/local", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: ordinary substitutions do not separate a protected operand from its flags"},
++    {"command": "echo \"Fixing Homebrew's permissions\" && chown -R $(whoami) /usr/local", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: quoted status text does not carry quote state into the stripped permission scan"}
+   ]
+ }
 diff --git a/test/shim.mjs b/test/shim.mjs
 index 98d10e2..bd11001 100644
 --- a/test/shim.mjs
