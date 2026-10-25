@@ -280,8 +280,9 @@ Each OpenCode launch keeps its checker snapshot and session files in
 `state/opencode/<release>.<random>`, with an `owner` file holding the launching
 process's pid and start time. A launch that ends without starting OpenCode
 (a refusal, `profile` or `check`) removes its folder. The launcher also prunes
-old folders, outside the sandbox and in the background, at most once every 24
-hours; `state/.session-prune` records the last run. It removes a folder whose
+old folders, outside the sandbox and in the background, when
+`state/.session-prune` is more than 24 hours old. Launches that start together
+may both run it, which is harmless. It removes a folder whose
 owner is no longer running (the pid is gone, or has a different start time) when
 the folder is more than 24 hours old, and a folder with no `owner` file when it
 predates the last boot. Other folders, including the current launch's, are kept.

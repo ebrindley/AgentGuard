@@ -244,7 +244,7 @@ try {
       utimesSync(stamp, old, old)
       assert.equal(launch(null, ["cli", "hello"]).status, 7)
       until(() => !existsSync(again), "pruning did not run after the stamp aged")
-      console.log("ok pruning runs at most once every 24 hours")
+      console.log("ok the stamp throttles pruning")
       const names = () => execFileSync("/bin/ls", [sessions], { encoding: "utf8" }).split("\n").filter(Boolean)
       const before = names()
       const r = launch(null, ["profile"])

@@ -497,10 +497,10 @@ case $mode in
   (*) fail "usage: launch cli|gui|profile|check [staged]" ;;
 esac
 
-# Session folders of ended launches, at most once a day. Runs here, outside the
-# sandbox, and in the background so it never delays or fails a launch. A folder
-# with an owner record goes when the owner is gone and the folder is a day old;
-# one without goes when it predates the last boot.
+# Session folders of ended launches. Pruning runs here, outside the sandbox and
+# in the background so it never delays or fails a launch, when the stamp is more
+# than a day old. A folder with an owner record goes when the owner is gone and
+# the folder is a day old; one without goes when it predates the last boot.
 prune_sessions() {
   local d rec start boot now mtime
   setopt no_err_exit
