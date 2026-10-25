@@ -1,0 +1,32 @@
+{
+  "source": "ffd4066b994b591c620a64e2f7b3a4960a724b8b",
+  "runtime": "Pi 1.4.0 settings manager, Node 24.22.1, macOS Seatbelt",
+  "baseline_sha256": "e01354939886dbe058aa953f89f26d65de0c9826214a76a70df6b23cd4de7ffa",
+  "candidate_sha256": "ea6ce1c7e73f022d685b8d1c185629d58896a0d11edca18422974b069ca0627b",
+  "baseline": {
+    "lock_mkdir": "EPERM",
+    "native_project_override": "ignored (existing paired reproduction)"
+  },
+  "candidate": {
+    "lock_lifecycle": "allowed",
+    "native_project_override": "project-canary, errors=[]",
+    "settings_modify_remove_rename": "denied",
+    "regular_lock_file_symlink_descendant": "denied",
+    "outside_project_and_other_locks": "denied"
+  },
+  "enforcement_totals": {
+    "directory_node_write_grants": {
+      "before": 0,
+      "after": 1
+    },
+    "removed_denials": 0,
+    "required_hosted_checks": {
+      "before": 1,
+      "after": 1
+    },
+    "gate_file_slices": {
+      "before": 8,
+      "after": 8
+    }
+  }
+}
