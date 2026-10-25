@@ -236,6 +236,12 @@ touch.
   the operation-class denies (`lsopen`, `job-creation`) and setuid semantics carry
   the guarantee. A claim that a copied binary defeats the path deny is a finding
   only if the underlying capability is shown to be reachable.
+- The profile restricts `mach-lookup` for one service, `com.apple.authd`, and only
+  with `GUI=1`. It stops guarded desktop processes, in practice OpenCode's
+  updater, from raising administrator authorization prompts (observed 2026-10-24).
+  That is a recorded failure of a process that has no legitimate need for such a
+  prompt. Other Mach services stay reachable, and a claim about one of them needs
+  its own recorded failure.
 - Guard List entries are compared as written, after escape and link resolution.
   Unicode normalization differences between an entry and the path on disk are in
   scope under class 6 and have not been tested.
