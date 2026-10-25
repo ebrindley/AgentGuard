@@ -12,7 +12,7 @@ assert.equal((await preflight()).ok, true);
 const rows = [];
 const cases = JSON.parse(readFileSync(new URL('../profiles/pi/test/corpus/corpus.json', import.meta.url))).cases
   .filter(c => c.note?.startsWith('Command boundary:'));
-assert.equal(cases.length, 12);
+assert.equal(cases.length, 13);
 for (const { command, expect: expected } of cases) {
   const result = await analyzeCommand(command, { cwd: project, home });
   rows.push({ command, expected, actual: result.decision, reason: result.reason });

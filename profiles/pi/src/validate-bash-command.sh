@@ -2875,12 +2875,15 @@ esac
 # so the grouping rewrite does not turn those arguments into separators.
 permission_scan_text="$execution_scan_text"
 case "$permission_scan_text" in
-    *\\*|*\"*|*\'*)
-        _permission_stripped="${permission_scan_text//\\/}"; _permission_stripped="${_permission_stripped//\"/}"; _permission_stripped="${_permission_stripped//\'/}"
-        permission_scan_text="$permission_scan_text"$'\n'"$_permission_stripped" ;;
-esac
-case "$permission_scan_text" in
-    *chmod*|*chown*) permission_scan_text="$(neutralize_command_substs "$permission_scan_text" | awk "$SEGMENT_AWK")" ;;
+    *chmod*|*chown*)
+        permission_scan_text="$(neutralize_command_substs "$execution_scan_text")"
+        # Each copy needs fresh quote state before command splitting.
+        case "$execution_scan_text" in
+            *\\*|*\"*|*\'*)
+                _permission_stripped="${execution_scan_text//\\/}"; _permission_stripped="${_permission_stripped//\"/}"; _permission_stripped="${_permission_stripped//\'/}"
+                permission_scan_text="$permission_scan_text"$'\n'"$(neutralize_command_substs "$_permission_stripped")" ;;
+        esac
+        permission_scan_text="$(printf '%s' "$permission_scan_text" | awk "$SEGMENT_AWK")" ;;
 esac
 for pattern in "${dangerous_patterns[@]}"; do
     scan_text="$dangerous_scan_text"
