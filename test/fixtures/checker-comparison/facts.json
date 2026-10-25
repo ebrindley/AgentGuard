@@ -5,7 +5,7 @@
   "platform": "darwin",
   "scope": "Pre-execution Pi handlers only; confirmation is simulated and declined; no payload executed. Native containment is measured separately.",
   "counts": {
-    "characterization": 413,
+    "characterization": 414,
     "in-scope": 34,
     "benign": 25
   },
@@ -232,6 +232,7 @@
     "corpus-411",
     "corpus-412",
     "corpus-413",
+    "corpus-414",
     "reset",
     "reset-cwd",
     "reset-order",
@@ -282,9 +283,9 @@
     "pem-fixture",
     "file-pem"
   ],
-  "analyzerSha256": "015c6ba08682bc27f0aa2531c33127e5562d927a0f52e63b3fdccb42c9f9f0ba",
-  "corpusSha256": "983e7fd0cf4319b92a0063bdee214f8c0fff2f81976caf739c3476115f52b9e4",
-  "casesSha256": "61824d9e2f96700b942e8dd332ed4ae08da5416ff15e4cc355bc876f66cb9d1f",
+  "analyzerSha256": "af7636bd8b9d56901102347ab37feb9ba3211256b4bdeea74e418d94462d235d",
+  "corpusSha256": "864a4f146289e5eb4b20ba10ab732f7248d00e6a6af3d9f1cb4442620f7bb784",
+  "casesSha256": "076b9809a9cfe193db0cf204724c783415308df9ce7415c8f17bba8eae94512e",
   "policy": {
     "settings": {
       "level": "strict",
@@ -297,7 +298,7 @@
     "allow->allow": 133,
     "ask->allow": 55,
     "ask->block": 35,
-    "block->allow": 136,
+    "block->allow": 137,
     "block->block": 89,
     "allow->block": 24
   }

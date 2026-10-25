@@ -24,5 +24,7 @@
       "hook": "INERT_HOOK",
       "childWrite": false
     }
-  ]
+  ],
+  "candidateAnalyzerSha256": "af7636bd8b9d56901102347ab37feb9ba3211256b4bdeea74e418d94462d235d",
+  "candidateProfileSha256": "ea6ce1c7e73f022d685b8d1c185629d58896a0d11edca18422974b069ca0627b"
 }

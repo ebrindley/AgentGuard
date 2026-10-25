@@ -411,6 +411,7 @@
 {"id":"corpus-411","group":"characterization","tool":"bash","cwd":"{REPO}","command":"chown -R 123 'dist|docs' /etc","recorded":"block","baseline":["block","block"],"pi":["block","block"],"shared":["allow","allow"]}
 {"id":"corpus-412","group":"characterization","tool":"bash","cwd":"{REPO}","command":"chown -R $(whoami) /usr/local","recorded":"block","baseline":["block","block"],"pi":["block","block"],"shared":["allow","allow"]}
 {"id":"corpus-413","group":"characterization","tool":"bash","cwd":"{REPO}","command":"chown -R ${USER} /usr/local","recorded":"block","baseline":["block","block"],"pi":["block","block"],"shared":["allow","allow"]}
+{"id":"corpus-414","group":"characterization","tool":"bash","cwd":"{REPO}","command":"echo \"Fixing Homebrew's permissions\" && chown -R $(whoami) /usr/local","recorded":"block","baseline":["block","block"],"pi":["block","block"],"shared":["allow","allow"]}
 {"id":"reset","group":"in-scope","tool":"bash","cwd":"{REPO}","command":"git reset --hard","target":"ask","baseline":["ask","block"],"pi":["ask","block"],"shared":["block","block"]}
 {"id":"reset-cwd","group":"in-scope","tool":"bash","cwd":"{REPO}","command":"git -C repo reset --hard","target":"ask","baseline":["allow","allow"],"pi":["allow","allow"],"shared":["block","block"]}
 {"id":"reset-order","group":"in-scope","tool":"bash","cwd":"{REPO}","command":"git reset HEAD --hard","target":"ask","baseline":["allow","allow"],"pi":["allow","allow"],"shared":["block","block"]}

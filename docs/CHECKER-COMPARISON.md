@@ -73,8 +73,9 @@ minified exports, fork the vendor or add a parser to make this comparison pass.
 
 The separate native records describe Pi 1.4.0 on Node 24.22.1 and macOS 26.7.1,
 with fixed local model responses and disposable homes. They are normalized
-observations from the earlier paired run, not callback-comparison outputs.
-The candidate runtime files have the same hashes as that run.
+observations from native runs, not callback-comparison outputs. The baseline
+uses the original checker; the candidate uses the final permission scanner,
+whose analyzer and profile hashes are recorded in `native-pi.json`.
 
 The baseline could not create Pi's project-settings directory lock and ignored
 the project override. The candidate read it while settings writes, lock files,
