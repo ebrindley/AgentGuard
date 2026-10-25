@@ -130,6 +130,11 @@ the boundary.
 
 ### Pi and OMP
 
+Pi's project settings reader may create, update and remove the directory node
+`.pi/settings.json.lock` within the project, including nested launch folders.
+The exception does not permit regular files, symlinks or writes inside the lock,
+and does not make settings or other configuration writable.
+
 The launcher, `~/.local/bin/pi` or `~/.local/bin/omp`, runs Pi or OMP under
 pi-sandbox-guard 7ad441f's Seatbelt profile, which Agent Guard installs at the
 paths pi-sandbox-guard uses. The profile is fixed; it does not read the Guard
