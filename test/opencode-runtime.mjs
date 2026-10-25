@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
-import { execFileSync, spawnSync } from "node:child_process"
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs"
+import { execFileSync, spawn, spawnSync } from "node:child_process"
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir, userInfo } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -197,6 +197,64 @@ try {
     rmSync(join(engine, "state"), { recursive: true, force: true })
     rmSync(log, { force: true })
     console.log("ok a guarded launch drops the outer-sandbox variable")
+  }
+  {
+    // Session folders: the launcher prunes ended ones outside the sandbox, once
+    // a day, in the background.
+    const sessions = join(engine, "state/opencode")
+    const stamp = join(engine, "state/.session-prune")
+    const wait = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+    const until = (done, what) => { for (let i = 0; i < 100 && !done(); i++) wait(100); assert.ok(done(), what) }
+    const startOf = pid => execFileSync("/bin/ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8" }).trim().split(/\s+/).join(" ")
+    const old = new Date("2020-01-01T00:00:00Z")
+    const folder = (name, { owner, mtime = old } = {}) => {
+      const d = join(sessions, `fixture.${name}`)
+      mkdirSync(d, { recursive: true })
+      if (owner) writeFileSync(join(d, "owner"), `${owner[0]}\n${owner[1]}\n`)
+      utimesSync(d, mtime, mtime)
+      return d
+    }
+    const live = spawn("/bin/sleep", ["60"], { stdio: "ignore" })
+    try {
+      const dead = spawnSync("/usr/bin/true").pid
+      const liveStart = startOf(live.pid)
+      const kept = {
+        live: folder("liveowne", { owner: [live.pid, liveStart] }),
+        recent: folder("recentde", { owner: [dead, "Mon Jan  1 00:00:00 2001"], mtime: new Date() }),
+        fresh: folder("freshnoow", { mtime: new Date() }),
+      }
+      const gone = {
+        dead: folder("deadowne", { owner: [dead, liveStart] }),
+        reused: folder("reusedpi", { owner: [live.pid, "Mon Jan  1 00:00:00 2001"] }),
+        preboot: folder("preboot0", {}),
+      }
+      assert.equal(launch(null, ["cli", "hello"]).status, 7)
+      until(() => Object.values(gone).every(d => !existsSync(d)), "ended sessions were not removed")
+      wait(500)
+      assert.ok(Object.values(kept).every(existsSync), "a live, recent or fresh session was removed")
+      assert.ok(existsSync(sessions) && existsSync(stamp))
+      const own = execFileSync("/bin/ls", [sessions], { encoding: "utf8" }).split("\n").filter(n => n && !n.startsWith("fixture."))
+      assert.equal(own.length, 1)
+      assert.match(readFileSync(join(sessions, own[0], "owner"), "utf8"), /^\d+\n\w{3} \w{3} +\d+ [\d:]{8} \d{4}\n$/)
+      console.log("ok launch removes sessions of dead or reused owners and owner-less folders from before boot, and keeps the rest")
+      const again = folder("deadtwo0", { owner: [dead, liveStart] })
+      assert.equal(launch(null, ["cli", "hello"]).status, 7)
+      wait(1500)
+      assert.ok(existsSync(again), "the stamp did not throttle pruning")
+      utimesSync(stamp, old, old)
+      assert.equal(launch(null, ["cli", "hello"]).status, 7)
+      until(() => !existsSync(again), "pruning did not run after the stamp aged")
+      console.log("ok pruning runs at most once every 24 hours")
+      const names = () => execFileSync("/bin/ls", [sessions], { encoding: "utf8" }).split("\n").filter(Boolean)
+      const before = names()
+      const r = launch(null, ["profile"])
+      assert.equal(r.status, 0, r.stderr)
+      assert.match(r.stdout, /\(version 1\)/)
+      assert.deepEqual(names().filter(n => !before.includes(n)), [])
+      console.log("ok launch profile leaves no session folder")
+    } finally { live.kill() }
+    rmSync(join(engine, "state"), { recursive: true, force: true })
+    rmSync(log, { force: true })
   }
   {
     // The probe fails, but not with sandbox_apply: no step-aside.
