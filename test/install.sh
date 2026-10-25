@@ -163,6 +163,24 @@ label=S6
   pass 'rule.json keeps the other rule and its override' || fail 'rule.json keeps the other rule and its override'
 /usr/bin/cmp -s "$cc/agent-guard/rulebook.json" "$source_root/profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json" &&
   pass "the stale rulebook is replaced by the release's" || fail "the stale rulebook is replaced by the release's"
+label=S7
+usage='OpenCode asked for this while running inside Agent Guard. Agent Guard does not use it itself.'
+/usr/bin/plutil -convert json -o - "$app/Contents/Info.plist" |
+  /usr/bin/jq -e --arg t "$usage" '[to_entries[] | select(.key | endswith("UsageDescription"))] | length == 11 and all(.value == $t)' >/dev/null &&
+  /usr/bin/codesign --verify --strict "$app" 2>/dev/null &&
+  pass 'all 11 usage strings carry the new text and the signature verifies' || fail 'usage strings or signature'
+# A change to the privacy text alone is enough for ag_app_decide to rebuild an existing app.
+decided=$( (
+  source "$source_root/installer/lib.zsh"
+  ag_tree=$source_root engine="$run/decide/engine" bundle_id=test.bundle app="$run/decide/App.app" stamp="$run/decide/stamp.json"
+  /bin/mkdir -p "$app"
+  ag_app_decide || exit 1
+  print -r -- "{\"app_inputs\":\"$ag_app_inputs\"}" > "$stamp"
+  ag_app_decide; print -n "$ag_app_rebuild "
+  ag_app_usage_text() { REPLY='another sentence' }
+  ag_app_decide; print -n $ag_app_rebuild
+) )
+[[ $decided == '0 1' ]] && pass 'only a change to the privacy text rebuilds an app whose stamp matches' || fail "ag_app_decide: '$decided'"
 save A
 snapshot "$home" > "$run/A.snapshot"
 
@@ -315,11 +333,13 @@ same_snapshot 'nothing changed' "$run/B.snapshot"
 # the previous release go.
 label=U3
 restore B
+plist_inode=$(/usr/bin/stat -f %i "$app/Contents/Info.plist")
 point= boot latest
 rc=$?
 rid_c=$(current_rid)
 (( rc == 0 )) && [[ $rid_c != "$rid_b" && $rid_c != absent ]] && pass "rerun installs a new release ID ($rid_c)" || { fail "rerun of B (exit $rc)"; show }
 same_snapshot 'user data unchanged' "$run/B.snapshot"
+[[ $(/usr/bin/stat -f %i "$app/Contents/Info.plist") == "$plist_inode" ]] && pass 'the app is not rebuilt when its inputs are unchanged' || fail 'the app was rebuilt'
 label=G5
 rels=("$engine"/releases/*(N:t)) want=("$rid_b" "$rid_c")
 [[ ${(j: :)${(o)rels}} == ${(j: :)${(o)want}} ]] && pass 'releases/ holds the current and the previous release only' ||
