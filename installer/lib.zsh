@@ -720,8 +720,15 @@ ag_projects_check() {
 }
 
 # The app runs a path that does not change between releases, so it is rebuilt only
-# when its inputs (script, bundle ID, privacy text, icon) differ from the stamp's, or it is missing.
+# when its inputs (script, bundle ID, privacy text, signing options, icon,
+# entitlements) differ from the stamp's, or it is missing.
 ag_app_script() { REPLY="do shell script quoted form of \"$engine/bin/opencode-gui\" & \" >/dev/null 2>&1 &\"" }
+
+# With the hardened runtime, macOS checks the responsible app's entitlements before a
+# privacy prompt. AgentGuard.entitlements has every resource-access entitlement except
+# audio input, so microphone requests from the processes the app starts, such as
+# OpenCode Desktop's sound on an output device with inputs, are refused without one.
+ag_app_sign_options() { reply=(--options runtime) }
 
 # macOS shows the applet's usage strings in the privacy prompts that OpenCode's
 # processes raise, because the applet is their responsible process. These are the
@@ -734,10 +741,12 @@ ag_app_usage_keys() {
 ag_app_usage_text() { REPLY='OpenCode asked for this while running inside Agent Guard. Agent Guard does not use it itself.' }
 
 ag_app_decide() {
-  local icon="$ag_tree/profiles/opencode/assets/AgentGuard.icns" s old=
+  local icon="$ag_tree/profiles/opencode/assets/AgentGuard.icns" ents="$ag_tree/profiles/opencode/assets/AgentGuard.entitlements" s old=
+  [[ -f $ents ]] || { ag_err "the release has no $ents"; return 1 }
   ag_app_script
-  s=$( { print -r -- "$REPLY"; print -r -- "$bundle_id"; ag_app_usage_text; print -r -- "$REPLY"; /usr/bin/shasum -a 256 < "$icon" } | /usr/bin/shasum -a 256 ) ||
-    { ag_err "cannot hash $icon"; return 1 }
+  s=$( { print -r -- "$REPLY"; print -r -- "$bundle_id"; ag_app_usage_text; print -r -- "$REPLY"
+         ag_app_sign_options; print -r -- "$reply"; /usr/bin/shasum -a 256 < "$icon"; /usr/bin/shasum -a 256 < "$ents" } | /usr/bin/shasum -a 256 ) ||
+    { ag_err "cannot hash $icon and $ents"; return 1 }
   ag_app_inputs=${s%% *}
   [[ -f $stamp ]] && old=$(/usr/bin/jq -r '.app_inputs // empty' "$stamp" 2>/dev/null)
   ag_app_rebuild=1
@@ -821,7 +830,9 @@ ag_build() {
   for k in $reply; do
     /usr/bin/plutil -replace "$k" -string "$REPLY" "$s/Contents/Info.plist" || return 1
   done
-  /usr/bin/codesign --force --sign - "$s" 2>/dev/null || { ag_err 'cannot sign the app'; return 1 }
+  ag_app_sign_options
+  /usr/bin/codesign --force --sign - $reply --entitlements "$rel/profiles/opencode/assets/AgentGuard.entitlements" "$s" 2>/dev/null ||
+    { ag_err 'cannot sign the app'; return 1 }
   /usr/bin/codesign --verify --strict "$s" 2>/dev/null || { ag_err 'the built app fails codesign --verify --strict'; return 1 }
   id=$(/usr/bin/plutil -extract CFBundleIdentifier raw "$s/Contents/Info.plist") && [[ $id == "$bundle_id" ]] ||
     { ag_err "the built app's bundle ID is not $bundle_id"; return 1 }
