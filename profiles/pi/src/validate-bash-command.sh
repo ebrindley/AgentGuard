@@ -2874,15 +2874,19 @@ esac
 # Permission arguments can contain $(...) and ${...}. Keep pre-grouping text
 # so the grouping rewrite does not turn those arguments into separators.
 permission_scan_text="$execution_scan_text"
+_permission_stripped=""
+case "$permission_scan_text" in
+    *\\*|*\"*|*\'*)
+        _permission_stripped="${execution_scan_text//\\/}"; _permission_stripped="${_permission_stripped//\"/}"; _permission_stripped="${_permission_stripped//\'/}"
+        permission_scan_text="$permission_scan_text"$'\n'"$_permission_stripped" ;;
+esac
 case "$permission_scan_text" in
     *chmod*|*chown*)
         permission_scan_text="$(neutralize_command_substs "$execution_scan_text")"
         # Each copy needs fresh quote state before command splitting.
-        case "$execution_scan_text" in
-            *\\*|*\"*|*\'*)
-                _permission_stripped="${execution_scan_text//\\/}"; _permission_stripped="${_permission_stripped//\"/}"; _permission_stripped="${_permission_stripped//\'/}"
-                permission_scan_text="$permission_scan_text"$'\n'"$(neutralize_command_substs "$_permission_stripped")" ;;
-        esac
+        if [[ -n "$_permission_stripped" ]]; then
+            permission_scan_text="$permission_scan_text"$'\n'"$(neutralize_command_substs "$_permission_stripped")"
+        fi
         permission_scan_text="$(printf '%s' "$permission_scan_text" | awk "$SEGMENT_AWK")" ;;
 esac
 for pattern in "${dangerous_patterns[@]}"; do
