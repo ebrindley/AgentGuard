@@ -620,6 +620,15 @@ cc-safety-net 2.4.14 ships entry points for OpenCode and Pi, and a hook mode for
 
 The analyzer took 0.15 to 1.7 seconds per command against its 2-second fail-closed limit; cc-safety-net took 1.4 to 15 milliseconds in-process. The review's scratch homes were under `/tmp`, which the analyzer treats as a safe root, so some delete verdicts may differ in a real home; step 7e repeats the run outside the temp roots.
 
+The [current comparison](CHECKER-COMPARISON.md) uses the bundled cc-safety-net
+2.6.0, 413 characterization cases and 59 targeted/benign cases outside the temp
+safe roots. It supersedes the historical table as evidence for a replacement.
+Keep the current Pi checker: lost confirmations, ASK-to-DENY changes, benign
+refusals and literal ancestor-recursion coverage remain unresolved. Seatbelt
+protects paths individually; a protected ancestor can contain writable project
+descendants. No checker is retired or added here, and D5's consolidation remains
+unqualified pending step 7e's remaining mappings and environments.
+
 ### Recursive deletes
 
 Planned. One policy for every harness: Pi and OMP from step 10d, OpenCode from its deletes release (section 11, OpenCode's releases). It comes from cc-safety-net's scoped rules at the strict level:
