@@ -415,6 +415,19 @@
     { "command": "git config --unset core.hooksPath", "expect": "allow", "note": "reads and the REMEDIATION do not repoint anything; gating them trains click-through without adding cover" },
     { "command": "git config set core.hooksPath /tmp/evil", "expect": "ask", "note": "git >= 2.46 `config set` subcommand: without it the parser read `set` as the key and allowed the repoint" },
     { "command": "git config --file .git/config core.hooksPath /tmp/evil", "expect": "ask", "note": "value-taking option must be consumed, or its value is counted as the key" },
-    { "command": "git config get core.hooksPath", "expect": "allow", "note": "subcommand spelling of a read stays allow, same as --get" }
+    { "command": "git config get core.hooksPath", "expect": "allow", "note": "subcommand spelling of a read stays allow, same as --get" },
+    {"command": "chmod -R 755 dist && ls /usr/local/bin", "cwd": "{REPO}", "expect": "allow", "note": "Command boundary: permission patterns do not cross a separate command"},
+    {"command": "chown -R 123 dist && ls /etc", "cwd": "{REPO}", "expect": "allow", "note": "Command boundary: permission patterns do not cross a separate command"},
+    {"command": "chmod -R 755 dist; printf '%s' /etc", "cwd": "{REPO}", "expect": "allow", "note": "Command boundary: permission patterns do not cross a separate command"},
+    {"command": "chmod -R 755 dist | ls /etc", "cwd": "{REPO}", "expect": "allow", "note": "Command boundary: permission patterns do not cross a separate command"},
+    {"command": "chmod -R 755 /etc", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: permission patterns do not cross a separate command"},
+    {"command": "chmod 755 -R /etc", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: permission patterns do not cross a separate command"},
+    {"command": "chown -R 123 /etc", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: permission patterns do not cross a separate command"},
+    {"command": "chmod -R 755 dist && chown -R 123 /etc", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: permission patterns do not cross a separate command"},
+    {"command": "chmod -R 755 'dist;docs' /etc", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: quoted separators remain part of an operand"},
+    {"command": "chown -R 123 'dist|docs' /etc", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: quoted separators remain part of an operand"},
+    {"command": "chown -R $(whoami) /usr/local", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: ordinary substitutions do not separate a protected operand from its flags"},
+    {"command": "chown -R ${USER} /usr/local", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: ordinary substitutions do not separate a protected operand from its flags"},
+    {"command": "echo \"Fixing Homebrew's permissions\" && chown -R $(whoami) /usr/local", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: quoted status text does not carry quote state into the stripped permission scan"}
   ]
 }
