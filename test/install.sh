@@ -169,6 +169,18 @@ usage='OpenCode asked for this while running inside Agent Guard. Agent Guard doe
   /usr/bin/jq -e --arg t "$usage" '[to_entries[] | select(.key | endswith("UsageDescription"))] | length == 11 and all(.value == $t)' >/dev/null &&
   /usr/bin/codesign --verify --strict "$app" 2>/dev/null &&
   pass 'all 11 usage strings carry the new text and the signature verifies' || fail 'usage strings or signature'
+# A change to the privacy text alone is enough for ag_app_decide to rebuild an existing app.
+decided=$( (
+  source "$source_root/installer/lib.zsh"
+  ag_tree=$source_root engine="$run/decide/engine" bundle_id=test.bundle app="$run/decide/App.app" stamp="$run/decide/stamp.json"
+  /bin/mkdir -p "$app"
+  ag_app_decide || exit 1
+  print -r -- "{\"app_inputs\":\"$ag_app_inputs\"}" > "$stamp"
+  ag_app_decide; print -n "$ag_app_rebuild "
+  ag_app_usage_text() { REPLY='another sentence' }
+  ag_app_decide; print -n $ag_app_rebuild
+) )
+[[ $decided == '0 1' ]] && pass 'only a change to the privacy text rebuilds an app whose stamp matches' || fail "ag_app_decide: '$decided'"
 save A
 snapshot "$home" > "$run/A.snapshot"
 
