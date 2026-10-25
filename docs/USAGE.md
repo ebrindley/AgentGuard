@@ -106,10 +106,18 @@ OpenCode's code come from reading its bundle, not from running it.
   finished" sound. The sound is on by default (Settings, General, Sound
   effects, Agent), and OpenCode's helpers carry the audio-input entitlement.
   This version's desktop code does not capture audio. Its only `getUserMedia`
-  call asks for a camera, in a web-only QR scanner. Inference: on an output
-  device that has a microphone, macOS treats the sound playback as a microphone
-  request. The prompt names Agent Guard because Agent Guard starts OpenCode.
-  Choose Don't Allow, or turn off the "agent finished" sound.
+  call asks for a camera, in a web-only QR scanner. On 2026-10-25 the request
+  came from `coreaudiod` as OpenCode's audio helper opened the default output,
+  a virtual device with 8 input and 8 output channels. That is consistent with
+  a report that macOS asks when an app with the audio-input entitlement starts
+  playback on a device that has inputs
+  (https://developer.apple.com/forums/thread/743077). The prompt names Agent
+  Guard because Agent Guard starts OpenCode. Agent Guard now signs its app with
+  the hardened runtime and without the audio-input entitlement, so macOS
+  refuses the microphone to the processes the app starts, without a prompt, and
+  the sound still plays. No program those processes run can use the
+  microphone, a future OpenCode voice feature included, and System Settings
+  cannot grant it. OpenCode started from a terminal is not affected.
 
 ## OpenCode shared service
 

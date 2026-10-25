@@ -99,6 +99,14 @@ service (`com.apple.authd`), so nothing in a guarded app, including its updater,
 can raise an administrator password prompt. The update fails without one. The
 command-line profile does not have this rule.
 
+macOS attributes the desktop app's privacy requests to `Agent Guard.app`, which
+starts it. The app is signed with the hardened runtime and with every
+resource-access entitlement except audio input, so macOS refuses microphone
+access to the processes it starts, and to the programs they run, without a
+prompt. Camera, location, contacts, calendars, photos and Apple Events requests
+prompt as before. The hardened runtime also limits the app itself to loading
+Apple's libraries.
+
 Ordinary configuration and extensions can execute code and persist changes into
 later unguarded sessions. This risk is accepted, as for editable project scripts
 and shared skills. Their execution in a guarded process tree remains confined.
@@ -399,7 +407,9 @@ For OpenCode:
   command, the app, or a forwarder left after the move from OpenCode Guard)
   without the plugin's refusal;
 - for the desktop app, look up `com.apple.authd` and so raise an administrator
-  authorization prompt.
+  authorization prompt;
+- for the desktop app started by `Agent Guard.app`, use the microphone or raise
+  a microphone prompt.
 
 For Pi and OMP:
 
