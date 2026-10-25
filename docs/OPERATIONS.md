@@ -276,6 +276,18 @@ links to the launchers in `~/.local/bin`, and `state/` holds the custom wrapper
 records and what a pi-sandbox-guard migration retired; Pi's own files are listed
 under [Pi's files](#pis-files).
 
+Each OpenCode launch keeps its checker snapshot and session files in
+`state/opencode/<release>.<random>`, with an `owner` file holding the launching
+process's pid and start time. The launcher prunes old folders, outside the
+sandbox and in the background, when `state/.session-prune` is more than 24 hours
+old. Launches that start together may both run it, which is harmless. It removes
+a folder whose owner is no longer running (the pid is gone, or has a different
+start time) when the folder is more than 24 hours old, and a folder with no
+`owner` file when it predates the last boot. Other folders, including the current
+launch's, are kept. A launch that ends without starting OpenCode (a refusal,
+`profile` or `check`) leaves its folder for a later prune. A folder left by an
+interrupted launch is safe to delete by hand once no OpenCode session uses it.
+
 ## Moving from OpenCode Guard
 
 Run the appropriate installer under [Release channels](#release-channels).
