@@ -7,6 +7,13 @@ and homes described below. For installed checks, see
 
 ## Tests
 
+### Offline checker comparison
+
+See [Pi checker comparison](CHECKER-COMPARISON.md) for the baseline argument,
+disposable fixtures, generated observations and policy dispositions. Two fresh
+runs should produce identical normalized verdict records. This comparison is
+not a required CI gate and does not qualify a checker replacement.
+
 ### OpenCode 1 and 2
 
 The V1 native suites remain pinned to 1.18.33. V2 uses `@opencode/cli@2.0.32`.

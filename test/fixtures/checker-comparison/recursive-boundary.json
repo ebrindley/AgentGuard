@@ -1,0 +1,9 @@
+{
+  "fixture": "{FIXTURE}",
+  "target": "{FIXTURE_HOME}",
+  "exit_code": 0,
+  "project_canary_survived": false,
+  "protected_canary_survived": true,
+  "stderr": "",
+  "method": "Under the Pi profile, shutil.rmtree(fixture_home,onerror=ignore) attempted cleanup only of a disposable fixture ancestor. No operation targeted the account home or system root."
+}

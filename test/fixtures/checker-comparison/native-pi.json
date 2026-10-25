@@ -1,0 +1,30 @@
+{
+  "runtime": "Pi 1.4.0 / Node 24.22.1 / macOS 26.7.1",
+  "model": "fixed local fixture, no provider credentials",
+  "results": [
+    {
+      "variant": "baseline",
+      "code": 0,
+      "calls": 12,
+      "benign_compound_error": true,
+      "settings_lock_warning": true,
+      "outside": "original",
+      "config": "{}",
+      "hook": "INERT_HOOK",
+      "childWrite": false
+    },
+    {
+      "variant": "candidate",
+      "code": 0,
+      "calls": 12,
+      "benign_compound_error": false,
+      "settings_lock_warning": false,
+      "outside": "original",
+      "config": "{}",
+      "hook": "INERT_HOOK",
+      "childWrite": false
+    }
+  ],
+  "candidateAnalyzerSha256": "af7636bd8b9d56901102347ab37feb9ba3211256b4bdeea74e418d94462d235d",
+  "candidateProfileSha256": "ea6ce1c7e73f022d685b8d1c185629d58896a0d11edca18422974b069ca0627b"
+}
