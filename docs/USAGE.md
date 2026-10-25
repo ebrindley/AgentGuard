@@ -79,22 +79,28 @@ OpenCode's code come from reading its bundle, not from running it.
   OpenCode is running shows "OpenCode is already open"; the launcher cannot tell
   whether that OpenCode is guarded, so the message covers both cases.
 - OpenCode checks for updates at launch and every ten minutes. Inside the guard
-  it cannot replace the app: on 2026-10-24, 2.1.1 staging 2.1.4 raised an
-  administrator prompt, and cancelling it was logged as `OSStatus error -60006`.
-  Quit OpenCode, update it outside the guard, then reopen it through Agent
-  Guard. For the Homebrew cask, run `brew upgrade --cask opencode-desktop`. The
-  cask declares `auto_updates`, but Homebrew 7.0.10 upgrades a cask named on the
-  command line without `--greedy` (`Cask::Upgrade.outdated_casks` in its
-  source). The other route is the download from opencode.ai.
+  it cannot replace the app. On 2026-10-24, 2.1.1 staging 2.1.4 raised an
+  administrator prompt; cancelling it was logged as `OSStatus error -60006`.
+  Since 2026.10.25 the guard denies `com.apple.authd` to the desktop, so the
+  in-app update now fails without a prompt. Quit OpenCode, update it outside the
+  guard, then reopen it through Agent Guard. For the Homebrew cask, run
+  `brew upgrade --cask opencode-desktop`. The cask declares `auto_updates`, but
+  Homebrew 7.0.10 also upgrades it with plain `brew upgrade` once the installed
+  app is older than the tap's version (`Cask#outdated_version`), unless
+  `HOMEBREW_NO_UPGRADE_AUTO_UPDATES_CASKS` is set. The other route is the
+  download from opencode.ai.
 - Links do not open. The guard denies `lsopen`, OpenCode drops the failure, and
-  the click does nothing. For OpenCode Console sign-in, use "Copy sign-in link"
-  and paste it into a browser. Sign-in for other providers shows a device code
-  or an "open in browser" button, with no link to copy. Instead, choose the
-  provider's API key method where it offers one, or run `opencode auth login` in
-  a terminal. In the 2.1.4 CLI that command prints the sign-in URL and
-  instructions before it tries to open the page. This is read from the CLI's
-  code and was not run. That the desktop then sees the saved credential is an
-  inference.
+  the click does nothing. Right-clicking an ordinary link should offer Copy Link:
+  the 2.1.4 bundle enables `electron-context-menu` without turning off
+  `showCopyLink`. This is read from the bundle and was not tried in the app. For
+  OpenCode Console sign-in, use "Copy sign-in link" and paste it into a browser.
+  Sign-in for other providers shows a device code or an "open in browser"
+  button, with no link to copy. Instead, choose the provider's API key method
+  where it offers one, or run `opencode auth login` in a guarded terminal. The
+  launcher runs `auth` subcommands with `--standalone`, and the 2.1.4 CLI prints
+  the sign-in URL and instructions before it tries to open the page. The CLI
+  behavior is read from its code and was not run. That the desktop then uses the
+  saved credential is an inference.
 - A prompt "'Agent Guard' would like to access the Microphone" appeared 155 ms
   after an agent reply finished, which is when OpenCode plays its "agent
   finished" sound. The sound is on by default (Settings, General, Sound
