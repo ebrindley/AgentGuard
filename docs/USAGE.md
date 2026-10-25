@@ -1,6 +1,6 @@
 # Using Agent Guard
 
-This guide describes release 2026.10.25, which supports OpenCode, Pi and OMP.
+This guide describes release 2026.10.25.1, which supports OpenCode, Pi and OMP.
 See [release channels](OPERATIONS.md#release-channels) for installation.
 
 ## Start OpenCode
@@ -25,7 +25,7 @@ Review changes before executing them outside the guard.
 
 ## OpenCode versions
 
-Stable 2026.10.25 targets OpenCode 1.18.33 and newer V1 releases,
+Stable 2026.10.25.1 targets OpenCode 1.18.33 and newer V1 releases,
 plus OpenCode 2.0.32 and 2.1.1 CLI and desktop backends. The native V2
 fixtures also pass with the OpenCode 2.1.4 CLI. Keep shared configuration in the V1 format
 when both versions use it; V2 normalizes supported V1 settings in memory.
@@ -112,8 +112,9 @@ OpenCode's code come from reading its bundle, not from running it.
   a report that macOS asks when an app with the audio-input entitlement starts
   playback on a device that has inputs
   (https://developer.apple.com/forums/thread/743077). The prompt names Agent
-  Guard because Agent Guard starts OpenCode. Agent Guard now signs its app with
-  the hardened runtime and without the audio-input entitlement, so macOS
+  Guard because Agent Guard starts OpenCode. Since 2026.10.25.1 Agent Guard
+  signs its app with the hardened runtime and without the audio-input
+  entitlement, so macOS
   refuses the microphone to the processes the app starts, without a prompt, and
   the sound still plays. No program those processes run can use the
   microphone, a future OpenCode voice feature included, and System Settings
