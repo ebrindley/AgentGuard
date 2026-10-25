@@ -242,12 +242,6 @@ touch.
   That is a recorded failure of a process that has no legitimate need for such a
   prompt. Other Mach services stay reachable, and a claim about one of them needs
   its own recorded failure.
-- With `GUI=1` the profile also denies the `device-microphone` operation. The
-  recorded failure is a prompt naming Agent Guard that appeared 155 ms after
-  OpenCode Desktop played its "agent finished" sound (observed 2026-10-24).
-  Desktop 2.1.4 has no audio capture, so nothing in use is lost. The cost is that
-  a future OpenCode microphone feature, such as voice input, would not work under
-  the guard. Camera access and other operations are not restricted.
 - Guard List entries are compared as written, after escape and link resolution.
   Unicode normalization differences between an entry and the path on disk are in
   scope under class 6 and have not been tested.

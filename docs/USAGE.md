@@ -109,9 +109,7 @@ OpenCode's code come from reading its bundle, not from running it.
   call asks for a camera, in a web-only QR scanner. Inference: on an output
   device that has a microphone, macOS treats the sound playback as a microphone
   request. The prompt names Agent Guard because Agent Guard starts OpenCode.
-  Agent Guard denies microphone access to the guarded desktop, so the prompt
-  does not appear and the sound still plays. A future OpenCode feature that
-  needs the microphone would not work under the guard.
+  Choose Don't Allow, or turn off the "agent finished" sound.
 
 ## OpenCode shared service
 
