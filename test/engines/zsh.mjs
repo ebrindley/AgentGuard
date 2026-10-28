@@ -22,6 +22,10 @@ export function stage(source, dest, home) {
   piSeams(dest, home);
 }
 
+export function isolateHarness(tree) {
+  for (const key of Object.keys(harness)) replaceOnce(join(tree, 'profiles/opencode/harness.zsh'), seams[key], harness[key]);
+}
+
 // Lays out a staged tree as the release folder releases/<rid> in engine, with
 // current pointing to it, as the installer does, without the rest of the install.
 export function layout(tree, engine, rid = '0.0.0-20260101T000000Z') {
@@ -146,7 +150,7 @@ export function release(source, out, { home, tag, version, url }) {
   fixtureHome(join(tree, 'engine/launch'), home);
   fixtureAccount(join(tree, 'engine/account.zsh'), home);
   replaceOnce(join(tree, 'engine/agent-guard'), seams.downloadBase, `local repo=${quote(url)}; local -a curl_proto=()`);
-  for (const key of Object.keys(harness)) replaceOnce(join(tree, 'profiles/opencode/harness.zsh'), seams[key], harness[key]);
+  isolateHarness(tree);
   piSeams(tree, home);
   rmSync(archive);
   run(['/usr/bin/tar', '-czf', archive, '--no-xattrs', '--no-acls', '--no-fflags', '--uid', '0', '--gid', '0', '--uname', 'root', '--gname', 'wheel', '-C', unpacked, ...entries],
@@ -168,12 +172,13 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
     console.log(release(source, out, { home, tag, version, url }).dir);
   }
   else if (command === 'stage' && args.length === 3) stage(...args);
+  else if (command === 'isolate' && args.length === 1) isolateHarness(args[0]);
   else if (command === 'launcher' && (args.length === 1 || args.length === 2)) console.log(launcher(...args).join('\n'));
   else if (command === 'identity' && args.length === 3) {
     const found = identity(args[0], { HOME: args[1], USER: args[2] });
     console.log(`${found.home}\n${found.engine}`);
   } else {
-    console.error('usage: zsh.mjs name | stage SOURCE DEST HOME | launcher ENGINE [RID] | identity SOURCE HOME USER | release SOURCE OUT HOME TAG VERSION URL');
+    console.error('usage: zsh.mjs name | stage SOURCE DEST HOME | isolate TREE | launcher ENGINE [RID] | identity SOURCE HOME USER | release SOURCE OUT HOME TAG VERSION URL');
     process.exit(2);
   }
 }

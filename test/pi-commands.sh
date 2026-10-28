@@ -52,9 +52,7 @@ replace_once() {
 # plugin check whatever this Mac has installed.
 /bin/mkdir -p "$run/tree"
 node "$adapter" stage "$source_root" "$run/tree" "$home" || { fail 'cannot stage the tree'; finish }
-replace_once "$run/tree/profiles/opencode/harness.zsh" \
-  'cli_search=(/opt/homebrew/bin/opencode /usr/local/bin/opencode "$home/.opencode/bin/opencode")' \
-  'cli_search=("$home/.opencode/bin/opencode")'
+node "$adapter" isolate "$run/tree" || { fail 'cannot isolate harness discovery'; finish }
 
 # The release folder, as the installer lays it out, with the Pi files from the fixture.
 /bin/mkdir -p "$rel/bin" "$rel/profiles/opencode" "$rel/profiles/pi/scripts" "$engine/state" "$home/Agent Guard"
