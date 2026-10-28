@@ -21,7 +21,7 @@ best-effort basis. There is no bug bounty.
 ## Supported versions
 
 Fixes go into the latest release only; older releases do not receive backports.
-The latest stable release is 2026.10.25.1 (OpenCode, Pi and OMP).
+The latest stable release is 2026.10.27 (OpenCode, Pi and OMP).
 `agent-guard update` follows stable releases and leaves a newer installed version
 unchanged. See [release channels](docs/OPERATIONS.md#release-channels) for tagged
 installers; they do not include later commits. The policy below includes current
@@ -35,7 +35,7 @@ retain their existing policy.
 ## What Agent Guard is
 
 Agent Guard is a macOS Seatbelt write-containment boundary for terminal coding
-agents. Release 2026.10.25.1 guards OpenCode, Pi and Oh My Pi (OMP). Each harness, and
+agents. Release 2026.10.27 guards OpenCode, Pi and Oh My Pi (OMP). Each harness, and
 every process it starts, runs under `/usr/bin/sandbox-exec`, but OpenCode and Pi
 are guarded by different code with different rules until Pi moves onto Agent
 Guard's engine (step 10d of the plan in [docs/DESIGN.md](docs/DESIGN.md#12-plan)).
@@ -47,7 +47,7 @@ they address and the layer that covers each are in
 
 ### OpenCode
 
-Stable 2026.10.25.1 supports OpenCode 1.18.33 and newer V1 releases, plus
+Stable 2026.10.27 supports OpenCode 1.18.33 and newer V1 releases, plus
 OpenCode 2.0.32 and 2.1.1. The 2.1.1 qualification covers macOS 26.7.1 arm64
 with isolated application and service data. First-launch onboarding and
 production-account upgrades remain unqualified. The native V2 fixtures also pass
