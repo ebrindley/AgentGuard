@@ -8,6 +8,7 @@ import { createConnection } from "node:net"
 import { randomUUID } from "node:crypto"
 import { homedir, tmpdir } from "node:os"
 import * as adapter from "./engines/zsh.mjs"
+import { groupExists, signalGroup } from "./process-group.mjs"
 
 assert.equal(process.versions.node.split(".")[0], "24")
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
@@ -127,9 +128,6 @@ for (const mode of selected) {
   if (mode === "routing") {
     const password = randomUUID(), servers = [], results = []
     const pause = ms => new Promise(resolve => setTimeout(resolve, ms))
-    const groupExists = pid => {
-      try { process.kill(-pid, 0); return true } catch (error) { if (error.code === "ESRCH") return false; throw error }
-    }
     const listening = address => new Promise(resolve => {
       const socket = createConnection({ host: "127.0.0.1", port: Number(new URL(address).port) })
       const finish = value => { socket.destroy(); resolve(value) }
@@ -156,16 +154,17 @@ for (const mode of selected) {
     }
     const stop = async server => {
       if (server.stopped) return
-      if (groupExists(server.child.pid)) process.kill(-server.child.pid, "SIGTERM")
+      if (groupExists(server.child.pid)) signalGroup(server.child.pid, "SIGTERM")
       for (let attempt = 0; attempt < 100 && groupExists(server.child.pid); attempt++) await pause(50)
       const graceful = !groupExists(server.child.pid)
-      if (!graceful) process.kill(-server.child.pid, "SIGKILL")
+      if (!graceful) signalGroup(server.child.pid, "SIGKILL")
       const exit = await server.closed
       server.stopped = true
       results.push({ server: server.label, address: server.address, exit, groupGone: !groupExists(server.child.pid), listenerGone: server.address ? !await listening(server.address) : null })
       assert.ok(graceful, `${server.label} left its process group running`)
       if (server.address) assert.equal(await listening(server.address), false, `${server.label} left its listener running`)
     }
+    let routingError
     try {
       const incumbent = start(cli, ["serve", "--service", "--hostname", "127.0.0.1"], "incumbent")
       const incumbentAddress = await ready(incumbent)
@@ -209,15 +208,18 @@ for (const mode of selected) {
       assert.equal(service.status, 0, service.stderr)
       assert.equal(service.stdout.trim(), incumbentAddress)
       assert.equal(index, 0, "routing probes must not call a model")
+    } catch (error) {
+      routingError = error
     } finally {
-      let cleanupError
+      const errors = routingError ? [routingError] : []
       for (const server of [...servers].reverse()) {
-        try { await stop(server) } catch (error) { cleanupError ??= error }
+        try { await stop(server) } catch (error) { errors.push(error) }
         finally { writeFileSync(join(run, mode, `${server.label}.log`), server.output) }
       }
       model.closeAllConnections(); model.close()
       writeFileSync(join(run, mode, "routing.json"), JSON.stringify(results, null, 2))
-      if (cleanupError) throw cleanupError
+      if (errors.length === 1) throw errors[0]
+      if (errors.length > 1) throw new AggregateError(errors, "OpenCode V2 routing and cleanup failed")
     }
     console.log("ok OpenCode V2 routing: output, release identity, process and listener cleanup, incumbent preserved")
     continue
