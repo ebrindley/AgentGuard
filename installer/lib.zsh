@@ -1357,10 +1357,10 @@ ag_abort() {
 # zsh install.sh: stages the checkout like the bootstrap stages an archive.
 ag_checkout_main() {
   local root version txn dest f
+  ag_tools || exit 1
   ag_init || exit 1
   ag_phase=prep ag_stage=
   root=${ag_self:h:h:h}
-  ag_tools || exit 1
   ag_probe || exit 1
   ag_lock || exit 1
   if [[ ! -e $txn_dir && ! -e $state/txn.new ]]; then /bin/rm -rf -- "$engine/stage"/*(DN); fi
@@ -1451,6 +1451,7 @@ ag_install_main() {
     esac
     shift
   done
+  ag_tools || exit 1
   ag_init || exit 1
   ag_phase=prep ag_stage=
   [[ $ag_txn == [0-9A-Za-z.-]## ]] || { ag_err "invalid stage name: $ag_txn"; exit 2 }
@@ -1458,7 +1459,6 @@ ag_install_main() {
   ag_tstage=$ag_stage
   ag_tree=${ag_self:h:h:h}
   [[ ${ag_tree:h} == "$ag_stage/tree" ]] || { ag_err "the installer runs only from $ag_stage/tree"; exit 1 }
-  ag_tools || exit 1
   ag_probe || exit 1
   ag_lock || exit 1
 

@@ -6,6 +6,31 @@ import { release } from './engines/zsh.mjs';
 import { mkdtempSync,mkdirSync,writeFileSync,symlinkSync,readFileSync,existsSync,lstatSync,cpSync,rmSync,readdirSync,readlinkSync } from 'node:fs';
 import { spawn,spawnSync } from 'node:child_process';
 const root=resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const platformRun=mkdtempSync(root+'/test/.run-platform-');
+const installer=readFileSync(root+'/installer/lib.zsh','utf8');
+assert.equal(installer.split('$(/usr/bin/uname -s)').length,2);
+for(const platform of ['Linux','Darwin']){
+  const file=platformRun+'/'+platform+'.zsh';
+  writeFileSync(file,installer.replace('$(/usr/bin/uname -s)',platform));
+  for(const entry of ['ag_checkout_main','ag_install_main']){
+    const result=spawnSync('/bin/zsh',['-fc',`
+      setopt no_unset pipe_fail extended_glob
+      source "$1"
+      ag_init() { print ACCOUNT_LOOKUP; return 1; }
+      "$2" fixture
+    `,'platform',file,entry],{encoding:'utf8'});
+    assert.equal(result.status,1,result.stderr);
+    if(platform==='Linux'){
+      assert.match(result.stderr,/macOS only/);
+      assert.equal(result.stdout,'','unsupported platforms must stop before account lookup');
+    }else{
+      assert.equal(result.stderr,'');
+      assert.equal(result.stdout,'ACCOUNT_LOOKUP\n');
+    }
+  }
+}
+console.log('ok installer platform: checkout and staged entry refuse before account lookup; Darwin reaches initialization');
+if(process.argv.includes('--platform-only'))process.exit(0);
 const run=mkdtempSync(root+'/test/.run-install-state-');
 const home=run+'/home',served=run+'/served',bin=run+'/bin';
 for(const p of [home+'/Projects/app',home+'/Documents',home+'/.local/bin',served,bin]) mkdirSync(p,{recursive:true});
