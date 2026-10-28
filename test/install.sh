@@ -169,7 +169,8 @@ usage='OpenCode asked for this while running inside Agent Guard. Agent Guard doe
   /usr/bin/jq -e --arg t "$usage" '[to_entries[] | select(.key | endswith("UsageDescription"))] | length == 11 and all(.value == $t)' >/dev/null &&
   /usr/bin/codesign --verify --strict "$app" 2>/dev/null &&
   pass 'all 11 usage strings carry the new text and the signature verifies' || fail 'usage strings or signature'
-/usr/bin/codesign -dv "$app" 2>&1 | /usr/bin/grep -qE '^CodeDirectory .* flags=0x[0-9a-f]+\([^)]*runtime' &&
+# Drain codesign output: grep -q can cause SIGPIPE and a false failure under pipe_fail.
+/usr/bin/codesign -dv "$app" 2>&1 | /usr/bin/grep -E '^CodeDirectory .* flags=0x[0-9a-f]+\([^)]*runtime' >/dev/null &&
   /usr/bin/codesign -d --entitlements - --xml "$app" 2>/dev/null | /usr/bin/plutil -convert json -o - - |
   /usr/bin/jq -e 'keys == ["com.apple.security.automation.apple-events", "com.apple.security.device.camera",
     "com.apple.security.personal-information.addressbook", "com.apple.security.personal-information.calendars",
