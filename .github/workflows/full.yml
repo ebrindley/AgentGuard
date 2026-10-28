@@ -120,9 +120,11 @@ jobs:
         with:
           node-version: '24'
       - run: npm install --prefix "$RUNNER_TEMP/opencode-v2" @opencode/cli@2.0.32
+      - run: npm install --prefix "$RUNNER_TEMP/opencode-v1" opencode-ai@1.18.33
       - run: node test/opencode-v2-native.mjs
         env:
           AG_TEST_OPENCODE: ${{ runner.temp }}/opencode-v2/node_modules/.bin/opencode
+          AG_TEST_OPENCODE_V1: ${{ runner.temp }}/opencode-v1/node_modules/.bin/opencode
 
   full-tests:
     needs: [suites, migrate-pi, opencode-v2]

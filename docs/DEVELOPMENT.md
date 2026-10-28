@@ -21,7 +21,8 @@ The V1 native suites remain pinned to 1.18.33. V2 uses `@opencode/cli@2.0.32`.
 APIs. `test/opencode-runtime.mjs` covers command routing, the classification of
 `service status` output and terminal launches inside another sandbox. For native
 V2 checks,
-set `AG_TEST_OPENCODE` to its executable and run
+set `AG_TEST_OPENCODE` to its executable and `AG_TEST_OPENCODE_V1` to the pinned
+V1 executable, then run
 `node test/opencode-v2-native.mjs` with Node 24 outside an
 existing sandbox. The GUI fixture follows the packaged desktop's shared-service
 contract using the real bundled CLI: its stand-in client reads the address from
@@ -33,13 +34,17 @@ real account home. Each active project has its own Git root, so discovery does
 not walk into the source repository or the account's global skill directories.
 The CLI case records watched paths and checks that discovery stays outside the
 real account home. Logs remain in the printed fixture folder.
-Pass `cli`, `gui`, `gui-disabled`, `doctor`, `managed-cli`, `gui-signal`, `gui-server-stop` or `routing` to
+Pass `cli`, `gui`, `gui-disabled`, `doctor`, `managed-cli`, `gui-signal`, `gui-server-stop`, `routing`, `plugins` or `mixed-plugins` to
 select one case. The managed cases cover leading global flags, client shutdown,
 SIGTERM and loss of the original service. `gui-disabled` repeats `gui` with
 `"disabled": true` in the fixture's service configuration and checks that the
 client still used the launcher's service.
 The routing case checks command output, status release identifiers and restart
 state, probe process/listener cleanup, and preservation of an incumbent service.
+The plugin cases cover successful loading, failed V2 setup and installer warnings.
+`mixed-plugins` also requires `AG_TEST_OPENCODE_V1` pointing to OpenCode 1.18.33;
+it pairs that terminal CLI with a disposable desktop bundle containing the V2 CLI.
+The ordinary V1 and Pi fixtures exclude the account's installed desktop application.
 
 Each host still registers one Guard tool-before hook and uses the same command
 checker and filesystem rules. V2 adds one adapter registration and one read-only

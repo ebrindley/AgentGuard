@@ -34,6 +34,7 @@ root="$run/source"
 export HOME="$run/home"
 # The adapter applies the test home to this disposable copy only, never to production code or the account database.
 node "$adapter" stage "$tested" "$root" "$HOME" || { print -ru2 'Cannot stage engine'; exit 1 }
+node "$adapter" isolate "$root" || { print -ru2 'Cannot isolate harness discovery'; exit 1 }
 /bin/mkdir -p "$HOME"/{Projects/app/secret,Projects/archive/live,Projects/dotfiles,Documents/private,.config/opencode,bin}
 home=${HOME:A}
 # Resolve a native CLI once; an installed Guard shim from the caller's PATH

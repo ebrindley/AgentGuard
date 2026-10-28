@@ -12,7 +12,7 @@ import * as adapter from "./engines/zsh.mjs"
 assert.equal(process.versions.node.split(".")[0], "24")
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const cli = realpathSync(process.env.AG_TEST_OPENCODE)
-const modes = ["cli", "gui", "gui-disabled", "doctor", "managed-cli", "gui-signal", "gui-server-stop", "routing"]
+const modes = ["cli", "gui", "gui-disabled", "doctor", "managed-cli", "gui-signal", "gui-server-stop", "routing", "plugins", "mixed-plugins"]
 const selected = process.argv[2] ? [process.argv[2]] : modes
 assert.ok(selected.every(mode => modes.includes(mode)))
 const accountHome = realpathSync(homedir())
@@ -78,6 +78,52 @@ for (const mode of selected) {
     TMPDIR: process.env.TMPDIR, LANG: "en_US.UTF-8", XDG_CONFIG_HOME: join(home, ".config"),
     XDG_DATA_HOME: join(home, ".local/share"), XDG_STATE_HOME: join(home, ".local/state"),
     OPENCODE_MODELS_URL: url + "/models", OPENCODE_DISABLE_MODELS_FETCH: "1" }
+  if (mode === "plugins" || mode === "mixed-plugins") {
+    const harness = join(release, "profiles/opencode/harness.zsh")
+    writeFileSync(harness, readFileSync(harness, "utf8").replace('app_paths=(/Applications/OpenCode.app "$home/Applications/OpenCode.app")', 'app_paths=("$home/Applications/OpenCode.app")').replace('app_bundle_id=ai.opencode.desktop', 'app_bundle_id=invalid.test'))
+    if (mode === "mixed-plugins") {
+      assert.ok(process.env.AG_TEST_OPENCODE_V1, "mixed-plugins requires the pinned V1 CLI in AG_TEST_OPENCODE_V1")
+      const v1 = realpathSync(process.env.AG_TEST_OPENCODE_V1)
+      writeFileSync(join(home, "fakebin/opencode"), `#!/bin/sh\nexec ${quote(v1)} "$@"\n`, { mode: 0o755 })
+      const app = join(home, "Applications/OpenCode.app/Contents")
+      mkdirSync(join(app, "MacOS"), { recursive: true })
+      mkdirSync(join(app, "Resources"), { recursive: true })
+      symlinkSync(cli, join(app, "Resources/opencode-cli"))
+    }
+    const extra = join(config, "plugins/fixture-extra.js")
+    const plugin = broken => `import {writeFileSync} from 'node:fs';
+      export const Extra = async () => { writeFileSync(${JSON.stringify(join(project, "v1-extra"))}, 'loaded'); return {}; };
+      export default {id:'fixture-extra',server:Extra,async setup(){${broken ? "throw new Error('PRIVATE_PLUGIN_ERROR')" : `writeFileSync(${JSON.stringify(join(project, "v2-extra"))}, 'loaded')`}}};\n`
+    const check = async (name, gate, expected) => {
+      const child = spawn("/bin/zsh", [launch, "check"], { cwd: project, env: { ...env, ...(gate ? { AGENT_GUARD_GATE: "1" } : {}) }, stdio: ["ignore", "pipe", "pipe"] })
+      let output = ""
+      child.stdout.on("data", data => { output += data }); child.stderr.on("data", data => { output += data })
+      const timer = setTimeout(() => child.kill("SIGTERM"), 60000)
+      const code = await new Promise(resolve => child.once("close", resolve))
+      clearTimeout(timer)
+      writeFileSync(join(run, mode, `${name}.log`), output)
+      assert.equal(code, expected, output)
+      assert.match(output, /ok   Guard readiness in OpenCode V2/)
+      assert.doesNotMatch(output, /PRIVATE_PLUGIN_ERROR/)
+      if (mode === "mixed-plugins") {
+        assert.match(output, /ok   plugins loaded in OpenCode\n/)
+        assert.match(output, /desktop bundled CLI/)
+      }
+      return output
+    }
+    try {
+      writeFileSync(extra, plugin(false))
+      assert.match(await check("compatible", false, 0), /ok   plugins loaded in OpenCode V2/)
+      assert.ok(existsSync(join(project, "v2-extra")))
+      if (mode === "mixed-plugins") assert.ok(existsSync(join(project, "v1-extra")))
+      writeFileSync(extra, plugin(true))
+      assert.match(await check("incompatible", false, 1), /FAIL plugin not active in OpenCode V2/)
+      assert.match(await check("installer-warning", true, 0), /warn plugin not active in OpenCode V2/)
+      assert.equal(index, 0, "plugin readiness must not call a model")
+    } finally { model.closeAllConnections(); model.close() }
+    console.log(`ok OpenCode V2 ${mode}: compatible plugins, V2 setup failure and installer warning`)
+    continue
+  }
   if (mode === "routing") {
     const password = randomUUID(), servers = [], results = []
     const pause = ms => new Promise(resolve => setTimeout(resolve, ms))
