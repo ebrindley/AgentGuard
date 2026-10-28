@@ -178,6 +178,36 @@ opencode_check() {
     fi
 }
 
+opencode_plugins_v2() { # RESPONSE SEVERITY LABEL
+  local plugins=$1 sev=$2 label=$3 report
+  if print -r -- "$plugins" | /usr/bin/jq -e '.data | type=="array" and all(.[]; .state.status=="active")' >/dev/null 2>&1; then
+    print "ok   plugins loaded in OpenCode V2$label"
+    return 0
+  fi
+  # Keep paths, URL credentials and arbitrary host errors out of the diagnostic.
+  # A numeric position still identifies entries whose names cannot be displayed.
+  report=$(print -r -- "$plugins" | /usr/bin/jq -er '
+    def name:
+      if type == "string" and length <= 100 then
+        if test("^(@[a-z0-9._-]+/)?[a-z0-9][a-z0-9._-]*(@[0-9][a-z0-9.*+-]*)?$")
+          and (test("^(sk-|gh[pousr]_|github_pat_)") | not) then . else empty end
+      else empty end;
+    if (.data | type) != "array" then error("unavailable") else
+      .data | to_entries | map(select(.value.state?.status? != "active")) | .[:8][] |
+      .key as $index | .value as $plugin |
+      ([$plugin.id?, $plugin.source?.target?] | map(name) | first // "name withheld") as $name |
+      ($plugin.state?.status? | if . == "failed" or . == "loading" or . == "disabled" then . else "unknown" end) as $status |
+      ([$plugin.state?.ref? | if type == "string" then select(test("^err_[A-Za-z0-9]{1,64}$")) else empty end] | first // null) as $ref |
+      "#\($index + 1) \($name): \($status)" + (if $ref then " (\($ref))" else "" end)
+    end' 2>/dev/null) || {
+      print "$sev plugin status unavailable in OpenCode V2$label"
+      return 1
+    }
+  local line
+  for line in ${(f)report}; do print -r -- "$sev plugin not active in OpenCode V2$label: $line"; done
+  return 1
+}
+
 opencode_check_v2() {
   local cli=$1 out="$engine/state/.serve.$$" pid url= result= plugins= query i
   local password="agent-guard-probe-$$-$RANDOM-$RANDOM" sev=FAIL
@@ -200,12 +230,7 @@ opencode_check_v2() {
     print "ok   Guard readiness in OpenCode V2$label"
     [[ ${AGENT_GUARD_GATE:-} == 1 ]] && sev=warn
     plugins=$(/usr/bin/curl -sf --max-time 5 -u "opencode:$password" "$url/api/plugin?location%5Bdirectory%5D=$query" 2>/dev/null) || plugins=
-    if ! print -r -- "$plugins" | /usr/bin/jq -e '.data | type=="array" and all(.[]; .state.status=="active")' >/dev/null 2>&1; then
-      print "$sev configured plugins failed or unverified in OpenCode V2$label"
-      [[ $sev == warn ]] || ok=0
-    else
-      print "ok   plugins loaded in OpenCode V2$label"
-    fi
+    opencode_plugins_v2 "$plugins" "$sev" "$label" || { [[ $sev == warn ]] || ok=0 }
     if (( ! staged )); then
       permission_report=$(/usr/bin/curl -sf --max-time 5 -u "opencode:$password" -H 'Content-Type: application/json' \
         -d '{"input":{}}' "$url/api/rpc/agent-guard/permissions?location%5Bdirectory%5D=$query" 2>/dev/null | /usr/bin/jq -c .output) || permission_report=
