@@ -5,8 +5,39 @@ import { tmpdir, userInfo } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { layout, stage } from "./engines/zsh.mjs"
+import { groupExists, groupMembers, signalGroup } from "./process-group.mjs"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
+// Keep the event loop blocked until this owned child is a zombie, so reaping
+// cannot hide the Darwin EPERM window from the cleanup regression.
+const exited = spawn("/usr/bin/true", [], { detached: true, stdio: "ignore" })
+const reaped = new Promise(resolve => exited.once("close", resolve))
+let zombie = false
+for (let attempt = 0; attempt < 100; attempt++) {
+  if (groupMembers(exited.pid).some(member => member.state.startsWith("Z"))) { zombie = true; break }
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5)
+}
+assert.ok(zombie, "fixture child must exit before its parent reaps it")
+assert.equal(groupExists(exited.pid), true)
+signalGroup(exited.pid, "SIGTERM")
+assert.equal(groupExists(exited.pid), true, "an unreaped group must not be reported absent")
+await reaped
+assert.equal(groupExists(exited.pid), false)
+const alive = spawn("/bin/sleep", ["30"], { detached: true, stdio: "ignore" })
+const stopped = new Promise(resolve => alive.once("close", resolve))
+await new Promise(resolve => alive.once("spawn", resolve))
+const kill = process.kill
+try {
+  process.kill = () => { throw Object.assign(new Error("fixture permission failure"), { code: "EPERM" }) }
+  assert.throws(() => signalGroup(alive.pid, "SIGTERM"), { code: "EPERM" })
+} finally {
+  process.kill = kill
+  signalGroup(alive.pid, "SIGTERM")
+  await stopped
+}
+assert.equal(groupExists(alive.pid), false)
+console.log("ok process-group cleanup: zombies stay present until reaped; live-group permission errors remain failures")
+
 function pluginReport(value, severity = "FAIL") {
   return spawnSync("/bin/zsh", ["-fc", 'setopt no_unset pipe_fail; source "$1"; opencode_plugins_v2 "$2" "$3" " (fixture)"',
     "plugins", join(root, "profiles/opencode/hooks.zsh"), typeof value === "string" ? value : JSON.stringify(value), severity], { encoding: "utf8" })
