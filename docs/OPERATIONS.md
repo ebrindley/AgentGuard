@@ -607,6 +607,11 @@ warnings and skipped checks as well as the exit status. Inside guarded OpenCode,
 `agent_guard_status` reports the loaded plugin's view of local confinement and
 its release. It does not attest remote services or other plugins' hook behavior.
 
+For OpenCode V2, doctor distinguishes unavailable plugin status from inactive
+plugins. It lists up to eight inactive entries by position, a safe plugin name
+when available, and the host's error reference. Paths, URLs and raw plugin errors
+are withheld; use OpenCode's plugin list to inspect the named entry locally.
+
 Bundled CC Safety Net's standalone `cc-safety-net doctor` looks for its package
 in OpenCode's plugin configuration. It does not recognize Agent Guard's
 file-based wrapper plugin, so it can report "No integration configured" even

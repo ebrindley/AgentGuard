@@ -7,6 +7,35 @@ import { fileURLToPath } from "node:url"
 import { layout, stage } from "./engines/zsh.mjs"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
+function pluginReport(value, severity = "FAIL") {
+  return spawnSync("/bin/zsh", ["-fc", 'setopt no_unset pipe_fail; source "$1"; opencode_plugins_v2 "$2" "$3" " (fixture)"',
+    "plugins", join(root, "profiles/opencode/hooks.zsh"), typeof value === "string" ? value : JSON.stringify(value), severity], { encoding: "utf8" })
+}
+for (const data of [[], [{ id: "healthy", state: { status: "active" } }]]) assert.equal(pluginReport({ data }).status, 0)
+for (const value of ["", "invalid JSON", {}, { data: null }, { data: {} }]) {
+  const result = pluginReport(value)
+  assert.equal(result.status, 1)
+  assert.match(result.stdout, /plugin status unavailable/)
+  assert.equal(result.stderr, "")
+}
+const failedPlugins = { data: [
+  { id: "healthy", state: { status: "active" } },
+  { source: { target: "@fixture/broken@1.0.0" }, state: { status: "failed", error: "PRIVATE_ERROR", ref: "err_fixture1" } },
+  { id: "sk-private", source: { target: "https://user:PRIVATE_TOKEN@example.test/plugin?key=PRIVATE_QUERY" }, state: { status: "failed", ref: "PRIVATE_REF\n" } },
+  { source: { path: "/PRIVATE_PATH" }, state: { status: "PRIVATE_STATUS" } },
+] }
+for (const severity of ["FAIL", "warn"]) {
+  const result = pluginReport(failedPlugins, severity)
+  assert.equal(result.status, 1)
+  assert.match(result.stdout, /#2 @fixture\/broken@1\.0\.0: failed \(err_fixture1\)/)
+  assert.match(result.stdout, /#3 name withheld: failed/)
+  assert.match(result.stdout, /#4 name withheld: unknown/)
+  assert.ok(result.stdout.split("\n").filter(Boolean).every(line => line.startsWith(severity + " ")))
+  assert.doesNotMatch(result.stdout + result.stderr, /PRIVATE|sk-private|https:|user:/)
+}
+assert.equal(pluginReport({ data: Array.from({ length: 12 }, () => ({ state: { status: "failed" } })) }).stdout.trim().split("\n").length, 8)
+console.log("ok OpenCode V2 plugin diagnostics: healthy, unavailable, failed and sanitized status")
+
 function prepare(args) {
   const result = spawnSync("/bin/zsh", ["-fc", `
     setopt err_exit no_unset pipe_fail extended_glob
