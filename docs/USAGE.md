@@ -1,6 +1,6 @@
 # Using Agent Guard
 
-This guide describes release 2026.10.25.1, which supports OpenCode, Pi and OMP.
+This guide describes release 2026.10.27, which supports OpenCode, Pi and OMP.
 See [release channels](OPERATIONS.md#release-channels) for installation.
 
 ## Start OpenCode
@@ -25,7 +25,7 @@ Review changes before executing them outside the guard.
 
 ## OpenCode versions
 
-Stable 2026.10.25.1 targets OpenCode 1.18.33 and newer V1 releases,
+Stable 2026.10.27 targets OpenCode 1.18.33 and newer V1 releases,
 plus OpenCode 2.0.32 and 2.1.1 CLI and desktop backends. The native V2
 fixtures also pass with the OpenCode 2.1.4 CLI. Keep shared configuration in the V1 format
 when both versions use it; V2 normalizes supported V1 settings in memory.
@@ -234,6 +234,8 @@ enforcement boundary. A direct launch of the real Pi/OMP executable is
 unguarded even if the analyzer loads and prints `FILTER-ONLY`; see
 [unguarded execution and maintenance](OPERATIONS.md#running-pi-or-omp-without-the-guard).
 
+Set up Pi credentials outside the guard before the first guarded session: Pi
+cannot create its protected `auth.json` inside a session.
 Pi OAuth logins stop at their first refresh inside a session because
 `auth.json` is write-protected. Install packages and edit settings outside the
 guard. OMP profiles must be selected before confinement; `--profile` must be
