@@ -86,9 +86,23 @@ for (const parent of ['opencode', 'pi', 'omp']) {
     const r = launch(parent, `/usr/bin/touch ${quote(path)}`);
     assert.equal(r.status, 0, `${parent}: runtime ${relative}\n${r.stderr}`);
   }
-  for (const relative of ['.codex/shell_snapshots/test', '.codex/memories_1.sqlite', '.codex/archived_sessions/state_5.sqlite', '.codex/backup/.codex/state_5.sqlite', '.claude/session-env/test', '.claude/shell-snapshots/test']) {
+  // Claude saves ~/.claude.json by writing .claude.json.tmp.<pid>.<hex> and renaming it over the file.
+  const claudeState = join(home, '.claude.json'), claudeTemp = join(home, '.claude.json.tmp.41191.23da383e3f70');
+  writeFileSync(claudeState, '{}');
+  const saved = launch(parent, `/usr/bin/touch ${quote(claudeTemp)} && /bin/mv ${quote(claudeTemp)} ${quote(claudeState)}`);
+  assert.equal(saved.status, 0, `${parent}: Claude's atomic save\n${saved.stderr}`);
+  for (const relative of ['.codex/shell_snapshots/test', '.codex/memories_1.sqlite', '.codex/archived_sessions/state_5.sqlite', '.codex/backup/.codex/state_5.sqlite', '.claude/session-env/test', '.claude/shell-snapshots/test',
+                          '.claude.json.backup', '.claude.json.lock', '.claude.json.tmp.x', '.claude.json.tmp.1.ab/nested']) {
     mkdirSync(dirname(join(home, relative)), { recursive: true });
     assert.notEqual(launch(parent, `/usr/bin/touch ${quote(join(home, relative))}`).status, 0);
+  }
+  // The other harnesses' policy and executable files stay write-protected whatever they grant to runtime state.
+  for (const relative of ['.claude/settings.json', '.claude/settings.local.json', '.claude/hooks/hook.sh', '.claude/commands/c.md',
+                          '.codex/config.toml', '.codex/rules/default.rules', '.codex/hooks.json', '.cursor/cli-config.json', '.cursor/mcp.json',
+                          '.grok/config.toml', '.grok/sandbox.toml', '.grok/requirements.toml', '.grok/managed_config.toml', '.grok/trusted_folders.toml',
+                          '.grok/hooks/hook.json', '.grok/hooks-paths', '.grok/bin/grok', '.grok/downloads/grok-1', '.grok/vendor/rg', '.grok/bundled/s', '.grok/bundles/s']) {
+    mkdirSync(dirname(join(home, relative)), { recursive: true });
+    assert.notEqual(launch(parent, `/usr/bin/touch ${quote(join(home, relative))}`).status, 0, `${parent}: ${relative} must not be writable`);
   }
   for (const path of [join(release, 'peers/codex'), join(home, '.codex/config.toml'), join(home, 'outside')]) {
     const r = launch(parent, `/usr/bin/touch ${quote(path)}`);
