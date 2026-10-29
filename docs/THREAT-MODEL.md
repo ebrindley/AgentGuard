@@ -137,8 +137,10 @@ product's subject is destructive reach, and a coding agent has to read the machi
 it works on; read-deny-by-default for OpenCode would need a per-user allowlist of
 every toolchain path. The operator opts in per path. Accepted risk: credential
 material is readable by default under OpenCode and the operator carries the duty
-to deny it. Pi and OMP differ — their fixed profile denies named credential paths
-— so a read of one of those under Pi is in scope. SECURITY.md states both.
+to deny it. Pi, OMP and Grok differ — their fixed profiles deny named credential
+paths — so a read of one of those under Pi, OMP or Grok is in scope. The keychain
+stays reachable under Grok, as under every harness: a session can use the accounts
+`gh` and `git` hold. SECURITY.md states the OpenCode and Pi cases.
 
 **Exfiltration of anything a session can read.** Outbound network is unrestricted
 for every harness. No read restriction here implies a confidentiality guarantee,

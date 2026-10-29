@@ -485,7 +485,8 @@ loaded; `/reload` loads the extension now on disk.
 ## Commands
 
 - `agent-guard doctor` runs each installed harness's checks: OpenCode's installed
-  self-test and, with Pi's guard installed, Pi's checks:
+  self-test, with Grok installed the launcher's Grok check and which `grok` a new
+  terminal and `zsh -c` find first, and, with Pi's guard installed, Pi's checks:
   - everything pi-sandbox-guard's `npm run status` and `npm run check:path`
     checked, comparing the installed Pi files with the stamp's hashes;
   - the profile's self-test, the analyzer's preflight, and one allowed and one
@@ -675,6 +676,20 @@ Started without the guard, the plugin refuses every tool except a few that do
 not touch files ([design](DESIGN.md#5-inner-layer)). Set
 `AGENT_GUARD_BYPASS=1` in OpenCode's environment to lift that refusal. OpenCode
 Guard's `OPENCODE_GUARD_BYPASS` is no longer honored.
+
+## Grok's files and running Grok without the guard
+
+The installer replaces `~/.local/bin/grok` with a link to Agent Guard's `bin/grok`,
+records Grok's executable (normally `~/.grok/bin/grok`) in `state/grok-executable`
+and keeps the entry it replaced in `state/grok-replaced/grok`; uninstall puts it
+back. Nothing under `~/.grok` is changed. Run `~/.grok/bin/grok` directly for what
+the guard refuses: `login`, `logout`, `update`, `workspace start` and changes to
+`config.toml`, `sandbox.toml`, hooks and other protected files. A direct start runs
+Grok with its own sandbox setting, not Agent Guard's. `grok update` or a
+reinstall of Grok can put a link of its own back at `~/.local/bin/grok`; then
+`grok` in a new terminal starts Grok unguarded and `agent-guard doctor` fails with
+the lookup that no longer finds Agent Guard's launcher. Run the installer again
+to restore it.
 
 ## Running Pi or OMP without the guard
 

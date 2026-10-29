@@ -276,9 +276,43 @@ Helpers run before Seatbelt with the account's full authority. The check validat
 the permitted wrapper syntax and helper paths; it does not prove helper arguments
 safe. Review download and output destinations before installing a wrapper.
 
+## Grok
+
+When the installer finds Grok, `grok` in a new terminal window, `~/.local/bin/grok`
+and Agent Guard's `bin/grok` start Grok inside the guard with `--sandbox off`:
+Grok's own sandbox profiles block the keychain, so `gh` and `git` over https fail
+under them, and Agent Guard's profile takes their place. The Guard List applies as
+for OpenCode, and so does nothing else of OpenCode's: there is no plugin.
+
+Grok can write the folders the Guard List allows, `~/.grok` apart from the files
+below, and its caches. It authors skills, agents, workflows, rules, `AGENTS.md`,
+memory, plugins and sessions as usual. These stay write-protected:
+`~/.grok/config.toml`, `sandbox.toml`, `requirements.toml`, `managed_config.toml`
+and `trusted_folders.toml`; `hooks`, `hooks-paths` and the targets it names; `bin`,
+`downloads`, `vendor`, `bundled` and `bundles`; the `grok` link; and
+`~/.config/gh`, which stays readable. A setting changed inside a session, such as
+`/model` or a folder-trust answer, therefore applies to that session only; change
+`config.toml` outside the guard.
+
+`~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.git-credentials`, `~/.config/git/credentials`,
+`~/.netrc`, `~/.npmrc`, `~/.secrets`, `~/.docker/config.json`, `~/.kube/config` and
+`.env` files (but not `.env.example`, `.env.sample` or `.env.template`) can be neither
+read nor written. The keychain stays usable, so a session can use the accounts
+`gh` and `git` hold. Sessions run without `SSH_AUTH_SOCK` and with npm's user
+configuration disabled.
+
+Run these outside the guard, with Grok's own executable (`~/.grok/bin/grok`);
+`grok` refuses them in a guarded session and says so: `grok login`, `grok logout`,
+`grok update` and `grok workspace start|restart|resume`. Grok's updater is off in a
+guarded session. The launcher also refuses an explicit `--sandbox` profile other
+than `off` (and `GROK_SANDBOX`), `--leader`, `use_leader = true` in the
+configuration, a `GROK_HOME` other than `~/.grok`, and resuming a session that
+was saved with a sandbox profile, which Grok keeps for the life of the session.
+Start a new session instead.
+
 ## Peer CLIs
 
-Inside guarded OpenCode, Pi and OMP sessions, `codex`, `claude`,
+Inside guarded OpenCode, Pi, OMP and Grok sessions, `codex`, `claude`,
 `cursor-agent`, `grok` and `opencode` use session-only launch wrappers. They
 inherit the parent filesystem boundary and keep their native approvals, hooks,
 models and configuration. No additional sandbox flags are needed. Launches
