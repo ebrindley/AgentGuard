@@ -1,0 +1,82 @@
+# Grok's launch arguments (docs/DESIGN.md section 3, Grok), shared by
+# engine/launch and engine/peers.zsh.
+#
+# grok_args ARG...: sets reply to the arguments to run Grok with, and exports the
+# environment that goes with them, or sets REPLY to the reason and fails.
+# Agent Guard is Grok's only sandbox, so Grok runs with --sandbox off. A resumed
+# session keeps the profile it was saved with and Grok refuses a different one;
+# the saved profile is read here to say so first.
+grok_args() {
+  emulate -L zsh
+  setopt no_unset extended_glob
+  local h=${home:-$HOME} arg pending= id= saved= f real=${home:-$HOME}/.grok/bin/grok
+  integer literal=0 resume=0 cont=0
+  local -a out found
+  reply=()
+  if [[ ${GROK_SANDBOX:-off} != off ]]; then
+    REPLY="Grok cannot apply the sandbox profile '$GROK_SANDBOX' inside Agent Guard; unset GROK_SANDBOX"
+    return 1
+  fi
+  if [[ -n ${GROK_HOME:-} && ${GROK_HOME:A} != ${h:A}/.grok ]]; then
+    REPLY="GROK_HOME is set to $GROK_HOME; Agent Guard protects ~/.grok only, so unset GROK_HOME"
+    return 1
+  fi
+  case ${1:-} in
+    (update|login|logout)
+      REPLY="grok $1 changes Grok's installed files or account and cannot run in Agent Guard; run it outside, as $real $1"
+      return 1 ;;
+    (workspace)
+      if [[ ${2:-} == (start|restart|resume) ]]; then
+        REPLY="grok workspace $2 starts a daemon that outlives the session; run it outside Agent Guard, as $real workspace $2"
+        return 1
+      fi ;;
+  esac
+  for f in "$h/.grok/config.toml" "$h/.grok/managed_config.toml"; do
+    if [[ -r $f ]] && /usr/bin/grep -Eqs '^[[:space:]]*use_leader[[:space:]]*=[[:space:]]*true' "$f"; then
+      REPLY="use_leader is true in $f, which would send work to a shared Grok leader outside Agent Guard; set it to false outside Agent Guard"
+      return 1
+    fi
+  done
+  for arg in "$@"; do
+    if (( literal )); then out+=("$arg"); continue; fi
+    case $pending in
+      (sandbox)
+        pending=
+        [[ $arg == off ]] || { REPLY="Grok cannot apply the sandbox profile '$arg' inside Agent Guard"; return 1 }
+        continue ;;
+      (resume)
+        pending=
+        if [[ $arg != -* ]]; then id=$arg; out+=("$arg"); continue; fi ;;
+    esac
+    case $arg in
+      (--) literal=1; out+=("$arg") ;;
+      (--sandbox) pending=sandbox ;;
+      (--sandbox=*)
+        [[ ${arg#*=} == off ]] || { REPLY="Grok cannot apply the sandbox profile '${arg#*=}' inside Agent Guard"; return 1 } ;;
+      (--leader)
+        REPLY='Grok cannot use a shared leader inside Agent Guard; its tools would run outside the guard'
+        return 1 ;;
+      (-r|--resume) resume=1; pending=resume; out+=("$arg") ;;
+      (--resume=*) resume=1; id=${arg#*=}; out+=("$arg") ;;
+      (-c|--continue) cont=1; out+=("$arg") ;;
+      (*) out+=("$arg") ;;
+    esac
+  done
+  if [[ $pending == sandbox ]]; then REPLY='--sandbox requires a value'; return 1; fi
+  if (( resume && ${#id} )) && [[ $id == [0-9a-fA-F]##-[0-9a-fA-F-]## ]]; then
+    found=("$h"/.grok/sessions/*/$id/summary.json(N[1]))
+  elif (( cont )); then
+    found=("$h/.grok/sessions/$(/usr/bin/jq -rn --arg p "${PWD:A}" '$p | @uri')"/*/summary.json(Nom[1]))
+  fi
+  (( $#found )) && saved=$(/usr/bin/jq -r '.sandbox_profile // empty' "${found[1]}" 2>/dev/null) || saved=
+  if [[ -n $saved && $saved != off ]]; then
+    REPLY="that Grok session was saved with the sandbox profile '$saved' and a resumed session keeps it, but Agent Guard runs Grok with --sandbox off; start a new session"
+    return 1
+  fi
+  # Grok documents a flag for local execution only on `grok agent`.
+  if [[ ${out[1]:-} == agent && ${out[(Ie)--no-leader]} == 0 ]]; then
+    out=(agent --no-leader "${(@)out[2,-1]}")
+  fi
+  export GROK_SANDBOX=off GROK_DISABLE_AUTOUPDATER=1
+  reply=(--sandbox off "${out[@]}")
+}

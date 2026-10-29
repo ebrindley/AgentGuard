@@ -50,6 +50,7 @@ for (const parent of ['opencode', 'pi', 'omp']) {
     assert.ok(!argv.includes('--force') && !argv.includes('--dangerously-bypass-approvals-and-sandbox'));
     if (name === 'codex') assert.deepEqual(argv.slice(0, 3), ['--no-daemon', '--sandbox', 'danger-full-access']);
     if (name === 'claude') assert.deepEqual(argv.slice(0, 2), ['--settings', '{"sandbox":{"enabled":false}}']);
+    if (name === 'grok') assert.deepEqual(argv.slice(0, 2), ['--sandbox', 'off']);
     console.log(`ok ${parent} -> ${name}: discovery, argv and approvals`);
   }
   for (const command of ['codex exec --sandbox read-only', 'codex exec -s workspace-write',

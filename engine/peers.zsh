@@ -6,7 +6,15 @@ agent_guard_peer() {
   shift 2
   local -a search args=("$@")
   search=("${(@s/:/)${AGENT_GUARD_PEER_PATH:-$PATH}}" "$HOME/.local/bin" "$HOME/.npm-global/bin" "$HOME/bin" "$HOME/.opencode/bin" /opt/homebrew/bin /usr/local/bin)
+  # Grok's shim is a guard entry, so the executable the installer recorded
+  # comes first, then Grok's own install folder.
+  if [[ $name == grok && -r $HOME/Library/Application\ Support/AgentGuard/state/grok-executable ]]; then
+    d=$(<"$HOME/Library/Application Support/AgentGuard/state/grok-executable")
+    [[ $d == /* && -x $d && ! -d $d ]] && target=$d
+  fi
+  search+=("$HOME/.grok/bin")
   for d in $search; do
+    [[ -z $target ]] || break
     [[ -x $d/$name && ! -d $d/$name ]] || continue
     target=${d}/${name}
     [[ ${target:A} == ${root:A}/* || ${target:A} == "$HOME/Library/Application Support/AgentGuard"/* ||
@@ -96,11 +104,9 @@ agent_guard_peer() {
       (( sandbox )) && exec "$target" "${args[@]}"
       exec "$target" --sandbox disabled "${args[@]}" ;;
     grok)
-      if [[ ${GROK_SANDBOX:-off} != off ]]; then
-        print -ru2 -- 'agent-guard: Grok cannot apply an explicit inner sandbox'; return 2
-      fi
-      (( sandbox )) && exec "$target" "${args[@]}"
-      exec "$target" --sandbox off "${args[@]}" ;;
+      source "$root/profiles/grok/args.zsh"
+      grok_args "${args[@]}" || { print -ru2 -- "agent-guard: $REPLY"; return 2; }
+      exec "$target" "${reply[@]}" ;;
     opencode)
       local version managed=0
       local -a reply
