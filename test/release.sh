@@ -24,12 +24,13 @@ expected=(
   engine/launch engine/account.zsh engine/agent-guard engine/profile.sb engine/vendor/THIRD-PARTY-NOTICES
   engine/peers.zsh engine/peer-runtime.sb
   profiles/opencode/{harness.zsh,hooks.zsh,runtime.zsh,skills.zsh,protected.sb,plugin.js,v2.js,permissions.js,permissions.jq,diagnostics.zsh,opencode,opencode-gui,install.sh,uninstall.sh}
-  installer/{lib.zsh,actions.zsh,harness/{opencode,pi}.zsh,migrate/{opencode-guard,pi-sandbox-guard}.zsh}
+  installer/{lib.zsh,actions.zsh,harness/{opencode,pi,grok}.zsh,migrate/{opencode-guard,pi-sandbox-guard}.zsh}
   profiles/opencode/assets/{AgentGuard.icns,AgentGuard.entitlements}
   profiles/pi/{LICENSE,launchers/{pi,example-custom},sandbox/{pi-sandbox.sb,pi-sandbox-preamble.zsh}}
   profiles/pi/src/{index.mjs,guard-core.mjs,validate-bash-command.sh}
   profiles/pi/scripts/{extension-entry.ts,test-sandbox-profile.sh,check-launchers.mjs,bind-executable.sh,lib-ops.sh}
   profiles/pi/commands/{bind,doctor,wrapper}.zsh
+  profiles/grok/{harness.zsh,args.zsh,hooks.zsh,credentials.sb,grok}
   ${(f)"$(/usr/bin/git -C "$source_root" ls-files -- engine/vendor/cc-safety-net engine/peers profiles/opencode/templates)"}
 )
 listed=$(/usr/bin/tar -tzf "$archive") || fail "archive readable"
