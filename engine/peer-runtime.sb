@@ -25,6 +25,14 @@
   (subpath (peer-home "/.claude/paste-cache"))
   (subpath (peer-home "/.claude/cache"))
   (literal (peer-home "/.claude/history.jsonl"))
+  ;; Claude's global state file, the lock folder it holds around each
+  ;; read-modify-write, and the temporary it renames over the file, written
+  ;; as <file>.tmp.<pid>.<12 hex digits> beside the file, here in the home folder only.
+  (literal (peer-home "/.claude.json"))
+  (literal (peer-home "/.claude.json.lock"))
+  (require-all (prefix (peer-home "/.claude.json.tmp."))
+    (regex #"/\.claude\.json\.tmp\.[0-9]+\.[0-9a-f]+$")
+    (require-not (regex #"/\.claude\.json\.tmp\.[0-9]+\.[0-9a-f]+/")))
   (subpath (peer-home "/.cursor/chats"))
   (subpath (peer-home "/.cursor/projects"))
   (subpath (peer-home "/.cursor/ai-tracking"))
