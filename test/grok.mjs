@@ -177,7 +177,7 @@ assert.notEqual(probe(`: >> ${q(join(home, '.config/gh/config.yml'))}`).status, 
 ok('credential files and .env files are unreadable and unwritable, template names are readable, gh configuration is readable and not writable');
 
 // Nested launches.
-// An outer sandbox a second profile cannot be applied inside, as Poetic's denies the engine and list folders.
+// An outer sandbox a second profile cannot be applied inside, denying the engine and list folders.
 const outerProfile = `(version 1)(allow default)(deny file-write* (subpath ${JSON.stringify(engine)}) (subpath ${JSON.stringify(join(home, 'Agent Guard'))}))(deny process-exec (literal "/usr/bin/osascript"))`;
 const outer = (args) => spawnSync('/usr/bin/sandbox-exec', ['-p', outerProfile, '/bin/zsh', '-f', '-c', '"$0" "$@"', shim, ...args], { cwd: project, env, encoding: 'utf8', timeout: 20000 });
 const other = outer(['-p', 'x']);
