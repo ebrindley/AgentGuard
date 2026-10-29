@@ -54,11 +54,11 @@ grok_args() {
     # subcommand name is refused (an option missing from the list can hide one).
     case $arg in
       (update|login|logout)
-        REPLY="grok $arg changes Grok's installed files or account and cannot run in Agent Guard; run it outside, as $real $arg"
+        REPLY="grok $arg changes Grok's installed files or account and cannot run in Agent Guard; run it outside, as ${(q)real} $arg"
         return 1 ;;
       (start|restart|resume)
         if [[ $prev == workspace ]]; then
-          REPLY="grok workspace $arg starts a daemon that outlives the session; run it outside Agent Guard, as $real workspace $arg"
+          REPLY="grok workspace $arg starts a daemon that outlives the session; run it outside Agent Guard, as ${(q)real} workspace $arg"
           return 1
         fi
         out+=("$arg") ;;

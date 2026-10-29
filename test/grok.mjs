@@ -201,7 +201,7 @@ put(join(engine, 'state/grok-executable'), `${join(engine, 'state/grok-kept/grok
 const kept = launch(['-p', 'kept']);
 assert.equal(kept.status, 0, kept.stderr);
 assert.match(kept.stdout, /^argv:--sandbox\|off\|-p\|kept$/m);
-assert.ok(launch(['update']).stderr.includes(`as ${join(engine, 'state/grok-kept/grok')} update`), 'the message names the recorded executable');
+assert.ok(launch(['update']).stderr.includes(`as ${join(engine, 'state/grok-kept/grok').replaceAll(' ', '\\ ')} update`), 'the message names the recorded executable, shell-quoted');
 put(join(engine, 'state/grok-executable'), `${join(grok, 'bin/grok')}\n`);
 ok('the kept copy of a replaced executable runs');
 // Peer commands in a guarded session find the recorded executable (the link in
