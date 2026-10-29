@@ -93,11 +93,15 @@ for (const parent of ['opencode', 'pi', 'omp']) {
   assert.equal(saved.status, 0, `${parent}: Claude's atomic save\n${saved.stderr}`);
   // It holds ~/.claude.json.lock (a folder, refreshed while held) around each save; nothing can be created inside it.
   const claudeLock = join(home, '.claude.json.lock');
-  const locked = launch(parent, `/bin/mkdir ${quote(claudeLock)} && /usr/bin/touch ${quote(claudeLock)} && /bin/mkdir ${quote(claudeLock + '/x')}`);
-  assert.notEqual(locked.status, 0, `${parent}: nothing may be created inside the lock folder`);
-  assert.ok(existsSync(claudeLock) && !existsSync(join(claudeLock, 'x')), `${parent}: the lock folder is created and holds nothing`);
-  const released = launch(parent, `/bin/rmdir ${quote(claudeLock)}`);
-  assert.equal(released.status, 0, `${parent}: Claude's lock release\n${released.stderr}`);
+  const lockMade = launch(parent, `/bin/mkdir ${quote(claudeLock)}`);
+  assert.equal(lockMade.status, 0, `${parent}: Claude's lock folder\n${lockMade.stderr}`);
+  const lockRefreshed = launch(parent, `/usr/bin/touch ${quote(claudeLock)}`);
+  assert.equal(lockRefreshed.status, 0, `${parent}: Claude's lock refresh\n${lockRefreshed.stderr}`);
+  const lockChild = launch(parent, `/bin/mkdir ${quote(claudeLock + '/x')}`);
+  assert.notEqual(lockChild.status, 0, `${parent}: nothing may be created inside the lock folder`);
+  assert.ok(!existsSync(join(claudeLock, 'x')));
+  const lockReleased = launch(parent, `/bin/rmdir ${quote(claudeLock)}`);
+  assert.equal(lockReleased.status, 0, `${parent}: Claude's lock release\n${lockReleased.stderr}`);
   assert.ok(!existsSync(claudeLock));
   for (const relative of ['.codex/shell_snapshots/test', '.codex/memories_1.sqlite', '.codex/archived_sessions/state_5.sqlite', '.codex/backup/.codex/state_5.sqlite', '.claude/session-env/test', '.claude/shell-snapshots/test',
                           '.claude.json.backup', '.claude.json.lock.x', '.claude.json.tmp.x', '.claude.json.tmp.1.ab/nested']) {
