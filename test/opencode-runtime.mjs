@@ -217,11 +217,11 @@ try {
   const recorded = () => existsSync(record) ? readFileSync(record, "utf8").trimEnd().split("\n") : null
   const stepAside = /agent-guard: already inside another sandbox; Agent Guard's sandbox is not applied and OpenCode runs under the existing one/
   const allowAll = "(version 1)(allow default)"
-  // Poetic's case: the outer sandbox denies writes to the list folder and the
+  // An orchestrator's run sandbox: it denies writes to the list folder and the
   // engine. It also denies osascript, so a gui refusal shows no alert here.
-  const poetic = `(version 1)(allow default)(deny file-write* (subpath ${JSON.stringify(join(home, "Agent Guard"))}) (subpath ${JSON.stringify(engine)}))(deny process-exec (literal "/usr/bin/osascript"))`
+  const denyList = `(version 1)(allow default)(deny file-write* (subpath ${JSON.stringify(join(home, "Agent Guard"))}) (subpath ${JSON.stringify(engine)}))(deny process-exec (literal "/usr/bin/osascript"))`
   const nests = spawnSync("/usr/bin/sandbox-exec", ["-p", allowAll, "/usr/bin/sandbox-exec", "-p", allowAll, "/usr/bin/true"]).status === 0
-  for (const [name, outer] of [["an allow-everything sandbox", allowAll], ["a sandbox denying the list folder", poetic]]) {
+  for (const [name, outer] of [["an allow-everything sandbox", allowAll], ["a sandbox denying the list folder", denyList]]) {
     if (outer === allowAll && nests) {
       console.log(`skip launch cli inside ${name}: this macOS applies a second profile there, so the launch is not confined`)
       continue
@@ -235,14 +235,14 @@ try {
     console.log(`ok launch cli inside ${name} runs the CLI with --standalone, writes nothing, sets no marker and marks the outer sandbox`)
   }
   {
-    const r = launch(poetic, ["cli", "mcp", "list"])
+    const r = launch(denyList, ["cli", "mcp", "list"])
     assert.equal(r.status, 1)
     assert.match(r.stderr, /run this V2 command from Terminal outside the existing guard/)
     assert.equal(recorded(), null)
     console.log("ok launch cli inside another sandbox refuses a command that needs a managed service")
   }
   for (const mode of ["gui", "check"]) {
-    const r = launch(poetic, [mode])
+    const r = launch(denyList, [mode])
     assert.equal(r.status, 1)
     assert.match(r.stderr, /agent-guard: already inside another sandbox, where Agent Guard cannot apply its own/)
     assert.doesNotMatch(r.stderr, /inside the guard/)
