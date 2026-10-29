@@ -11,7 +11,13 @@ grok_args() {
   setopt no_unset extended_glob
   local h=${home:-$HOME} arg prev= pending= id= saved= f real=${home:-$HOME}/.grok/bin/grok
   integer literal=0 resume=0 cont=0
+  # Options that take a value in Grok's --help (-w and -r take an optional one).
+  local value_options='--add-dir|--agent|--agents|--allow|--allowedTools|--allowed-tools|--cwd|--debug-file|--deny|--disallowedTools|--disallowed-tools|--json-schema|--leader-socket|-m|--model|--max-turns|--output-format|-p|--prompt|--single|--permission-mode|--prompt-file|--prompt-json|--reasoning-effort|--rules|-s|--session-id|--system-prompt-override|--tools|--worktree-ref|-w|--worktree'
   local -a out found
+  # The executable to run directly: the one the installer recorded, which is a
+  # kept copy when Grok has no install folder.
+  f=$h/Library/Application\ Support/AgentGuard/state/grok-executable
+  [[ -r $f ]] && f=$(<"$f") && [[ $f == /* && -x $f ]] && real=$f
   reply=()
   if [[ ${GROK_SANDBOX:-off} != off ]]; then
     REPLY="Grok cannot apply the sandbox profile '$GROK_SANDBOX' inside Agent Guard; unset GROK_SANDBOX"
@@ -37,9 +43,15 @@ grok_args() {
       (resume)
         pending=
         if [[ $arg != -* ]]; then id=$arg; out+=("$arg"); continue; fi ;;
+      (value)
+        # The value of an option that takes one is data, whatever it says; an
+        # argument that starts with a dash is still read as an option.
+        pending=
+        if [[ $arg != -* ]]; then out+=("$arg"); prev=$arg; continue; fi ;;
     esac
-    # A subcommand can follow global options, so every argument before -- is
-    # checked; an argument that merely equals a subcommand name is refused too.
+    # A subcommand can follow global options, so every argument before -- that is
+    # not the value of an option from grok --help is checked, and one that equals a
+    # subcommand name is refused (an option missing from the list can hide one).
     case $arg in
       (update|login|logout)
         REPLY="grok $arg changes Grok's installed files or account and cannot run in Agent Guard; run it outside, as $real $arg"
@@ -52,6 +64,7 @@ grok_args() {
         out+=("$arg") ;;
       (--) literal=1; out+=("$arg") ;;
       (--sandbox) pending=sandbox ;;
+      (${~value_options}) pending=value; out+=("$arg") ;;
       (--sandbox=*)
         [[ ${arg#*=} == off ]] || { REPLY="Grok cannot apply the sandbox profile '${arg#*=}' inside Agent Guard"; return 1 } ;;
       (--leader)

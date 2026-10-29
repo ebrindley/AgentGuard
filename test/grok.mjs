@@ -73,6 +73,13 @@ ok('grok agent runs locally');
 const dup = launch(['--sandbox', 'off', '-p', 'x', '--', '--sandbox', 'strict']);
 assert.match(dup.stdout, /^argv:--sandbox\|off\|-p\|x\|--\|--sandbox\|strict$/m);
 ok('an explicit --sandbox off is kept once, and arguments after -- are untouched');
+// The value of an option is not a command, whatever it says.
+for (const args of [['-p', 'update'], ['-m', 'update'], ['--model=update'], ['--prompt-file', 'login', '-m', 'logout'], ['-w', 'workspace', '-p', 'x']]) {
+  const r = launch(args);
+  assert.equal(r.status, 0, `${args.join(' ')}: ${r.stderr}`);
+  assert.ok(r.stdout.includes(`argv:--sandbox|off|${args.join('|')}\n`), `${args.join(' ')}: ${r.stdout}`);
+}
+ok('option values that spell update, login or logout are not refused');
 assert.equal(probe('print -r -- "$AGENT_GUARD_SANDBOXED"').stdout, '1\n');
 ok('scripted launch is marked as guarded');
 
@@ -92,6 +99,8 @@ for (const [name, args, extra, text] of [
   ['update after an option', ['--no-alt-screen', 'update'], {}, /grok update/],
   ['login after an option value', ['-m', 'fixture', 'login'], {}, /grok login/],
   ['logout after --sandbox off', ['--sandbox', 'off', 'logout'], {}, /grok logout/],
+  ['update after a value', ['-p', 'x', 'update'], {}, /grok update/],
+  ['--sandbox after -w', ['-w', '--sandbox', 'strict'], {}, /cannot apply the sandbox profile 'strict'/],
 ]) {
   const r = launch(args, extra);
   assert.equal(r.status, 1, `${name}: ${r.stdout}${r.stderr}`);
@@ -192,6 +201,7 @@ put(join(engine, 'state/grok-executable'), `${join(engine, 'state/grok-kept/grok
 const kept = launch(['-p', 'kept']);
 assert.equal(kept.status, 0, kept.stderr);
 assert.match(kept.stdout, /^argv:--sandbox\|off\|-p\|kept$/m);
+assert.ok(launch(['update']).stderr.includes(`as ${join(engine, 'state/grok-kept/grok')} update`), 'the message names the recorded executable');
 put(join(engine, 'state/grok-executable'), `${join(grok, 'bin/grok')}\n`);
 ok('the kept copy of a replaced executable runs');
 // Peer commands in a guarded session find the recorded executable (the link in

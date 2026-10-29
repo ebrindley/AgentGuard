@@ -683,8 +683,11 @@ The installer replaces `~/.local/bin/grok` with a link to Agent Guard's `bin/gro
 records Grok's executable (normally `~/.grok/bin/grok`) in `state/grok-executable`
 and keeps the entry it replaced in `state/grok-replaced/grok`; uninstall puts it
 back. A regular executable at `~/.local/bin/grok` with no `~/.grok/bin/grok` is
-also copied to `state/grok-kept/grok`, which the record names. Nothing under `~/.grok` is changed. Run `~/.grok/bin/grok` directly for what
-the guard refuses: `login`, `logout`, `update`, `workspace start` and changes to
+also copied to `state/grok-kept/grok`, which the record names. Nothing under
+`~/.grok` is changed. Run the recorded executable directly, `~/.grok/bin/grok` or
+in that layout the kept copy under the engine's `state` folder, for what the
+guard refuses (its refusal message names the path): `login`, `logout`, `update`,
+`workspace start` and changes to
 `config.toml`, `sandbox.toml`, hooks and other protected files. A direct start runs
 Grok with its own sandbox setting, not Agent Guard's. `grok update` or a
 reinstall of Grok can put a link of its own back at `~/.local/bin/grok`; then
