@@ -184,6 +184,16 @@ OpenCode Guard's engine folder, and step 7 the rules for OpenCode's package
 stores, `bin` folder and model catalog. The original source commit is
 `9242c1ad45c895efd63e903e1b27d7bab53620ad`; bundled cc-safety-net is 2.4.14.
 
+`node test/grok.mjs` tests the Grok harness with a stand-in grok under the real
+launcher and Seatbelt in a disposable home: plain, scripted and nested launches,
+the refused arguments and resumes, the writable and write-protected `~/.grok`
+paths, the credential set and the peer command. `zsh test/grok-install.sh` installs
+that harness from test releases over a stand-in Grok link: the recorded
+executable, a failure and a kill at each Grok test point, the update, doctor, a
+link put back by Grok, a regular file at `~/.local/bin/grok`, and uninstall
+restoring what was there. Both run in the full validation. Run them from a
+checkout outside `/private/tmp`, which every profile makes writable.
+
 `zsh test/pi.sh` tests Pi's guard. It runs pi-sandbox-guard's suites from
 `profiles/pi/test` and `profiles/pi/scripts` against Agent Guard's copy, changed
 for recorded behavior differences and test diagnostics; `test/pi-files.mjs`,

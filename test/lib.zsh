@@ -18,6 +18,9 @@ migrate_points=(list-import import discard fwd-cli fwd-gui plugin-take plugin-na
 pi_points=(psg-wrappers pi-bindings pi-preamble pi-profile pi-launcher-pi pi-launcher-omp pi-extension pi-extension-gap
            psg-switch-time pi-keep psg-keep psg-retire-launchers psg-retire-backups psg-uninstall-copy)
 
+# The same for the Grok harness, which only test/grok-install.sh exercises.
+grok_points=(grok-kept grok-binding grok-shim grok-keep)
+
 # new_home DIR: replaces DIR with an empty disposable home. REPLY is its real path.
 new_home() {
   /bin/rm -rf -- "$1"

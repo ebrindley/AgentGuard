@@ -6,7 +6,8 @@ plugins and command analyzers provide additional checks.
 
 The stable release, [2026.10.27](https://github.com/ebrindley/AgentGuard/releases/tag/v2026.10.27),
 supports OpenCode, Pi and Oh My Pi (OMP). Agent Guard replaces OpenCode Guard
-and pi-sandbox-guard. Pi and OMP use a separate project-based policy.
+and pi-sandbox-guard. Pi and OMP use a separate project-based policy. Grok CLI
+is supported in the development version; see [Grok](docs/USAGE.md#grok).
 
 OpenCode 1 and 2 CLI and desktop use shared Guard checks.
 V2 uses a different plugin
@@ -18,6 +19,7 @@ API and server lifecycle; see [OpenCode versions](docs/USAGE.md#opencode-version
 |---|---|---|---|
 | OpenCode | ALLOW folders, ordinary global configuration and skills, and runtime/cache/temp locations | Explicit DENY entries | Applies |
 | Pi / OMP | Launched project and permitted runtime/cache/temp locations | Fixed credential-path and `.env` denies | Does not apply |
+| Grok | ALLOW folders, `~/.grok` apart from its settings, hooks and executables, and cache/temp locations | Fixed credential-path and `.env` denies | Applies |
 
 Guard files remain write-protected. OpenCode can maintain its ordinary
 configuration, plugins, MCPs, skills and dependencies under the sandbox.

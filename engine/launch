@@ -1,8 +1,15 @@
 #!/bin/zsh
-# usage: launch cli|gui|profile|check [staged] [args...]
+# usage: launch [--harness NAME] cli|gui|profile|check [staged] [args...]
+# NAME is the profile to launch (profiles/NAME); the default is opencode.
 emulate -L zsh
 setopt err_exit no_unset pipe_fail extended_glob
 
+harness=opencode
+if [[ ${1:-} == --harness ]]; then
+  [[ ${2:-} == [a-z]## ]] || { print -ru2 "agent-guard: unknown harness: ${2:-}"; exit 2 }
+  harness=$2
+  shift 2
+fi
 mode=${1:-}
 log=
 (( $# )) && shift
@@ -42,9 +49,10 @@ release=${0:A:h}
   fail "not an installed release: $release"
 list_dir="$home/Agent Guard"
 list="$list_dir/Guard List.txt"
-log="$list_dir/last-launch-opencode.log"
+log="$list_dir/last-launch-$harness.log"
 here=$release
-profile_dir="$release/profiles/opencode"
+profile_dir="$release/profiles/$harness"
+[[ -f $profile_dir/harness.zsh ]] || fail "unknown harness: $harness"
 failure_stage=configuration
 
 # check staged tests a release that is not current yet, without the steps that
@@ -57,10 +65,12 @@ if [[ $mode == check && ${1:-} == staged ]]; then
   staged=1
 fi
 
+# Profile fields a harness may leave unset.
+typeset -a libs=() app_paths=() writable_gui=() protected_names=() env_unset=() env_set=()
+typeset -aU credential_paths
+cli_binding= cli_kept= app_bundle_id= state_hook= args_hook= check_hook= protect_hook= credential_fragment= protected_fragment= title=$harness
 source "$profile_dir/harness.zsh"
-source "$profile_dir/hooks.zsh"
-source "$profile_dir/skills.zsh"
-source "$profile_dir/runtime.zsh"
+for f in $libs; do source "$profile_dir/$f"; done
 
 note() {
   print -r -- "$*" >> "$log"
@@ -86,6 +96,16 @@ in_guard() {
 
 next_cli() {
   local d f cli
+  # A recorded executable (the installer's binding) comes first: the harness's
+  # own name on PATH may be the guard's shim.
+  if [[ -n $cli_binding && -r $cli_binding ]]; then
+    f=$(<"$cli_binding")
+    # The installer's kept copy of an executable it replaced lives in the engine.
+    if [[ $f == /* && -x $f && ! -d $f ]] && { ! in_guard "$f" || [[ -n $cli_kept && ${f:A} == ${cli_kept:A}/* ]] }; then
+      REPLY=$f
+      return 0
+    fi
+  fi
   for d in $path; do
     for cli in $cli_names; do
       f="$d/$cli"
@@ -97,7 +117,7 @@ next_cli() {
   for f in $cli_search; do
     [[ -x $f ]] && ! in_guard "$f" && { REPLY=$f; return 0 }
   done
-  if find_app && [[ -x $REPLY/Contents/Resources/opencode-cli ]]; then
+  if [[ -n $app_bundle_id ]] && find_app && [[ -x $REPLY/Contents/Resources/opencode-cli ]]; then
     REPLY="$REPLY/Contents/Resources/opencode-cli"
     return 0
   fi
@@ -106,6 +126,7 @@ next_cli() {
 
 find_app() {
   local a
+  [[ -n $app_bundle_id ]] || return 1
   for a in $app_paths \
            ${(f)"$(/usr/bin/mdfind "kMDItemCFBundleIdentifier == '$app_bundle_id'" 2>/dev/null)"}; do
     [[ -d $a/Contents/MacOS ]] && { REPLY=$a; return 0 }
@@ -118,7 +139,7 @@ find_app() {
 # export would print the environment.
 unset $env_unset
 (( $#env_set )) && export $env_set
-[[ ${CC_SAFETY_NET_LEVEL:-} == paranoid ]] || export CC_SAFETY_NET_LEVEL=strict
+[[ $harness != opencode || ${CC_SAFETY_NET_LEVEL:-} == paranoid ]] || export CC_SAFETY_NET_LEVEL=strict
 
 # The engine's nesting marker is exported just before exec. OpenCode Guard's
 # marker also counts as already guarded until step 11. Without a marker, only
@@ -142,20 +163,25 @@ if [[ -n $inside ]]; then
     note() { print -ru2 -- "agent-guard: $*" }
     export AGENT_GUARD_OUTER_SANDBOX=1
     [[ $mode == cli ]] || fail "already inside another sandbox, where Agent Guard cannot apply its own; open this outside that sandbox"
-    print -ru2 -- "agent-guard: already inside another sandbox; Agent Guard's sandbox is not applied and OpenCode runs under the existing one"
+    print -ru2 -- "agent-guard: already inside another sandbox; Agent Guard's sandbox is not applied and $title runs under the existing one"
   else
     [[ $mode == cli ]] || fail "already inside the guard; run this from Terminal, outside any guard or sandbox"
   fi
-  next_cli || fail "opencode not found"
+  next_cli || fail "${cli_names[1]} not found"
   cli=$REPLY
   sandbox=()
-  # This branch already inherits the outer sandbox; a second Seatbelt profile
-  # cannot be applied. The version probe must keep that inherited confinement.
-  version=$("$cli" --version 2>/dev/null) || fail 'cannot read nested OpenCode version'
-  if [[ $version == (opencode\ v2.*|2.*|v2.*) ]]; then
-    managed=0
-    opencode_cli_args "$@"
-    (( ! managed )) || fail 'run this V2 command from Terminal outside the existing guard'
+  if [[ $harness == opencode ]]; then
+    # This branch already inherits the outer sandbox; a second Seatbelt profile
+    # cannot be applied. The version probe must keep that inherited confinement.
+    version=$("$cli" --version 2>/dev/null) || fail 'cannot read nested OpenCode version'
+    if [[ $version == (opencode\ v2.*|2.*|v2.*) ]]; then
+      managed=0
+      opencode_cli_args "$@"
+      (( ! managed )) || fail 'run this V2 command from Terminal outside the existing guard'
+      set -- "${reply[@]}"
+    fi
+  else
+    $args_hook "$@" || fail "$REPLY"
     set -- "${reply[@]}"
   fi
   exec "$cli" "$@"
@@ -164,8 +190,10 @@ export HOME=$home
 [[ -r $list ]] || fail "cannot read $list"
 # State roots: the profile's state_hook resolves and canonicalizes them, or refuses.
 typeset -aU cache_given cache_roots
-$state_hook
-cache_prefix="${cache_roots[1]%/}/"
+if [[ -n $state_hook ]]; then
+  $state_hook
+  cache_prefix="${cache_roots[1]%/}/"
+fi
 # Installed harnesses (docs/DESIGN.md section 3, Every installed harness): the open
 # transaction's candidate inventory, else the stamp's; either without harnesses is
 # from before 0.2.0 and means OpenCode alone. With Pi installed, its recorded
@@ -257,7 +285,7 @@ while IFS= read -r line || [[ -n $line ]]; do
   p=$REPLY
   if [[ $section != allow ]]; then
     for e in $essential; do
-      within "$e" "$p" && { note "refused ${${section:u}/READONLY/READ ONLY}, OpenCode needs $e: $p"; continue 2 }
+      within "$e" "$p" && { note "refused ${${section:u}/READONLY/READ ONLY}, $title needs $e: $p"; continue 2 }
     done
   fi
   if [[ $section == deny ]]; then
@@ -282,7 +310,7 @@ typeset -aU user_readonly skill_roots skill_pins skill_configs config_roots prot
 user_readonly=($readonly)
 (( ${installed[(Ie)pi]} )) && pi_guard=("$home"/.local/bin/{pi,omp,pi-sandbox.sb,pi-sandbox-preamble.zsh,pi-sandbox-guard-extension} "${(@)pi_wrappers/#/$home/.local/bin/}"
   "$home/.pi/agent/extensions/pi-sandbox-guard" "$home/.config/pi-sandbox-guard/executables.conf")
-opencode_skill_globals
+[[ $harness != opencode ]] || opencode_skill_globals
 typeset -a rules
 typeset -U pinned
 # A link an entry resolves through decides what that entry covers, so replacing
@@ -306,6 +334,19 @@ for p in $deny; do
     within "$s" "$p" && note "overridden by DENY $p: $s"
   done
 done
+
+# Credentials the harness's sessions can neither read nor write (docs/DESIGN.md
+# section 3, Grok). Each is also denied at its resolved target. A fragment adds
+# the name rules.
+for p in $credential_paths; do
+  for q in "$p" "${p:A}"; do
+    sbpl "$q"
+    rules+=("(deny file-read* file-write* (subpath $REPLY))")
+  done
+done
+[[ -z $credential_fragment ]] || rules+=("$(<"$profile_dir/$credential_fragment")")
+# Paths only the launch can name, such as the targets a registry file lists.
+[[ -z $protect_hook ]] || $protect_hook
 
 # Pi's and OMP's project config names, once Pi is installed (docs/DESIGN.md
 # section 12, step 7f): Pi loads a trusted project's .pi, and OMP loads .omp from
@@ -365,15 +406,23 @@ typeset -aU frozen_pins
 frozen_pins=($state_pins $skill_pins)
 for p in $frozen_pins; do sbpl_path "$p"; state_rules+=("  (literal $REPLY)"); done
 
-[[ -n ${XDG_CONFIG_HOME:-} && $XDG_CONFIG_HOME != "$home/.config" ]] && note "custom XDG config follows Guard List permissions; the default guard plugin may not load"
-[[ -n ${OPENCODE_CONFIG:-} || -n ${OPENCODE_CONFIG_DIR:-} || -n ${OPENCODE_TUI_CONFIG:-} ]] && note "custom OpenCode config paths receive no automatic write grant"
-[[ ${OPENCODE_PURE:-} == 1 ]] && note "OpenCode plugin-disabled mode: Seatbelt remains active; advisory plugin loading is not assured"
+if [[ $harness == opencode ]]; then
+  [[ -n ${XDG_CONFIG_HOME:-} && $XDG_CONFIG_HOME != "$home/.config" ]] && note "custom XDG config follows Guard List permissions; the default guard plugin may not load"
+  [[ -n ${OPENCODE_CONFIG:-} || -n ${OPENCODE_CONFIG_DIR:-} || -n ${OPENCODE_TUI_CONFIG:-} ]] && note "custom OpenCode config paths receive no automatic write grant"
+  [[ ${OPENCODE_PURE:-} == 1 ]] && note "OpenCode plugin-disabled mode: Seatbelt remains active; advisory plugin loading is not assured"
+fi
 record "allow: ${(j:, :)allow:-none}"
 record "read only: ${(j:, :)readonly:-none}"
 record "deny: ${(j:, :)deny:-none}"
-record "always writable for OpenCode itself: ~/.local/share/opencode, ~/.local/state/opencode, ~/.cache, ~/Library/Caches, ~/.npm, ~/.bun/install/cache, /private/tmp, per-user temp and cache"
-cache_dirs=(${^cache_roots}/opencode)
-record "OpenCode cache follows filesystem permissions: ${(j:, :)cache_dirs}"
+if [[ $harness == opencode ]]; then
+  record "always writable for OpenCode itself: ~/.local/share/opencode, ~/.local/state/opencode, ~/.cache, ~/Library/Caches, ~/.npm, ~/.bun/install/cache, /private/tmp, per-user temp and cache"
+  cache_dirs=(${^cache_roots}/opencode)
+  record "OpenCode cache follows filesystem permissions: ${(j:, :)cache_dirs}"
+else
+  record "always writable for $title itself: ${(j:, :)writable}, /private/tmp, per-user temp and cache"
+  record "write-protected for $title: ${(j:, :)protected_paths}"
+  record "unreadable and unwritable for $title: ${(j:, :)credential_paths}, .env files"
+fi
 (( $#pi_guard )) && record "write-protected for Pi, maintained outside the guard: ${(j:, :)pi_guard}"
 (( $#pi_names )) && record "write-protected anywhere, Pi's and OMP's project config: ${(j:, :)pi_names}"
 
@@ -400,44 +449,54 @@ skill_content() {
   for p in ${^skill_configs}/{skill,skills}; do (( ${skill_roots[(Ie)$p]} )) && continue; sbpl_path "$p"; print -r -- "  (require-all (subpath $REPLY) (require-not (literal $REPLY)))"; done
   print -r -- '))'
 }
-profile=${profile/';;@SKILL_CONTENT@'/$(skill_content)}
+if [[ $harness == opencode ]]; then
+  profile=${profile/';;@SKILL_CONTENT@'/$(skill_content)}
+else
+  profile=${profile/';;@SKILL_CONTENT@'/}
+fi
 profile=${profile/';;@STATE_PROTECTED@'/${(F)state_rules}}
-profile=${profile/';;@PROTECTED_NAMES@'/$(<"$profile_dir/$protected_fragment")}
+if [[ -n $protected_fragment ]]; then
+  profile=${profile/';;@PROTECTED_NAMES@'/$(<"$profile_dir/$protected_fragment")}
+else
+  profile=${profile/';;@PROTECTED_NAMES@'/}
+fi
 darwin_temp=${$(/usr/bin/getconf DARWIN_USER_TEMP_DIR):A}
 darwin_cache=${$(/usr/bin/getconf DARWIN_USER_CACHE_DIR):A}
 
 /bin/mkdir -p $writable
 [[ $mode == gui ]] && /bin/mkdir -p "$writable_gui[1]"
 
-jarr() { /usr/bin/jq -cn '$ARGS.positional' --args "$@" }
-/bin/mkdir -p "$engine/state"
-/bin/mkdir -p "$engine/state/opencode"
-session=$(/usr/bin/mktemp -d "$engine/state/opencode/${release:t}.XXXXXXXX")
-# The folder belongs to this process: exec keeps the pid and start time, and
-# the managed desktop launch stays alive until the app exits. Pruning reads
-# this record.
-owner_start=$(/bin/ps -o lstart= -p $$ 2>/dev/null) || owner_start=
-[[ -z $owner_start ]] || print -r -- "$$"$'\n'"${(j: :)${=owner_start}}" > "$session/owner"
-# No process outlives a staged check, and a snapshot left behind would keep a
-# failed install from removing the new engine folder.
-if (( staged )); then
-  trap '/bin/rm -rf -- "$session"; /bin/rmdir -- "$engine/state/opencode" 2>/dev/null || true' EXIT
-fi
-channel= replies=
-failure_stage=checker-preparation preparation_status=ready
-opencode_checker_snapshot "$session" || fail "cannot preserve the checker policy in $session"
-context="$session/permissions.json"
-/usr/bin/jq -n --argjson allow "$(jarr $allow)" --argjson readonly "$(jarr $user_readonly)" \
-  --argjson deny "$(jarr $deny)" --argjson protected "$(jarr $protected_targets)" \
-  --argjson skills "$(jarr $skill_roots)" --argjson configs "$(jarr $skill_configs)" \
-  --argjson writable "$(jarr $writable $darwin_cache $config_roots)" \
-  --argjson pins "$(jarr $pinned $state_pins $skill_pins)" \
-  --arg checker "$session/checker" --arg preparation "$channel" --arg preparationReplies "$replies" --arg preparationStatus "$preparation_status" \
-  '{allow:$allow,readonly:$readonly,deny:$deny,protected:$protected,skills:$skills,configs:$configs,writable:$writable,pins:$pins,checker:$checker,preparation:$preparation,preparationReplies:$preparationReplies,preparationStatus:$preparationStatus}' > "$context"
-export AGENT_GUARD_CONTEXT="$context"
-if (( ! staged )); then
-  /bin/cp "$context" "$engine/state/rules.json.$$"
-  /bin/mv -f "$engine/state/rules.json.$$" "$engine/state/rules.json"
+if [[ $harness == opencode ]]; then
+  jarr() { /usr/bin/jq -cn '$ARGS.positional' --args "$@" }
+  /bin/mkdir -p "$engine/state"
+  /bin/mkdir -p "$engine/state/opencode"
+  session=$(/usr/bin/mktemp -d "$engine/state/opencode/${release:t}.XXXXXXXX")
+  # The folder belongs to this process: exec keeps the pid and start time, and
+  # the managed desktop launch stays alive until the app exits. Pruning reads
+  # this record.
+  owner_start=$(/bin/ps -o lstart= -p $$ 2>/dev/null) || owner_start=
+  [[ -z $owner_start ]] || print -r -- "$$"$'\n'"${(j: :)${=owner_start}}" > "$session/owner"
+  # No process outlives a staged check, and a snapshot left behind would keep a
+  # failed install from removing the new engine folder.
+  if (( staged )); then
+    trap '/bin/rm -rf -- "$session"; /bin/rmdir -- "$engine/state/opencode" 2>/dev/null || true' EXIT
+  fi
+  channel= replies=
+  failure_stage=checker-preparation preparation_status=ready
+  opencode_checker_snapshot "$session" || fail "cannot preserve the checker policy in $session"
+  context="$session/permissions.json"
+  /usr/bin/jq -n --argjson allow "$(jarr $allow)" --argjson readonly "$(jarr $user_readonly)" \
+    --argjson deny "$(jarr $deny)" --argjson protected "$(jarr $protected_targets)" \
+    --argjson skills "$(jarr $skill_roots)" --argjson configs "$(jarr $skill_configs)" \
+    --argjson writable "$(jarr $writable $darwin_cache $config_roots)" \
+    --argjson pins "$(jarr $pinned $state_pins $skill_pins)" \
+    --arg checker "$session/checker" --arg preparation "$channel" --arg preparationReplies "$replies" --arg preparationStatus "$preparation_status" \
+    '{allow:$allow,readonly:$readonly,deny:$deny,protected:$protected,skills:$skills,configs:$configs,writable:$writable,pins:$pins,checker:$checker,preparation:$preparation,preparationReplies:$preparationReplies,preparationStatus:$preparationStatus}' > "$context"
+  export AGENT_GUARD_CONTEXT="$context"
+  if (( ! staged )); then
+    /bin/cp "$context" "$engine/state/rules.json.$$"
+    /bin/mv -f "$engine/state/rules.json.$$" "$engine/state/rules.json"
+  fi
 fi
 
 sandbox=(/usr/bin/sandbox-exec -D "HOME=$home" -D "DARWIN_TEMP=$darwin_temp" -D "DARWIN_CACHE=$darwin_cache" -p "$profile")
@@ -446,24 +505,30 @@ managed=0 managed_cli=
 case $mode in
   (cli)
     failure_stage=host-launch
-    attached=0
-    [[ ${1:-} == attach ]] && attached=1
-    for arg in "$@"; do
-      [[ $arg == -- ]] && break
-      [[ $arg == --attach || $arg == --attach=* ]] && attached=1
-    done
-    (( attached )) && note "attached client is sandboxed; the server executes tools under its own permissions"
-    next_cli || fail "opencode not found"
+    next_cli || fail "${cli_names[1]} not found"
     cli=$REPLY
-    opencode_major "$cli"
-    if [[ $REPLY == 2 ]]; then
-      opencode_cli_args "$@"
-      set -- "${reply[@]}"
-      (( ! managed )) || managed_cli=$cli
+    if [[ $harness == opencode ]]; then
+      attached=0
+      [[ ${1:-} == attach ]] && attached=1
+      for arg in "$@"; do
+        [[ $arg == -- ]] && break
+        [[ $arg == --attach || $arg == --attach=* ]] && attached=1
+      done
+      (( attached )) && note "attached client is sandboxed; the server executes tools under its own permissions"
+      opencode_major "$cli"
+      if [[ $REPLY == 2 ]]; then
+        opencode_cli_args "$@"
+        set -- "${reply[@]}"
+        (( ! managed )) || managed_cli=$cli
+      fi
+      set -- -D GUI=0 "$cli" "$@"
+    else
+      $args_hook "$@" || fail "$REPLY"
+      set -- -D GUI=0 "$cli" "${reply[@]}"
     fi
-    set -- -D GUI=0 "$cli" "$@"
     ;;
   (gui)
+    [[ $harness == opencode ]] || fail "$title has no app to open"
     failure_stage=host-launch
     find_app || fail "OpenCode.app not found"
     app=$REPLY
@@ -521,10 +586,12 @@ prune_sessions() {
     /bin/rm -rf -- "$d"
   done
 }
-recent=("$engine/state"/.session-prune(Nmh-24))
-if (( ! $#recent )); then
-  { : > "$engine/state/.session-prune" } 2>/dev/null || true
-  (prune_sessions) >/dev/null 2>&1 </dev/null &!
+if [[ $harness == opencode ]]; then
+  recent=("$engine/state"/.session-prune(Nmh-24))
+  if (( ! $#recent )); then
+    { : > "$engine/state/.session-prune" } 2>/dev/null || true
+    (prune_sessions) >/dev/null 2>&1 </dev/null &!
+  fi
 fi
 
 # The plugin loads through current, which an update can move; AGENT_GUARD_RELEASE
