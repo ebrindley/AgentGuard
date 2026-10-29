@@ -30,7 +30,7 @@ main() {
     # the engine that holds Pi's saved replacements; 0.1.x installed OpenCode alone.
     if ! /usr/bin/jq -se 'length == 1 and (.[0] | type == "object" and
         (if has("harnesses") then
-          (.harnesses | type == "array" and length > 0 and all(.[]; . == "opencode" or . == "pi"))
+          (.harnesses | type == "array" and length > 0 and all(.[]; . == "opencode" or . == "pi" or . == "grok"))
         else (.version | type == "string" and test("^0\\.1\\.[0-9]+$")) end))' "$stamp" >/dev/null 2>&1; then
       ag_err "cannot identify installed harnesses in $stamp; the guard and saved replacements are kept. Restore the stamp from a backup before running uninstall again."
       ag_unlock

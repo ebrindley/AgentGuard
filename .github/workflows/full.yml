@@ -51,6 +51,8 @@ jobs:
       - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node test/peers.mjs
       - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node test/grok.mjs
+      - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node test/skills.mjs
       - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node test/skills.mjs readonly
@@ -81,6 +83,8 @@ jobs:
         run: zsh test/install.sh
       - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: zsh test/pi-commands.sh
+      - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: zsh test/grok-install.sh
       # The migration suite makes its OpenCode Guard installs with OpenCode Guard's own
       # unmodified installer, which stops on macOS 15: its `plutil -remove CFBundleIconName`
       # finds no such key in the app osacompile builds there.

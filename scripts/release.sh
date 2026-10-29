@@ -49,6 +49,11 @@ files=(
   profiles/opencode/diagnostics.zsh
   profiles/opencode/opencode
   profiles/opencode/opencode-gui
+  profiles/grok/harness.zsh
+  profiles/grok/args.zsh
+  profiles/grok/hooks.zsh
+  profiles/grok/credentials.sb
+  profiles/grok/grok
   profiles/opencode/install.sh
   profiles/opencode/uninstall.sh
   profiles/opencode/assets/AgentGuard.icns
@@ -57,6 +62,7 @@ files=(
   installer/actions.zsh
   installer/harness/opencode.zsh
   installer/harness/pi.zsh
+  installer/harness/grok.zsh
   installer/migrate/opencode-guard.zsh
   installer/migrate/pi-sandbox-guard.zsh
   # Pi's runtime files, which the installer copies into place, and those bind,
