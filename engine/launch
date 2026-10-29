@@ -68,7 +68,7 @@ fi
 # Profile fields a harness may leave unset.
 typeset -a libs=() app_paths=() writable_gui=() protected_names=() env_unset=() env_set=()
 typeset -aU credential_paths
-cli_binding= app_bundle_id= state_hook= args_hook= check_hook= protect_hook= credential_fragment= protected_fragment= title=$harness
+cli_binding= cli_kept= app_bundle_id= state_hook= args_hook= check_hook= protect_hook= credential_fragment= protected_fragment= title=$harness
 source "$profile_dir/harness.zsh"
 for f in $libs; do source "$profile_dir/$f"; done
 
@@ -100,7 +100,11 @@ next_cli() {
   # own name on PATH may be the guard's shim.
   if [[ -n $cli_binding && -r $cli_binding ]]; then
     f=$(<"$cli_binding")
-    [[ $f == /* && -x $f && ! -d $f ]] && ! in_guard "$f" && { REPLY=$f; return 0 }
+    # The installer's kept copy of an executable it replaced lives in the engine.
+    if [[ $f == /* && -x $f && ! -d $f ]] && { ! in_guard "$f" || [[ -n $cli_kept && ${f:A} == ${cli_kept:A}/* ]] }; then
+      REPLY=$f
+      return 0
+    fi
   fi
   for d in $path; do
     for cli in $cli_names; do

@@ -31,6 +31,7 @@ put(join(grok, 'downloads/grok-1.0.0'), standIn, 0o755);
 mk(join(grok, 'bin'));
 symlinkSync('../downloads/grok-1.0.0', join(grok, 'bin/grok'));
 put(join(engine, 'state/grok-executable'), `${join(grok, 'bin/grok')}\n`);
+put(join(engine, 'state/grok-kept/grok'), standIn, 0o755);
 mk(join(home, '.local/bin'));
 symlinkSync(join(engine, 'bin/grok'), join(home, '.local/bin/grok'));
 const hookTarget = join(project, 'hooks/extra.json');
@@ -86,6 +87,11 @@ for (const [name, args, extra, text] of [
   ['update', ['update'], {}, /run it outside, as .*\.grok\/bin\/grok update/],
   ['login', ['login'], {}, /outside/],
   ['workspace start', ['workspace', 'start'], {}, /outlives the session/],
+  ['workspace start after --sandbox off', ['--sandbox', 'off', 'workspace', 'start'], {}, /outlives the session/],
+  ['workspace restart after an option value', ['-m', 'fixture', 'workspace', 'restart'], {}, /outlives the session/],
+  ['update after an option', ['--no-alt-screen', 'update'], {}, /grok update/],
+  ['login after an option value', ['-m', 'fixture', 'login'], {}, /grok login/],
+  ['logout after --sandbox off', ['--sandbox', 'off', 'logout'], {}, /grok logout/],
 ]) {
   const r = launch(args, extra);
   assert.equal(r.status, 1, `${name}: ${r.stdout}${r.stderr}`);
@@ -125,7 +131,7 @@ const writable = [join(grok, 'skills/new/SKILL.md'), join(grok, 'agents/a.md'), 
 const guarded = [join(grok, 'config.toml'), join(grok, 'sandbox.toml'), join(grok, 'requirements.toml'), join(grok, 'managed_config.toml'),
   join(grok, 'trusted_folders.toml'), join(grok, 'hooks-paths'), join(grok, 'hooks/h.json'), join(grok, 'bin/other'), join(grok, 'downloads/grok-2.0.0'),
   join(grok, 'downloads/grok-1.0.0'), join(grok, 'vendor/rg'), join(grok, 'bundled/skill'), join(grok, 'bundles/skill'), hookTarget,
-  join(home, '.local/bin/grok'), join(home, '.config/gh/hosts.yml'), join(home, '.config/gh/config.yml'), join(engine, 'state/grok-executable'),
+  join(home, '.local/bin/grok'), join(home, '.config/gh/hosts.yml'), join(home, '.config/gh/config.yml'), join(engine, 'state/grok-executable'), join(engine, 'state/grok-kept/grok'),
   join(release, 'bin/grok'), join(release, 'launch'), join(home, 'Agent Guard/Guard List.txt'), join(home, 'outside'), join(home, '.zshrc')];
 for (const file of writable) {
   mk(dirname(file));
@@ -172,17 +178,29 @@ assert.match(other.stdout, /^argv:--sandbox\|off\|-p\|x$/m);
 assert.match(other.stdout, /updater=1 ssh=unset npmrc=\/dev\/null outer=1$/m);
 const refusedOther = outer(['--sandbox', 'strict']);
 assert.equal(refusedOther.status, 1);
+for (const args of [['--sandbox', 'off', 'workspace', 'start'], ['-m', 'fixture', 'update'], ['--no-alt-screen', 'login']]) {
+  const r = outer(args);
+  assert.equal(r.status, 1, args.join(' '));
+  assert.doesNotMatch(r.stdout, /argv:/, `${args.join(' ')} must not start grok`);
+}
 const inside = probe(`AG_PROBE= ${q(shim)} -p nested`);
 assert.equal(inside.status, 0, inside.stderr);
 assert.match(inside.stdout, /^argv:--sandbox\|off\|-p\|nested$/m);
 ok('inside another sandbox or the guard the launcher steps aside and keeps the same arguments');
+// A record naming the installer's kept copy of an executable (state/grok-kept), which is inside the engine, is honoured.
+put(join(engine, 'state/grok-executable'), `${join(engine, 'state/grok-kept/grok')}\n`);
+const kept = launch(['-p', 'kept']);
+assert.equal(kept.status, 0, kept.stderr);
+assert.match(kept.stdout, /^argv:--sandbox\|off\|-p\|kept$/m);
+put(join(engine, 'state/grok-executable'), `${join(grok, 'bin/grok')}\n`);
+ok('the kept copy of a replaced executable runs');
 // Peer commands in a guarded session find the recorded executable (the link in
 // ~/.local/bin is the guard's) and run it with the same arguments.
 const peer = probe(`AG_PROBE= ${q(join(release, 'peers/grok'))} -p peer`);
 assert.equal(peer.status, 0, peer.stderr);
 assert.match(peer.stdout, /^argv:--sandbox\|off\|-p\|peer$/m);
 assert.match(peer.stdout, /updater=1/);
-for (const args of ['--sandbox strict', 'update', '--leader'])
+for (const args of ['--sandbox strict', 'update', '--leader', '--sandbox off workspace start', '-m x logout'])
   assert.equal(probe(`AG_PROBE= ${q(join(release, 'peers/grok'))} ${args}`).status, 2, args);
 ok('the peer command finds the recorded executable and refuses what the launcher refuses');
 

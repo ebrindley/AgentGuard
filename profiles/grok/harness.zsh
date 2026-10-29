@@ -5,6 +5,7 @@ libs=(args.zsh hooks.zsh)
 cli_names=(grok)
 cli_search=("$home/.grok/bin/grok")
 cli_binding="$engine/state/grok-executable"
+cli_kept="$engine/state/grok-kept"
 args_hook=grok_args
 protect_hook=grok_protect
 check_hook=grok_check

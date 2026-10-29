@@ -9,6 +9,7 @@ ag_h_grok_init() {
   grok_shim="$home/.local/bin/grok"
   grok_default="$home/.grok/bin/grok"
   grok_record="$state/grok-executable"
+  grok_kept="$state/grok-kept"
   grok_replaced="$state/grok-replaced"
   grok_release_files=(args.zsh credentials.sb grok harness.zsh hooks.zsh)
   ag_grok_exec=
@@ -28,14 +29,16 @@ ag_h_grok_detect() {
 ag_h_grok_volume() { reply=("${grok_shim:h}") }
 
 # The executable the launcher runs: the recorded one while it still works, else
-# the target of a link that is not ours, else Grok's own install folder. Sets
-# ag_grok_exec, or fails when there is none.
+# the target of a link that is not ours, else Grok's own install folder, else a
+# regular executable at the link's place, which the link replaces and so which
+# the install copies to $grok_kept first (ag_grok_stage). Sets ag_grok_exec, to
+# the link's own path for that last case, or fails when there is none.
 ag_grok_resolve() {
   local t
   ag_grok_exec=
   if [[ -r $grok_record ]]; then
     t=$(<"$grok_record")
-    [[ $t == /* && -x $t && ! -d $t && ${t:A} != "$engine"/* ]] && { ag_grok_exec=$t; return 0 }
+    [[ $t == /* && -x $t && ! -d $t ]] && [[ ${t:A} != "$engine"/* || ${t:A} == ${grok_kept:A}/grok ]] && { ag_grok_exec=$t; return 0 }
   fi
   if [[ -L $grok_shim && $(/usr/bin/readlink -- "$grok_shim") != "$engine/bin/grok" ]]; then
     t=$(/usr/bin/readlink -- "$grok_shim")
@@ -43,6 +46,7 @@ ag_grok_resolve() {
     [[ -x $t && ! -d $t && ${t:A} != "$engine"/* ]] && { ag_grok_exec=$t; return 0 }
   fi
   [[ -x $grok_default && ! -d $grok_default ]] && { ag_grok_exec=$grok_default; return 0 }
+  [[ -f $grok_shim && ! -L $grok_shim && -x $grok_shim ]] && { ag_grok_exec=$grok_shim; return 0 }
   return 1
 }
 
@@ -65,11 +69,17 @@ ag_h_grok_assemble() {  # RELEASE-FOLDER
 }
 
 # The staged record and its identical copy, which ag_pi_put compares against.
+# A regular executable at the link's place is copied for grok-kept, and the record
+# names the copy, since the link is about to replace the original.
 ag_grok_stage() {
   local s="$ag_tstage/grok"
   /bin/rm -rf -- "$s"
   /bin/mkdir -p -- "$s" || return 1
   ag_grok_resolve || return 1
+  if [[ $ag_grok_exec == "$grok_shim" ]]; then
+    /bin/cp -p -- "$grok_shim" "$s/grok-kept" && /bin/cp -p -- "$grok_shim" "$s/grok-kept.want" || return 1
+    ag_grok_exec="$grok_kept/grok"
+  fi
   print -r -- "$ag_grok_exec" > "$s/grok-executable" && print -r -- "$ag_grok_exec" > "$s/grok-executable.want" &&
     /bin/chmod 644 "$s/grok-executable" "$s/grok-executable.want"
 }
@@ -92,6 +102,15 @@ ag_h_grok_staged() {
 
 # --- Switch actions, registered in actions.zsh: the record, then the link, so the
 # launcher can find the executable the moment the link points at it.
+
+# The copy of a regular executable the link replaces, in the engine's state folder,
+# which a guarded session cannot write. Nothing to do for any other layout.
+do_grok_kept() {
+  ag_grok_stage || return 1
+  [[ -e $ag_tstage/grok/grok-kept ]] || { ag_jlast grok-kept; [[ $REPLY == done ]] || return 0 }
+  ag_pi_put grok-kept "$grok_kept/grok" "$ag_tstage/grok/grok-kept" "$ag_tstage/grok/grok-kept.want"
+}
+undo_grok_kept() { ag_pi_put_undo grok-kept "$grok_kept/grok" }
 
 do_grok_binding() {
   ag_grok_stage || return 1

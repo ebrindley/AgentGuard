@@ -183,16 +183,47 @@ for p in grok-binding grok-shim grok-keep; do
   (( $? == 0 )) && pass 'doctor passes after recovery' || { fail 'doctor after recovery'; show }
 done
 
-# A file of the user's at ~/.local/bin/grok is kept and put back, and a Mac without Grok is left alone.
+# A regular executable of the user's at ~/.local/bin/grok, with no Grok install folder, is
+# copied into the engine's state folder, which the record names, then replaced by the link
+# and put back by uninstall. A failure or a kill at the copy leaves the file or a finished install.
 label=file
 restore fresh
-/bin/rm "$lb/grok"
-print -r -- '#!/bin/sh' > "$lb/grok"
+/bin/rm "$lb/grok" "$grok/bin/grok"
+print -r -- '#!/bin/sh
+echo kept-stand-in' > "$lb/grok"
 /bin/chmod 755 "$lb/grok"
 boot
-(( $? == 0 )) && [[ -f $state/grok-replaced/grok && ! -L $state/grok-replaced/grok ]] && pass 'a regular file is replaced and kept' || { fail 'install over a file'; show }
+if (( $? == 0 )) && [[ -f $state/grok-replaced/grok && ! -L $state/grok-replaced/grok && -x $state/grok-kept/grok && $(<"$state/grok-executable") == "$state/grok-kept/grok" &&
+    $(/usr/bin/readlink "$lb/grok") == "$engine/bin/grok" ]]; then pass 'a regular file is copied into the engine, replaced and kept'; else fail 'install over a file'; show; fi
+ag doctor
+(( $? == 0 )) && pass 'doctor passes with the kept executable' || { fail 'doctor with the kept executable'; show }
 ag uninstall
-[[ -f $lb/grok && ! -L $lb/grok && $(<"$lb/grok") == '#!/bin/sh' ]] && pass 'uninstall puts the file back' || fail 'file after uninstall'
+[[ -f $lb/grok && ! -L $lb/grok && -x $lb/grok && $(<"$lb/grok") == $'#!/bin/sh\necho kept-stand-in' && ! -e $engine ]] && pass 'uninstall puts the file back' || fail 'file after uninstall'
+for p in grok-kept grok-binding grok-shim; do
+  label="file fail:$p"
+  restore fresh
+  /bin/rm "$lb/grok" "$grok/bin/grok"
+  print -r -- '#!/bin/sh
+echo kept-stand-in' > "$lb/grok"
+  /bin/chmod 755 "$lb/grok"
+  point="fail:$p"
+  boot
+  rc=$?
+  point=
+  (( rc != 0 )) && [[ -f $lb/grok && ! -L $lb/grok && ! -e $state/grok-kept && ! -e $state/grok-executable ]] && pass 'the install fails and rolls back to the file, with no copy and no record' || { fail "after a failure at $p (exit $rc): $(grok_state)"; show }
+  label="file kill:$p"
+  restore fresh
+  /bin/rm "$lb/grok" "$grok/bin/grok"
+  print -r -- '#!/bin/sh
+echo kept-stand-in' > "$lb/grok"
+  /bin/chmod 755 "$lb/grok"
+  point="kill:$p"
+  boot
+  point=
+  boot
+  (( $? == 0 )) && [[ $(/usr/bin/readlink "$lb/grok") == "$engine/bin/grok" && -x $state/grok-kept/grok && $(<"$state/grok-executable") == "$state/grok-kept/grok" ]] &&
+    pass 'killed there, the next run leaves a working install' || { fail "after a kill at $p: $(grok_state)"; show }
+done
 label=none
 restore fresh
 /bin/rm "$lb/grok" "$grok/bin/grok"

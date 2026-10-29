@@ -9,7 +9,7 @@
 grok_args() {
   emulate -L zsh
   setopt no_unset extended_glob
-  local h=${home:-$HOME} arg pending= id= saved= f real=${home:-$HOME}/.grok/bin/grok
+  local h=${home:-$HOME} arg prev= pending= id= saved= f real=${home:-$HOME}/.grok/bin/grok
   integer literal=0 resume=0 cont=0
   local -a out found
   reply=()
@@ -21,16 +21,6 @@ grok_args() {
     REPLY="GROK_HOME is set to $GROK_HOME; Agent Guard protects ~/.grok only, so unset GROK_HOME"
     return 1
   fi
-  case ${1:-} in
-    (update|login|logout)
-      REPLY="grok $1 changes Grok's installed files or account and cannot run in Agent Guard; run it outside, as $real $1"
-      return 1 ;;
-    (workspace)
-      if [[ ${2:-} == (start|restart|resume) ]]; then
-        REPLY="grok workspace $2 starts a daemon that outlives the session; run it outside Agent Guard, as $real workspace $2"
-        return 1
-      fi ;;
-  esac
   for f in "$h/.grok/config.toml" "$h/.grok/managed_config.toml"; do
     if [[ -r $f ]] && /usr/bin/grep -Eqs '^[[:space:]]*use_leader[[:space:]]*=[[:space:]]*true' "$f"; then
       REPLY="use_leader is true in $f, which would send work to a shared Grok leader outside Agent Guard; set it to false outside Agent Guard"
@@ -48,7 +38,18 @@ grok_args() {
         pending=
         if [[ $arg != -* ]]; then id=$arg; out+=("$arg"); continue; fi ;;
     esac
+    # A subcommand can follow global options, so every argument before -- is
+    # checked; an argument that merely equals a subcommand name is refused too.
     case $arg in
+      (update|login|logout)
+        REPLY="grok $arg changes Grok's installed files or account and cannot run in Agent Guard; run it outside, as $real $arg"
+        return 1 ;;
+      (start|restart|resume)
+        if [[ $prev == workspace ]]; then
+          REPLY="grok workspace $arg starts a daemon that outlives the session; run it outside Agent Guard, as $real workspace $arg"
+          return 1
+        fi
+        out+=("$arg") ;;
       (--) literal=1; out+=("$arg") ;;
       (--sandbox) pending=sandbox ;;
       (--sandbox=*)
@@ -61,6 +62,7 @@ grok_args() {
       (-c|--continue) cont=1; out+=("$arg") ;;
       (*) out+=("$arg") ;;
     esac
+    prev=$arg
   done
   if [[ $pending == sandbox ]]; then REPLY='--sandbox requires a value'; return 1; fi
   if (( resume && ${#id} )) && [[ $id == [0-9a-fA-F]##-[0-9a-fA-F-]## ]]; then
