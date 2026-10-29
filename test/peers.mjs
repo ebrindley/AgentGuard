@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -91,8 +91,16 @@ for (const parent of ['opencode', 'pi', 'omp']) {
   writeFileSync(claudeState, '{}');
   const saved = launch(parent, `/usr/bin/touch ${quote(claudeTemp)} && /bin/mv ${quote(claudeTemp)} ${quote(claudeState)}`);
   assert.equal(saved.status, 0, `${parent}: Claude's atomic save\n${saved.stderr}`);
+  // It holds ~/.claude.json.lock (a folder, refreshed while held) around each save; nothing can be created inside it.
+  const claudeLock = join(home, '.claude.json.lock');
+  const locked = launch(parent, `/bin/mkdir ${quote(claudeLock)} && /usr/bin/touch ${quote(claudeLock)} && /bin/mkdir ${quote(claudeLock + '/x')}`);
+  assert.notEqual(locked.status, 0, `${parent}: nothing may be created inside the lock folder`);
+  assert.ok(existsSync(claudeLock) && !existsSync(join(claudeLock, 'x')), `${parent}: the lock folder is created and holds nothing`);
+  const released = launch(parent, `/bin/rmdir ${quote(claudeLock)}`);
+  assert.equal(released.status, 0, `${parent}: Claude's lock release\n${released.stderr}`);
+  assert.ok(!existsSync(claudeLock));
   for (const relative of ['.codex/shell_snapshots/test', '.codex/memories_1.sqlite', '.codex/archived_sessions/state_5.sqlite', '.codex/backup/.codex/state_5.sqlite', '.claude/session-env/test', '.claude/shell-snapshots/test',
-                          '.claude.json.backup', '.claude.json.lock', '.claude.json.tmp.x', '.claude.json.tmp.1.ab/nested']) {
+                          '.claude.json.backup', '.claude.json.lock.x', '.claude.json.tmp.x', '.claude.json.tmp.1.ab/nested']) {
     mkdirSync(dirname(join(home, relative)), { recursive: true });
     assert.notEqual(launch(parent, `/usr/bin/touch ${quote(join(home, relative))}`).status, 0);
   }

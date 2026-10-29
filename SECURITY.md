@@ -474,8 +474,13 @@ not established.
 Peer runtime grants are shared by every process in the session, including the
 outer agent. They cover runtime subdirectories and selected files, not whole
 peer configuration directories. Peer configuration, credential files and CLI
-installations receive no new write grants. Claude's mixed `~/.claude.json` is
-not granted. Some granted runtime folders hold memory for later sessions:
+installations receive no new write grants, with one exception: Claude's mixed
+`~/.claude.json`, its lock folder `~/.claude.json.lock` and the temporary
+`~/.claude.json.tmp.<pid>.<hex>` it renames over the file, in the home folder
+only, so that Claude can save its state while Poetic or a peer runs it. That
+file also holds user-scoped MCP server definitions, project trust answers and
+allowed tools, so a guarded session that runs Claude can change them, and the
+change takes effect at Claude's next start. Some granted runtime folders hold memory for later sessions:
 Claude Code loads a project's auto-memory from `~/.claude/projects`, and Grok
 keeps its memory in `~/.grok/memory` and `~/.grok/memory-v2`. The grants cover
 every project, so a session confined to one project can write memory that a

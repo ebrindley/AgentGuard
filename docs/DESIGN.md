@@ -1863,10 +1863,13 @@ The grants name runtime state only, so in every guarded session the other
 harnesses' policy files stay write-protected: Claude's `settings.json`,
 `settings.local.json` and `hooks`, Codex's `config.toml` and `rules`, Cursor's
 `cli-config.json` and Grok's configuration, hooks and executables.
-`test/peers.mjs` asserts it for OpenCode, Pi and OMP sessions. The one grant
-beside runtime state is Claude's `~/.claude.json` and its temporary sibling
-`~/.claude.json.tmp.<pid>.<hex>` in the home folder, because Claude saves its
-state by renaming one over the other. That file also holds user-scoped MCP server
-definitions, project trust answers and allowed tools, which Claude applies at its
-next start, so a guarded session that runs Claude can change them. This is
-accepted so that Poetic and peers can run Claude inside a guard.
+`test/peers.mjs` asserts it for OpenCode, Pi and OMP sessions. The grants beside
+runtime state are Claude's `~/.claude.json`, its temporary sibling
+`~/.claude.json.tmp.<pid>.<hex>` and its lock folder `~/.claude.json.lock`, all in
+the home folder only. Claude saves its state by renaming the temporary over the
+file, and Claude 2.1.312 takes the lock before each save so that concurrent
+sessions do not overwrite each other; without the grant it saves unlocked. The
+file also holds user-scoped MCP server definitions, project trust answers and
+allowed tools, which Claude applies at its next start, so a guarded session that
+runs Claude can change them. This is accepted so that Poetic and peers can run
+Claude inside a guard.
