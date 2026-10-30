@@ -322,6 +322,17 @@
     (subpath (string-append (param "OMP_STATE_ROOT") "/wt"))
     (regex #"/hooks/[^/]*\.[^/]+$")))
 
+;; Agent Guard difference 16: the agents that hold keys. Sessions run without
+;; SSH_AUTH_SOCK and cannot read ~/.ssh or ~/.gnupg, but a file deny does not stop
+;; a connection to a socket: ssh-agent's launchd socket can be found, and gpg-agent
+;; and SSH control sockets live in those folders. AG_SSH_AGENT=allow, from
+;; AGENT_GUARD_SSH_AGENT set outside the guard, leaves them reachable.
+(if (not (equal? (param "AG_SSH_AGENT") "allow"))
+  (deny network-outbound
+    (regex #"^/private/(var/run|tmp)/com\.apple\.launchd\.[^/]+/Listeners$")
+    (subpath (string-append (param "HOME") "/.ssh"))
+    (subpath (string-append (param "HOME") "/.gnupg"))))
+
 ;; ---------------------------------------------------------------------------
 ;; SECRET READS: deny reading host credential material. Scoped to specific HOME
 ;; locations so project files are unaffected. (No blanket *.key/*.pem regexes —

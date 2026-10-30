@@ -124,6 +124,12 @@
       "id": 15,
       "change": "Keep recursive chmod/chown flags and protected targets within one command. A later read of a system directory after a shell separator is not an operand of an earlier permission change. Neutralize the original and stripped copies independently so quoted status text cannot carry quote state into a later permission check. The protected-root patterns themselves remain in force.",
       "files": ["src/validate-bash-command.sh"]
+    },
+    {
+      "id": 16,
+      "change": "Deny connections to the agents that hold keys, unless the operator sets AGENT_GUARD_SSH_AGENT=allow outside the guard: ssh-agent's launchd socket under /private/var/run or /private/tmp, and sockets under ~/.ssh and ~/.gnupg, where gpg-agent and SSH control sockets live. Sessions already run without SSH_AUTH_SOCK and cannot read those folders, but a file deny does not stop a socket connection, so the agents could be used with every loaded key (docs/DESIGN.md decision D15). Other Unix sockets stay reachable.",
+      "files": ["sandbox/pi-sandbox.sb", "sandbox/pi-sandbox-preamble.zsh"],
+      "parameters": ["AG_SSH_AGENT"]
     }
   ],
   "test_notes": [

@@ -564,6 +564,42 @@ try {
     });
   }
 
+  // Difference 16: the SSH agent's launchd socket. ssh-add -l exits 2 only when it
+  // cannot reach the agent.
+  {
+    const a = account('ssh-agent');
+    const launchd = mkdtempSync('/private/tmp/com.apple.launchd.agtest'), agentSock = join(launchd, 'Listeners');
+    // Any other socket; the account's own folders are too deep for a socket path.
+    const other = mkdtempSync('/private/tmp/agtest-socket'), otherSock = join(other, 'agent.sock');
+    const agents = [agentSock, otherSock].map((s) => execFileSync('/usr/bin/ssh-agent', ['-a', s, '-s'], { encoding: 'utf8' }).match(/SSH_AGENT_PID=(\d+)/)[1]);
+    const reach = (sock, env) => {
+      // The preamble removes SSH_AUTH_SOCK, so the session sets it, as an agent would.
+      const r = session(a, ['/usr/bin/env', `SSH_AUTH_SOCK=${sock}`, '/usr/bin/ssh-add', '-l'], { env });
+      assert.ok(started(r), `session did not start:\n${r.stderr}`);
+      return r.status;
+    };
+    try {
+      check('difference 16: the SSH agent socket is unreachable and another socket is reachable', () => {
+        assert.equal(reach(agentSock), 2, 'launchd agent socket');
+        assert.notEqual(reach(otherSock), 2, 'other socket');
+      });
+      check('difference 16: AGENT_GUARD_SSH_AGENT=allow leaves the agent reachable', () =>
+        assert.notEqual(reach(agentSock, { AGENT_GUARD_SSH_AGENT: 'allow' }), 2));
+      // gpg-agent's socket is in ~/.gnupg; the profile alone, with a home short enough for a socket path.
+      check('difference 16: a socket in ~/.gnupg is unreachable unless AG_SSH_AGENT=allow', () => {
+        const gnupgSock = join(other, '.gnupg/S.test');
+        mkdirSync(dirname(gnupgSock));
+        agents.push(execFileSync('/usr/bin/ssh-agent', ['-a', gnupgSock, '-s'], { encoding: 'utf8' }).match(/SSH_AGENT_PID=(\d+)/)[1]);
+        const add = (params) => sb({ PROJECT: a.project, HOME: other, ...params }, ['/usr/bin/env', `SSH_AUTH_SOCK=${gnupgSock}`, '/usr/bin/ssh-add', '-l']).status;
+        assert.equal(add({}), 2, 'denied');
+        assert.notEqual(add({ AG_SSH_AGENT: 'allow' }), 2, 'allowed');
+      });
+    } finally {
+      for (const pid of agents) process.kill(Number(pid));
+      for (const d of [launchd, other]) rmSync(d, { recursive: true, force: true });
+    }
+  }
+
   // Difference 7.
   {
     const a = account('opencode-config');

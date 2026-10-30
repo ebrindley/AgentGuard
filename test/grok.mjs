@@ -176,6 +176,32 @@ assert.equal(probe(`/bin/cat ${q(join(home, '.config/gh/config.yml'))} > /dev/nu
 assert.notEqual(probe(`: >> ${q(join(home, '.config/gh/config.yml'))}`).status, 0);
 ok('credential files and .env files are unreadable and unwritable, template names are readable, gh configuration is readable and not writable');
 
+// Key agents are unreachable unless the operator allows them: ssh-agent's launchd
+// socket, and a socket under a credential path, where gpg-agent keeps its own. Other
+// Unix sockets stay usable. ssh-add -l exits 2 only when it cannot reach the agent.
+{
+  const launchd = mkdtempSync('/private/tmp/com.apple.launchd.agtest'), agentSock = join(launchd, 'Listeners');
+  const projectSock = join(project, 'agent.sock'), gnupgSock = join(home, '.gnupg/S.test');
+  mkdirSync(dirname(gnupgSock), { recursive: true });
+  const agents = [agentSock, projectSock, gnupgSock].map((a) => {
+    const r = spawnSync('/usr/bin/ssh-agent', ['-a', a, '-s'], { encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+    return r.stdout.match(/SSH_AGENT_PID=(\d+)/)[1];
+  });
+  try {
+    const reach = (sock, extra) => probe(`SSH_AUTH_SOCK=${q(sock)} /usr/bin/ssh-add -l`, extra).status;
+    assert.equal(reach(agentSock), 2, 'the launchd agent socket must be unreachable');
+    assert.equal(reach(gnupgSock), 2, 'a socket in ~/.gnupg must be unreachable');
+    assert.notEqual(reach(projectSock), 2, 'a socket in the project stays reachable');
+    for (const sock of [agentSock, gnupgSock])
+      assert.notEqual(reach(sock, { AGENT_GUARD_SSH_AGENT: 'allow' }), 2, `AGENT_GUARD_SSH_AGENT=allow leaves ${sock} reachable`);
+  } finally {
+    for (const pid of agents) process.kill(Number(pid));
+    rmSync(launchd, { recursive: true, force: true });
+  }
+}
+ok('the SSH agent and ~/.gnupg sockets are unreachable, a project socket is reachable, and AGENT_GUARD_SSH_AGENT=allow reaches both agents');
+
 // Nested launches.
 // An outer sandbox a second profile cannot be applied inside, denying the engine and list folders.
 const outerProfile = `(version 1)(allow default)(deny file-write* (subpath ${JSON.stringify(engine)}) (subpath ${JSON.stringify(join(home, 'Agent Guard'))}))(deny process-exec (literal "/usr/bin/osascript"))`;
