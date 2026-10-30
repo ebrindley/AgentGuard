@@ -277,6 +277,13 @@ expect no ".opencode/.gitignore in READ ONLY" sb /bin/sh -c ": > '$home/Projects
 expect no "exec open"                     sb /usr/bin/open -h
 expect no "exec codesign"                 sb /usr/bin/codesign -h
 expect no "exec diskutil"                 sb /usr/sbin/diskutil list
+/bin/mkdir -p "$home/.ssh" "$home/.aws"
+print data > "$home/.ssh/id_test"; print data > "$home/.aws/credentials"
+print data > "$home/Projects/app/.env"; print data > "$home/Projects/app/.env.example"
+expect no "read credential file"          sb /bin/cat "$home/.ssh/id_test"
+expect no "write credential file"         sb /bin/sh -c "echo x >> '$home/.aws/credentials'"
+expect no "read .env in ALLOW"            sb /bin/cat "$home/Projects/app/.env"
+expect ok "read .env.example in ALLOW"    sb /bin/cat "$home/Projects/app/.env.example"
 # Without -u, security authorize never shows UI: with the lookup allowed it answers
 # "interaction not allowed" (-60007); with authd denied it answers nothing.
 authorize="/usr/bin/security authorize system.privilege.admin"

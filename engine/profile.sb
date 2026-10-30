@@ -24,6 +24,8 @@
 
 ;;@USER_RULES@
 
+;;@CREDENTIALS@
+
 (deny file-write*
   (subpath (h "/Library/Application Support/AgentGuard"))
   (subpath (h "/Library/Application Support/OpenCodeGuard"))

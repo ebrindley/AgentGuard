@@ -131,16 +131,16 @@ spellings an agent emits naturally; document the rest.
 **Confidentiality and credential disclosure.** This scopes out a baseline
 protected outcome, so it is recorded here rather than left implied. Repository
 fact: `engine/profile.sb` opens with `(allow default)`, and the only read denies
-in a generated OpenCode profile are those Guard List DENY entries produce
-(`engine/launch` renders each as `deny file-read* file-write*`). Reason: the
-product's subject is destructive reach, and a coding agent has to read the machine
-it works on; read-deny-by-default for OpenCode would need a per-user allowlist of
-every toolchain path. The operator opts in per path. Accepted risk: credential
-material is readable by default under OpenCode and the operator carries the duty
-to deny it. Pi, OMP and Grok differ — their fixed profiles deny named credential
-paths — so a read of one of those under Pi, OMP or Grok is in scope. The keychain
-stays reachable under Grok, as under every harness: a session can use the accounts
-`gh` and `git` hold. SECURITY.md states the OpenCode and Pi cases.
+in a generated profile are the named credential paths every harness denies and
+those Guard List DENY entries produce (`engine/launch` renders each as `deny
+file-read* file-write*`). Reason: the product's subject is destructive reach, and
+a coding agent has to read the machine it works on; read-deny-by-default would
+need a per-user allowlist of every toolchain path. The operator opts in per path
+beyond the named set. Accepted risk: credential material outside the named paths
+is readable by default and the operator carries the duty to deny it. A read of a
+named credential path, or a connection to a key agent the profile denies, is in
+scope. The keychain stays reachable under every harness: a session can use the
+accounts `gh` and `git` hold. SECURITY.md states the cases per harness.
 
 **Exfiltration of anything a session can read.** Outbound network is unrestricted
 for every harness. No read restriction here implies a confidentiality guarantee,

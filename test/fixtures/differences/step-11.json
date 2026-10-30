@@ -1,0 +1,10 @@
+{
+  "step": 11,
+  "reason": "Give OpenCode sessions the credential set Pi and Grok sessions have: named credential paths and .env files are neither readable nor writable, and the agents that hold keys are unreachable unless AGENT_GUARD_SSH_AGENT=allow (DESIGN.md step 10e, decision D15).",
+  "inserts": [
+    {
+      "before": "(deny file-write*\n  (subpath (h \"/Library/Application Support/AgentGuard\"))",
+      "insert": "(deny file-read* file-write* (subpath (h \"/.ssh\")))\n(deny network-outbound (subpath (h \"/.ssh\")))\n(deny file-read* file-write* (subpath (h \"/.gnupg\")))\n(deny network-outbound (subpath (h \"/.gnupg\")))\n(deny file-read* file-write* (subpath (h \"/.aws\")))\n(deny network-outbound (subpath (h \"/.aws\")))\n(deny file-read* file-write* (subpath (h \"/.git-credentials\")))\n(deny network-outbound (subpath (h \"/.git-credentials\")))\n(deny file-read* file-write* (subpath (h \"/.netrc\")))\n(deny network-outbound (subpath (h \"/.netrc\")))\n(deny file-read* file-write* (subpath (h \"/.npmrc\")))\n(deny network-outbound (subpath (h \"/.npmrc\")))\n(deny file-read* file-write* (subpath (h \"/.secrets\")))\n(deny network-outbound (subpath (h \"/.secrets\")))\n(deny file-read* file-write* (subpath (h \"/.docker/config.json\")))\n(deny network-outbound (subpath (h \"/.docker/config.json\")))\n(deny file-read* file-write* (subpath (h \"/.kube/config\")))\n(deny network-outbound (subpath (h \"/.kube/config\")))\n(deny file-read* file-write* (subpath (h \"/.config/git/credentials\")))\n(deny network-outbound (subpath (h \"/.config/git/credentials\")))\n(deny file-read* file-write*\n  (require-all\n    (regex #\"/\\.env($|\\.)\")\n    (require-not (regex #\"/\\.env\\.(example|sample|template)$\"))))\n(deny network-outbound (regex #\"^/private/(var/run|tmp)/com\\.apple\\.launchd\\.[^/]+/Listeners$\"))\n\n"
+    }
+  ]
+}
