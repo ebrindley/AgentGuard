@@ -1,1 +1,1 @@
-  (require-all (regex #"/\.cc-safety-net(/|$)") (require-not (skill-content)) (require-not (subpath (h "/.cc-safety-net/logs"))))
+  (require-all (regex #"/\.cc-safety-net(/|$)") (require-not (subpath (h "/.cc-safety-net/logs"))))

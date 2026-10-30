@@ -87,6 +87,12 @@ if (mode === "lifecycle") {
 } else if (mode === "kernel") {
   const denied = fn => { assert.throws(fn, e => e.code === "EPERM" || e.code === "EACCES"); checks++ }
   denied(() => writeFileSync(join(home, "Library/Application Support/AgentGuard/state/tamper"), "x"))
+  // A checker policy folder stays write-denied inside a skill tree, as it is elsewhere.
+  for (const root of [join(project, ".opencode/skills"), join(home, ".config/opencode/skills")]) {
+    mkdirSync(join(root, "probe"), { recursive: true })
+    writeFileSync(join(root, "probe/SKILL.md"), "ok")
+    denied(() => mkdirSync(join(root, "probe/.cc-safety-net")))
+  }
   mkdirSync(join(project, ".opencode/skills"), { recursive: true })
   writeFileSync(join(project, ".opencode/opencode.json"), "{}")
   renameSync(join(project, ".opencode/skills"), join(project, "replaced"))

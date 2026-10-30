@@ -5,7 +5,7 @@
   "replaces": [
     {
       "before": "  (require-all (regex #\"/\\.opencode(/|$)\") (require-not (skill-content)))\n  (require-all (regex #\"/(opencode|tui)\\.jsonc?$\") (require-not (skill-content)))\n  (require-all (regex #\"/\\.cc-safety-net(/|$)\") (require-not (skill-content)) (require-not (subpath (h \"/.cc-safety-net/logs\"))))\n  (regex #\"/\\.opencode/skills?$\"))\n",
-      "after": "  (require-all (regex #\"/\\.cc-safety-net(/|$)\") (require-not (skill-content)) (require-not (subpath (h \"/.cc-safety-net/logs\")))))\n"
+      "after": "  (require-all (regex #\"/\\.cc-safety-net(/|$)\") (require-not (subpath (h \"/.cc-safety-net/logs\")))))\n"
     },
     {
       "before": "  (literal (h \"/.claude\"))\n",
