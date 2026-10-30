@@ -223,12 +223,6 @@ re-derived. All on macOS 26 (Darwin 25.6) arm64, case-insensitive APFS, 2026-10.
 Each needs its own item; this is not a backlog. Ranked by the damage class they
 touch.
 
-- The skill-content carve-out in `profiles/opencode/protected.sb` reaches a
-  `.cc-safety-net` component inside a skill tree, which DESIGN.md section 5 states
-  is not writable. This touches the layer that covers classes 1-inside and 2,
-  where there is no boundary underneath, so it matters more than its size
-  suggests. `CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY=1` limits the current effect to a
-  stale claim and a narrow hardening gap.
 - Shell startup protection (class 4) covers the eight files named directly in
   `$HOME` (`engine/profile.sb`). SECURITY.md's enumeration is accurate; the
   shorter phrasing earlier in that document reads as a general guarantee. With

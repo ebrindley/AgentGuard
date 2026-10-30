@@ -192,7 +192,7 @@ check_hook=opencode_check
 `profiles/opencode/protected.sb`:
 
 ```
-  (require-all (regex #"/\.cc-safety-net(/|$)") (require-not (skill-content)) (require-not (subpath (h "/.cc-safety-net/logs"))))
+  (require-all (regex #"/\.cc-safety-net(/|$)") (require-not (subpath (h "/.cc-safety-net/logs"))))
 ```
 
 At step 8 `protected.sb` becomes policy-model data, its name rules and the `~/.cc-safety-net/logs` exception, rendered to the same bytes.
