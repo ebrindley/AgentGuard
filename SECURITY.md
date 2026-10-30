@@ -114,8 +114,8 @@ Editable child symlinks and config-selection environment variables never create
 new write grants. Root identity pinning preserves launch-time automatic grants.
 Automatic root links configured outside the guard grant their resolved roots at
 launch, subject to Guard List and guard-owned restrictions. This includes linked
-global skill roots; OpenCode does not deny credential folders unless the Guard
-List names them.
+global skill roots; the credential denies under Reads, below, still apply
+inside them.
 A local MCP child inherits Seatbelt; services reached over the network do not.
 
 Install and update follow a link at OpenCode's global `config.json`,
@@ -285,9 +285,12 @@ behind linked ancestors. These changes follow the 0.2.0 prerelease.
   executable's folder, such as `/opt/homebrew`, makes that executable writable,
   OpenCode's included. Not planned: editing these folders is what the agent is for.
 - **Reads are broad unless denied.** Without DENY entries the agent can read
-  `~/.ssh`, `~/.aws` and every other file the account can read. Add DENY entries
-  to the Guard List for what it must not read; denying `~/.ssh` also stops git
-  over SSH inside the guard. A DENY or READ ONLY entry that is or contains a
+  every file the account can read except the credential paths, which it can
+  neither read nor write: `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.git-credentials`,
+  `~/.config/git/credentials`, `~/.netrc`, `~/.npmrc`, `~/.secrets`,
+  `~/.docker/config.json`, `~/.kube/config`, and `.env` files other than
+  `.env.example`, `.env.sample` and `.env.template`. Add DENY entries to the Guard
+  List for anything else it must not read. A DENY or READ ONLY entry that is or contains a
   folder OpenCode needs (`/`, home, `~/Library`, `~/.config`, `~/.local`,
   `~/.cache`, `/usr`, `/bin`, `/sbin`, `/System`, `/Library`, `/private`, `/dev`,
   `/opt`, `/Applications`) is refused, not applied; each launch names refused
@@ -372,13 +375,11 @@ pi-sandbox-guard 7ad441f's with the recorded adoption differences, so:
 - **Credential denies cover named paths.** With `~/.ssh` linked into a project,
   access through `~/.ssh` remains denied, but direct access to the project target
   is not covered by that deny. Keep credential content outside writable roots.
-- **Key agents are unreachable unless allowed.** Pi, OMP and Grok sessions
-  cannot connect to ssh-agent's launchd socket or to sockets in `~/.ssh` and
+- **Key agents are unreachable unless allowed.** Sessions cannot connect to ssh-agent's launchd socket or to sockets in `~/.ssh` and
   `~/.gnupg`, such as gpg-agent's, so git over SSH and SSH commit signing fail
   inside them. Set `AGENT_GUARD_SSH_AGENT=allow` outside the guard to leave the
   agents reachable. A third-party agent whose socket is elsewhere, set through
-  `IdentityAgent`, is not covered. OpenCode sessions can still reach the agents
-  (DESIGN.md decision D15).
+  `IdentityAgent`, is not covered (DESIGN.md decision D15).
 
 pi-sandbox-guard defects kept until step 10d, because the launcher, preamble and
 extension are reused unchanged apart from the recorded adoption differences:

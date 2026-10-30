@@ -344,16 +344,17 @@ done
 # AGENT_GUARD_SSH_AGENT=allow, set outside the guard, leaves the agents reachable.
 integer agents=1
 if [[ ${AGENT_GUARD_SSH_AGENT:-} == allow ]]; then agents=0; fi
-for p in $credential_paths; do
-  for q in "$p" "${p:A}"; do
-    sbpl "$q"
-    rules+=("(deny file-read* file-write* (subpath $REPLY))")
-    if (( agents )); then rules+=("(deny network-outbound (subpath $REPLY))"); fi
-  done
+typeset -aU credential_targets
+typeset -a credential_rules
+for p in $credential_paths; do credential_targets+=("$p" "${p:A}"); done
+for q in $credential_targets; do
+  if [[ $q == "$home"/* ]]; then sbpl "${q#$home}"; REPLY="(h $REPLY)"; else sbpl "$q"; fi
+  credential_rules+=("(deny file-read* file-write* (subpath $REPLY))")
+  if (( agents )); then credential_rules+=("(deny network-outbound (subpath $REPLY))"); fi
 done
-[[ -z $credential_fragment ]] || rules+=("$(<"$profile_dir/$credential_fragment")")
+[[ -z $credential_fragment ]] || credential_rules+=("$(<"$profile_dir/$credential_fragment")")
 if (( ${#credential_paths} && agents )); then
-  rules+=('(deny network-outbound (regex #"^/private/(var/run|tmp)/com\.apple\.launchd\.[^/]+/Listeners$"))')
+  credential_rules+=('(deny network-outbound (regex #"^/private/(var/run|tmp)/com\.apple\.launchd\.[^/]+/Listeners$"))')
 fi
 # Paths only the launch can name, such as the targets a registry file lists.
 [[ -z $protect_hook ]] || $protect_hook
@@ -440,6 +441,7 @@ fi
 profile=$(<"$here/profile.sb")
 profile=${profile/';;@PEER_RUNTIME@'/$(<"$here/peer-runtime.sb")}
 profile=${profile/';;@USER_RULES@'/${(F)rules}}
+profile=${profile/';;@CREDENTIALS@'/${(F)credential_rules}}
 # Keep 1.0.3 rule order and SBPL spelling while moving harness paths to data.
 path_rules() {
   local p indent=$1

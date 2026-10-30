@@ -42,6 +42,7 @@ files=(
   profiles/opencode/runtime.zsh
   profiles/opencode/skills.zsh
   profiles/opencode/protected.sb
+  profiles/opencode/credentials.sb
   profiles/opencode/plugin.js
   profiles/opencode/v2.js
   profiles/opencode/permissions.js

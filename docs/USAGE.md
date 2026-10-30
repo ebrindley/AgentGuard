@@ -202,9 +202,13 @@ list entries. Build tools that use other home folders, such as `~/.cargo` or
 `~/go`, need those folders under ALLOW. An ALLOW folder itself, and folders
 above a READ ONLY or DENY entry, cannot be renamed or removed.
 
-DENY entries can break tools that need the denied files. Denying `~/.ssh`, for
-example, prevents Git over SSH inside OpenCode. `@project` is not supported by
-the current launcher.
+DENY entries can break tools that need the denied files. OpenCode sessions
+cannot read or write the credential paths (`~/.ssh`, `~/.gnupg`, `~/.aws` and the
+others SECURITY.md lists) or `.env` files other than `.env.example`, `.env.sample`
+and `.env.template`, and run without `SSH_AUTH_SOCK` and without access to
+ssh-agent or gpg-agent, so Git over SSH fails inside them; use HTTPS remotes, or
+set `AGENT_GUARD_SSH_AGENT=allow` outside the guard before starting OpenCode.
+`@project` is not supported by the current launcher.
 
 Imported OpenCode Guard lists keep their introductory text. You can update the
 text above the first heading without changing the policy entries; the current
