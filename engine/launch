@@ -141,14 +141,13 @@ unset $env_unset
 (( $#env_set )) && export $env_set
 [[ $harness != opencode || ${CC_SAFETY_NET_LEVEL:-} == paranoid ]] || export CC_SAFETY_NET_LEVEL=strict
 
-# The engine's nesting marker is exported just before exec. OpenCode Guard's
-# marker also counts as already guarded until step 11. Without a marker, only
-# the error macOS reports for applying a second profile shows another tool's
-# sandbox (decision D10, docs/DESIGN.md section 15); a probe that fails for any
+# The engine's nesting marker is exported just before exec; OpenCode Guard's
+# marker is not accepted (step 11). Without a marker, only the error macOS
+# reports for applying a second profile shows another tool's sandbox (decision D10, docs/DESIGN.md section 15); a probe that fails for any
 # other reason takes the normal path and fails there.
 inside=
 if ! probe=$(/usr/bin/sandbox-exec -p '(version 1)(allow default)' /usr/bin/true 2>&1); then
-  if [[ ${AGENT_GUARD_SANDBOXED:-} == 1 || ${OPENCODE_SANDBOXED:-} == 1 ]]; then
+  if [[ ${AGENT_GUARD_SANDBOXED:-} == 1 ]]; then
     inside=guard
   elif [[ $probe == *'sandbox_apply: Operation not permitted'* ]]; then
     inside=other

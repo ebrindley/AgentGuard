@@ -515,10 +515,14 @@ refuses "unreadable wrapper record refused" "cannot read Pi's recorded wrappers"
 /bin/mkdir -p "$home/fakebin"
 child_home="$home/Projects/nested-home"
 /bin/mkdir -p "$child_home"
-# Agent Guard's nesting marker, then OpenCode Guard's.
+# Agent Guard's nesting marker, then OpenCode Guard's, which counts as another sandbox.
+typeset -A nested_refusal=(
+  AGENT_GUARD_SANDBOXED "already inside the guard; run this from Terminal, outside any guard or sandbox"
+  OPENCODE_SANDBOXED "already inside another sandbox, where Agent Guard cannot apply its own; open this outside that sandbox"
+)
 for marker in AGENT_GUARD_SANDBOXED OPENCODE_SANDBOXED; do
   refuses "nested diagnostic with $marker names the execution context" \
-    "already inside the guard; run this from Terminal, outside any guard or sandbox" \
+    "$nested_refusal[$marker]" \
     sb /usr/bin/env "$marker=1" "${launcher[@]}" check
 
   /bin/rm -f "$home/Projects/app/launched" "$home/Documents/escaped" "$home/Projects/app/nested-home"
