@@ -19,6 +19,7 @@ state_hook=opencode_state_roots
 gui_args=(--no-sandbox)
 credential_paths=("$home"/{.ssh,.gnupg,.aws,.git-credentials,.netrc,.npmrc,.secrets,.docker/config.json,.kube/config,.config/git/credentials})
 credential_fragment=credentials.sb
+git_hooks=1
 env_unset=(ELECTRON_RUN_AS_NODE OPENCODE_SIDECAR_V2 CC_SAFETY_NET_HOME CC_SAFETY_NET_WORKTREE SAFETY_NET_WORKTREE CC_SAFETY_NET_AUDIT_HOME
            SSH_AUTH_SOCK GPG_AGENT_INFO)
 env_set=(CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY=1 NPM_CONFIG_USERCONFIG=/dev/null)

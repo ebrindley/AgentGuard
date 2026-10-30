@@ -26,6 +26,8 @@
 
 ;;@CREDENTIALS@
 
+;;@GIT_HOOKS@
+
 (deny file-write*
   (subpath (h "/Library/Application Support/AgentGuard"))
   (subpath (h "/Library/Application Support/OpenCodeGuard"))

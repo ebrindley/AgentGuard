@@ -208,6 +208,11 @@ others SECURITY.md lists) or `.env` files other than `.env.example`, `.env.sampl
 and `.env.template`, and run without `SSH_AUTH_SOCK` and without access to
 ssh-agent or gpg-agent, so Git over SSH fails inside them; use HTTPS remotes, or
 set `AGENT_GUARD_SSH_AGENT=allow` outside the guard before starting OpenCode.
+OpenCode sessions cannot write Git hooks, other than Git's `*.sample` files, in
+any repository or in the active hooks folder of the launch folder, so hook
+managers such as husky, lefthook and pre-commit cannot install hooks inside them;
+run their install commands outside the guard. A `core.hooksPath` that is home, a
+system folder or contains the launch folder refuses the launch.
 `@project` is not supported by the current launcher.
 
 Imported OpenCode Guard lists keep their introductory text. You can update the
