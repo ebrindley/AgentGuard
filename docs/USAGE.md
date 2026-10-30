@@ -238,7 +238,10 @@ Set up Pi credentials outside the guard before the first guarded session: Pi
 cannot create its protected `auth.json` inside a session.
 Pi OAuth logins stop at their first refresh inside a session because
 `auth.json` is write-protected; log in and refresh outside the guard, or use an
-API key (DESIGN.md decision D16). Install packages and edit settings outside the
+API key (DESIGN.md decision D16). Pi and OMP sessions cannot reach ssh-agent or
+gpg-agent, so git over SSH fails inside them; use HTTPS remotes, or set
+`AGENT_GUARD_SSH_AGENT=allow` outside the guard before starting Pi or OMP.
+Install packages and edit settings outside the
 guard. OMP profiles must be selected before confinement; `--profile` must be
 the first argument and appear only once. Active XDG-split OMP state is refused
 by the current launcher.
@@ -300,7 +303,9 @@ and `trusted_folders.toml`; `hooks`, `hooks-paths` and the targets it names; `bi
 `.env` files (but not `.env.example`, `.env.sample` or `.env.template`) can be neither
 read nor written. The keychain stays usable, so a session can use the accounts
 `gh` and `git` hold. Sessions run without `SSH_AUTH_SOCK` and with npm's user
-configuration disabled.
+configuration disabled, and cannot reach ssh-agent or gpg-agent, so git over SSH
+fails inside them; use HTTPS remotes, or set `AGENT_GUARD_SSH_AGENT=allow`
+outside the guard before starting Grok.
 
 Run these outside the guard, with Grok's own executable (`~/.grok/bin/grok`);
 `grok` refuses them in a guarded session and says so: `grok login`, `grok logout`,

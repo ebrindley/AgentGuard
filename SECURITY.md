@@ -372,10 +372,13 @@ pi-sandbox-guard 7ad441f's with the recorded adoption differences, so:
 - **Credential denies cover named paths.** With `~/.ssh` linked into a project,
   access through `~/.ssh` remains denied, but direct access to the project target
   is not covered by that deny. Keep credential content outside writable roots.
-- **The SSH agent stays reachable.** Sessions cannot read `~/.ssh` and run
-  without `SSH_AUTH_SOCK`, but the agent's socket under `/private/tmp` can be
-  found and used with every key loaded into it. A deny is planned where Seatbelt
-  can express it (DESIGN.md decision D15).
+- **Key agents are unreachable unless allowed.** Pi, OMP and Grok sessions
+  cannot connect to ssh-agent's launchd socket or to sockets in `~/.ssh` and
+  `~/.gnupg`, such as gpg-agent's, so git over SSH and SSH commit signing fail
+  inside them. Set `AGENT_GUARD_SSH_AGENT=allow` outside the guard to leave the
+  agents reachable. A third-party agent whose socket is elsewhere, set through
+  `IdentityAgent`, is not covered. OpenCode sessions can still reach the agents
+  (DESIGN.md decision D15).
 
 pi-sandbox-guard defects kept until step 10d, because the launcher, preamble and
 extension are reused unchanged apart from the recorded adoption differences:
