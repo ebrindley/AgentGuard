@@ -1,9 +1,10 @@
 # Pi checker comparison
 
-Keep Pi's current checker for now. Consolidation remains the intended direction,
-but the tested cc-safety-net 2.6.0 Pi entry cannot preserve the required ASK
-behavior, and some literal catastrophic operations still need coverage. This
-comparison does not authorize a checker switch or broad parser pruning.
+This comparison is the evidence behind moving Pi and OMP from pi-sandbox-guard's
+analyzer to cc-safety-net. Decision D13 (DESIGN.md section 15) settles the
+verdicts it left open: no confirmations, routine Git work allowed, whole-tree
+discards and remote-history rewrites denied. The dispositions below record the
+state before D13; where they differ, D13 applies.
 
 ## Observations and reproduction
 

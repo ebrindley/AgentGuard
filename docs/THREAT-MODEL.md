@@ -256,22 +256,26 @@ touch.
 
 The baseline's decision rule puts literal force-pushes and pipe-to-shell installs
 at ASK. This repository uses no ASK tier; each verdict is deny or allow
-(DESIGN.md section 15, D13). Approved by the operator on 2026-10-29.
+(DESIGN.md section 15, D13). Approved by the operator on 2026-10-29; revised on
+2026-10-30 so that routine work is never denied.
 
 - **Tightened to DENY:** plain force pushes (`--force`, `-f`, a `+` refspec),
-  mirror pushes and force-pushed tags, setting `core.hooksPath`, and whole-tree
-  discards (`git reset --hard`, and `git clean -f` or `git checkout -- .` without
-  a path). Evidence: the maintainer's Claude Code and Codex history held about 13
+  mirror pushes and force-pushed tags, setting `core.hooksPath`, whole-tree
+  discards (`git reset --hard`, `git checkout .`, `git restore .`, forced
+  switches and checkouts, `git stash clear`) and `git clean -f` with or without a
+  path. Evidence: the maintainer's Claude Code and Codex history held about 13
   deliberate force or mirror pushes in five and a half months, and no
   `core.hooksPath` writes. The operator runs these outside the guard.
-- **Relaxed to ALLOW:** a download piped to a shell. Repository fact: every guarded
-  session runs inside the harness's Seatbelt profile, which confines the script's
-  writes to the grant (section 3, class 1 outside the grant and class 3), and
-  cc-safety-net, the checker every harness moves to, returns only allow or deny.
-  Accepted risk: the script can change files inside the grant and send anything
-  the session can read, which section 4 already places outside this product.
-- **Relaxed to ALLOW:** `--force-with-lease`, deleting a remote branch, and
-  path-scoped discards. Repository fact: the history above shows these as routine
-  cleanup of branches and files the agent created. Accepted risk: a remote branch
-  deleted by mistake is recovered from a clone or the hosting service, and a
-  path-scoped discard can lose uncommitted changes to the named paths.
+- **Kept at DENY:** a download piped to a shell, and shell setup such as
+  `eval "$(pyenv init -)"`. Repository fact: these are fixed denials in
+  cc-safety-net 2.6.0, which no setting can lift. Every guarded session runs
+  inside Seatbelt, so allowing them would have been an accepted risk; keeping them
+  costs an agent one retry with the tool's direct form.
+- **Relaxed to ALLOW:** `--force-with-lease`, `git push --delete` and `--prune`,
+  path-scoped `git restore` and `git checkout -- <path>`, `git stash drop`,
+  `git branch -D`, `git tag -d`, and `git merge --abort` and `git rebase --abort`.
+  Repository fact: the history above shows these as routine work on branches and
+  files the agent created. Accepted risk: a remote branch or tag deleted by
+  mistake is recovered from a clone or the hosting service, a path-scoped discard
+  can lose uncommitted changes to the named paths, and an abort loses the
+  conflict resolution in progress.
