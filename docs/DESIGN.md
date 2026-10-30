@@ -10,9 +10,10 @@ OpenCode, Pi and OMP. 0.2.2 added the OpenCode [skill policy](SKILLS.md).
 0.2.1 includes Pi/OMP state-root pinning and protection of missing OpenCode
 configuration behind linked ancestors, committed after the 0.2.0 tag.
 Grok runs on the zsh engine. The Rust launcher and the shared engine will not be
-built (decision D12): per-launch rules, `@project`, Pi's move to cc-safety-net and
-OpenCode's credential and Git-hook protection are planned on the zsh engine (steps
-9 and 10). Both earlier projects are archived (step 11). Current user procedures are in [USAGE.md](USAGE.md)
+built (decision D12). Per-launch rules are built for OpenCode (step 9); `@project`,
+Pi's move to cc-safety-net and Git-hook protection for OpenCode and Grok are planned
+on the zsh engine (step 10). Both earlier projects are archived (step 11). Current
+user procedures are in [USAGE.md](USAGE.md)
 and [OPERATIONS.md](OPERATIONS.md).
 
 Agent Guard is one macOS guard for terminal coding agents. It replaces OpenCode Guard (v1.0.4) and pi-sandbox-guard with one engine and a small profile, hook set and plugin adapter per harness.
@@ -1730,13 +1731,13 @@ Alongside steps 7 to 7d, not gating them: the OMP 18.4.9 observation, which need
 
 8. **Rust launcher.** Not built (decision D12). The zsh engine stays, and section 7 is kept as the record of the design.
 
-9. **Per-launch rules.** Each launch writes the rules it applied to its own file instead of the shared `state/rules.json`, and passes that file's path to its plugin, so a second launch cannot change the rules a running session's plugin enforces (section 2). Built on the zsh engine (decision D12). Done when two concurrent launches with different rules each enforce their own, a missing or malformed rules file refuses writes, and files of ended launches are cleaned up.
+9. **Per-launch rules.** Each launch writes the rules it applied to its own file instead of the shared `state/rules.json`, and passes that file's path to its plugin, so a second launch cannot change the rules a running session's plugin enforces (section 2). Built for OpenCode on the zsh engine (decision D12): each launch writes `state/opencode/<release>.<id>/permissions.json` and passes its path in `AGENT_GUARD_CONTEXT`, the plugin loads it once at start and refuses writes when it is missing or malformed, and folders of ended launches are pruned. `state/rules.json` is still written for sessions of earlier releases and for `doctor`. The `state/launch/` snapshot of section 7 is not built.
 
 10. **`@project`, Pi's checker and OpenCode's protections**, on the zsh engine (decision D12), each independent of the others:
 
     - **10a. `@project` for OpenCode.** Its positional project argument (`opencode [project]`) and what the app launcher means by it; the app's working directory is unverified.
     - **10d. Pi and OMP on cc-safety-net.** Pi's and OMP's command checker moves from the adopted analyzer to cc-safety-net, with the checker policy of decision D13, and the analyzer retires. Release notes list the confirmations removed and the commands newly refused.
-    - **10e. OpenCode's credentials and Git hooks.** OpenCode sessions get the credential set and the Git-hook protection that Pi and Grok sessions have, as profile data on the zsh engine. The credentials release is built (golden step 11); the hooks release remains.
+    - **10e. OpenCode's credentials and Git hooks.** OpenCode sessions get the credential set that Pi and Grok sessions have and the Git-hook protection that Pi sessions have, as profile data on the zsh engine. The credentials release is built (golden step 11); the hooks release remains, and Grok sessions get the same hooks protection after it.
 
     The shared engine, its typed policy model, the protection union, composition across harnesses and the nested-launch releases are not built (decision D12). Sections 3, 7 and 11 still describe them as the record of that design.
 
