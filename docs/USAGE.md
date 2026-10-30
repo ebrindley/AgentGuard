@@ -316,6 +316,12 @@ configuration disabled, and cannot reach ssh-agent or gpg-agent, so git over SSH
 fails inside them; use HTTPS remotes, or set `AGENT_GUARD_SSH_AGENT=allow`
 outside the guard before starting Grok.
 
+Grok sessions cannot write Git hooks, other than Git's `*.sample` files, in any
+repository or in the active hooks folder of the launch folder, so hook managers
+such as husky, lefthook and pre-commit cannot install hooks inside them; run their
+install commands outside the guard. A `core.hooksPath` that is home, a system
+folder or contains the launch folder refuses the launch.
+
 Run these outside the guard, with Grok's own executable (`~/.grok/bin/grok`);
 `grok` refuses them in a guarded session and says so: `grok login`, `grok logout`,
 `grok update` and `grok workspace start|restart|resume`. Grok's updater is off in a

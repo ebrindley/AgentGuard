@@ -176,6 +176,34 @@ assert.equal(probe(`/bin/cat ${q(join(home, '.config/gh/config.yml'))} > /dev/nu
 assert.notEqual(probe(`: >> ${q(join(home, '.config/gh/config.yml'))}`).status, 0);
 ok('credential files and .env files are unreadable and unwritable, template names are readable, gh configuration is readable and not writable');
 
+// Git hooks: every repository's hooks are write-denied except Git's samples, and
+// the active hooks folder resolved at launch is denied whole.
+{
+  const git = (...args) => assert.equal(exec('/usr/bin/git', args).status, 0, args.join(' '));
+  const repo = join(project, 'repo'), worktree = join(project, 'wt'), hooks = join(repo, '.git/hooks'), active = join(project, 'githooks');
+  git('init', '-q', repo);
+  git('-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-q', '--allow-empty', '-m', 'init');
+  git('-C', repo, 'worktree', 'add', '-q', worktree);
+  assert.equal(probe(`/usr/bin/git init -q ${q(join(project, 'new-repo'))}`).status, 0, 'git init');
+  for (const command of [`: > ${q(join(hooks, 'pre-commit'))}`, `/bin/mv ${q(join(hooks, 'pre-commit.sample'))} ${q(join(hooks, 'pre-commit'))}`,
+    `/bin/mkdir -p ${q(join(repo, '.git/modules/m/hooks'))} && : > ${q(join(repo, '.git/modules/m/hooks/post-checkout'))}`])
+    assert.notEqual(probe(command).status, 0, command);
+  for (const command of [`: > ${q(join(hooks, 'new.sample'))}`, `/bin/mkdir -p ${q(join(repo, 'src/hooks'))} && : > ${q(join(repo, 'src/hooks/use.ts'))}`])
+    assert.equal(probe(command).status, 0, command);
+  mk(active);
+  git('-C', repo, 'config', 'core.hooksPath', active);
+  for (const cwd of [repo, worktree]) {
+    assert.notEqual(launch([], { AG_PROBE: `: > ${q(join(active, 'pre-commit'))}` }, cwd).status, 0, `core.hooksPath from ${cwd}`);
+    assert.equal(launch([], { AG_PROBE: `: > ${q(join(project, 'beside'))}` }, cwd).status, 0, `beside core.hooksPath from ${cwd}`);
+  }
+  git('-C', repo, 'config', 'core.hooksPath', project);
+  const refused = launch(['-p', 'x'], {}, repo);
+  assert.notEqual(refused.status, 0);
+  assert.match(refused.stderr, /contains the launch folder/);
+  for (const d of [repo, worktree, active, join(project, 'new-repo')]) rmSync(d, { recursive: true, force: true });
+}
+ok('Git hooks and the core.hooksPath folder are not writable from a repository or its linked worktree, samples and source hooks folders are, git init works, and a hooks path containing the launch folder refuses the launch');
+
 // Key agents are unreachable unless the operator allows them: ssh-agent's launchd
 // socket, and a socket under a credential path, where gpg-agent keeps its own. Other
 // Unix sockets stay usable. ssh-add -l exits 2 only when it cannot reach the agent.

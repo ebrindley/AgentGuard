@@ -17,5 +17,6 @@ protected_paths=("$home/.local/bin/grok"
 protected=($protected_paths)
 credential_paths=("$home"/{.ssh,.gnupg,.aws,.git-credentials,.netrc,.npmrc,.secrets,.docker/config.json,.kube/config,.config/git/credentials})
 credential_fragment=credentials.sb
+git_hooks=1
 env_unset=(SSH_AUTH_SOCK GPG_AGENT_INFO)
 env_set=(NPM_CONFIG_USERCONFIG=/dev/null)
