@@ -221,6 +221,17 @@ async function guard(input) {
     } catch {}
     if (!checkCommand) failure("api-load", "api-unavailable", "reinstall")
   }
+  // cc-safety-net drops a rule source it cannot load and goes on allowing, so the
+  // session copy must prove Agent Guard's Git rules are in force (docs/DESIGN.md
+  // section 5, Command checker).
+  let checkerRules = !guarded || !rules || !checkCommand
+  if (!checkerRules) {
+    try {
+      const probe = checkCommand({ command: "git config core.hooksPath agent-guard-probe", cwd: directory })
+      checkerRules = probe.kind === "deny" && probe.ruleId === "custom.agent-guard-git/hooks-path"
+    } catch {}
+    if (!checkerRules) failure("rules-load", "rules-unavailable", "relaunch")
+  }
   const temps = [...new Set([canonical(tmpdir()), "/private/tmp"])]
   // OpenCode Guard's engine folder holds the forwarders after a migration.
   const protectedRoots = [ENGINE, join(HOME, "Library/Application Support/OpenCodeGuard"), join(HOME, "Agent Guard"),
@@ -292,7 +303,7 @@ async function guard(input) {
       return net?.["tool.execute.before"]?.(info, output)
     }
     if (DELEGATE === false) refuse(tool, "Agent Guard was updated; quit and reopen OpenCode.", "tool-hook", "launcher-release-unavailable", "relaunch")
-    if (!rules) refuse(tool, "Agent Guard: rules unavailable; relaunch OpenCode.", "tool-hook", "rules-unavailable", "relaunch")
+    if (!rules || !checkerRules) refuse(tool, "Agent Guard: rules unavailable; relaunch OpenCode.", "tool-hook", "rules-unavailable", "relaunch")
     if (!net || !checkCommand) refuse(tool, "Agent Guard: cc-safety-net failed to load; reinstall Agent Guard.", "tool-hook", !net ? "engine-unavailable" : "api-unavailable", "reinstall")
     if (tool === "bash" && typeof args.command === "string") args.command = normalizedCommand(args.command)
     if (READS.has(tool)) checkRead(args.filePath ?? args.path ?? directory, tool)
@@ -327,7 +338,7 @@ async function guard(input) {
   }
 
   const state = !guarded ? outer || sandbox.result === "unconfined" ? "inactive" : "unknown" :
-    RELEASE && DELEGATE !== false && rules && net && checkCommand ? "active" : "degraded"
+    RELEASE && DELEGATE !== false && rules && checkerRules && net && checkCommand ? "active" : "degraded"
   const health = () => {
     const loaded = RELEASE ? basename(RELEASE) : null
     const launcher = releaseID(WANTED)

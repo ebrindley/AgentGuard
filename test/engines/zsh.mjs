@@ -31,7 +31,7 @@ export function isolateHarness(tree) {
 export function layout(tree, engine, rid = '0.0.0-20260101T000000Z') {
   const release = join(engine, 'releases', rid);
   mkdirSync(join(release, 'profiles'), { recursive: true });
-  for (const f of ['launch', 'profile.sb', 'account.zsh', 'peers.zsh', 'peer-runtime.sb', 'peers']) cpSync(join(tree, 'engine', f), join(release, f), { recursive: true });
+  for (const f of ['launch', 'profile.sb', 'account.zsh', 'peers.zsh', 'peer-runtime.sb', 'peers', 'checker']) cpSync(join(tree, 'engine', f), join(release, f), { recursive: true });
   cpSync(join(tree, 'profiles/opencode'), join(release, 'profiles/opencode'), { recursive: true });
   cpSync(join(tree, 'profiles/grok'), join(release, 'profiles/grok'), { recursive: true });
   mkdirSync(join(release, 'bin'), { recursive: true });

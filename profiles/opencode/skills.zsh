@@ -100,6 +100,12 @@ opencode_checker_snapshot() {
   else
     print -r -- '{"version":1,"rules":[],"overrides":{},"transparent_wrappers":["env","exec","nice","nohup","setsid","stdbuf","time","timeout"]}' > "$dest/rules/rule.json"
   fi
+  # Agent Guard's Git rules (docs/DESIGN.md section 5, Command checker): the
+  # release's copy replaces any rulebook of that name.
+  /bin/mkdir -p -- "$dest/rules/agent-guard-git"
+  /bin/cp -- "$release/checker/agent-guard-git/rulebook.json" "$dest/rules/agent-guard-git/rulebook.json" || return 1
+  /usr/bin/jq '.rules = (((.rules // []) - ["agent-guard-git"]) + ["agent-guard-git"])' "$dest/rules/rule.json" > "$dest/rules/.new" &&
+    /bin/mv "$dest/rules/.new" "$dest/rules/rule.json" || return 1
   if [[ -f $source/policy.json ]]; then
     /bin/cp -L -- "$source/policy.json" "$dest/policy.json" || return 1
   else
@@ -109,7 +115,7 @@ opencode_checker_snapshot() {
   # cc-safety-net. Explicit allowances in the copied policy are never removed.
   local legacy=${CC_SAFETY_NET_PARANOID_RM-${SAFETY_NET_PARANOID_RM:-}}
   local paranoid=${CC_SAFETY_NET_PARANOID-${SAFETY_NET_PARANOID:-}}
-  if ! /usr/bin/jq -e 'type == "object" and ((.destructive_command_protection // {}) | type == "object") and ((.destructive_command_protection.allow_paths // []) | type == "array") and ((.safety // {}) | type == "object") and ((.safety.overrides // {}) | type == "object")' "$dest/policy.json" >/dev/null 2>&1; then
+  if ! /usr/bin/jq -e 'type == "object" and ((.destructive_command_protection // {}) | type == "object") and ((.destructive_command_protection.allow_paths // []) | type == "array") and ((.destructive_command_protection.overrides // {}) | type == "object") and ((.safety // {}) | type == "object") and ((.safety.overrides // {}) | type == "object")' "$dest/policy.json" >/dev/null 2>&1; then
     preparation_status=warning
     note "checker policy copied without automatic deletion allowances: $source/policy.json"
     return 0
@@ -129,11 +135,19 @@ opencode_checker_snapshot() {
     [[ $REPLY == (deny|readonly) ]] || deletion_roots+=("$name")
   done
   local roots=$(/usr/bin/jq -cn '$ARGS.positional' --args $deletion_roots)
-  /usr/bin/jq --arg level "$CC_SAFETY_NET_LEVEL" --arg legacy "${legacy:l}" --arg paranoid "${paranoid:l}" --argjson roots "$roots" '
+  # Built-in rules decision D13 allows (docs/DESIGN.md section 15), unless the
+  # user chose the paranoid level; a rule the user's policy names keeps the
+  # user's setting.
+  local allowed=$(/usr/bin/jq -cn '$ARGS.positional' --args git.push-delete git.stash-drop git.branch-force-delete git.tag-delete \
+    git.merge-abort git.rebase-abort git.checkout-double-dash git.checkout-ref-path git.restore-unstaged git.restore-worktree)
+  /usr/bin/jq --arg level "$CC_SAFETY_NET_LEVEL" --arg legacy "${legacy:l}" --arg paranoid "${paranoid:l}" --argjson roots "$roots" --argjson allowed "$allowed" '
     if type != "object" then error("checker policy must be an object") else . end
     | ((if ((.safety.overrides // {}) | has("paranoid_rm")) then .safety.overrides.paranoid_rm else ((.safety.level == "paranoid") or ($level == "paranoid")) end)
        or ($legacy == "1" or $legacy == "true") or ($paranoid == "1" or $paranoid == "true")) as $restricted
     | if $restricted then . else
         .destructive_command_protection.allow_paths = (((.destructive_command_protection.allow_paths // []) + $roots) | unique)
+      end
+    | if (.safety.level == "paranoid") or ($level == "paranoid") then . else
+        .destructive_command_protection.overrides = (($allowed | map({(.): "off"}) | add) + (.destructive_command_protection.overrides // {}))
       end' "$dest/policy.json" > "$dest/.policy" && /bin/mv "$dest/.policy" "$dest/policy.json" || return 1
 }

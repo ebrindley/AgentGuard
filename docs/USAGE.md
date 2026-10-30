@@ -213,6 +213,14 @@ any repository or in the active hooks folder of the launch folder, so hook
 managers such as husky, lefthook and pre-commit cannot install hooks inside them;
 run their install commands outside the guard. A `core.hooksPath` that is home, a
 system folder or contains the launch folder refuses the launch.
+Inside OpenCode sessions, routine Git work is allowed: per-file `git restore` and
+`git checkout -- <file>`, `git stash drop`, `git branch -D`, `git tag -d`, merge
+and rebase aborts, `git push --delete` and `--force-with-lease`. Force and mirror
+pushes, whole-tree discards such as `git reset --hard`, `git checkout .` and
+`git restore .`, `git clean -f` and setting `core.hooksPath` are refused; run
+them in a terminal outside the guard, and use `rm -r <path>` in place of a
+path-scoped `git clean`. Your own `~/.cc-safety-net` settings still apply in
+sessions, and take effect at the next launch.
 `@project` is not supported by the current launcher.
 
 Imported OpenCode Guard lists keep their introductory text. You can update the

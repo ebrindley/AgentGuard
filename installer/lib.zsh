@@ -782,6 +782,7 @@ ag_assemble() {
   # The peer commands read Grok's launch arguments whether or not the Grok harness is installed.
   /bin/mkdir -p -- "$r/profiles/grok" && /bin/cp -- "$t/profiles/grok/args.zsh" "$r/profiles/grok/" || return 1
   /bin/cp -R -- "$t/engine/peers" "$r/peers" || return 1
+  /bin/cp -R -- "$t/engine/checker" "$r/checker" || return 1
   # The release's install.sh, which agent-guard and uninstall.sh source, loads these.
   /bin/cp -R -- "$t/installer" "$r/installer" || return 1
   /bin/cp -- "$p/harness.zsh" "$p/hooks.zsh" "$p/runtime.zsh" "$p/protected.sb" "$p/credentials.sb" "$p/skills.zsh" "$p/plugin.js" "$p/v2.js" "$p/permissions.js" "$p/permissions.jq" "$p/diagnostics.zsh" "$r/profiles/opencode/" || return 1

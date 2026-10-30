@@ -77,7 +77,17 @@ if (mode === "lifecycle") {
   await call("bash", { command: "git push --force origin main", workdir: blocked }, false, blockedHooks["tool.execute.before"])
   await call("write", { filePath: join(blocked, ".opencode/skills/x/SKILL.md") }, false, blockedHooks["tool.execute.before"])
   assert.equal(readFileSync(join(home, ".cc-safety-net/rules/agent-guard/rulebook.json"), "utf8").includes("recursive-rm"), true)
+} else if (mode === "git") {
+  // Decision D13 in the session copy; the user's policy keeps git.tag-delete on.
+  for (const command of ["git restore src/a.ts", "git checkout -- src/a.ts", "git checkout HEAD -- src/a.ts", "git restore --staged .",
+                         "git stash drop", "git branch -D feature", "git merge --abort", "git rebase --abort", "git push origin --delete feature",
+                         "git push --force-with-lease", "git config --get core.hooksPath"])
+    await call("bash", { command, workdir: project })
+  for (const command of ["git restore .", "git checkout -- .", "git checkout .", "git clean -f src/tmp", "git reset --hard", "git stash clear",
+                         "git push --force origin main", "git config core.hooksPath .githooks", "git tag -d v1"])
+    await call("bash", { command, workdir: project }, false)
 } else if (mode === "paranoid") {
+  await call("bash", { command: "git branch -D feature", workdir: project }, false)
   await put(join(project, ".opencode/skills/x/SKILL.md"), "x")
   await shell("rm -r .opencode/skills/x", project, false)
   await shell(`rm -r ${quote(join(home, ".config/opencode/skills/x"))}`, project, false)

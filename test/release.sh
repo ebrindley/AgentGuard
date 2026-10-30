@@ -31,7 +31,7 @@ expected=(
   profiles/pi/scripts/{extension-entry.ts,test-sandbox-profile.sh,check-launchers.mjs,bind-executable.sh,lib-ops.sh}
   profiles/pi/commands/{bind,doctor,wrapper}.zsh
   profiles/grok/{harness.zsh,args.zsh,hooks.zsh,credentials.sb,grok}
-  ${(f)"$(/usr/bin/git -C "$source_root" ls-files -- engine/vendor/cc-safety-net engine/peers profiles/opencode/templates)"}
+  ${(f)"$(/usr/bin/git -C "$source_root" ls-files -- engine/vendor/cc-safety-net engine/checker engine/peers profiles/opencode/templates)"}
 )
 listed=$(/usr/bin/tar -tzf "$archive") || fail "archive readable"
 if [[ ${(F)${(o)${(f)listed}}} == ${(F)${(o)expected/#/$name/}} ]]; then
