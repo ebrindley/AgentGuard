@@ -357,8 +357,9 @@ pi-sandbox-guard 7ad441f's with the recorded adoption differences, so:
   `~/.pi/agent/prompts` whose names do not contain `prompt`, the `AGENTS.md`,
   `AGENTS.override.md` and `CLAUDE.md` that Pi 0.99.2 loads from its agent folder
   into every session, and OMP's `memories` can be written in a session and are
-  loaded by later sessions. Not yet decided: protect them, or accept the risk in
-  writing.
+  loaded by later sessions. Accepted (DESIGN.md decision D14): Pi and OMP start
+  only through the guard, so such instructions are followed only by a later
+  guarded session.
 - **Anything in the project can be changed or deleted,** including build scripts
   and `.git/config`. The active Git hooks are write-denied as resolved at launch,
   but a session can point `core.hooksPath` at a folder it can write, whose hooks
@@ -371,6 +372,10 @@ pi-sandbox-guard 7ad441f's with the recorded adoption differences, so:
 - **Credential denies cover named paths.** With `~/.ssh` linked into a project,
   access through `~/.ssh` remains denied, but direct access to the project target
   is not covered by that deny. Keep credential content outside writable roots.
+- **The SSH agent stays reachable.** Sessions cannot read `~/.ssh` and run
+  without `SSH_AUTH_SOCK`, but the agent's socket under `/private/tmp` can be
+  found and used with every key loaded into it. A deny is planned where Seatbelt
+  can express it (DESIGN.md decision D15).
 
 pi-sandbox-guard defects kept until step 10d, because the launcher, preamble and
 extension are reused unchanged apart from the recorded adoption differences:
