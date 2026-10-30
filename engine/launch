@@ -337,14 +337,24 @@ done
 
 # Credentials the harness's sessions can neither read nor write (docs/DESIGN.md
 # section 3, Grok). Each is also denied at its resolved target. A fragment adds
-# the name rules.
+# the name rules. A file deny does not stop a connection to a socket, so the agents
+# that hold keys are denied as sockets: those under a credential path (gpg-agent in
+# ~/.gnupg, SSH control sockets in ~/.ssh) and ssh-agent's launchd socket, which
+# sessions can find although they run without SSH_AUTH_SOCK (decision D15).
+# AGENT_GUARD_SSH_AGENT=allow, set outside the guard, leaves the agents reachable.
+integer agents=1
+if [[ ${AGENT_GUARD_SSH_AGENT:-} == allow ]]; then agents=0; fi
 for p in $credential_paths; do
   for q in "$p" "${p:A}"; do
     sbpl "$q"
     rules+=("(deny file-read* file-write* (subpath $REPLY))")
+    if (( agents )); then rules+=("(deny network-outbound (subpath $REPLY))"); fi
   done
 done
 [[ -z $credential_fragment ]] || rules+=("$(<"$profile_dir/$credential_fragment")")
+if (( ${#credential_paths} && agents )); then
+  rules+=('(deny network-outbound (regex #"^/private/(var/run|tmp)/com\.apple\.launchd\.[^/]+/Listeners$"))')
+fi
 # Paths only the launch can name, such as the targets a registry file lists.
 [[ -z $protect_hook ]] || $protect_hook
 
@@ -422,6 +432,7 @@ else
   record "always writable for $title itself: ${(j:, :)writable}, /private/tmp, per-user temp and cache"
   record "write-protected for $title: ${(j:, :)protected_paths}"
   record "unreadable and unwritable for $title: ${(j:, :)credential_paths}, .env files"
+  if (( agents )); then record "SSH and GPG agents unreachable for $title"; else record "SSH and GPG agents reachable for $title (AGENT_GUARD_SSH_AGENT=allow)"; fi
 fi
 (( $#pi_guard )) && record "write-protected for Pi, maintained outside the guard: ${(j:, :)pi_guard}"
 (( $#pi_names )) && record "write-protected anywhere, Pi's and OMP's project config: ${(j:, :)pi_names}"

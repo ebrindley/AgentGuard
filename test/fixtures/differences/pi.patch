@@ -21,7 +21,7 @@ index 2f94258..d86d372 100755
  fi
  
 diff --git a/sandbox/pi-sandbox-preamble.zsh b/sandbox/pi-sandbox-preamble.zsh
-index 9b7c788..cadb126 100644
+index 9b7c788..b339bfb 100644
 --- a/sandbox/pi-sandbox-preamble.zsh
 +++ b/sandbox/pi-sandbox-preamble.zsh
 @@ -48,6 +48,7 @@ unset _PI_GIT_ENV_NAME
@@ -335,7 +335,7 @@ index 9b7c788..cadb126 100644
  emit "OS sandbox ON. Runtime [$PI_SANDBOX_RUNTIME]. Project [$PROJECT_VIA]: $PROJECT"
  emit "  active Git hooks denied: $ACTIVE_HOOKS"
  if [ "$PI_SANDBOX_RUNTIME" = "pi" ]; then
-@@ -1112,6 +1300,15 @@ fi
+@@ -1112,6 +1300,19 @@ fi
  export PI_SANDBOX_PROFILE_DIGEST PI_SANDBOX_PROJECT_BOUNDARY
  export PI_SANDBOX_ACTIVE_HOOKS_BOUNDARY PI_SANDBOX_AGENT_STATE_BOUNDARY
  
@@ -348,19 +348,24 @@ index 9b7c788..cadb126 100644
 +  export PATH
 +fi
 +
++# Agent Guard difference 16: the SSH agent's socket is denied unless the operator
++# set AGENT_GUARD_SSH_AGENT=allow outside the guard.
++AG_SSH_AGENT=deny
++[[ ${AGENT_GUARD_SSH_AGENT:-} == allow ]] && AG_SSH_AGENT=allow
  PI_SANDBOX_CMD=(
    "$SANDBOX_EXEC"
    -D "PROJECT=$PROJECT"
-@@ -1122,5 +1319,6 @@ PI_SANDBOX_CMD=(
+@@ -1122,5 +1323,7 @@ PI_SANDBOX_CMD=(
    -D "OMP_AGENT_STATE=$OMP_AGENT_STATE"
    -D "OMP_STATE_ROOT=$OMP_STATE_ROOT"
    -D "OMP_BASE_ROOT=$OMP_BASE_ROOT"
 -  -f "$PROFILE"
++  -D "AG_SSH_AGENT=$AG_SSH_AGENT"
 +  "${AG_SANDBOX_PARAMS[@]}"
 +  -p "$AG_PEER_PROFILE"
  )
 diff --git a/sandbox/pi-sandbox.sb b/sandbox/pi-sandbox.sb
-index f560a31..119b2f3 100644
+index f560a31..213a568 100644
 --- a/sandbox/pi-sandbox.sb
 +++ b/sandbox/pi-sandbox.sb
 @@ -113,6 +113,8 @@
@@ -424,7 +429,25 @@ index f560a31..119b2f3 100644
  ;; Re-allow the minimum `git init` / submodule-init needs inside the now-denied
  ;; hooks subtrees (last-match-wins, so this overrides the subtree denies above
  ;; but not for the active hook files it does NOT re-allow):
-@@ -323,3 +347,142 @@
+@@ -298,6 +322,17 @@
+     (subpath (string-append (param "OMP_STATE_ROOT") "/wt"))
+     (regex #"/hooks/[^/]*\.[^/]+$")))
+ 
++;; Agent Guard difference 16: the agents that hold keys. Sessions run without
++;; SSH_AUTH_SOCK and cannot read ~/.ssh or ~/.gnupg, but a file deny does not stop
++;; a connection to a socket: ssh-agent's launchd socket can be found, and gpg-agent
++;; and SSH control sockets live in those folders. AG_SSH_AGENT=allow, from
++;; AGENT_GUARD_SSH_AGENT set outside the guard, leaves them reachable.
++(if (not (equal? (param "AG_SSH_AGENT") "allow"))
++  (deny network-outbound
++    (regex #"^/private/(var/run|tmp)/com\.apple\.launchd\.[^/]+/Listeners$")
++    (subpath (string-append (param "HOME") "/.ssh"))
++    (subpath (string-append (param "HOME") "/.gnupg"))))
++
+ ;; ---------------------------------------------------------------------------
+ ;; SECRET READS: deny reading host credential material. Scoped to specific HOME
+ ;; locations so project files are unaffected. (No blanket *.key/*.pem regexes —
+@@ -323,3 +358,142 @@
    (literal (string-append (param "HOME") "/.pi/agent/security-events.log"))
    ;; .env files anywhere (incl. project) — the one project-wide secret deny.
    (regex #"/\.env($|\.)"))

@@ -1309,6 +1309,10 @@ if [[ -f "$AG_PEER_RELEASE/peer-runtime.sb" && -d "$AG_PEER_RELEASE/peers" ]]; t
   export PATH
 fi
 
+# Agent Guard difference 16: the SSH agent's socket is denied unless the operator
+# set AGENT_GUARD_SSH_AGENT=allow outside the guard.
+AG_SSH_AGENT=deny
+[[ ${AGENT_GUARD_SSH_AGENT:-} == allow ]] && AG_SSH_AGENT=allow
 PI_SANDBOX_CMD=(
   "$SANDBOX_EXEC"
   -D "PROJECT=$PROJECT"
@@ -1319,6 +1323,7 @@ PI_SANDBOX_CMD=(
   -D "OMP_AGENT_STATE=$OMP_AGENT_STATE"
   -D "OMP_STATE_ROOT=$OMP_STATE_ROOT"
   -D "OMP_BASE_ROOT=$OMP_BASE_ROOT"
+  -D "AG_SSH_AGENT=$AG_SSH_AGENT"
   "${AG_SANDBOX_PARAMS[@]}"
   -p "$AG_PEER_PROFILE"
 )
