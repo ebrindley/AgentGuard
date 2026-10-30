@@ -284,6 +284,26 @@ expect no "read credential file"          sb /bin/cat "$home/.ssh/id_test"
 expect no "write credential file"         sb /bin/sh -c "echo x >> '$home/.aws/credentials'"
 expect no "read .env in ALLOW"            sb /bin/cat "$home/Projects/app/.env"
 expect ok "read .env.example in ALLOW"    sb /bin/cat "$home/Projects/app/.env.example"
+# Git hooks: every repository's hooks are write-denied except Git's samples, and
+# the active hooks folder resolved at launch is denied whole.
+repo="$home/Projects/app/repo"
+/usr/bin/git init -q "$repo"
+expect ok "git init in ALLOW"             sb /usr/bin/git init -q "$home/Projects/app/new-repo"
+expect no "write a Git hook"              sb /bin/sh -c "echo x > '$repo/.git/hooks/pre-commit'"
+expect no "rename a sample to a Git hook" sb /bin/mv "$repo/.git/hooks/pre-commit.sample" "$repo/.git/hooks/pre-commit"
+expect ok "write a Git hook sample"       sb /bin/sh -c "echo x > '$repo/.git/hooks/new.sample'"
+expect no "write a submodule hook"        sb /bin/sh -c "mkdir -p '$repo/.git/modules/m/hooks' && echo x > '$repo/.git/modules/m/hooks/post-checkout'"
+expect ok "write a source hooks folder"   sb /bin/sh -c "mkdir -p '$repo/src/hooks' && echo x > '$repo/src/hooks/use.ts'"
+/usr/bin/git -C "$repo" config core.hooksPath .githooks
+/bin/mkdir -p "$repo/.githooks"
+hooks_profile=$(cd "$repo" && "${launcher[@]}" profile 2>/dev/null) || fail "profile with core.hooksPath"
+expect no "write the core.hooksPath folder" /usr/bin/sandbox-exec -D "HOME=$home" -D "DARWIN_TEMP=$temp" -D "DARWIN_CACHE=$cache" -D GUI=0 -p "$hooks_profile" \
+  /bin/sh -c "echo x > '$repo/.githooks/pre-commit'"
+expect ok "write beside the core.hooksPath folder" /usr/bin/sandbox-exec -D "HOME=$home" -D "DARWIN_TEMP=$temp" -D "DARWIN_CACHE=$cache" -D GUI=0 -p "$hooks_profile" \
+  /usr/bin/touch "$repo/README"
+/usr/bin/git -C "$repo" config core.hooksPath "$home/Projects"
+refuses "core.hooksPath containing the launch folder refused" "contains the launch folder" /bin/sh -c "cd '$repo' && exec \"\$@\"" sh "${launcher[@]}" profile
+/bin/rm -rf "$repo" "$home/Projects/app/new-repo"
 # Without -u, security authorize never shows UI: with the lookup allowed it answers
 # "interaction not allowed" (-60007); with authd denied it answers nothing.
 authorize="/usr/bin/security authorize system.privilege.admin"

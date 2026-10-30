@@ -1,0 +1,10 @@
+{
+  "step": 12,
+  "reason": "Protect Git hooks in OpenCode sessions as Pi sessions have it: writes are denied under every hooks folder in a Git folder or a submodule's, except Git's *.sample files, and under the active hooks folder Git resolves for the launch folder (DESIGN.md step 10e).",
+  "inserts": [
+    {
+      "before": "(deny file-write*\n  (subpath (h \"/Library/Application Support/AgentGuard\"))",
+      "insert": "(deny file-write*\n  (require-all\n    (regex #\"\\.git/(hooks|modules/.+/hooks)/\")\n    (require-not (regex #\"/hooks/[^/]*\\.sample$\"))))\n\n"
+    }
+  ]
+}

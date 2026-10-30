@@ -68,7 +68,8 @@ can write to ALLOW folders, ordinary global OpenCode configuration, standard
 global skill folders and required runtime/cache/temp locations. DENY entries
 block reads and writes. Guard-owned code, policy, snapshots, bootstrap entries,
 the installed `~/.opencode/bin` executable, shell startup files and
-`~/Library/LaunchAgents` remain protected. The global configuration roots and
+`~/Library/LaunchAgents` remain protected, and so do Git hooks (Known
+limitations, below). The global configuration roots and
 the bootstrap container are pinned against replacement; their ordinary
 descendants are editable. Once Pi's guard is installed, it also cannot change
 Pi's guard files, even inside ALLOW: `pi`, `omp`, `pi-sandbox.sb`,
@@ -278,12 +279,22 @@ behind linked ancestors. These changes follow the 0.2.0 prerelease.
   `opencode` command still runs its private server outside the sandbox while the
   command lasts; the opt-out only stops that server from staying behind. Not
   planned.
-- **Anything in an ALLOW folder can be changed or deleted.** That includes git
-  hooks, build scripts and other files that run later outside the guard, for
-  example when you run `git commit` or a build in an unguarded terminal. Review
-  changes before running them outside the guard. An ALLOW entry that covers an
+- **Anything in an ALLOW folder can be changed or deleted,** apart from Git
+  hooks. That includes build scripts, `.git/config` and other files that run
+  later outside the guard, for example when you run a build in an unguarded
+  terminal. Review changes before running them outside the guard. An ALLOW entry that covers an
   executable's folder, such as `/opt/homebrew`, makes that executable writable,
   OpenCode's included. Not planned: editing these folders is what the agent is for.
+- **Git hooks are protected against direct writes only.** Sessions cannot write
+  hooks in any `.git/hooks` folder or a submodule's, other than Git's inert
+  `*.sample` files, or in the active hooks folder Git resolves for the launch
+  folder, such as a `core.hooksPath`. A session can still point `core.hooksPath`
+  at a folder it can write, or replace a `.git/hooks` or `.git` folder with a
+  prepared one, and those hooks run at the next `git` command outside the guard.
+  Review `.git/config` changes before running Git outside the guard. Hook
+  managers such as husky, lefthook and pre-commit cannot install hooks from a
+  session. A `core.hooksPath` that is home, a system folder or contains the
+  launch folder refuses the launch. Not planned.
 - **Reads are broad unless denied.** Without DENY entries the agent can read
   every file the account can read except the credential paths, which it can
   neither read nor write: `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.git-credentials`,
