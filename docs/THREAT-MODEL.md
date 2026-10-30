@@ -251,3 +251,27 @@ touch.
 - Guard List entries are compared as written, after escape and link resolution.
   Unicode normalization differences between an entry and the path on disk are in
   scope under class 6 and have not been tested.
+
+## 8. Checker severity
+
+The baseline's decision rule puts literal force-pushes and pipe-to-shell installs
+at ASK. This repository uses no ASK tier; each verdict is deny or allow
+(DESIGN.md section 15, D13). Approved by the operator on 2026-10-29.
+
+- **Tightened to DENY:** plain force pushes (`--force`, `-f`, a `+` refspec),
+  mirror pushes and force-pushed tags, setting `core.hooksPath`, and whole-tree
+  discards (`git reset --hard`, and `git clean -f` or `git checkout -- .` without
+  a path). Evidence: the maintainer's Claude Code and Codex history held about 13
+  deliberate force or mirror pushes in five and a half months, and no
+  `core.hooksPath` writes. The operator runs these outside the guard.
+- **Relaxed to ALLOW:** a download piped to a shell. Repository fact: every guarded
+  session runs inside the harness's Seatbelt profile, which confines the script's
+  writes to the grant (section 3, class 1 outside the grant and class 3), and
+  cc-safety-net, the checker every harness moves to, returns only allow or deny.
+  Accepted risk: the script can change files inside the grant and send anything
+  the session can read, which section 4 already places outside this product.
+- **Relaxed to ALLOW:** `--force-with-lease`, deleting a remote branch, and
+  path-scoped discards. Repository fact: the history above shows these as routine
+  cleanup of branches and files the agent created. Accepted risk: a remote branch
+  deleted by mistake is recovered from a clone or the hosting service, and a
+  path-scoped discard can lose uncommitted changes to the named paths.

@@ -237,7 +237,8 @@ unguarded even if the analyzer loads and prints `FILTER-ONLY`; see
 Set up Pi credentials outside the guard before the first guarded session: Pi
 cannot create its protected `auth.json` inside a session.
 Pi OAuth logins stop at their first refresh inside a session because
-`auth.json` is write-protected. Install packages and edit settings outside the
+`auth.json` is write-protected; log in and refresh outside the guard, or use an
+API key (DESIGN.md decision D16). Install packages and edit settings outside the
 guard. OMP profiles must be selected before confinement; `--profile` must be
 the first argument and appear only once. Active XDG-split OMP state is refused
 by the current launcher.
