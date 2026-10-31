@@ -53,7 +53,7 @@ if (name === 'engine-import') net = 'throw new Error("' + marker + '");';
 if (name === 'engine-init') net = 'export default { server: async () => { throw new Error("' + marker + '"); } };';
 if (name === 'hooks-missing') net = 'export default { server: async () => ({}) };';
 fs.writeFileSync(join(release, 'vendor/cc-safety-net/dist/index.js'), net);
-fs.writeFileSync(join(release, 'vendor/cc-safety-net/dist/api.js'), name === 'api-import' ? 'throw new Error("' + marker + '");' : 'export const checkCommand = ({command}) => command.includes("API-DENY") ? ({kind:"deny",reason:"' + marker + '",ruleId:"' + marker + '"}) : ({kind:"allow"});');
+fs.writeFileSync(join(release, 'vendor/cc-safety-net/dist/api.js'), name === 'api-import' ? 'throw new Error("' + marker + '");' : 'export const checkCommand = ({command}) => command.includes("API-DENY") ? ({kind:"deny",reason:"' + marker + '",ruleId:"' + marker + '"}) : command.startsWith("git config core.hooksPath ") ? ({kind:"deny",reason:"hooks",ruleId:"custom.agent-guard-git/hooks-path"}) : ({kind:"allow"});');
 let installed = release;
 if (name === 'updated') {
   installed = join(engine, 'releases/2.0.0-fixture');

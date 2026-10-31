@@ -230,7 +230,7 @@ async function guard(input) {
       const probe = checkCommand({ command: "git config core.hooksPath agent-guard-probe", cwd: directory })
       checkerRules = probe.kind === "deny" && probe.ruleId === "custom.agent-guard-git/hooks-path"
     } catch {}
-    if (!checkerRules) failure("rules-load", "rules-unavailable", "relaunch")
+    if (!checkerRules) failure("rules-load", "rules-unavailable", "review-policy")
   }
   const temps = [...new Set([canonical(tmpdir()), "/private/tmp"])]
   // OpenCode Guard's engine folder holds the forwarders after a migration.
@@ -303,7 +303,8 @@ async function guard(input) {
       return net?.["tool.execute.before"]?.(info, output)
     }
     if (DELEGATE === false) refuse(tool, "Agent Guard was updated; quit and reopen OpenCode.", "tool-hook", "launcher-release-unavailable", "relaunch")
-    if (!rules || !checkerRules) refuse(tool, "Agent Guard: rules unavailable; relaunch OpenCode.", "tool-hook", "rules-unavailable", "relaunch")
+    if (!rules) refuse(tool, "Agent Guard: rules unavailable; relaunch OpenCode.", "tool-hook", "rules-unavailable", "relaunch")
+    if (!checkerRules) refuse(tool, `Agent Guard: cc-safety-net did not load Agent Guard's rules. Fix ${join(HOME, ".cc-safety-net/rules/rule.json")} (npx cc-safety-net doctor lists the problem), then relaunch OpenCode.`, "tool-hook", "rules-unavailable", "review-policy")
     if (!net || !checkCommand) refuse(tool, "Agent Guard: cc-safety-net failed to load; reinstall Agent Guard.", "tool-hook", !net ? "engine-unavailable" : "api-unavailable", "reinstall")
     if (tool === "bash" && typeof args.command === "string") args.command = normalizedCommand(args.command)
     if (READS.has(tool)) checkRead(args.filePath ?? args.path ?? directory, tool)
