@@ -60,7 +60,7 @@ node "$adapter" isolate "$run/tree" || { fail 'cannot isolate harness discovery'
 /bin/cp -R "$run/tree/engine/peers" "$rel/peers"
 /bin/cp -R "$run/tree/installer" "$rel/"
 /bin/cp "$run/tree/engine/agent-guard" "$run/tree/profiles/opencode/"{opencode,opencode-gui} "$rel/bin/"
-/bin/cp "$run/tree/profiles/opencode/"{harness.zsh,hooks.zsh,runtime.zsh,skills.zsh,protected.sb,plugin.js} "$rel/profiles/opencode/"
+/bin/cp "$run/tree/profiles/opencode/"{harness.zsh,hooks.zsh,runtime.zsh,skills.zsh,protected.sb,credentials.sb,plugin.js} "$rel/profiles/opencode/"
 /bin/cp -R "$run/tree/profiles/pi/commands" "$rel/profiles/pi/"
 /bin/cp "$run/tree/profiles/pi/scripts/"{bind-executable.sh,lib-ops.sh} "$rel/profiles/pi/scripts/"
 /bin/cp -R "$fixture/"{launchers,sandbox,src} "$rel/profiles/pi/"
