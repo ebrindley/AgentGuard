@@ -295,6 +295,18 @@ behind linked ancestors. These changes follow the 0.2.0 prerelease.
   managers such as husky, lefthook and pre-commit cannot install hooks from a
   session. A `core.hooksPath` that is home, a system folder or contains the
   launch folder refuses the launch. Not planned.
+- **The command checker denies only rare Git operations that cannot be undone.**
+  In OpenCode sessions cc-safety-net denies force and mirror pushes, whole-tree
+  discards (`git reset --hard`, `git checkout .`, `git restore .`, forced
+  switches, `git stash clear`), `git clean -f` and setting `core.hooksPath`, and
+  allows per-file `git restore` and `git checkout -- <file>`, `git stash drop`,
+  `git branch -D`, `git tag -d`, merge and rebase aborts, `git push --delete`
+  and `--force-with-lease`. Run a denied command outside the guard. Its pattern
+  rules miss `git -C <dir> restore .`, `git -C <dir> config core.hooksPath`,
+  shell globs such as `git checkout -- *` and direct edits of `.git/config`. A
+  `~/.cc-safety-net/policy.json` setting for one of these rules, or the paranoid
+  level, keeps cc-safety-net's own verdict. Not planned: the policy follows
+  DESIGN.md decision D13.
 - **Reads are broad unless denied.** Without DENY entries the agent can read
   every file the account can read except the credential paths, which it can
   neither read nor write: `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.git-credentials`,
@@ -326,8 +338,7 @@ pi-sandbox-guard 7ad441f's with the recorded adoption differences, so:
   file tools such as `read`, `edit` and `write`. Seatbelt still applies to every
   write. Planned: step 10d.
 - **The analyzer does not check local Git discards.** It allows `git checkout --
-  .`, `git restore .`, `git stash drop` and `git branch -D`, which cc-safety-net
-  blocks in OpenCode sessions. Some ordinary forms also bypass its reset/clean and force-push checks, including
+  .` and `git restore .`, which cc-safety-net blocks in OpenCode sessions. Some ordinary forms also bypass its reset/clean and force-push checks, including
   `git -C repo reset --hard`, `git reset HEAD --hard`, `git clean -d -f`,
   `git -C $(pwd) push --force` and `git push origin $(git branch --show-current) --force`.
   Seatbelt cannot contain remote history changes. These classifier gaps remain

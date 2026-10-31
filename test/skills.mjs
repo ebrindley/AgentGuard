@@ -91,5 +91,11 @@ if (process.argv[2] === "stdin") {
   assert.ok(result.stdout.includes("stdin-received:fixture"), result.stdout)
   console.log("ok terminal input retained")
 }
+if (!process.argv[2] || process.argv[2] === "git") {
+  const policy = join(home, ".cc-safety-net/policy.json")
+  writeFileSync(policy, '{"version":1,"destructive_command_protection":{"overrides":{"git.tag-delete":"on"}}}')
+  client("git")
+  rmSync(policy)
+}
 if (!process.argv[2] || process.argv[2] === "paranoid") client("paranoid", { CC_SAFETY_NET_LEVEL: "paranoid" })
 console.log("ok skills fixture reports retained")

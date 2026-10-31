@@ -178,7 +178,7 @@ pre_cfg='{"model":"m","permission":{"bash":{"ls *":"allow","*":"ask"},"task":"as
 pre_cfg2='{"theme":"x"}'
 print -r -- "$pre_cfg" > "$cfg"
 print -r -- "$pre_cfg2" > "$cfg2"
-print -r -- '{"version":1,"rules":["custom"],"overrides":{"custom":{"x":1}},"transparent_wrappers":["env"]}' > "$cc/rule.json"
+print -r -- '{"version":1,"rules":["custom"],"overrides":{"custom/x":"off"},"transparent_wrappers":["env"]}' > "$cc/rule.json"
 fake_app="$home/Applications/OpenCode.app"
 /bin/mkdir -p "$fake_app/Contents/MacOS"
 print -r -- '<?xml version="1.0" encoding="UTF-8"?>

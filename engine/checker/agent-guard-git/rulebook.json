@@ -1,0 +1,49 @@
+{
+  "rulebook_version": 2,
+  "name": "agent-guard-git",
+  "version": "1.0.0",
+  "allowed_commands": ["git"],
+  "rules": [
+    {
+      "name": "hooks-path",
+      "command": "git",
+      "match": {
+        "command_path": ["config"],
+        "any_args": ["core.hooksPath", "core.hookspath", "core.HooksPath", "CORE.HOOKSPATH"],
+        "exclude_args": ["--get", "--get-all", "--get-regexp", "--get-urlmatch", "--list", "-l", "--show-origin", "--show-scope", "--unset", "--unset-all", "get", "list", "unset"]
+      },
+      "reason": "Hooks run outside Agent Guard; change core.hooksPath in a terminal outside the guard.",
+      "intent": "manual_only"
+    },
+    {
+      "name": "restore-whole-tree",
+      "command": "git",
+      "match": {
+        "command_path": ["restore"],
+        "any_args": [".", "./", ":/"],
+        "exclude_args": ["--staged", "-S"]
+      },
+      "reason": "Restoring the whole tree discards uncommitted work; restore named files, or run it outside Agent Guard.",
+      "intent": "manual_only"
+    },
+    {
+      "name": "checkout-whole-tree",
+      "command": "git",
+      "match": {
+        "command_path": ["checkout"],
+        "any_args": [".", "./", ":/"]
+      },
+      "reason": "Checking out the whole tree discards uncommitted work; check out named files, or run it outside Agent Guard.",
+      "intent": "manual_only"
+    }
+  ],
+  "tests": [
+    { "command": "git config core.hooksPath .githooks", "expect": "blocked", "rule": "hooks-path" },
+    { "command": "git config --get core.hooksPath", "expect": "allowed" },
+    { "command": "git restore .", "expect": "blocked", "rule": "restore-whole-tree" },
+    { "command": "git restore src/a.ts", "expect": "allowed" },
+    { "command": "git restore --staged .", "expect": "allowed" },
+    { "command": "git checkout -- .", "expect": "blocked", "rule": "checkout-whole-tree" },
+    { "command": "git checkout -- src/a.ts", "expect": "allowed" }
+  ]
+}

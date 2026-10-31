@@ -88,6 +88,7 @@ files=(
 # Folders shipped whole, apart from Finder and AppleDouble files.
 trees=(
   engine/vendor/cc-safety-net
+  engine/checker
   engine/peers
   profiles/opencode/templates
 )

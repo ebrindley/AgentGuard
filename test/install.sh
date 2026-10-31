@@ -127,7 +127,7 @@ print -r -- 'export EDITOR=vi' > "$home/dotfiles/zshrc"
 /bin/chmod 600 "$home/dotfiles/zshrc"
 /bin/ln -s "$home/dotfiles/zshrc" "$home/.zshrc"
 print -r -- "$original" > "$cfg"
-print -r -- '{"version":1,"rules":["custom"],"overrides":{"custom":{"x":1}},"transparent_wrappers":["env"]}' > "$cc/rule.json"
+print -r -- '{"version":1,"rules":["custom"],"overrides":{"custom/x":"off"},"transparent_wrappers":["env"]}' > "$cc/rule.json"
 /usr/bin/jq -c . "$source_root/profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json" > "$cc/agent-guard/rulebook.json"
 fake_app="$home/Applications/OpenCode.app"
 /bin/mkdir -p "$fake_app/Contents/MacOS"
@@ -159,7 +159,7 @@ label=S4
 one_block "$home/dotfiles/zshrc" && one_block "$home/.zprofile" && pass 'one PATH block in the target and in .zprofile' || fail 'one PATH block each'
 /usr/bin/grep -qFx 'export EDITOR=vi' "$home/dotfiles/zshrc" && pass "the target keeps its contents" || fail "the target keeps its contents"
 label=S6
-/usr/bin/jq -e '.rules == ["agent-guard", "custom"] and .overrides == {"custom": {"x": 1}}' "$cc/rule.json" >/dev/null &&
+/usr/bin/jq -e '.rules == ["agent-guard", "custom"] and .overrides == {"custom/x": "off"}' "$cc/rule.json" >/dev/null &&
   pass 'rule.json keeps the other rule and its override' || fail 'rule.json keeps the other rule and its override'
 /usr/bin/cmp -s "$cc/agent-guard/rulebook.json" "$source_root/profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json" &&
   pass "the stale rulebook is replaced by the release's" || fail "the stale rulebook is replaced by the release's"
