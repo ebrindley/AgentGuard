@@ -4,8 +4,8 @@ emulate -L zsh
 setopt no_unset pipe_fail
 # Set inside an Agent Guard session; it would choose the plugin's release.
 unset AGENT_GUARD_RELEASE
-# A relocated cache root would take the launches' cache rules and bin folder out of the test home.
-unset XDG_CACHE_HOME
+# Resolve configuration, data, state and cache from the disposable HOME below.
+unset XDG_CACHE_HOME XDG_CONFIG_HOME XDG_DATA_HOME XDG_STATE_HOME
 command -v node >/dev/null || { print -ru2 'Node is required for fixture isolation'; exit 1 }
 
 source_root=${0:A:h:h}
