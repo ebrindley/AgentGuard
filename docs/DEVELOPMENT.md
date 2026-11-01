@@ -144,6 +144,14 @@ For skill changes, run `node test/skills.mjs`, `node test/skills.mjs readonly`,
 fixture uses a test bundle with the real backend. Logs remain under `test/.run-*`.
 These focused runners use disposable homes and require no additional account.
 
+Suites that create fixture homes under the checkout and exercise write denial
+or executable binding need that checkout outside sandbox-writable temporary
+roots: `/private/tmp` (`/tmp`), `/private/var/tmp` (`/var/tmp`), and Darwin
+per-user temporary directories. Otherwise a temporary-directory grant can
+invalidate a write-denial check, or Pi can refuse a fixture executable. This
+does not restrict offline checks or change the native V2 runner's OS-temporary
+fixture homes.
+
 Run from a checkout, outside any agent sandbox, on macOS 15 or later:
 
 ```sh
@@ -191,8 +199,7 @@ paths, the credential set and the peer command. `zsh test/grok-install.sh` insta
 that harness from test releases over a stand-in Grok link: the recorded
 executable, a failure and a kill at each Grok test point, the update, doctor, a
 link put back by Grok, a regular file at `~/.local/bin/grok`, and uninstall
-restoring what was there. Both run in the full validation. Run them from a
-checkout outside `/private/tmp`, which every profile makes writable.
+restoring what was there. Both run in the full validation.
 
 `zsh test/pi.sh` tests Pi's guard. It runs pi-sandbox-guard's suites from
 `profiles/pi/test` and `profiles/pi/scripts` against Agent Guard's copy, changed
