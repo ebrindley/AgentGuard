@@ -286,10 +286,37 @@ configuration, extensions, active Git hooks and specified credentials, and
 denies reads of specified credential paths and `.env` files. The complete
 policy and exceptions are in [SECURITY.md](../SECURITY.md#pi-and-omp).
 
-The bash analyzer checks shell commands only; it does not check file tools.
-It can block a command or ask for confirmation, but Seatbelt supplies the
-enforcement boundary. A direct launch of the real Pi/OMP executable is
-unguarded even if the analyzer loads and prints `FILTER-ONLY`; see
+Pi and OMP check every tool call with cc-safety-net, under the same policy as
+OpenCode (DESIGN.md decision D13). Each verdict is allow or refuse: there are no
+confirmation prompts. At launch the guard copies `~/.cc-safety-net` into the
+session and adds Agent Guard's Git rules; `~/.cc-safety-net` itself is not
+changed. Routine work is allowed: `git status`, `commit`, `rebase`, `pull`,
+`push` (also `--force-with-lease` and `--delete`), `stash drop`, `branch -D`,
+`git restore` and `git checkout -- <path>` with a path, `rm -rf` of a literal
+path below the project, package managers, builds and tests. Refused: `git push`
+with `--force`, `-f` or a `+` refspec, and `--mirror`; `git reset --hard`,
+`git checkout .`, `git restore .`, `git clean -f`, `git switch -f`, `git stash clear`; `git config core.hooksPath`; `rm -rf` of the project folder itself, its
+parents, home, `/` or a dynamic path such as `rm -rf "$DIR"`; a download
+piped to a shell; `eval "$(tool init -)"` shell setup; and an interpreter that
+reads its program from a heredoc, such as `python3 - <<'PY'` (write the program to
+a file first). Run a refused command in a terminal outside the guard. The refusal names the rule.
+
+The file tools `read`, `write` and `edit` are checked for secret paths: `.env`
+files and variants (`.env.example` is fine), `.npmrc`, `.netrc`, `.pypirc`,
+`.git-credentials`, key and certificate files (`*.pem`, `*.key`, `*.p12`, `*.pfx`,
+`*.jks`, `*.keystore`, `*.kdbx`), SSH key names such as `id_rsa`, and the
+credential folders under `~`. This applies to those names anywhere, including a
+public `.pem` fixture in the project; edit such a file outside the guard. Other
+files, paths outside the project and paths with spaces are not refused by the
+checker; Seatbelt still decides writes.
+
+If the checker cannot run, every tool call is refused and the message says what
+to fix: relaunch through `pi` or `omp` for a missing session copy, fix
+`~/.cc-safety-net/rules/rule.json` (`npx cc-safety-net doctor` lists the problem)
+when the Git rules did not load, or run `agent-guard update` when cc-safety-net
+fails to load. Seatbelt supplies the enforcement boundary. A direct launch of
+the real Pi/OMP executable is unguarded and refuses every tool call, because it
+has no session copy; see
 [unguarded execution and maintenance](OPERATIONS.md#running-pi-or-omp-without-the-guard).
 
 Set up Pi credentials outside the guard before the first guarded session: Pi

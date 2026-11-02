@@ -100,17 +100,17 @@ central limitation of this design, and classes 1 and 2 above are where it bites.
 | Damage class | What covers it |
 | --- | --- |
 | 1, outside the grant | The Seatbelt profile. Enforced. |
-| 1, inside the grant | cc-safety-net and Pi's analyzer, then operator review. No boundary. |
-| 2, local history | cc-safety-net and Pi's analyzer. No boundary. |
-| 2, remote history | cc-safety-net and Pi's analyzer. Seatbelt cannot reach it. |
+| 1, inside the grant | cc-safety-net, then operator review. No boundary. |
+| 2, local history | cc-safety-net. No boundary. |
+| 2, remote history | cc-safety-net. Seatbelt cannot reach it. |
 | 3 | The Seatbelt profile. Enforced. |
 | 4 | The profile, for the assets it names; the exceptions in SECURITY.md are accepted. |
 | 5, 6 | The Seatbelt profile. Enforced. |
 
 Two consequences follow, and they pull in opposite directions.
 
-SECURITY.md's statement that the in-process checkers are advisory and "nothing
-depends on them for safety" means they are not a containment boundary and must
+SECURITY.md's statement that the in-process checker is advisory and "nothing
+depends on it for safety" means it is not a containment boundary and must
 never be the stated defence for a class the profile could enforce. A
 boundary-class invariant is defended in the profile or it is not defended;
 adding an advisory check for it manufactures the appearance of a control.
@@ -257,7 +257,11 @@ touch.
 The baseline's decision rule puts literal force-pushes and pipe-to-shell installs
 at ASK. This repository uses no ASK tier; each verdict is deny or allow
 (DESIGN.md section 15, D13). Approved by the operator on 2026-10-29; revised on
-2026-10-30 so that routine work is never denied.
+2026-10-30 so that routine work is never denied. The rule applies to every
+harness with a command checker. Pi and OMP ran pi-sandbox-guard's analyzer, which
+asked, until the switch to cc-safety-net (step 10d); their confirmations ended
+with it, and an operation the analyzer asked about is now allowed or denied by
+the lists below, so that Pi, OMP and OpenCode give the same verdict.
 
 - **Tightened to DENY:** plain force pushes (`--force`, `-f`, a `+` refspec),
   mirror pushes and force-pushed tags, setting `core.hooksPath`, whole-tree

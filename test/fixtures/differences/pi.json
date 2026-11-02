@@ -1,7 +1,7 @@
 {
   "source": "pi-sandbox-guard",
   "commit": "7ad441f",
-  "reason": "profiles/pi carries pi-sandbox-guard 7ad441f's Pi profile with the protections Agent Guard adds to Pi sessions (docs/DESIGN.md section 11). Every change to a vendored file is in the patch and listed here; test/pi-files.mjs checks both, test/pi-launch.mjs tests differences 1 to 5, 7, 9 and 13, test/pi-commands.sh difference 6 and the corpus difference 8.",
+  "reason": "profiles/pi carries pi-sandbox-guard 7ad441f's Pi profile with the protections Agent Guard adds to Pi sessions (docs/DESIGN.md section 11). Every change to a vendored file is in the patch and listed here; test/pi-files.mjs checks both, test/pi-launch.mjs tests differences 1 to 5, 7, 9 and 13, test/pi-commands.sh difference 6, profiles/pi/test/checker.mjs difference 17 and the corpus difference 8.",
   "patch": "pi.patch",
   "files": {
     "LICENSE": { "mode": "644", "blob": "18a32b25985be476250a26c9e8c47f823ae92172", "commit": "b60240a", "note": "From b60240a, the pi-sandbox-guard commit after 7ad441f that changed only LICENSE's copyright line, to name pi-sandbox-guard contributors." },
@@ -18,10 +18,8 @@
     "src/index.mjs": { "mode": "644", "blob": "d997be1bc417effcf0c0318cdc2e3bafb542b342" },
     "src/pi-types.d.ts": { "mode": "644", "blob": "8a88e39d7dd5f5a2609914ed22eda0d57716655d" },
     "src/validate-bash-command.sh": { "mode": "755", "blob": "5c2099698cecb8289853a960fca38177e512b84f" },
-    "test/adapter.mjs": { "mode": "644", "blob": "e26069bf3d38e0139422ae848b7b72057cdc5b13" },
     "test/corpus.mjs": { "mode": "644", "blob": "ca5197ce6a8de824d2a0e7362713718d309761b3" },
     "test/corpus/corpus.json": { "mode": "644", "blob": "53ef5270cc221964207f493b819717ba934a913f" },
-    "test/degraded.mjs": { "mode": "644", "blob": "6762c27dc3f52549c9d1156424c3bb01e9316f28" },
     "test/shim.mjs": { "mode": "644", "blob": "98d10e2434e169a416f0b2b1472714beca978de2" },
     "test/smoke.mjs": { "mode": "644", "blob": "c31f80d4745fc151903f3f8a1cdae9293995a619" }
   },
@@ -29,7 +27,8 @@
     "package.json": "Replaces 7ad441f's package.json, whose scripts run the npm deploy, bind and status commands that Agent Guard replaces; keeps the module fields.",
     "commands/bind.zsh": "agent-guard bind: runs scripts/bind-executable.sh with HOME set to the account home and its path overrides unset; replaces npm run bind.",
     "commands/doctor.zsh": "The Pi checks of agent-guard doctor, which replace scripts/status.sh and scripts/check-path.sh.",
-    "commands/wrapper.zsh": "agent-guard wrapper add|remove|list; replaces deploy-launchers.sh --extra-launchers."
+    "commands/wrapper.zsh": "agent-guard wrapper add|remove|list; replaces deploy-launchers.sh --extra-launchers.",
+    "test/checker.mjs": "Tests the extension of difference 17 against a disposable release and session copy; replaces test/adapter.mjs and test/degraded.mjs, which tested the analyzer adapter."
   },
   "not_vendored": {
     "scripts/test-ops.sh": "Tests pi-sandbox-guard's npm deploy, status and bind scripts, which Agent Guard replaces.",
@@ -130,11 +129,16 @@
       "change": "Deny connections to the agents that hold keys, unless the operator sets AGENT_GUARD_SSH_AGENT=allow outside the guard: ssh-agent's launchd socket under /private/var/run or /private/tmp, and sockets under ~/.ssh and ~/.gnupg, where gpg-agent and SSH control sockets live. Sessions already run without SSH_AUTH_SOCK and cannot read those folders, but a file deny does not stop a socket connection, so the agents could be used with every loaded key (docs/DESIGN.md decision D15). Other Unix sockets stay reachable.",
       "files": ["sandbox/pi-sandbox.sb", "sandbox/pi-sandbox-preamble.zsh"],
       "parameters": ["AG_SSH_AGENT"]
+    },
+    {
+      "id": 17,
+      "change": "The extension checks tool calls with cc-safety-net's Pi entry from the release (vendor/cc-safety-net/dist/pi/index.js), through a stand-in Pi API that captures its tool_call handler, once for each candidate working folder with the worst result kept, in place of the analyzer; the analyzer files stay in the profile, unused, until a later release removes them. The verdicts are allow or block: there are no confirmations. The policy is the session copy of the user's cc-safety-net configuration under decision D13 (docs/DESIGN.md section 5, Command checker), which the preamble builds at launch, outside the sandbox, with the release's checker/snapshot.zsh into <engine>/state/pi/<release>.XXXXXXXX/checker, a folder the profile write-protects with the engine folder; the preamble exports CC_SAFETY_NET_HOME, AGENT_GUARD_RELEASE, CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY=1 and the level (strict unless CC_SAFETY_NET_LEVEL=paranoid), clears the other CC_SAFETY_NET_* selectors, and prunes ended sessions' folders in the background. The extension blocks every tool call, naming the repair, when the session copy is missing or outside that state folder, cc-safety-net fails to load, or the probe `git config core.hooksPath agent-guard-probe` is not denied by Agent Guard's hooks-path rule. The FILTER-ONLY diagnostic and the per-event de-duplication stay. A Pi started without the shim has no session copy, so its extension blocks every call.",
+      "files": ["sandbox/pi-sandbox-preamble.zsh", "src/index.mjs"]
     }
   ],
   "test_notes": [
     "test/pi.sh runs profiles/pi/test/shim.mjs unchanged: its launch cases run the preamble against the account's real home, because its fixtures keep the real directory-service lookup. Since difference 4 they create ~/.cache/opencode/bin in that account when it is missing, as they already create and remove ~/.local/share/pi-sandbox-bindable-* folders. Difference 9 also prepares active Pi/OMP roots there, including ~/.omp/agent, ~/.omp/profiles and named profiles; run these cases in a disposable account.",
-    "test/pi.sh runs the analyzer suites (smoke, corpus, adapter, degraded) with the account's home, which corpus.mjs needs, under a Seatbelt profile that denies writes to ~/.pi, so the analyzer's security log is not appended to."
+    "test/pi.sh runs the analyzer suites (smoke, corpus) with the account's home, which corpus.mjs needs, under a Seatbelt profile that denies writes to ~/.pi, so the analyzer's security log is not appended to."
   ],
   "test_edits": [
     {

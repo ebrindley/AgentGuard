@@ -5,9 +5,9 @@
 // the disposable home. A stand-in Pi runs the command it is given inside the
 // session. Runs outside any sandbox.
 import assert from 'node:assert/strict';
-import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { userInfo } from 'node:os';
 import { layout, stage } from './engines/zsh.mjs';
@@ -564,6 +564,99 @@ try {
     });
   }
 
+  // Difference 17: the checker's session copy, built before the sandbox applies.
+  {
+    const a = account('checker');
+    const engine = join(a.home, 'Library/Application Support/AgentGuard');
+    const source = join(run, 'checker-source');
+    mkdirSync(source);
+    stage(root, source, a.home);
+    const release = layout(source, engine);
+    cpSync(join(source, 'engine/vendor'), join(release, 'vendor'), { recursive: true });
+    cpSync(join(root, 'profiles/opencode/templates/cc-safety-net'), join(a.home, '.cc-safety-net'), { recursive: true });
+    const userPolicy = '{"version":1,"safety":{"level":"strict"}}\n';
+    writeFileSync(join(a.home, '.cc-safety-net/policy.json'), userPolicy);
+    const env = (name) => session(a, ['/usr/bin/printenv', name]);
+    // The stand-in extension host: loads the profile's extension as the session does
+    // and prints the verdicts of three commands.
+    const index = JSON.stringify(pathToFileURL(join(pi, 'src/index.mjs')).href);
+    const verdicts = `
+      const { default: extension } = await import(${index});
+      let handler;
+      extension({ on: (type, h) => { if (type === 'tool_call') handler = h; } });
+      const ctx = { cwd: process.cwd(), sessionManager: { getSessionId: () => 'launch-test' } };
+      const out = [];
+      for (const command of ['git status', 'git reset --hard', 'git push --force origin main']) {
+        const r = await handler({ type: 'tool_call', toolName: 'bash', input: { command } }, ctx);
+        out.push(r && r.block ? 'block' : 'allow');
+      }
+      console.log(out.join(' '));`;
+    let sessionCopy;
+    check('difference 17: the session copy is in write-protected engine state and CC_SAFETY_NET_HOME names it', () => {
+      const r = env('CC_SAFETY_NET_HOME');
+      allowed(r, 'session');
+      sessionCopy = r.stdout.trim();
+      const states = join(engine, 'state/pi');
+      assert.ok(sessionCopy.startsWith(`${states}/${basename(release)}.`) && sessionCopy.endsWith('/checker'), sessionCopy);
+      assert.ok(existsSync(join(sessionCopy, 'rules/agent-guard-git/rulebook.json')));
+      assert.match(readFileSync(join(sessionCopy, 'policy.json'), 'utf8'), /"git.stash-drop": "off"/);
+      assert.equal(env('AGENT_GUARD_RELEASE').stdout.trim(), basename(release));
+      assert.equal(env('CC_SAFETY_NET_LEVEL').stdout.trim(), 'strict');
+      assert.equal(env('CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY').stdout.trim(), '1');
+      denied(write(a, join(sessionCopy, 'policy.json')), 'the copy');
+      denied(session(a, ['/usr/bin/touch', join(dirname(sessionCopy), 'other')]), 'the session folder');
+    });
+    check('difference 17: ~/.cc-safety-net is only read', () => {
+      assert.equal(readFileSync(join(a.home, '.cc-safety-net/policy.json'), 'utf8'), userPolicy);
+    });
+    check('difference 17: ambient CC_SAFETY_NET_* selectors are replaced by the launch', () => {
+      const r = session(a, ['/usr/bin/printenv', 'CC_SAFETY_NET_HOME'], { env: { CC_SAFETY_NET_HOME: '/private/tmp/ambient' } });
+      assert.ok(r.stdout.trim().startsWith(join(engine, 'state/pi')), r.stdout);
+      for (const name of ['CC_SAFETY_NET_WORKTREE', 'SAFETY_NET_WORKTREE', 'CC_SAFETY_NET_AUDIT_HOME'])
+        assert.equal(session(a, ['/usr/bin/printenv', name], { env: { [name]: '/private/tmp/ambient' } }).status, 1, name);
+      assert.equal(session(a, ['/usr/bin/printenv', 'CC_SAFETY_NET_LEVEL'], { env: { CC_SAFETY_NET_LEVEL: 'paranoid' } }).stdout.trim(), 'paranoid');
+      assert.equal(session(a, ['/usr/bin/printenv', 'CC_SAFETY_NET_LEVEL'], { env: { CC_SAFETY_NET_LEVEL: 'off' } }).stdout.trim(), 'strict');
+    });
+    for (const runtime of ['pi', 'omp']) {
+      check(`difference 17: ${runtime}'s extension gives D13's verdicts inside the session`, () => {
+        const r = session(a, [process.execPath, '--input-type=module', '-e', verdicts], { runtime });
+        allowed(r, runtime);
+        assert.equal(r.stdout.trim(), 'allow block block', r.stderr);
+      });
+    }
+    check('difference 17: each launch gets its own copy', () => {
+      const first = env('CC_SAFETY_NET_HOME').stdout.trim(), second = env('CC_SAFETY_NET_HOME').stdout.trim();
+      assert.notEqual(first, second);
+      assert.ok(existsSync(join(dirname(first), 'owner')));
+    });
+    check('difference 17: a user rule.json the checker rejects blocks every call and the launch says so', () => {
+      const rules = join(a.home, '.cc-safety-net/rules/rule.json');
+      const saved = readFileSync(rules, 'utf8');
+      writeFileSync(rules, JSON.stringify({ ...JSON.parse(saved), overrides: { custom: { x: 1 } } }));
+      try {
+        const r = session(a, [process.execPath, '--input-type=module', '-e', verdicts]);
+        allowed(r, 'session');
+        assert.equal(r.stdout.trim(), 'block block block');
+        assert.match(r.stderr, /did not load Agent Guard's rules/);
+        writeFileSync(rules, '{ not json');
+        const broken = session(a, ['/usr/bin/printenv', 'CC_SAFETY_NET_HOME']);
+        assert.ok(started(broken));
+        assert.equal(broken.stdout.trim(), '');
+        assert.match(broken.stderr, /cannot build the checker's session copy.*rule\.json/);
+      } finally {
+        writeFileSync(rules, saved);
+      }
+    });
+    check('difference 17: without an installed release there is no copy and the extension blocks', () => {
+      const bare = account('checker-bare');
+      const r = session(bare, [process.execPath, '--input-type=module', '-e', verdicts]);
+      allowed(r, 'session');
+      assert.equal(r.stdout.trim(), 'block block block');
+      assert.match(r.stderr, /release folder is missing/);
+      assert.ok(!existsSync(join(bare.home, 'Library/Application Support/AgentGuard/state')));
+    });
+  }
+
   // Difference 16: the SSH agent's launchd socket. ssh-add -l exits 2 only when it
   // cannot reach the agent.
   {
@@ -736,7 +829,7 @@ try {
       assert.equal(r.stdout, 'stand-in --version\n');
       assert.match(r.stderr, /already inside another sandbox; Agent Guard's sandbox is not applied/);
       assert.ok(!existsSync(join(home, 'Agent Guard/last-launch-opencode.log')), 'launch log written');
-      assert.ok(!existsSync(join(engine, 'state')), 'engine state written');
+      assert.ok(!existsSync(join(engine, 'state/opencode')) && !existsSync(join(engine, 'state/rules.json')), 'OpenCode engine state written');
     });
   }
 } finally {

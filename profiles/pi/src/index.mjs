@@ -1,15 +1,23 @@
-// index.mjs — shared Pi/OMP extension entry point for pi-sandbox-guard.
+// index.mjs — shared Pi/OMP extension entry point.
 //
-// A best-effort, fail-closed PRE-EXECUTION guard for the `bash` tool. It is NOT
-// a sandbox: Pi allows later handlers to mutate event.input with no
+// A best-effort PRE-EXECUTION guard: every tool call goes to cc-safety-net's Pi
+// entry (vendor/cc-safety-net/dist/pi/index.js in the Agent Guard release), which
+// checks bash commands and routes the file tools through its secret-path checks.
+// It is NOT a sandbox: Pi allows later handlers to mutate event.input with no
 // re-validation, so this is authoritative only if it runs last and nothing
-// rewrites the command afterward (documented limitation — see README).
+// rewrites the command afterward. Seatbelt is the layer that does not depend on it.
 //
-// Maps the harness-agnostic core Decision onto Pi's { block, reason } contract.
+// The entry is driven through a stand-in Pi API that captures its `tool_call`
+// handler; neither Pi nor OMP loads cc-safety-net as an extension of its own. The
+// handler runs once per candidate working folder and the worst result wins. The
+// policy is the session copy of the user's cc-safety-net configuration that the
+// launcher built outside the sandbox (docs/DESIGN.md section 5, Command checker,
+// and decision D13). Every verdict is allow or block: there are no confirmations.
 
-import { statSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { analyzeCommand, preflight, SEVERITY } from './guard-core.mjs';
+import { existsSync, realpathSync, statSync } from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const EVENT_STATE_KEY = Symbol.for('@ebrindley/pi-sandbox-guard/event-state');
 const eventState = globalThis[EVENT_STATE_KEY] ?? {
@@ -35,14 +43,25 @@ export function processedEventCountForTests() {
   return eventState.processed;
 }
 
+const SENTINEL_COMMAND = 'git config core.hooksPath agent-guard-probe';
+const SENTINEL_RULE = 'custom.agent-guard-git/hooks-path';
+const UNSAFE_NET_ENV = ['CC_SAFETY_NET_WORKTREE', 'SAFETY_NET_WORKTREE', 'CC_SAFETY_NET_AUDIT_HOME'];
+
+const isDirectory = (p) => {
+  try {
+    return statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+};
+
 /**
  * Collect the DISTINCT, existing-directory cwd candidates for a tool call.
  * Pi may surface the execution directory on event.input.cwd, event.cwd, or
  * ctx.cwd, and event.input is model-mutable — so we do NOT trust any single one
- * as authoritative. We analyze against ALL of them and take the worst verdict
- * (see analyzeWorstCwd), which is fail-safe whichever one bash actually uses.
- * Non-string and non-directory candidates are dropped here; if that leaves
- * none, the caller passes undefined and the core fail-closes.
+ * as authoritative. The checker runs against ALL of them and the worst result
+ * wins, which is fail-safe whichever one bash actually uses. Non-string and
+ * non-directory candidates are dropped here.
  */
 function candidateCwds(event, ctx) {
   const raw = [event?.input?.cwd, event?.cwd, ctx && ctx.cwd];
@@ -51,31 +70,9 @@ function candidateCwds(event, ctx) {
   for (const c of raw) {
     if (typeof c !== 'string' || c.length === 0 || seen.has(c)) continue;
     seen.add(c);
-    try {
-      if (statSync(c).isDirectory()) dirs.push(c);
-    } catch {
-      // missing / not a dir / no perms -> ignore this candidate
-    }
+    if (isDirectory(c)) dirs.push(c);
   }
   return dirs;
-}
-
-/**
- * Trusted policy env, sourced from the HOST process — NOT from the target repo.
- * (The core further filters this to an allow-list of keys, so anything not on
- * that list is dropped even if we pass it.) Only POLICY_RM_SAFE_ROOTS is a real,
- * supported knob today. We do NOT forward disarm keys (CLAUDE_ALLOW_RM_RF*),
- * analyzer-native aliases, or dead surfaces (security-log path, bash-guard max
- * bytes): the core allow-list is the single source of truth.
- *
- * POLICY_ASK_FALLBACK is intentionally NOT read. Without an interactive
- * confirm UI, ask verdicts always deny. A silent headless allow path is not
- * supported — ambient env (including host profiles) must not weaken the guard.
- */
-function trustedPolicyEnv() {
-  const env = {};
-  if (process.env.POLICY_RM_SAFE_ROOTS) env.POLICY_RM_SAFE_ROOTS = process.env.POLICY_RM_SAFE_ROOTS;
-  return env;
 }
 
 /**
@@ -94,23 +91,131 @@ function trustedPolicyEnv() {
  *   - Wording says "could not verify" rather than "not detected" because an
  *     unrelated but valid Seatbelt profile would also lack this marker.
  *
- * Warn, never block: filter-only is a documented, legitimate deployment mode
- * (`npm run deploy` without launchers, or a Pi-package install). A missing OS
- * sandbox does not make a healthy analyzer unusable, which is the distinct
- * condition that DEGRADED covers below.
+ * Warn, never block: a missing OS sandbox is a different condition from an
+ * unavailable checker, which the health check below covers.
  */
 function warnIfUnverifiedSandbox() {
   if (process.env.PI_SANDBOX_PROFILE_DIGEST) return;
   // eslint-disable-next-line no-console
   console.error(
     '[pi-sandbox-guard] FILTER-ONLY: could not verify launch through the protected ' +
-      'Pi/OMP Seatbelt shim. The bash filter is active; this guard is not applying an OS ' +
+      'Pi/OMP Seatbelt shim. The command checker is active; this guard is not applying an OS ' +
       'sandbox, so assume out-of-project writes are uncontained unless you know one ' +
       'is in place by other means. For the full guard, install Agent Guard (`agent-guard update`, ' +
       'or the one-line installer) and run `agent-guard bind`, then launch via the ' +
       '`pi` or `omp` shim on PATH (startup prints "OS sandbox ON").',
   );
 }
+
+const releaseId = (v) =>
+  typeof v === 'string' && v.length <= 100 && /^[0-9A-Za-z.+-]+$/.test(v) && v !== '.' && v !== '..' ? v : null;
+
+/**
+ * Find the pieces the launcher prepared: the release folder (cc-safety-net comes
+ * from it) and the write-protected session copy of the checker's configuration.
+ * Returns { release, copy } or { failure } with the reason every call is blocked.
+ */
+function locate() {
+  let home;
+  try {
+    home = realpathSync(homedir());
+  } catch {
+    return { failure: 'the account home cannot be resolved' };
+  }
+  const engine = join(home, 'Library/Application Support/AgentGuard');
+  const releases = join(engine, 'releases');
+  let release = null;
+  try {
+    const named = releaseId(process.env.AGENT_GUARD_RELEASE);
+    const dir = named ? join(releases, named) : realpathSync(join(engine, 'current'));
+    if (dir.startsWith(releases + '/') && existsSync(join(dir, 'RELEASE'))) release = dir;
+  } catch {
+    // fall through to the failure below
+  }
+  if (!release) {
+    return { failure: 'Agent Guard\'s release folder is missing; reinstall Agent Guard (`agent-guard update`), then relaunch' };
+  }
+  const named = process.env.CC_SAFETY_NET_HOME;
+  let copy = null;
+  try {
+    if (named) {
+      const real = realpathSync(named);
+      if (real.startsWith(join(engine, 'state/pi') + '/') && existsSync(join(real, 'rules/rule.json'))) copy = real;
+    }
+  } catch {
+    // an unreadable copy counts as missing
+  }
+  if (!copy) {
+    return {
+      failure:
+        'the checker\'s session copy is missing; start Pi or OMP through the protected shim (the `pi` or `omp` on PATH), which builds it at launch',
+    };
+  }
+  return { release, copy };
+}
+
+/**
+ * Load cc-safety-net's Pi entry with a stand-in Pi API and prove that Agent Guard's
+ * Git rules are in force. cc-safety-net drops a rule source it cannot load and goes
+ * on allowing, so the sentinel (docs/DESIGN.md section 5, Health) must be denied by
+ * the hooks-path rule before any call is allowed.
+ */
+async function loadChecker() {
+  const found = locate();
+  if (found.failure) return { failure: found.failure };
+  for (const name of UNSAFE_NET_ENV) delete process.env[name];
+  if (process.env.CC_SAFETY_NET_LEVEL !== 'paranoid') process.env.CC_SAFETY_NET_LEVEL = 'strict';
+  process.env.CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY = '1';
+  process.env.CC_SAFETY_NET_HOME = found.copy;
+  let handler = null;
+  try {
+    const entry = join(found.release, 'vendor/cc-safety-net/dist/pi/index.js');
+    const module = await import(pathToFileURL(entry).href);
+    const standIn = {
+      on(type, h) {
+        if (type === 'tool_call' && typeof h === 'function') handler = h;
+      },
+      // The entry's `cc-safety-net` command is not offered to Pi.
+      registerCommand() {},
+      sendUserMessage() {},
+    };
+    module.default(standIn);
+  } catch {
+    handler = null;
+  }
+  if (!handler) {
+    return { failure: 'cc-safety-net failed to load; reinstall Agent Guard (`agent-guard update`), then relaunch' };
+  }
+  const probeCwd = isDirectory(process.cwd()) ? process.cwd() : tmpdir();
+  let probe;
+  try {
+    probe = await handler(
+      { type: 'tool_call', toolName: 'bash', input: { command: SENTINEL_COMMAND } },
+      checkerContext(null, probeCwd),
+    );
+  } catch {
+    probe = null;
+  }
+  if (!(probe && probe.block === true && typeof probe.reason === 'string' && probe.reason.includes(`Rule: ${SENTINEL_RULE}`))) {
+    return {
+      failure:
+        'cc-safety-net did not load Agent Guard\'s rules. Fix ~/.cc-safety-net/rules/rule.json (`npx cc-safety-net doctor` lists the problem), then relaunch',
+    };
+  }
+  return { handler };
+}
+
+/** The entry reads ctx.cwd and ctx.sessionManager.getSessionId(). */
+function checkerContext(ctx, cwd) {
+  const c = Object.create(ctx && typeof ctx === 'object' ? ctx : null);
+  Object.defineProperty(c, 'cwd', { value: cwd, enumerable: true });
+  if (typeof ctx?.sessionManager?.getSessionId !== 'function') {
+    Object.defineProperty(c, 'sessionManager', { value: { getSessionId: () => 'agent-guard' }, enumerable: true });
+  }
+  return c;
+}
+
+const block = (reason) => ({ block: true, reason });
 
 /**
  * Pi extension default export.
@@ -119,148 +224,63 @@ function warnIfUnverifiedSandbox() {
 export default function (pi) {
   warnIfUnverifiedSandbox();
 
-  // Preflight once at load. If the guard cannot run, we do NOT silently allow:
-  // we flip into block-all-bash mode and announce it loudly.
-  /** @type {null | Awaited<ReturnType<typeof preflight>>} */
-  let health = null;
-  const ready = preflight()
-    .then((h) => {
-      health = h;
-      if (!h.ok) {
-        const why =
-          h.platform === 'win32'
-            ? 'unsupported platform (win32, no bash)'
-            : !h.scriptPresent
-              ? 'analyzer script missing'
-              : `missing helpers: ${h.missing.join(', ')}`;
+  // Load once. If the checker cannot run, we do NOT silently allow: every tool
+  // call is blocked with the reason, and the reason is announced at startup.
+  let checker = { failure: 'the checker has not finished loading' };
+  const ready = loadChecker()
+    .then((c) => {
+      checker = c;
+      if (c.failure) {
         // eslint-disable-next-line no-console
-        console.error(
-          `[pi-sandbox-guard] DEGRADED: ${why}. All bash commands will be BLOCKED until fixed.`,
-        );
+        console.error(`[pi-sandbox-guard] DEGRADED: ${c.failure}. All tool calls will be BLOCKED until fixed.`);
       }
     })
     .catch(() => {
-      health = { ok: false, missing: [], scriptPresent: false, platform: process.platform };
+      checker = { failure: 'cc-safety-net failed to load; reinstall Agent Guard (`agent-guard update`), then relaunch' };
     });
 
   const handleToolCall = async (event, ctx) => {
-    // Only gate the bash tool. Everything else passes through untouched.
-    const isBash =
-      typeof pi.isToolCallEventType === 'function'
-        ? pi.isToolCallEventType('bash', event)
-        : event.toolName === 'bash';
-    if (!isBash) return;
-
-    const command = event?.input?.command;
-    if (typeof command !== 'string') {
-      return {
-        block: true,
-        reason: '[pi-sandbox-guard] Malformed bash command payload; blocked as fail-safe.',
-      };
-    }
-    // Allow a genuinely empty bash invocation through — it is a no-op. The core
-    // also fail-closes on empties if they ever reach it, so this is belt-and-
-    // suspenders for the common case.
-    if (command.trim().length === 0) return;
-
     await ready;
 
-    // Guard unavailable (missing analyzer, missing helpers, or win32): BLOCK ALL
-    // bash unconditionally. A partial-regex allowlist has been proved to miss real
-    // catastrophic commands (find -delete, shred, truncate, wipefs, ANSI-C quoted
-    // rm, …). A bricked agent is visible and recoverable; a silently-allowed
-    // `shred /dev/sda` is not.
-    if (!health || !health.ok) {
-      const why = !health
-        ? 'preflight failed'
-        : health.platform === 'win32'
-          ? 'unsupported platform (win32, no bash)'
-          : !health.scriptPresent
-            ? 'analyzer script missing'
-            : `missing helpers: ${health.missing.join(', ')}`;
-      return {
-        block: true,
-        reason: `[pi-sandbox-guard] Guard unavailable (${why}); all bash commands are blocked until the guard is restored.`,
-      };
+    // Checker unavailable (no session copy, cc-safety-net failed to load, or Agent
+    // Guard's rules not in force): BLOCK EVERY tool call. A bricked agent is
+    // visible and recoverable; a silently allowed destructive command is not.
+    if (!checker.handler) {
+      return block(`[pi-sandbox-guard] Guard unavailable: ${checker.failure}. All tool calls are blocked until the guard is restored.`);
     }
 
-    // Determine the cwd(s) the bash tool might execute in, for correct
-    // relative-path analysis. We do NOT trust event.input.cwd as authoritative
-    // (event.input is model-mutable, and a wrong cwd could turn a catastrophic
-    // `rm -rf .` into an allowed one). Instead we analyze against EVERY distinct
-    // candidate directory and take the WORST verdict — fail-safe regardless of
-    // which one bash truly uses. If there are no valid candidates we pass
-    // undefined and the core fail-closes (block).
-    const cwds = candidateCwds(event, ctx);
+    // A genuinely empty bash invocation is a no-op.
+    if (
+      event &&
+      typeof event === 'object' &&
+      event.toolName === 'bash' &&
+      typeof event.input?.command === 'string' &&
+      event.input.command.trim().length === 0
+    ) {
+      return;
+    }
 
-    // Defense-in-depth: the core is contracted never to throw, but if it ever
-    // does (or a future change regresses that), a throw here would escape into
-    // Pi's loop. Catch and fail closed.
-    let verdict;
+    // Run the entry against EVERY distinct candidate directory and take the worst
+    // result. With no usable directory the entry sees the session's own cwd and
+    // fails closed for the tools that need one.
+    const cwds = candidateCwds(event, ctx);
+    if (cwds.length === 0) cwds.push(ctx && typeof ctx.cwd === 'string' ? ctx.cwd : '');
+
+    // The entry is contracted never to throw; a throw here would escape into Pi's
+    // loop, so catch and fail closed.
+    let worst;
     try {
-      if (cwds.length === 0) {
-        verdict = await analyzeCommand(command, {
-          cwd: undefined, // core fail-closes
-          trustedPolicyEnv: trustedPolicyEnv(),
-          home: process.env.HOME,
-        });
-      } else {
-        const verdicts = await Promise.all(
-          cwds.map((cwd) =>
-            analyzeCommand(command, {
-              cwd,
-              trustedPolicyEnv: trustedPolicyEnv(),
-              home: process.env.HOME,
-            }),
-          ),
-        );
-        // Worst-of: pick the highest-severity verdict (block > ask > allow).
-        verdict = verdicts.reduce((worst, v) =>
-          SEVERITY[v.decision] > SEVERITY[worst.decision] ? v : worst,
-        );
+      for (const cwd of cwds) {
+        const result = await checker.handler(event, checkerContext(ctx, cwd));
+        if (result && result.block) {
+          worst = result;
+          break;
+        }
       }
     } catch {
-      return { block: true, reason: '[pi-sandbox-guard] Guard errored; blocked as fail-safe.' };
+      return block('[pi-sandbox-guard] Guard errored; blocked as fail-safe.');
     }
-
-    switch (verdict.decision) {
-      case 'allow':
-        return; // allow
-
-      case 'block':
-        return { block: true, reason: `[pi-sandbox-guard] ${verdict.reason}` };
-
-      case 'ask': {
-        // No-UI / headless: always deny. There is no silent allow path and no
-        // ambient env knob (POLICY_ASK_FALLBACK is not honored) that can turn
-        // ask into allow without an interactive confirm.
-        const canConfirm = ctx && ctx.ui && typeof ctx.ui.confirm === 'function';
-        if (!canConfirm) {
-          return {
-            block: true,
-            reason: `[pi-sandbox-guard] ${verdict.reason} (no interactive confirm available; blocked)`,
-          };
-        }
-        // Wrap confirm so a UI error fails closed rather than propagating an
-        // uncaught rejection into Pi's event loop.
-        try {
-          const ok = await ctx.ui.confirm(
-            'Potentially dangerous command',
-            `${verdict.reason}\n\nAllow it to run?`,
-          );
-          return ok ? undefined : { block: true, reason: '[pi-sandbox-guard] Declined by user.' };
-        } catch {
-          return {
-            block: true,
-            reason: '[pi-sandbox-guard] Confirmation UI failed; blocked as fail-safe.',
-          };
-        }
-      }
-
-      default:
-        // Unreachable; core only emits allow/ask/block. Fail closed anyway.
-        return { block: true, reason: '[pi-sandbox-guard] Unknown verdict — blocked as fail-safe.' };
-    }
+    return worst ? block(typeof worst.reason === 'string' ? worst.reason : '[pi-sandbox-guard] Blocked by cc-safety-net.') : undefined;
   };
 
   pi.on('tool_call', (event, ctx) => {

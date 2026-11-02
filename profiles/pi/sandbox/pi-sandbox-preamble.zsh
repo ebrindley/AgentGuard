@@ -1309,6 +1309,41 @@ if [[ -f "$AG_PEER_RELEASE/peer-runtime.sb" && -d "$AG_PEER_RELEASE/peers" ]]; t
   export PATH
 fi
 
+# Agent Guard difference 17: the command checker is cc-safety-net with the policy of
+# decision D13 (docs/DESIGN.md section 5, Command checker). Here, outside the
+# sandbox, the release's builder copies the user's cc-safety-net configuration into
+# a per-session folder of the write-protected engine state, and the extension reads
+# the copy through CC_SAFETY_NET_HOME. A failed or impossible build leaves the
+# variable unset, and the extension then blocks every tool call and says why.
+unset CC_SAFETY_NET_HOME CC_SAFETY_NET_WORKTREE SAFETY_NET_WORKTREE CC_SAFETY_NET_AUDIT_HOME AGENT_GUARD_RELEASE
+export CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY=1
+[[ ${CC_SAFETY_NET_LEVEL:-} == paranoid ]] || export CC_SAFETY_NET_LEVEL=strict
+AG_ENGINE_STATE="$HOME_CANON/Library/Application Support/AgentGuard/state"
+AG_RELEASE_DIR="${AG_PEER_RELEASE:A}"
+if [[ "${AG_RELEASE_DIR:h}" == "${AG_ENGINE_STATE:h}/releases" && -f "$AG_RELEASE_DIR/RELEASE" \
+      && -f "$AG_RELEASE_DIR/checker/snapshot.zsh" ]]; then
+  source "$AG_RELEASE_DIR/checker/snapshot.zsh"
+  AG_CHECKER_SESSION=""
+  /bin/mkdir -p "$AG_ENGINE_STATE/pi" 2>/dev/null \
+    && AG_CHECKER_SESSION="$(/usr/bin/mktemp -d "$AG_ENGINE_STATE/pi/${AG_RELEASE_DIR:t}.XXXXXXXX" 2>/dev/null)" || AG_CHECKER_SESSION=""
+  if [[ -n "$AG_CHECKER_SESSION" ]]; then
+    # The folder belongs to this process: exec keeps the pid and start time.
+    _ag_owner_start="$(/bin/ps -o lstart= -p $$ 2>/dev/null)" || _ag_owner_start=""
+    [[ -z "$_ag_owner_start" ]] || print -r -- "$$"$'\n'"${(j: :)${=_ag_owner_start}}" > "$AG_CHECKER_SESSION/owner"
+    unset _ag_owner_start
+    if ag_checker_snapshot "$HOME_CANON" "$AG_CHECKER_SESSION/checker" "$AG_RELEASE_DIR" "$CC_SAFETY_NET_LEVEL"; then
+      export CC_SAFETY_NET_HOME="$AG_CHECKER_SESSION/checker"
+      export AGENT_GUARD_RELEASE="${AG_RELEASE_DIR:t}"
+      [[ -z "$ag_checker_warning" ]] || emit "$ag_checker_warning"
+    else
+      emit "cannot build the checker's session copy${ag_checker_warning:+ ($ag_checker_warning)}; every tool call will be blocked. Fix ~/.cc-safety-net/rules/rule.json (npx cc-safety-net doctor lists the problem), then relaunch."
+    fi
+    (ag_checker_prune "$AG_ENGINE_STATE/pi" "$AG_CHECKER_SESSION") >/dev/null 2>&1 </dev/null &!
+  else
+    emit "cannot create the checker's session folder in $AG_ENGINE_STATE/pi; every tool call will be blocked."
+  fi
+fi
+
 # Agent Guard difference 16: the SSH agent's socket is denied unless the operator
 # set AGENT_GUARD_SSH_AGENT=allow outside the guard.
 AG_SSH_AGENT=deny
