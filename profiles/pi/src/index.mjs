@@ -166,7 +166,7 @@ async function loadChecker() {
   const found = locate();
   if (found.failure) return { failure: found.failure };
   for (const name of UNSAFE_NET_ENV) delete process.env[name];
-  if (process.env.CC_SAFETY_NET_LEVEL !== 'paranoid') process.env.CC_SAFETY_NET_LEVEL = 'strict';
+  if (process.env.CC_SAFETY_NET_LEVEL !== 'paranoid') process.env.CC_SAFETY_NET_LEVEL = 'standard';
   process.env.CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY = '1';
   process.env.CC_SAFETY_NET_HOME = found.copy;
   let handler = null;
@@ -204,7 +204,7 @@ async function loadChecker() {
         'cc-safety-net did not load Agent Guard\'s rules. Fix ~/.cc-safety-net/rules/rule.json (`npx cc-safety-net doctor` lists the problem), then relaunch',
     };
   }
-  return { handler };
+  return { handler, copy: found.copy };
 }
 
 /** The entry reads ctx.cwd and ctx.sessionManager.getSessionId(). */
@@ -249,6 +249,12 @@ export default function (pi) {
     // visible and recoverable; a silently allowed destructive command is not.
     if (!checker.handler) {
       return block(`[pi-sandbox-guard] Guard unavailable: ${checker.failure}. All tool calls are blocked until the guard is restored.`);
+    }
+
+    // The session copy can disappear after startup; the checker would then go on
+    // from what it loaded. Two stats per call keep that visible.
+    if (!existsSync(join(checker.copy, 'rules/rule.json')) || !existsSync(join(checker.copy, 'rules/agent-guard-git/rulebook.json'))) {
+      return block('[pi-sandbox-guard] Guard unavailable: the checker\'s session copy is gone. All tool calls are blocked until the guard is restored; relaunch Pi or OMP.');
     }
 
     // Only shell tools go to the checker, as in OpenCode's plugin. File tools and

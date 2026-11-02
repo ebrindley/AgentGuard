@@ -219,8 +219,15 @@ and rebase aborts, `git push --delete` and `--force-with-lease`. Force and mirro
 pushes, whole-tree discards such as `git reset --hard`, `git checkout .` and
 `git restore .`, `git clean -f` and setting `core.hooksPath` are refused; run
 them in a terminal outside the guard, and use `rm -r <path>` in place of a
-path-scoped `git clean`. Your own `~/.cc-safety-net` settings still apply in
-sessions, and take effect at the next launch.
+path-scoped `git clean`. The checker runs at cc-safety-net's `standard` level,
+so an interpreter that reads its program from a heredoc (`python3 - <<'PY'`),
+`eval "$(pyenv init -)"` and `source <(...)` setup lines run; `rm -rf "$DIR"`
+and `rm -rf *` are still refused. Still refused: a download piped to a shell and
+`sh -c "$CMD"`, `. "$HOME/.nvm/nvm.sh"` and similar runs of a variable or sourced
+script. Only shell commands are checked; the file tools are not. Your own
+`~/.cc-safety-net` settings still apply in sessions, and take effect at the next
+launch; the `paranoid` level, if you set it, stays.
+
 
 ### Grant only the project you start OpenCode in
 
@@ -286,7 +293,7 @@ configuration, extensions, active Git hooks and specified credentials, and
 denies reads of specified credential paths and `.env` files. The complete
 policy and exceptions are in [SECURITY.md](../SECURITY.md#pi-and-omp).
 
-Pi and OMP check every tool call with cc-safety-net, under the same policy as
+Pi and OMP check shell commands with cc-safety-net, under the same policy as
 OpenCode (DESIGN.md decision D13). Each verdict is allow or refuse: there are no
 confirmation prompts. At launch the guard copies `~/.cc-safety-net` into the
 session and adds Agent Guard's Git rules; `~/.cc-safety-net` itself is not
@@ -296,10 +303,12 @@ changed. Routine work is allowed: `git status`, `commit`, `rebase`, `pull`,
 path below the project, package managers, builds and tests. Refused: `git push`
 with `--force`, `-f` or a `+` refspec, and `--mirror`; `git reset --hard`,
 `git checkout .`, `git restore .`, `git clean -f`, `git switch -f`, `git stash clear`; `git config core.hooksPath`; `rm -rf` of the project folder itself, its
-parents, home, `/` or a dynamic path such as `rm -rf "$DIR"`; a download
-piped to a shell; `eval "$(tool init -)"` shell setup; and an interpreter that
-reads its program from a heredoc, such as `python3 - <<'PY'` (write the program to
-a file first). Run a refused command in a terminal outside the guard. The refusal names the rule.
+parents, home, `/` or a dynamic path such as `rm -rf "$DIR"` or `rm -rf *`; and a
+download piped to a shell, or a variable or sourced script run as shell (`sh -c
+"$CMD"`, `. "$HOME/.nvm/nvm.sh"`). Allowed too: interpreters that read their
+program from a heredoc (`python3 - <<'PY'`) and shell setup such as
+`eval "$(pyenv init -)"`. Run a refused command in a terminal outside the guard.
+The refusal names the rule.
 
 Only shell commands are checked. The file tools `read`, `write`, `edit` and
 `grep`, and other tools, pass the checker; Seatbelt decides what they can read

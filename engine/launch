@@ -141,7 +141,7 @@ find_app() {
 # export would print the environment.
 unset $env_unset
 (( $#env_set )) && export $env_set
-[[ $harness != opencode || ${CC_SAFETY_NET_LEVEL:-} == paranoid ]] || export CC_SAFETY_NET_LEVEL=strict
+[[ $harness != opencode || ${CC_SAFETY_NET_LEVEL:-} == paranoid ]] || export CC_SAFETY_NET_LEVEL=standard
 
 # The engine's nesting marker is exported just before exec; OpenCode Guard's
 # marker is not accepted (step 11). Without a marker, only the error macOS

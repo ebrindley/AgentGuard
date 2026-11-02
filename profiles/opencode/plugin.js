@@ -199,7 +199,7 @@ async function guard(input) {
   if (!rules && !outer) failure("rules-load", "rules-unavailable", "relaunch", rulesErrno)
   if (guarded) {
     for (const name of UNSAFE_NET_ENV) delete process.env[name]
-    if (process.env.CC_SAFETY_NET_LEVEL !== "paranoid") process.env.CC_SAFETY_NET_LEVEL = "strict"
+    if (process.env.CC_SAFETY_NET_LEVEL !== "paranoid") process.env.CC_SAFETY_NET_LEVEL = "standard"
     process.env.CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY = "1"
     if (rules) process.env.CC_SAFETY_NET_HOME = rules.checker
   }
@@ -300,7 +300,7 @@ async function guard(input) {
     if (!guarded) {
       if (!bypass && !SAFE_UNGUARDED.has(tool))
         refuse(tool, "Agent Guard: OpenCode was started without the guard. Quit it and open Agent Guard, or run opencode from a new terminal.", "tool-hook", "unguarded", "launch-guarded")
-      return net?.["tool.execute.before"]?.(info, output)
+      return tool === "bash" ? net?.["tool.execute.before"]?.(info, output) : undefined
     }
     if (DELEGATE === false) refuse(tool, "Agent Guard was updated; quit and reopen OpenCode.", "tool-hook", "launcher-release-unavailable", "relaunch")
     if (!rules) refuse(tool, "Agent Guard: rules unavailable; relaunch OpenCode.", "tool-hook", "rules-unavailable", "relaunch")
@@ -325,7 +325,7 @@ async function guard(input) {
         }
       }
     }
-    try { await net["tool.execute.before"](info, output) } catch (error) {
+    try { if (tool === "bash") await net["tool.execute.before"](info, output) } catch (error) {
       const matched = typeof error.message === "string" ? error.message.slice(0, 8192).match(/^Rule: ([a-z0-9.-]{1,100})$/m)?.[1] : null
       const ruleId = matched ? RULE_IDS.has(matched) ? matched : "custom" : "unattributed"
       recordEvent({ layer: "guard", stage: "safety-net", code: "safety-net-failed", remediation: "review-policy", ruleId, tool: toolClass(tool), errno: ERRNOS.has(error.code) ? error.code : "unknown" })

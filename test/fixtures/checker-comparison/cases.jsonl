@@ -87,7 +87,7 @@
 {"id":"corpus-87","group":"characterization","tool":"bash","cwd":"{TMP}","command":"mv /etc /tmp/etc.bak","recorded":"block","baseline":["block","block"],"pi":["allow","allow"],"shared":["allow","allow"]}
 {"id":"corpus-88","group":"characterization","tool":"bash","cwd":"{TMP}","command":"cp /tmp/evil /etc/passwd","recorded":"block","baseline":["block","block"],"pi":["allow","allow"],"shared":["allow","allow"]}
 {"id":"corpus-89","group":"characterization","tool":"bash","cwd":"{TMP}","command":"rm -f /System/Library/example","recorded":"block","baseline":["block","block"],"pi":["allow","allow"],"shared":["allow","allow"]}
-{"id":"corpus-90","group":"characterization","tool":"bash","cwd":"{TMP}","command":":(){ :|:& };:","recorded":"block","baseline":["block","block"],"pi":["block","block"],"shared":["block","block"]}
+{"id":"corpus-90","group":"characterization","tool":"bash","cwd":"{TMP}","command":":(){ :|:& };:","recorded":"block","baseline":["block","block"],"pi":["allow","allow"],"shared":["allow","allow"]}
 {"id":"corpus-91","group":"characterization","tool":"bash","cwd":"{TMP}","command":"dd if=/dev/zero of=/dev/disk0","recorded":"block","baseline":["block","block"],"pi":["block","block"],"shared":["block","block"]}
 {"id":"corpus-92","group":"characterization","tool":"bash","cwd":"{TMP}","command":"mkfs.ext4 /dev/sda1","recorded":"block","baseline":["block","block"],"pi":["block","block"],"shared":["block","block"]}
 {"id":"corpus-93","group":"characterization","tool":"bash","cwd":"{TMP}","command":"wipefs -a /dev/sda","recorded":"block","baseline":["block","block"],"pi":["allow","allow"],"shared":["allow","allow"]}
@@ -153,7 +153,7 @@
 {"id":"corpus-153","group":"characterization","tool":"bash","cwd":"{TMP}","command":"env -C /etc rm -rf hosts","recorded":"block","baseline":["block","block"],"pi":["block","block"],"shared":["block","block"]}
 {"id":"corpus-154","group":"characterization","tool":"bash","cwd":"{TMP}","command":"env -C / env -C etc truncate passwd","recorded":"block","baseline":["block","block"],"pi":["allow","allow"],"shared":["allow","allow"]}
 {"id":"corpus-155","group":"characterization","tool":"bash","cwd":"{TMP}","command":"env -C/etc truncate passwd","recorded":"block","baseline":["block","block"],"pi":["allow","allow"],"shared":["allow","allow"]}
-{"id":"corpus-156","group":"characterization","tool":"bash","cwd":"{TMP}","command":"env -S '-C /etc truncate passwd'","recorded":"block","baseline":["block","block"],"pi":["block","block"],"shared":["block","block"]}
+{"id":"corpus-156","group":"characterization","tool":"bash","cwd":"{TMP}","command":"env -S '-C /etc truncate passwd'","recorded":"block","baseline":["block","block"],"pi":["allow","allow"],"shared":["allow","allow"]}
 {"id":"corpus-157","group":"characterization","tool":"bash","cwd":"{TMP}","command":"cd /etc | truncate hosts","recorded":"allow","baseline":["allow","allow"],"pi":["allow","allow"],"shared":["allow","allow"]}
 {"id":"corpus-158","group":"characterization","tool":"bash","cwd":"{TMP}","command":"cd /etc & truncate hosts","recorded":"allow","baseline":["allow","allow"],"pi":["allow","allow"],"shared":["allow","allow"]}
 {"id":"corpus-159","group":"characterization","tool":"bash","cwd":"{TMP}","command":"echo /etc/passwd | xargs rm","recorded":"ask","baseline":["ask","block"],"pi":["allow","allow"],"shared":["allow","allow"]}
@@ -388,8 +388,8 @@
 {"id":"corpus-388","group":"characterization","tool":"bash","cwd":"{TMP}","command":"awk 'BEGIN{system(\"echo hi\")}'","recorded":"ask","baseline":["ask","block"],"pi":["allow","allow"],"shared":["allow","allow"]}
 {"id":"corpus-389","group":"characterization","tool":"bash","cwd":"{TMP}","command":"node -e 'require(\"fs\").rmSync(\"./out\",{recursive:true})'","recorded":"ask","baseline":["ask","block"],"pi":["allow","allow"],"shared":["allow","allow"]}
 {"id":"corpus-390","group":"characterization","tool":"bash","cwd":"{TMP}","command":"python3 -c 'print(\"/etc\")'; node -e 'require(\"fs\").rm(\"./out\",()=>{})'","recorded":"ask","baseline":["ask","block"],"pi":["allow","allow"],"shared":["allow","allow"]}
-{"id":"corpus-391","group":"characterization","tool":"bash","cwd":"{TMP}","command":"python3 -c \"$CODE\"","recorded":"allow","baseline":["allow","allow"],"pi":["block","block"],"shared":["block","block"]}
-{"id":"corpus-392","group":"characterization","tool":"bash","cwd":"{TMP}","command":"node -e \"$(cat payload.js)\"","recorded":"allow","baseline":["allow","allow"],"pi":["block","block"],"shared":["block","block"]}
+{"id":"corpus-391","group":"characterization","tool":"bash","cwd":"{TMP}","command":"python3 -c \"$CODE\"","recorded":"allow","baseline":["allow","allow"],"pi":["allow","allow"],"shared":["allow","allow"]}
+{"id":"corpus-392","group":"characterization","tool":"bash","cwd":"{TMP}","command":"node -e \"$(cat payload.js)\"","recorded":"allow","baseline":["allow","allow"],"pi":["allow","allow"],"shared":["allow","allow"]}
 {"id":"corpus-393","group":"characterization","tool":"bash","cwd":"{TMP}","command":"git config core.hooksPath /tmp/evil","recorded":"ask","baseline":["ask","block"],"pi":["block","block"],"shared":["block","block"]}
 {"id":"corpus-394","group":"characterization","tool":"bash","cwd":"{TMP}","command":"git -c core.hooksPath=/tmp/evil status","recorded":"ask","baseline":["ask","block"],"pi":["allow","allow"],"shared":["allow","allow"]}
 {"id":"corpus-395","group":"characterization","tool":"bash","cwd":"{TMP}","command":"echo git config core.hooksPath /tmp/evil","recorded":"allow","baseline":["allow","allow"],"pi":["allow","allow"],"shared":["allow","allow"]}

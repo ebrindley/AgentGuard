@@ -25,6 +25,7 @@
     "corpus-87",
     "corpus-88",
     "corpus-89",
+    "corpus-90",
     "corpus-93",
     "corpus-94",
     "corpus-95",
@@ -68,6 +69,7 @@
     "corpus-152",
     "corpus-154",
     "corpus-155",
+    "corpus-156",
     "corpus-159",
     "corpus-160",
     "corpus-162",
@@ -208,8 +210,6 @@
     "corpus-388",
     "corpus-389",
     "corpus-390",
-    "corpus-391",
-    "corpus-392",
     "corpus-393",
     "corpus-394",
     "corpus-396",
@@ -273,6 +273,7 @@
     "corpus-87",
     "corpus-88",
     "corpus-89",
+    "corpus-90",
     "corpus-93",
     "corpus-94",
     "corpus-95",
@@ -316,6 +317,7 @@
     "corpus-152",
     "corpus-154",
     "corpus-155",
+    "corpus-156",
     "corpus-159",
     "corpus-160",
     "corpus-162",
@@ -456,8 +458,6 @@
     "corpus-388",
     "corpus-389",
     "corpus-390",
-    "corpus-391",
-    "corpus-392",
     "corpus-393",
     "corpus-394",
     "corpus-396",
@@ -481,18 +481,18 @@
   ],
   "analyzerSha256": "af7636bd8b9d56901102347ab37feb9ba3211256b4bdeea74e418d94462d235d",
   "corpusSha256": "864a4f146289e5eb4b20ba10ab732f7248d00e6a6af3d9f1cb4442620f7bb784",
-  "casesSha256": "455d7cfbe9f67cd5a8cc23888a3a544065455b375e2e7281485402eb12a4b0be",
+  "casesSha256": "6bfe5df0653d39634a2f4d2072a1b33174084dfd40b90b6abbc0dd839b1b5f1e",
   "policy": {
     "settings": {
-      "level": "strict",
+      "level": "standard",
       "projectTightenOnly": true
     },
-    "snapshot": "{\n  \"version\": 1,\n  \"destructive_command_protection\": {\n    \"allow_paths\": [],\n    \"overrides\": {\n      \"git.push-delete\": \"off\",\n      \"git.stash-drop\": \"off\",\n      \"git.branch-force-delete\": \"off\",\n      \"git.tag-delete\": \"off\",\n      \"git.merge-abort\": \"off\",\n      \"git.rebase-abort\": \"off\",\n      \"git.checkout-double-dash\": \"off\",\n      \"git.checkout-ref-path\": \"off\",\n      \"git.restore-unstaged\": \"off\",\n      \"git.restore-worktree\": \"off\"\n    }\n  }\n}\n",
-    "snapshotSha256": "45fbe7abc9cbf6a0638b580980321f3069f9af0b018ca4ccedc82b5185a30575"
+    "snapshot": "{\n  \"version\": 1,\n  \"destructive_command_protection\": {\n    \"allow_paths\": [],\n    \"overrides\": {\n      \"git.push-delete\": \"off\",\n      \"git.stash-drop\": \"off\",\n      \"git.branch-force-delete\": \"off\",\n      \"git.tag-delete\": \"off\",\n      \"git.merge-abort\": \"off\",\n      \"git.rebase-abort\": \"off\",\n      \"git.checkout-double-dash\": \"off\",\n      \"git.checkout-ref-path\": \"off\",\n      \"git.restore-unstaged\": \"off\",\n      \"git.restore-worktree\": \"off\",\n      \"rm.recursive-force-dynamic-target\": \"on\"\n    }\n  }\n}\n",
+    "snapshotSha256": "e0e3d28f5a4f011ab4848eca38d8403f5891079c91df3b8202ffd366ea85ed02"
   },
   "candidateToSharedTransitions": {
-    "allow->allow": 324,
-    "block->block": 146,
+    "allow->allow": 328,
+    "block->block": 142,
     "allow->block": 3
   }
 }

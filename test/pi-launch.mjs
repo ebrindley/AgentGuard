@@ -5,7 +5,7 @@
 // the disposable home. A stand-in Pi runs the command it is given inside the
 // session. Runs outside any sandbox.
 import assert from 'node:assert/strict';
-import { chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -600,8 +600,9 @@ try {
       assert.ok(sessionCopy.startsWith(`${states}/${basename(release)}.`) && sessionCopy.endsWith('/checker'), sessionCopy);
       assert.ok(existsSync(join(sessionCopy, 'rules/agent-guard-git/rulebook.json')));
       assert.match(readFileSync(join(sessionCopy, 'policy.json'), 'utf8'), /"git.stash-drop": "off"/);
+      assert.match(readFileSync(join(sessionCopy, 'policy.json'), 'utf8'), /"rm.recursive-force-dynamic-target": "on"/);
       assert.equal(env('AGENT_GUARD_RELEASE').stdout.trim(), basename(release));
-      assert.equal(env('CC_SAFETY_NET_LEVEL').stdout.trim(), 'strict');
+      assert.equal(env('CC_SAFETY_NET_LEVEL').stdout.trim(), 'standard');
       assert.equal(env('CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY').stdout.trim(), '1');
       denied(write(a, join(sessionCopy, 'policy.json')), 'the copy');
       denied(session(a, ['/usr/bin/touch', join(dirname(sessionCopy), 'other')]), 'the session folder');
@@ -615,7 +616,7 @@ try {
       for (const name of ['CC_SAFETY_NET_WORKTREE', 'SAFETY_NET_WORKTREE', 'CC_SAFETY_NET_AUDIT_HOME'])
         assert.equal(session(a, ['/usr/bin/printenv', name], { env: { [name]: '/private/tmp/ambient' } }).status, 1, name);
       assert.equal(session(a, ['/usr/bin/printenv', 'CC_SAFETY_NET_LEVEL'], { env: { CC_SAFETY_NET_LEVEL: 'paranoid' } }).stdout.trim(), 'paranoid');
-      assert.equal(session(a, ['/usr/bin/printenv', 'CC_SAFETY_NET_LEVEL'], { env: { CC_SAFETY_NET_LEVEL: 'off' } }).stdout.trim(), 'strict');
+      assert.equal(session(a, ['/usr/bin/printenv', 'CC_SAFETY_NET_LEVEL'], { env: { CC_SAFETY_NET_LEVEL: 'off' } }).stdout.trim(), 'standard');
     });
     for (const runtime of ['pi', 'omp']) {
       check(`difference 17: ${runtime}'s extension gives D13's verdicts inside the session`, () => {
@@ -627,7 +628,17 @@ try {
     check('difference 17: each launch gets its own copy', () => {
       const first = env('CC_SAFETY_NET_HOME').stdout.trim(), second = env('CC_SAFETY_NET_HOME').stdout.trim();
       assert.notEqual(first, second);
-      assert.ok(existsSync(join(dirname(first), 'owner')));
+    });
+    check('difference 17: pruning removes only copies from before the last boot', () => {
+      const states = join(engine, 'state/pi');
+      const old = join(states, `${basename(release)}.preboot0`), recent = join(states, `${basename(release)}.recent00`);
+      for (const d of [old, recent]) mkdirSync(d, { recursive: true });
+      utimesSync(old, new Date('2020-01-01T00:00:00Z'), new Date('2020-01-01T00:00:00Z'));
+      rmSync(join(states, '.session-prune'), { force: true });
+      allowed(env('CC_SAFETY_NET_HOME'), 'the launch that prunes');
+      for (let i = 0; i < 100 && existsSync(old); i++) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
+      assert.ok(!existsSync(old), 'a copy from before the boot was kept');
+      assert.ok(existsSync(recent), 'a recent copy was removed');
     });
     check('difference 17: a user rule.json the checker rejects blocks every call and the launch says so', () => {
       const rules = join(a.home, '.cc-safety-net/rules/rule.json');

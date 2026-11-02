@@ -212,12 +212,14 @@ migration moves pi-sandbox-guard's backups into the engine folder, including the
 extension backups in `~/.pi/agent/extension-backups/`, which Pi sessions could
 write.
 
-The extension's checker is advisory. It runs cc-safety-net on every tool call
+The extension's checker is advisory. It runs cc-safety-net on every shell command
 with the policy of [decision D13](docs/DESIGN.md#15-risks-and-open-decisions):
 each verdict is allow or block, never a confirmation. It blocks shell commands
 it recognizes as destructive (remote history rewrites, whole-tree discards,
-`git clean -f`, `core.hooksPath`, recursive deletes outside the working folder)
-but nothing depends on it for safety. It checks shell commands only: file tools
+`git clean -f`, `core.hooksPath`, recursive deletes outside the working folder,
+`rm -rf` of a variable or glob target) at cc-safety-net's `standard` level, which
+lets heredoc interpreters and `eval`/`source` setup lines run, but nothing
+depends on it for safety. It checks shell commands only: file tools
 (`read`, `write`, `edit`) and other tools pass it. The Seatbelt profile is the boundary. If the checker's session copy is
 missing, cc-safety-net fails to load or Agent Guard's Git rules are not in force,
 the extension blocks every tool call and says what to fix.
@@ -305,7 +307,8 @@ behind linked ancestors. These changes follow the 0.2.0 prerelease.
   session. A `core.hooksPath` that is home, a system folder or contains the
   launch folder refuses the launch. Not planned.
 - **The command checker denies only rare Git operations that cannot be undone.**
-  In OpenCode sessions cc-safety-net denies force and mirror pushes, whole-tree
+  In OpenCode sessions cc-safety-net, at its standard level and on shell
+  commands only, denies force and mirror pushes, whole-tree
   discards (`git reset --hard`, `git checkout .`, `git restore .`, forced
   switches, `git stash clear`), `git clean -f` and setting `core.hooksPath`, and
   allows per-file `git restore` and `git checkout -- <file>`, `git stash drop`,

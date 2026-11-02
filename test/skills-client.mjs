@@ -81,10 +81,14 @@ if (mode === "lifecycle") {
   // Decision D13 in the session copy; the user's policy keeps git.tag-delete on.
   for (const command of ["git restore src/a.ts", "git checkout -- src/a.ts", "git checkout HEAD -- src/a.ts", "git restore --staged .",
                          "git stash drop", "git branch -D feature", "git merge --abort", "git rebase --abort", "git push origin --delete feature",
-                         "git push --force-with-lease", "git config --get core.hooksPath"])
+                         "git push --force-with-lease", "git config --get core.hooksPath",
+                         "python3 - <<'PY'\nprint(1)\nPY", 'eval "$(pyenv init -)"'])
     await call("bash", { command, workdir: project })
+  // The standard level: only shell commands are checked, so a secret-looking path passes the tools.
+  for (const tool of ["read", "write", "edit"]) await call(tool, { filePath: join(project, "server.pem") })
   for (const command of ["git restore .", "git checkout -- .", "git checkout .", "git clean -f src/tmp", "git reset --hard", "git stash clear",
-                         "git push --force origin main", "git config core.hooksPath .githooks", "git tag -d v1"])
+                         "git push --force origin main", "git config core.hooksPath .githooks", "git tag -d v1",
+                         'rm -rf "$BUILD_DIR"', "rm -rf *"])
     await call("bash", { command, workdir: project }, false)
 } else if (mode === "paranoid") {
   await call("bash", { command: "git branch -D feature", workdir: project }, false)

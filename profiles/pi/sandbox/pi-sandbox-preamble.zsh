@@ -1317,7 +1317,7 @@ fi
 # variable unset, and the extension then blocks every tool call and says why.
 unset CC_SAFETY_NET_HOME CC_SAFETY_NET_WORKTREE SAFETY_NET_WORKTREE CC_SAFETY_NET_AUDIT_HOME AGENT_GUARD_RELEASE
 export CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY=1
-[[ ${CC_SAFETY_NET_LEVEL:-} == paranoid ]] || export CC_SAFETY_NET_LEVEL=strict
+[[ ${CC_SAFETY_NET_LEVEL:-} == paranoid ]] || export CC_SAFETY_NET_LEVEL=standard
 AG_ENGINE_STATE="$HOME_CANON/Library/Application Support/AgentGuard/state"
 AG_RELEASE_DIR="${AG_PEER_RELEASE:A}"
 if [[ "${AG_RELEASE_DIR:h}" == "${AG_ENGINE_STATE:h}/releases" && -f "$AG_RELEASE_DIR/RELEASE" \
@@ -1327,10 +1327,6 @@ if [[ "${AG_RELEASE_DIR:h}" == "${AG_ENGINE_STATE:h}/releases" && -f "$AG_RELEAS
   /bin/mkdir -p "$AG_ENGINE_STATE/pi" 2>/dev/null \
     && AG_CHECKER_SESSION="$(/usr/bin/mktemp -d "$AG_ENGINE_STATE/pi/${AG_RELEASE_DIR:t}.XXXXXXXX" 2>/dev/null)" || AG_CHECKER_SESSION=""
   if [[ -n "$AG_CHECKER_SESSION" ]]; then
-    # The folder belongs to this process: exec keeps the pid and start time.
-    _ag_owner_start="$(/bin/ps -o lstart= -p $$ 2>/dev/null)" || _ag_owner_start=""
-    [[ -z "$_ag_owner_start" ]] || print -r -- "$$"$'\n'"${(j: :)${=_ag_owner_start}}" > "$AG_CHECKER_SESSION/owner"
-    unset _ag_owner_start
     if ag_checker_snapshot "$HOME_CANON" "$AG_CHECKER_SESSION/checker" "$AG_RELEASE_DIR" "$CC_SAFETY_NET_LEVEL"; then
       export CC_SAFETY_NET_HOME="$AG_CHECKER_SESSION/checker"
       export AGENT_GUARD_RELEASE="${AG_RELEASE_DIR:t}"

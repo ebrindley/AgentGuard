@@ -48,7 +48,7 @@ writeFileSync(join(home, "Projects/rules/rulebook.json"), JSON.stringify({ ruleb
 symlinkSync(join(home, "Projects/rules"), join(rules, "other"))
 writeFileSync(join(rules, "rule.json"), JSON.stringify({ version: 1, rules: ["agent-guard", "other"], overrides: {}, transparent_wrappers: ["env", "timeout"] }))
 writeFileSync(join(home, "Agent Guard/Guard List.txt"), `ALLOW\n${home}/Projects\nREAD ONLY\nDENY\n`)
-const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, ".config"), CC_SAFETY_NET_LEVEL: "strict", CC_SAFETY_NET_PARANOID_RM: "", SAFETY_NET_PARANOID_RM: "", AGENT_GUARD_SANDBOXED: "", OPENCODE_SANDBOXED: "" }
+const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, ".config"), CC_SAFETY_NET_LEVEL: "standard", CC_SAFETY_NET_PARANOID_RM: "", SAFETY_NET_PARANOID_RM: "", AGENT_GUARD_SANDBOXED: "", OPENCODE_SANDBOXED: "" }
 delete env.XDG_CACHE_HOME
 const before = readFileSync(join(rules, "agent-guard/rulebook.json"), "utf8")
 const result = spawnSync("/bin/zsh", [join(release, "launch"), "profile"], { cwd: project, env, encoding: "utf8" })
@@ -59,7 +59,7 @@ assert.deepEqual(snapshot.rules, [custom])
 assert.equal(lstatSync(join(context.checker, "rules/other")).isSymbolicLink(), false)
 assert.equal(readFileSync(join(rules, "agent-guard/rulebook.json"), "utf8"), before)
 process.env.CC_SAFETY_NET_HOME = context.checker
-process.env.CC_SAFETY_NET_LEVEL = "strict"
+process.env.CC_SAFETY_NET_LEVEL = "standard"
 process.env.CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY = "1"
 process.env.NODE_ENV = "test"
 const { checkCommand } = await import(pathToFileURL(join(release, "vendor/cc-safety-net/dist/api.js")))

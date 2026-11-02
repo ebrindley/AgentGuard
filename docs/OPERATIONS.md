@@ -623,8 +623,8 @@ checks, and `agent_guard_status` in the guarded OpenCode session.
 CC Safety Net's synthetic self-test uses three fixed commands, no custom
 rules, and the standard baseline with `fail_closed`, `paranoid_rm` and
 `paranoid_interpreters` off. Its allowed result for `rm -rf ./node_modules`
-does not test Agent Guard's effective policy, which uses at least the strict
-preset, scoped deletion allowances and registered custom rules.
+does not test Agent Guard's effective policy, which uses the standard
+preset with the dynamic-target delete rule on, scoped deletion allowances and registered custom rules.
 
 ## Recovery after a failed or interrupted install
 

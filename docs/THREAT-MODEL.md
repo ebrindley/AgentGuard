@@ -263,6 +263,11 @@ asked, until the switch to cc-safety-net (step 10d); their confirmations ended
 with it, and an operation the analyzer asked about is now allowed or denied by
 the lists below, so that Pi, OMP and OpenCode give the same verdict. The Pi
 extension forwards shell commands only; file tools are covered by Seatbelt.
+Revised 2026-11-02: the checker runs at cc-safety-net's `standard` level, with
+the session copy keeping `rm.recursive-force-dynamic-target` on; heredoc
+interpreters and shell setup lines such as `eval "$(pyenv init -)"` are allowed;
+and OpenCode, like Pi and OMP, checks shell commands only, so cc-safety-net's
+secret-name checks on file tools no longer run.
 
 - **Tightened to DENY:** plain force pushes (`--force`, `-f`, a `+` refspec),
   mirror pushes and force-pushed tags, setting `core.hooksPath`, whole-tree
@@ -271,11 +276,16 @@ extension forwards shell commands only; file tools are covered by Seatbelt.
   path. Evidence: the maintainer's Claude Code and Codex history held about 13
   deliberate force or mirror pushes in five and a half months, and no
   `core.hooksPath` writes. The operator runs these outside the guard.
-- **Kept at DENY:** a download piped to a shell, and shell setup such as
-  `eval "$(pyenv init -)"`. Repository fact: these are fixed denials in
-  cc-safety-net 2.6.0, which no setting can lift. Every guarded session runs
-  inside Seatbelt, so allowing them would have been an accepted risk; keeping them
-  costs an agent one retry with the tool's direct form.
+- **Kept at DENY:** a download piped to a shell, and a variable or sourced
+  script run as shell (`sh -c "$CMD"`, `. "$HOME/.nvm/nvm.sh"`). Repository
+  fact: these are fixed denials in cc-safety-net 2.6.0, which no setting can lift.
+  Every guarded session runs inside Seatbelt, so allowing them would have been an
+  accepted risk; keeping them costs an agent one retry with the tool's direct
+  form. Shell setup such as `eval "$(pyenv init -)"` was denied at the strict
+  level and is allowed at the standard level the sessions now run.
+- **Kept at DENY, by setting:** `rm -rf` of a variable or glob target
+  (`rm -rf "$DIR"`, `rm -rf *`): the standard level allows it, and the session
+  copy switches `rm.recursive-force-dynamic-target` on.
 - **Relaxed to ALLOW:** `--force-with-lease`, `git push --delete` and `--prune`,
   path-scoped `git restore` and `git checkout -- <path>`, `git stash drop`,
   `git branch -D`, `git tag -d`, and `git merge --abort` and `git rebase --abort`.

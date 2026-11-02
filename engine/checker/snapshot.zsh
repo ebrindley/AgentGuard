@@ -8,7 +8,7 @@
 #   DEST     the folder that becomes CC_SAFETY_NET_HOME; created
 #   RELEASE  the release folder: its checker/ holds Agent Guard's Git rulebook and
 #            its profiles/opencode/templates hold the factory rulebook to drop
-#   LEVEL    the checker level the session runs at (strict or paranoid)
+#   LEVEL    the checker level the session runs at (standard or paranoid)
 #   ROOT     folders the harness grants deletion allowances for: recursive deletes
 #            below them are allowed unless the user's policy is restrictive
 # Fails when the copy cannot be built. Sets ag_checker_warning to a sentence when
@@ -69,7 +69,8 @@ ag_checker_snapshot() {
   local roots=$(/usr/bin/jq -cn '$ARGS.positional' --args "${roots_list[@]}")
   # Built-in rules decision D13 allows (docs/DESIGN.md section 15), unless the
   # user chose the paranoid level; a rule the user's policy names keeps the
-  # user's setting.
+  # user's setting. The standard level allows a recursive force delete of a
+  # variable or glob target; the copy keeps that rule on.
   local allowed=$(/usr/bin/jq -cn '$ARGS.positional' --args git.push-delete git.stash-drop git.branch-force-delete git.tag-delete \
     git.merge-abort git.rebase-abort git.checkout-double-dash git.checkout-ref-path git.restore-unstaged git.restore-worktree)
   /usr/bin/jq --arg level "$level" --arg legacy "${legacy:l}" --arg paranoid "${paranoid:l}" --argjson roots "$roots" --argjson allowed "$allowed" '
@@ -80,39 +81,30 @@ ag_checker_snapshot() {
         .destructive_command_protection.allow_paths = (((.destructive_command_protection.allow_paths // []) + $roots) | unique)
       end
     | if (.safety.level == "paranoid") or ($level == "paranoid") then . else
-        .destructive_command_protection.overrides = (($allowed | map({(.): "off"}) | add) + (.destructive_command_protection.overrides // {}))
+        .destructive_command_protection.overrides = ((($allowed | map({(.): "off"}) | add) + {"rm.recursive-force-dynamic-target": "on"}) + (.destructive_command_protection.overrides // {}))
       end' "$dest/policy.json" > "$dest/.policy" && /bin/mv "$dest/.policy" "$dest/policy.json" || return 1
 }
 
-# ag_checker_prune DIR SKIP: removes the session folders of ended launches from DIR
-# (folders named *.XXXXXXXX, as mktemp makes them), except SKIP. A folder with an
-# owner record (the owner's pid, then its start time) goes when the owner is gone
-# and the folder is a day old; one without goes when it predates the last boot. It
-# runs outside the sandbox, in the background, at most once a day.
+# ag_checker_prune DIR SKIP: removes session folders (named *.XXXXXXXX, as mktemp
+# makes them) from DIR that predate the last boot, except SKIP. A nested launch
+# inherits its parent's copy and outlives the parent, so no running process can
+# be shown not to hold a newer folder; a folder from before the boot has no
+# holder. It runs outside the sandbox, in the background, at most once a day.
 ag_checker_prune() {
-  local dir=$1 skip=$2 d start boot now mtime
+  local dir=$1 skip=$2 d boot mtime
   setopt local_options no_err_exit
-  local -a recent rec
-  zmodload zsh/datetime zsh/stat 2>/dev/null || return 0
+  local -a recent
+  zmodload zsh/stat 2>/dev/null || return 0
   recent=("$dir"/.session-prune(Nmh-24))
   (( $#recent )) && return 0
   { : > "$dir/.session-prune" } 2>/dev/null || true
   boot=$(/usr/sbin/sysctl -n kern.boottime 2>/dev/null) || return 0
   boot=${${boot#*sec = }%%,*}
   [[ $boot == <-> ]] || return 0
-  now=$EPOCHSECONDS
   for d in "$dir"/*.????????(N); do
     [[ -d $d && ! -L $d && $d != "$skip" ]] || continue
     zstat -A mtime +mtime -- "$d" 2>/dev/null || continue
-    rec=()
-    [[ -f $d/owner ]] && rec=("${(@f)$(<"$d/owner" 2>/dev/null)}")
-    if [[ ${rec[1]:-} == <-> && -n ${rec[2]:-} ]]; then
-      start=$(/bin/ps -o lstart= -p $rec[1] 2>/dev/null)
-      [[ ${(j: :)${=start}} == "$rec[2]" ]] && continue
-      (( now - mtime > 86400 )) || continue
-    else
-      (( mtime < boot )) || continue
-    fi
+    (( mtime < boot )) || continue
     /bin/rm -rf -- "$d"
   done
 }

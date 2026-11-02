@@ -21,7 +21,7 @@ index 2f94258..d86d372 100755
  fi
  
 diff --git a/sandbox/pi-sandbox-preamble.zsh b/sandbox/pi-sandbox-preamble.zsh
-index 9b7c788..a5ddaea 100644
+index 9b7c788..c4e7314 100644
 --- a/sandbox/pi-sandbox-preamble.zsh
 +++ b/sandbox/pi-sandbox-preamble.zsh
 @@ -48,6 +48,7 @@ unset _PI_GIT_ENV_NAME
@@ -335,7 +335,7 @@ index 9b7c788..a5ddaea 100644
  emit "OS sandbox ON. Runtime [$PI_SANDBOX_RUNTIME]. Project [$PROJECT_VIA]: $PROJECT"
  emit "  active Git hooks denied: $ACTIVE_HOOKS"
  if [ "$PI_SANDBOX_RUNTIME" = "pi" ]; then
-@@ -1112,6 +1300,54 @@ fi
+@@ -1112,6 +1300,50 @@ fi
  export PI_SANDBOX_PROFILE_DIGEST PI_SANDBOX_PROJECT_BOUNDARY
  export PI_SANDBOX_ACTIVE_HOOKS_BOUNDARY PI_SANDBOX_AGENT_STATE_BOUNDARY
  
@@ -356,7 +356,7 @@ index 9b7c788..a5ddaea 100644
 +# variable unset, and the extension then blocks every tool call and says why.
 +unset CC_SAFETY_NET_HOME CC_SAFETY_NET_WORKTREE SAFETY_NET_WORKTREE CC_SAFETY_NET_AUDIT_HOME AGENT_GUARD_RELEASE
 +export CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY=1
-+[[ ${CC_SAFETY_NET_LEVEL:-} == paranoid ]] || export CC_SAFETY_NET_LEVEL=strict
++[[ ${CC_SAFETY_NET_LEVEL:-} == paranoid ]] || export CC_SAFETY_NET_LEVEL=standard
 +AG_ENGINE_STATE="$HOME_CANON/Library/Application Support/AgentGuard/state"
 +AG_RELEASE_DIR="${AG_PEER_RELEASE:A}"
 +if [[ "${AG_RELEASE_DIR:h}" == "${AG_ENGINE_STATE:h}/releases" && -f "$AG_RELEASE_DIR/RELEASE" \
@@ -366,10 +366,6 @@ index 9b7c788..a5ddaea 100644
 +  /bin/mkdir -p "$AG_ENGINE_STATE/pi" 2>/dev/null \
 +    && AG_CHECKER_SESSION="$(/usr/bin/mktemp -d "$AG_ENGINE_STATE/pi/${AG_RELEASE_DIR:t}.XXXXXXXX" 2>/dev/null)" || AG_CHECKER_SESSION=""
 +  if [[ -n "$AG_CHECKER_SESSION" ]]; then
-+    # The folder belongs to this process: exec keeps the pid and start time.
-+    _ag_owner_start="$(/bin/ps -o lstart= -p $$ 2>/dev/null)" || _ag_owner_start=""
-+    [[ -z "$_ag_owner_start" ]] || print -r -- "$$"$'\n'"${(j: :)${=_ag_owner_start}}" > "$AG_CHECKER_SESSION/owner"
-+    unset _ag_owner_start
 +    if ag_checker_snapshot "$HOME_CANON" "$AG_CHECKER_SESSION/checker" "$AG_RELEASE_DIR" "$CC_SAFETY_NET_LEVEL"; then
 +      export CC_SAFETY_NET_HOME="$AG_CHECKER_SESSION/checker"
 +      export AGENT_GUARD_RELEASE="${AG_RELEASE_DIR:t}"
@@ -390,7 +386,7 @@ index 9b7c788..a5ddaea 100644
  PI_SANDBOX_CMD=(
    "$SANDBOX_EXEC"
    -D "PROJECT=$PROJECT"
-@@ -1122,5 +1358,7 @@ PI_SANDBOX_CMD=(
+@@ -1122,5 +1354,7 @@ PI_SANDBOX_CMD=(
    -D "OMP_AGENT_STATE=$OMP_AGENT_STATE"
    -D "OMP_STATE_ROOT=$OMP_STATE_ROOT"
    -D "OMP_BASE_ROOT=$OMP_BASE_ROOT"
@@ -690,7 +686,7 @@ index 4dcdf9c..7bcfc7c 100755
      target="$state_root/$relative"
      mkdir -p "$(dirname "$target")"
 diff --git a/src/index.mjs b/src/index.mjs
-index d997be1..160f7a8 100644
+index d997be1..9251296 100644
 --- a/src/index.mjs
 +++ b/src/index.mjs
 @@ -1,15 +1,23 @@
@@ -876,7 +872,7 @@ index d997be1..160f7a8 100644
 +  const found = locate();
 +  if (found.failure) return { failure: found.failure };
 +  for (const name of UNSAFE_NET_ENV) delete process.env[name];
-+  if (process.env.CC_SAFETY_NET_LEVEL !== 'paranoid') process.env.CC_SAFETY_NET_LEVEL = 'strict';
++  if (process.env.CC_SAFETY_NET_LEVEL !== 'paranoid') process.env.CC_SAFETY_NET_LEVEL = 'standard';
 +  process.env.CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY = '1';
 +  process.env.CC_SAFETY_NET_HOME = found.copy;
 +  let handler = null;
@@ -914,7 +910,7 @@ index d997be1..160f7a8 100644
 +        'cc-safety-net did not load Agent Guard\'s rules. Fix ~/.cc-safety-net/rules/rule.json (`npx cc-safety-net doctor` lists the problem), then relaunch',
 +    };
 +  }
-+  return { handler };
++  return { handler, copy: found.copy };
 +}
 +
 +/** The entry reads ctx.cwd and ctx.sessionManager.getSessionId(). */
@@ -932,7 +928,7 @@ index d997be1..160f7a8 100644
  /**
   * Pi extension default export.
   * @param {import('./pi-types').ExtensionAPI} pi
-@@ -119,148 +226,61 @@ function warnIfUnverifiedSandbox() {
+@@ -119,148 +226,67 @@ function warnIfUnverifiedSandbox() {
  export default function (pi) {
    warnIfUnverifiedSandbox();
  
@@ -996,10 +992,7 @@ index d997be1..160f7a8 100644
 -    if (command.trim().length === 0) return;
  
 -    await ready;
-+    // Only shell tools go to the checker, as in OpenCode's plugin. File tools and
-+    // other tools pass: Seatbelt denies reads of .env files and the credential set.
-+    if (!event || typeof event !== 'object' || !SHELL_TOOLS.has(event.toolName)) return;
- 
+-
 -    // Guard unavailable (missing analyzer, missing helpers, or win32): BLOCK ALL
 -    // bash unconditionally. A partial-regex allowlist has been proved to miss real
 -    // catastrophic commands (find -delete, shred, truncate, wipefs, ANSI-C quoted
@@ -1017,9 +1010,10 @@ index d997be1..160f7a8 100644
 -        block: true,
 -        reason: `[pi-sandbox-guard] Guard unavailable (${why}); all bash commands are blocked until the guard is restored.`,
 -      };
-+    // A genuinely empty bash invocation is a no-op.
-+    if (event.toolName === 'bash' && typeof event.input?.command === 'string' && event.input.command.trim().length === 0) {
-+      return;
++    // The session copy can disappear after startup; the checker would then go on
++    // from what it loaded. Two stats per call keep that visible.
++    if (!existsSync(join(checker.copy, 'rules/rule.json')) || !existsSync(join(checker.copy, 'rules/agent-guard-git/rulebook.json'))) {
++      return block('[pi-sandbox-guard] Guard unavailable: the checker\'s session copy is gone. All tool calls are blocked until the guard is restored; relaunch Pi or OMP.');
      }
  
 -    // Determine the cwd(s) the bash tool might execute in, for correct
@@ -1029,20 +1023,16 @@ index d997be1..160f7a8 100644
 -    // candidate directory and take the WORST verdict — fail-safe regardless of
 -    // which one bash truly uses. If there are no valid candidates we pass
 -    // undefined and the core fail-closes (block).
-+    // Run the entry against EVERY distinct candidate directory and take the worst
-+    // result. With no usable directory the entry sees the session's own cwd and
-+    // fails closed for the tools that need one.
-     const cwds = candidateCwds(event, ctx);
-+    if (cwds.length === 0) cwds.push(ctx && typeof ctx.cwd === 'string' ? ctx.cwd : '');
+-    const cwds = candidateCwds(event, ctx);
++    // Only shell tools go to the checker, as in OpenCode's plugin. File tools and
++    // other tools pass: Seatbelt denies reads of .env files and the credential set.
++    if (!event || typeof event !== 'object' || !SHELL_TOOLS.has(event.toolName)) return;
  
 -    // Defense-in-depth: the core is contracted never to throw, but if it ever
 -    // does (or a future change regresses that), a throw here would escape into
 -    // Pi's loop. Catch and fail closed.
 -    let verdict;
-+    // The entry is contracted never to throw; a throw here would escape into Pi's
-+    // loop, so catch and fail closed.
-+    let worst;
-     try {
+-    try {
 -      if (cwds.length === 0) {
 -        verdict = await analyzeCommand(command, {
 -          cwd: undefined, // core fail-closes
@@ -1066,15 +1056,23 @@ index d997be1..160f7a8 100644
 -      }
 -    } catch {
 -      return { block: true, reason: '[pi-sandbox-guard] Guard errored; blocked as fail-safe.' };
--    }
--
++    // A genuinely empty bash invocation is a no-op.
++    if (event.toolName === 'bash' && typeof event.input?.command === 'string' && event.input.command.trim().length === 0) {
++      return;
+     }
+ 
 -    switch (verdict.decision) {
 -      case 'allow':
 -        return; // allow
 -
 -      case 'block':
 -        return { block: true, reason: `[pi-sandbox-guard] ${verdict.reason}` };
--
++    // Run the entry against EVERY distinct candidate directory and take the worst
++    // result. With no usable directory the entry sees the session's own cwd and
++    // fails closed for the tools that need one.
++    const cwds = candidateCwds(event, ctx);
++    if (cwds.length === 0) cwds.push(ctx && typeof ctx.cwd === 'string' ? ctx.cwd : '');
+ 
 -      case 'ask': {
 -        // No-UI / headless: always deny. There is no silent allow path and no
 -        // ambient env knob (POLICY_ASK_FALLBACK is not honored) that can turn
@@ -1099,6 +1097,10 @@ index d997be1..160f7a8 100644
 -            block: true,
 -            reason: '[pi-sandbox-guard] Confirmation UI failed; blocked as fail-safe.',
 -          };
++    // The entry is contracted never to throw; a throw here would escape into Pi's
++    // loop, so catch and fail closed.
++    let worst;
++    try {
 +      for (const cwd of cwds) {
 +        const result = await checker.handler(event, checkerContext(ctx, cwd));
 +        if (result && result.block) {

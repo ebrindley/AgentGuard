@@ -30,7 +30,7 @@ const fixtureEnv = {
   TMPDIR: temporary, LANG: 'en_US.UTF-8', NODE_ENV: 'test',
   XDG_CONFIG_HOME: join(home, '.config'), XDG_CACHE_HOME: join(home, '.cache'),
   XDG_DATA_HOME: join(home, '.local/share'), XDG_STATE_HOME: join(home, '.local/state'),
-  CC_SAFETY_NET_LEVEL: 'strict', CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY: '1',
+  CC_SAFETY_NET_LEVEL: 'standard', CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY: '1',
 };
 for (const key of Object.keys(process.env)) delete process.env[key];
 Object.assign(process.env, fixtureEnv);
@@ -50,7 +50,7 @@ cpSync(join(tree, 'engine/vendor'), join(release, 'vendor'), { recursive: true }
 // The session copy as the Pi launcher builds it (profiles/pi/sandbox/pi-sandbox-preamble.zsh),
 // with the release's builder, in the write-protected state the extension requires.
 const snapshot = { checker: join(engine, 'state/pi', `${basename(release)}.comparison`, 'checker') };
-const built = spawnSync('/bin/zsh', ['-c', 'source "$1/checker/snapshot.zsh" && ag_checker_snapshot "$2" "$3" "$1" strict', '_', release, home, snapshot.checker], { env: fixtureEnv, encoding: 'utf8' });
+const built = spawnSync('/bin/zsh', ['-c', 'source "$1/checker/snapshot.zsh" && ag_checker_snapshot "$2" "$3" "$1" standard', '_', release, home, snapshot.checker], { env: fixtureEnv, encoding: 'utf8' });
 assert.equal(built.status, 0, built.stderr);
 process.env.CC_SAFETY_NET_HOME = snapshot.checker;
 process.env.AGENT_GUARD_RELEASE = basename(release);
@@ -177,7 +177,7 @@ const summary = {
   source: spawnSync('/usr/bin/git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim(),
   checkerVersion: JSON.parse(readFileSync(join(release, 'vendor/cc-safety-net/package.json'))).version,
   node: process.versions.node, platform: process.platform, run, temporary, seconds: (Date.now() - started) / 1000,
-  policy: { settings: { level: 'strict', projectTightenOnly: true },
+  policy: { settings: { level: 'standard', projectTightenOnly: true },
     snapshot: normalize(readFileSync(join(snapshot.checker, 'policy.json'), 'utf8')),
     snapshotSha256: createHash('sha256').update(readFileSync(join(snapshot.checker, 'policy.json'))).digest('hex') },
   scope: 'Pre-execution Pi handlers only; confirmation is simulated and declined; no payload executed. Native containment is measured separately.',
