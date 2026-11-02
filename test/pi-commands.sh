@@ -55,17 +55,20 @@ node "$adapter" stage "$source_root" "$run/tree" "$home" || { fail 'cannot stage
 node "$adapter" isolate "$run/tree" || { fail 'cannot isolate harness discovery'; finish }
 
 # The release folder, as the installer lays it out, with the Pi files from the fixture.
-/bin/mkdir -p "$rel/bin" "$rel/profiles/opencode" "$rel/profiles/pi/scripts" "$engine/state" "$home/Agent Guard"
+/bin/mkdir -p "$rel/bin" "$rel/profiles/opencode" "$rel/profiles/pi/scripts" "$engine/state" "$home/Agent Guard" "$home/.cc-safety-net"
 /bin/cp "$run/tree/engine/"{launch,profile.sb,account.zsh,peers.zsh,peer-runtime.sb} "$run/tree/profiles/opencode/"{install.sh,uninstall.sh} "$rel/"
 /bin/cp -R "$run/tree/engine/peers" "$rel/peers"
 /bin/cp -R "$run/tree/engine/checker" "$rel/checker"
+/bin/cp -R "$run/tree/engine/vendor" "$rel/vendor"
+/bin/cp -R "$run/tree/profiles/opencode/templates" "$rel/profiles/opencode/templates"
+/bin/cp -R "$run/tree/profiles/opencode/templates/cc-safety-net/." "$home/.cc-safety-net/"
 /bin/cp -R "$run/tree/installer" "$rel/"
 /bin/cp "$run/tree/engine/agent-guard" "$run/tree/profiles/opencode/"{opencode,opencode-gui} "$rel/bin/"
 /bin/cp "$run/tree/profiles/opencode/"{harness.zsh,hooks.zsh,runtime.zsh,skills.zsh,protected.sb,credentials.sb,plugin.js} "$rel/profiles/opencode/"
 /bin/cp -R "$run/tree/profiles/pi/commands" "$rel/profiles/pi/"
 /bin/cp "$run/tree/profiles/pi/scripts/"{bind-executable.sh,lib-ops.sh} "$rel/profiles/pi/scripts/"
-/bin/cp -R "$fixture/"{launchers,sandbox,src} "$rel/profiles/pi/"
-/bin/cp "$fixture/scripts/"{extension-entry.ts,check-launchers.mjs,test-sandbox-profile.sh} "$rel/profiles/pi/scripts/"
+/bin/cp -R "$source_root/profiles/pi/"{launchers,sandbox,src} "$rel/profiles/pi/"
+/bin/cp "$run/tree/profiles/pi/scripts/"{extension-entry.ts,check-launchers.mjs,test-sandbox-profile.sh} "$rel/profiles/pi/scripts/"
 print -r -- $rid > "$rel/RELEASE"
 print -r -- 0.2.0 > "$rel/VERSION"
 print -r -- dev > "$rel/COMMIT"
@@ -444,7 +447,13 @@ json_is() {
   fi
 }
 label=doctor
+# doctor never changes ~/.cc-safety-net: the probe's audit log goes to its scratch folder.
+cc_tree() { ( cd "$home/.cc-safety-net" && /usr/bin/find . -exec /usr/bin/stat -f '%N %Sp %z %m' {} + | /usr/bin/sort; /usr/bin/find . -type f -exec /usr/bin/shasum -a 256 {} + | /usr/bin/sort ) }
+/bin/mkdir -p "$home/.cc-safety-net/logs"
+print -r -- '{"existing":"entry"}' > "$home/.cc-safety-net/logs/existing.jsonl"
+cc_before=$(cc_tree)
 doctor_fails 'all checks pass'
+[[ $(cc_tree) == "$cc_before" ]] && pass '~/.cc-safety-net, with an existing log, is unchanged by doctor' || fail '~/.cc-safety-net changed'
 for l in 'ok   protected write denied' 'ok   ~/.local/bin/pi matches the release' 'ok   ~/.local/bin/omp matches the release' \
     'ok   ~/.pi/agent/extensions/pi-sandbox-guard/src/validate-bash-command.sh matches the release' \
     'ok   ~/Library/Application Support/AgentGuard/bin/pi links to ~/.local/bin/pi' \
@@ -452,13 +461,14 @@ for l in 'ok   protected write denied' 'ok   ~/.local/bin/pi matches the release
     "ok   checker Node: $want_node" "ok   bindings valid: pi=$fake_pi, omp=$fake_omp" \
     'ok   wrapper ~/.local/bin/good matches its recorded hash' "ok   good resolves to ~/.local/bin/good in a login shell ($lb/good)" \
     'ok   profile self-test of ~/.local/bin/pi-sandbox.sb' \
-    'ok   analyzer preflight' 'ok   the installed extension allows ls -la' 'ok   the installed extension blocks rm -rf /' \
+    "ok   the checker's session copy is built from ~/.cc-safety-net" 'ok   the installed extension allows ls -la' \
+    'ok   the installed extension blocks rm -rf /' "ok   the installed extension blocks git config core.hooksPath by Agent Guard's Git rules" \
     'ok   pi --version through ~/.local/bin/pi: fake pi 1.0.0' 'ok   omp --version through ~/.local/bin/omp: fake omp 2.0.0'; do
   outl=(${(f)out})
   (( ${outl[(Ie)$l]} )) && pass "prints: $l" || fail "prints: $l"
 done
 [[ -z $(print -l "$darwin_temp"/agent-guard-doctor.*(DN)) ]] && pass 'the scratch folder is removed' || fail 'the scratch folder is removed'
-[[ ! -e $home/.pi/agent/security-events.log ]] && pass 'the blocked command is not logged in the security log' || fail 'the blocked command is not logged in the security log'
+[[ -z $(print -l "$engine/state/pi"/doctor.*(DN)) ]] && pass 'the checker session folder is removed' || fail 'the checker session folder is removed'
 json_is '--json: status.sh fields and every check' "
   .guard_present == 1 and .launchers_present == 1 and .release_match == \"match\"
   and .guard_release_id == \"$rid\" and .launchers_release_id == \"$rid\"
@@ -466,7 +476,7 @@ json_is '--json: status.sh fields and every check' "
   and .pi_binding_path == \"$fake_pi\" and .omp_binding_path == \"$fake_omp\" and .drift == 0 and .ok == true
   and ([.checks[] | select(.harness == \"pi\")] | length) > 20
   and any(.checks[]; . == {harness: \"opencode\", result: \"ok\", check: \"protected write denied\"})
-  and any(.checks[]; . == {harness: \"pi\", result: \"ok\", check: \"analyzer preflight\"})
+  and any(.checks[]; . == {harness: \"pi\", result: \"ok\", check: \"the installed extension allows ls -la\"})
   and ([.checks[].result] - [\"ok\", \"skip\", \"warn\"]) == []"
 [[ $(/usr/bin/jq -r 'keys_unsorted[0:10] | join(",")' <<< "$out") == guard_present,launchers_present,release_match,guard_release_id,launchers_release_id,runtime_binding,pi_binding,pi_binding_path,omp_binding_path,drift ]] &&
   pass "--json keeps status.sh's field order" || fail "--json keeps status.sh's field order"
@@ -531,13 +541,28 @@ runs 'restores the omp binding' 0 recorded bind --pi "$fake_pi" --omp "$fake_omp
 
 /bin/cp "$ext/.guard-node" "$run/guard-node"
 print -r -- "$home/missing/node" > "$ext/.guard-node"
-doctor_fails 'a checker Node that is not there' "checker Node $home/missing/node is not an executable file*" 'analyzer not checked: no usable checker Node'
+doctor_fails 'a checker Node that is not there' "checker Node $home/missing/node is not an executable file*"
 json_is '--json: a stale checker Node is drift' '.drift == 1 and .runtime_binding == "ok"'
 print -r -- "$home/.cache/n/node" > "$ext/.guard-node"
-doctor_fails 'a checker Node in a sandbox-writable root' "checker Node $home/.cache/n/node is inside a sandbox-writable root" 'analyzer not checked: no usable checker Node'
+doctor_fails 'a checker Node in a sandbox-writable root' "checker Node $home/.cache/n/node is inside a sandbox-writable root"
 /bin/rm "$ext/.guard-node"
-doctor_fails 'no checker Node' 'checker Node: ~/.pi/agent/extensions/pi-sandbox-guard/.guard-node is missing*' 'analyzer not checked: no usable checker Node'
+doctor_fails 'no checker Node' 'checker Node: ~/.pi/agent/extensions/pi-sandbox-guard/.guard-node is missing*'
 /bin/mv "$run/guard-node" "$ext/.guard-node"
+
+# The checker: the session copy and the installed extension's verdicts.
+/bin/cp "$home/.cc-safety-net/rules/rule.json" "$run/rule.json"
+print -r -- 'not json' > "$home/.cc-safety-net/rules/rule.json"
+doctor_fails 'a checker configuration that cannot be copied' "the checker's session copy cannot be built*"
+[[ -z $(print -l "$engine/state/pi"/doctor.*(DN)) ]] && pass 'its session folder is removed' || fail 'its session folder is left'
+/bin/cp "$run/rule.json" "$home/.cc-safety-net/rules/rule.json"
+/bin/mv "$rel/vendor" "$run/vendor"
+doctor_fails 'a release without cc-safety-net' 'the installed extension blocks ls -la: [pi-sandbox-guard] Guard unavailable: cc-safety-net failed to load*'
+/bin/mv "$run/vendor" "$rel/vendor"
+/bin/cp "$rel/checker/agent-guard-git/rulebook.json" "$run/rulebook.json"
+/usr/bin/jq '.rules = []' "$run/rulebook.json" > "$rel/checker/agent-guard-git/rulebook.json"
+doctor_fails "a release without Agent Guard's Git rules" 'the installed extension blocks ls -la: [pi-sandbox-guard] Guard unavailable: cc-safety-net did not load Agent Guard*'
+/bin/cp "$run/rulebook.json" "$rel/checker/agent-guard-git/rulebook.json"
+doctor_fails 'the checker passes again'
 
 print -r -- '# edited' >> "$lb/good"
 /bin/rm "$lb/good2"
@@ -567,8 +592,7 @@ doctor_fails 'a profile that fails the self-test' "~/.local/bin/pi-sandbox.sb di
 /bin/mv "$run/profile" "$lb/pi-sandbox.sb"
 
 /bin/mv "$ext/src/validate-bash-command.sh" "$run/analyzer"
-doctor_fails 'an extension without its analyzer' '~/.pi/agent/extensions/pi-sandbox-guard/src/validate-bash-command.sh is missing' \
-  'analyzer preflight: analyzer script missing' 'the installed extension blocks ls -la'
+doctor_fails 'an extension without its analyzer' '~/.pi/agent/extensions/pi-sandbox-guard/src/validate-bash-command.sh is missing'
 /bin/mv "$run/analyzer" "$ext/src/validate-bash-command.sh"
 
 runtime "$fake_pi" 'print -ru2 -- boom; exit 3'
