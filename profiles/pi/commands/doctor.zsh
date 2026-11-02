@@ -3,24 +3,31 @@
 #
 # What pi-sandbox-guard's status.sh and check-path.sh checked, against the current
 # release's profiles/pi copies instead of a checkout, plus the profile self-test,
-# the analyzer and a --version start of each runtime through ~/.local/bin.
+# the command checker and a --version start of each runtime through ~/.local/bin.
 
-# Loads the installed extension as Pi does and asks it about one allowed and one
-# blocked command. argv: the extension folder and a working folder.
-pi_doctor_analyzer_js='
+# Loads the installed extension as Pi does and asks it about one allowed command and
+# two blocked ones. The extension blocks every call, with its reason, when the
+# session copy, cc-safety-net's Pi entry or Agent Guard's Git rules are unavailable.
+# argv: the extension folder, a working folder and a scratch folder for the audit log.
+pi_doctor_checker_js='
 import { pathToFileURL } from "node:url";
 const [ext, cwd] = process.argv.slice(1);
-const core = await import(pathToFileURL(`${ext}/src/guard-core.mjs`).href);
 const adapter = await import(pathToFileURL(`${ext}/src/index.mjs`).href);
-const preflight = await core.preflight();
 let handler;
-adapter.default({
-  isToolCallEventType: (name, event) => name === event.toolName,
-  on: (event, fn) => { if (event === "tool_call") handler = fn; },
-});
-const verdict = async (command) =>
-  (await handler({ toolName: "bash", input: { command, cwd } }, { cwd }))?.block === true ? "block" : "allow";
-console.log(JSON.stringify({ preflight, allow: await verdict("ls -la"), block: await verdict("rm -rf /") }));
+adapter.default({ on: (event, fn) => { if (event === "tool_call") handler = fn; } });
+// The extension clears CC_SAFETY_NET_AUDIT_HOME while it starts, before its first
+// await; point the audit log at the doctor'"'"'s scratch folder after that, so the probe
+// leaves ~/.cc-safety-net/logs alone.
+process.env.CC_SAFETY_NET_AUDIT_HOME = process.argv[3];
+const verdict = async (command) => {
+  const r = await handler({ type: "tool_call", toolName: "bash", input: { command, cwd } }, { cwd });
+  return { block: r?.block === true, reason: String(r?.reason ?? "") };
+};
+console.log(JSON.stringify({
+  allow: await verdict("ls -la"),
+  root: await verdict("rm -rf /"),
+  hooks: await verdict("git config core.hooksPath agent-guard-probe"),
+}));
 '
 
 # pi_doctor [--json]: prints one ok, FAIL or skip line per check; with --json it
@@ -33,8 +40,8 @@ pi_doctor() {
   setopt no_unset pipe_fail extended_glob
   local cur="$engine/current" bin="$home/.local/bin" ext="$home/.pi/agent/extensions/pi-sandbox-guard"
   local conf="$home/.config/pi-sandbox-guard/executables.conf" wrec="$engine/state/wrappers.json"
-  local scripts="$release/profiles/pi/scripts" checker= state=unbound pi_rec= omp_rec= node_rec=
-  local p rel rt label rec out err want sum work darwin_temp l rid= rg= rl= match=absent
+  local scripts="$release/profiles/pi/scripts" checker= jsnode= state=unbound pi_rec= omp_rec= node_rec=
+  local p rel rt label rec out err want sum work darwin_temp l rid= rg= rl= match=absent copy= sdir=
   local -a names lines wnames
   local -A where
   integer json=0 failed=0 drift=0 guard_present=0 launchers_present=0 rc
@@ -103,6 +110,8 @@ pi_doctor() {
     omp_rec=$(/usr/bin/sed -n 's/^[[:space:]]*omp[[:space:]]*=[[:space:]]*//p' "$conf" | /usr/bin/head -1)
     node_rec=$(/usr/bin/sed -n 's/^[[:space:]]*node[[:space:]]*=[[:space:]]*//p' "$conf" | /usr/bin/head -1)
   fi
+  jsnode=$checker
+  [[ -n $jsnode ]] || { pi_doctor_node && jsnode=$REPLY }
   if [[ -z $pi_rec ]]; then
     pi_doctor_say "skip bindings: no Pi binding recorded in ${conf/#$home/~}"
   elif out=$(pi_doctor_bind --check 2>&1); then
@@ -162,28 +171,60 @@ pi_doctor() {
   work=$(/usr/bin/mktemp -d "$darwin_temp/agent-guard-doctor.XXXXXX") || { pi_doctor_say "FAIL cannot create a folder in $darwin_temp"; work= }
   if [[ -n $work ]]; then
     /bin/mkdir -p -- "$work/project"
-    # The analyzer: preflight, then one allowed and one blocked command through the
-    # installed extension, run by the checker Node. HOME is the scratch folder, so
-    # the blocked command is not logged in ~/.pi/agent/security-events.log.
-    if [[ -z $checker ]]; then
-      pi_doctor_say "FAIL analyzer not checked: no usable checker Node"
+    # The checker: the release's session copy builder over the account's
+    # cc-safety-net configuration, then one allowed and two blocked commands through
+    # the installed extension, run by a Node, which loads cc-safety-net's Pi entry
+    # from the release with the copy. The copy is built in the engine's write-protected
+    # state, where the extension requires it, and removed after.
+    rid= copy= sdir=
+    [[ -f $cur/RELEASE ]] && rid=$(<"$cur/RELEASE")
+    if [[ ! -f $cur/checker/snapshot.zsh ]]; then
+      pi_doctor_say "FAIL the current release has no checker/snapshot.zsh"
+    elif [[ -z $rid ]]; then
+      pi_doctor_say "FAIL the current release has no RELEASE file"
+    elif ! /bin/mkdir -p -- "$engine/state/pi" || ! sdir=$(/usr/bin/mktemp -d "$engine/state/pi/doctor.XXXXXXXX"); then
+      sdir=
+      pi_doctor_say "FAIL cannot create a checker session folder in ${engine/#$home/~}/state/pi"
     else
-      out=$(cd "$work/project" && pi_doctor_bounded 60 /usr/bin/env "HOME=$work" "$checker" --input-type=module -e "$pi_doctor_analyzer_js" "$ext" "$work/project" 2>&1)
+      out=$( exec 2>&1; source "$cur/checker/snapshot.zsh" && ag_checker_snapshot "$home" "$sdir/checker" "$cur" standard; rc=$?
+             print -r -- "${ag_checker_warning:-}"; exit $rc )
       rc=$?
       lines=(${(f)out})
-      out=${lines[-1]:-}
-      if ! /usr/bin/jq -e 'has("preflight") and has("allow") and has("block")' <<< "$out" >/dev/null 2>&1; then
-        pi_doctor_say "FAIL analyzer did not run: $(pi_doctor_reason "$out" $rc 60)"
+      if (( rc )); then
+        pi_doctor_say "FAIL the checker's session copy cannot be built${lines[-1]:+: ${lines[-1]}}; fix ~/.cc-safety-net/rules/rule.json (npx cc-safety-net doctor lists the problem)"
       else
-        if /usr/bin/jq -e '.preflight.ok == true' <<< "$out" >/dev/null; then pi_doctor_say "ok   analyzer preflight"
-        else pi_doctor_say "FAIL analyzer preflight: $(/usr/bin/jq -r 'if .preflight.scriptPresent != true then "analyzer script missing" else "missing helpers: " + (.preflight.missing | join(", ")) end' <<< "$out")"
-        fi
-        [[ $(/usr/bin/jq -r .allow <<< "$out") == allow ]] && pi_doctor_say "ok   the installed extension allows ls -la" ||
-          pi_doctor_say "FAIL the installed extension blocks ls -la"
-        [[ $(/usr/bin/jq -r .block <<< "$out") == block ]] && pi_doctor_say "ok   the installed extension blocks rm -rf /" ||
-          pi_doctor_say "FAIL the installed extension allows rm -rf /"
+        copy=$sdir
+        pi_doctor_say "ok   the checker's session copy is built from ~/.cc-safety-net"
+        [[ -n ${lines[-1]:-} ]] && pi_doctor_say "skip ${lines[-1]}"
       fi
     fi
+    if [[ -n $copy ]]; then
+      if [[ -z $jsnode ]]; then
+        pi_doctor_say "skip the installed extension not asked about commands: no usable node on PATH to load it"
+      else
+        out=$(cd "$work/project" && pi_doctor_bounded 60 /usr/bin/env -u CC_SAFETY_NET_WORKTREE -u SAFETY_NET_WORKTREE -u CC_SAFETY_NET_AUDIT_HOME \
+          -u CC_SAFETY_NET_LEVEL "HOME=$home" "CC_SAFETY_NET_HOME=$copy/checker" "AGENT_GUARD_RELEASE=$rid" PI_SANDBOX_PROFILE_DIGEST=doctor \
+          "$jsnode" --input-type=module -e "$pi_doctor_checker_js" "$ext" "$work/project" "$sdir/audit" 2>&1)
+        rc=$?
+        lines=(${(f)out})
+        out=${lines[-1]:-}
+        if ! /usr/bin/jq -e 'has("allow") and has("root") and has("hooks")' <<< "$out" >/dev/null 2>&1; then
+          pi_doctor_say "FAIL the installed extension did not run: $(pi_doctor_reason "${(F)lines}" $rc 60)"
+        elif [[ $(/usr/bin/jq -r .allow.block <<< "$out") == true ]]; then
+          pi_doctor_say "FAIL the installed extension blocks ls -la: $(/usr/bin/jq -r '.allow.reason | split("\n")[0]' <<< "$out")"
+        else
+          pi_doctor_say "ok   the installed extension allows ls -la"
+          [[ $(/usr/bin/jq -r .root.block <<< "$out") == true ]] && pi_doctor_say "ok   the installed extension blocks rm -rf /" ||
+            pi_doctor_say "FAIL the installed extension allows rm -rf /"
+          if /usr/bin/jq -e '.hooks.block == true and (.hooks.reason | contains("agent-guard-git"))' <<< "$out" >/dev/null; then
+            pi_doctor_say "ok   the installed extension blocks git config core.hooksPath by Agent Guard's Git rules"
+          else
+            pi_doctor_say "FAIL Agent Guard's Git rules are not in force: git config core.hooksPath is not blocked by them"
+          fi
+        fi
+      fi
+    fi
+    [[ -n $sdir ]] && /bin/rm -rf -- "$sdir"
     # Each runtime through ~/.local/bin, from a scratch project: Pi refuses the home
     # folder as a project. No binding and no CLI is a runtime that is not there.
     for rt label rec in pi Pi "$pi_rec" omp OMP "$omp_rec"; do
@@ -262,6 +303,22 @@ pi_doctor_reason() {
 # lib-ops.sh's rule, as status.sh applies it to the checker Node.
 pi_doctor_write_root() {
   /bin/bash -c '. "$1" && ops_path_is_known_sandbox_write_root "$2" "$3"' _ "$scripts/lib-ops.sh" "$1" "$home"
+}
+
+# REPLY = a Node for the checks that run JavaScript: the recorded interpreter, else
+# the node on PATH or in Homebrew's folders; an absolute executable file outside
+# every folder Pi sessions can write. Fails when there is none.
+pi_doctor_node() {
+  local c
+  REPLY=
+  for c in "$node_rec" "$(command -v node 2>/dev/null)" /opt/homebrew/bin/node /usr/local/bin/node; do
+    [[ $c == /* && -x ${c:A} && ! -d ${c:A} ]] || continue
+    pi_doctor_write_root "$c" && continue
+    pi_doctor_write_root "${c:A}" && continue
+    REPLY=$c
+    return 0
+  done
+  return 1
 }
 
 pi_doctor_bind() {

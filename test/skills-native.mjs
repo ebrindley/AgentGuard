@@ -82,7 +82,7 @@ writeFileSync(join(home, ".config/opencode/opencode.json"), JSON.stringify({
   provider: { guardfixture: { name: "Fixture", npm: "@ai-sdk/openai-compatible", options: { baseURL: url + "/v1", apiKey: "fixture" }, models: { test: { name: "Fixture", tool_call: true, limit: { context: 8192, output: 1024 } } } } },
 }))
 const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, ".config"), XDG_DATA_HOME: join(home, ".local/share"), XDG_STATE_HOME: join(home, ".local/state"), PATH: join(home, "fakebin") + ":" + process.env.PATH, OPENCODE_MODELS_URL: url + "/models",
-  AGENT_GUARD_CONTEXT: "", AGENT_GUARD_RELEASE: "", AGENT_GUARD_SANDBOXED: "", OPENCODE_SANDBOXED: "", CC_SAFETY_NET_PARANOID_RM: "", SAFETY_NET_PARANOID_RM: "", CC_SAFETY_NET_LEVEL: "strict" }
+  AGENT_GUARD_CONTEXT: "", AGENT_GUARD_RELEASE: "", AGENT_GUARD_SANDBOXED: "", OPENCODE_SANDBOXED: "", CC_SAFETY_NET_PARANOID_RM: "", SAFETY_NET_PARANOID_RM: "", CC_SAFETY_NET_LEVEL: "standard" }
 for (const name of ["OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_CONTENT", "XDG_CACHE_HOME"]) delete env[name]
 console.log(`fixture: ${run}`)
 let guardedServer

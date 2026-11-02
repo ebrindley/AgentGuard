@@ -1,19 +1,28 @@
 # Pi checker comparison
 
 This comparison is the evidence behind moving Pi and OMP from pi-sandbox-guard's
-analyzer to cc-safety-net. Decision D13 (DESIGN.md section 15) settles the
-verdicts it left open: no confirmations, routine Git work allowed, whole-tree
-discards and remote-history rewrites denied. The dispositions below record the
-state before D13; where they differ, D13 applies.
+analyzer to cc-safety-net, which shipped as the switch of step 10d (DESIGN.md
+section 12). Decision D13 (DESIGN.md section 15) settles the verdicts the first
+version of this record left open: no confirmations, routine Git work allowed,
+whole-tree discards and remote-history rewrites denied. The generated fixtures
+compare the analyzer as it was before the switch (the baseline) with the
+extension that ships, which runs cc-safety-net 2.6.0 on the session copy of the
+D13 policy. The first version of this record measured cc-safety-net's `strict`
+level; on 2026-11-02 the level became `standard`, with the dynamic-target delete
+rule kept on, and the fixtures and counts below were regenerated.
 
 ## Observations and reproduction
 
-`test/checker-comparison.mjs` compares a caller-selected baseline, the working
-Pi adapter and the bundled cc-safety-net Pi entry. It uses the launcher's actual
-policy snapshot with strict protection and project tightening only. The snapshot
-omits the legacy managed blanket recursive-rm rule, as current launches do.
-Interactive and headless callbacks run; simulated confirmations are declined.
-Commands and file-tool payloads are data and are never executed.
+`test/checker-comparison.mjs` compares the Pi extension and analyzer of a
+caller-selected baseline commit, the working tree's Pi extension and the bundled
+cc-safety-net Pi entry. The working tree's extension and the entry use the session
+copy the Pi launcher builds: the release's builder (`engine/checker/snapshot.zsh`)
+run over the factory `~/.cc-safety-net`, at the standard level with project
+tightening only, so the policy has D13's ten built-in rules switched off,
+`rm.recursive-force-dynamic-target` on, Agent Guard's Git rulebook, and no
+recursive-rm rule. Interactive and headless callbacks
+run; the baseline's simulated confirmations are declined, and the extension never
+asks. Commands and file-tool payloads are data and are never executed.
 
 Use Node 24 outside a sandbox on macOS. Run the existing preflight, then:
 
@@ -25,50 +34,122 @@ cmp /private/tmp/guard-comparison-a/cases.jsonl /private/tmp/guard-comparison-b/
 cmp /private/tmp/guard-comparison-a/facts.json /private/tmp/guard-comparison-b/facts.json
 ```
 
-Use fresh output directories on the same host/runtime and the same baseline
-commit. Disposable homes and repositories live outside the analyzer's temp safe
-roots. Only fake secrets are
-created. Corpus paths with fixed parent counts are relocated to preserve their
-intended `/etc` target; `measuredCommand` records that difference. Quoted tilde
-data is left unchanged.
+The committed fixtures were generated with BASELINE_REF `f098322`, the last commit
+whose Pi extension calls the analyzer; two runs gave identical files. Use fresh
+output directories on the same host/runtime and the same baseline commit.
+Disposable homes and repositories live outside the analyzer's temp safe roots.
+Only fake secrets are created. Corpus paths with fixed parent counts are relocated
+to preserve their intended `/etc` target; `measuredCommand` records that
+difference. Quoted tilde data is left unchanged.
 
 Keep the host awake during both runs, for example with `caffeinate -i -s node`
 in place of `node`. Suspension can trigger fail-closed timeouts and invalidate
 the comparison. The runner retains raw captures and refuses to emit compact
 fixtures if any checker times out. Different home depths change `measuredCommand`
 even when verdicts agree, so byte identity is a same-host reproducibility check.
+The run ends with a check that the extension and the bundled entry agree on every
+case.
 
 Raw `rows.jsonl` and `result.json` include local paths, reasons and timings;
 keep them outside Git. The runner's `cases.jsonl` and `facts.json` are the portable
 generated observations committed under `test/fixtures/checker-comparison/`.
 No separate refresh script is needed. Case records omit timings; facts include
-source hashes and the normalized policy snapshot. Policy dispositions below are
-separate from generated facts. This offline development tool is not a new gate
-or a field false-positive measurement.
+source hashes and the normalized policy snapshot. This offline development tool
+is not a new gate or a field false-positive measurement. In the case records
+`baseline`, `pi` and `shared` hold the interactive and headless verdicts of the
+baseline analyzer, the extension and the bundled entry.
 
-## Bounded policy dispositions
+## Measurements
 
-Preserve in-scope outcomes, rather than every historical corpus refusal. A
-synthetic classifier example establishes behavior, not authority for a new
-guardrail. Existing protections remain while these mappings are unresolved.
+Per call, over the 473 cases in interactive and headless mode (946 calls per
+checker in each of two runs, on one developer Mac with Node 24.22.2; each cell
+gives the two runs' range):
 
-| Group | Required outcome and evidence | Disposition |
-| --- | --- | --- |
-| Remote history | ASK for literal force, delete, mirror, prune and lease forms. `push-prune` and `push-lease` lose Pi's ASK in the shared entry. | Retain Pi confirmations. Resolve through a supported matching interface before switching; no blanket conversion of shared blocks into ASK. |
-| Local discard and hooks | Preserve existing ASK for destructive reset/clean and `core.hooksPath` changes. Reordered Git forms already expose Pi gaps. Checkout, restore, stash drop and branch deletion are legitimate operations requiring separate policy choices. | Keep current behavior pending an explicit bounded choice. A stricter shared verdict is not automatically accepted. No new Git parser. |
-| Pipe to shell | Baseline severity is ASK. Pi blocks `pipe-shell` but allows `pipe-shell-chain`; the shared entry blocks both. | Severity and compound coverage remain unresolved. No silent ASK-to-DENY edit. |
-| Catastrophic recursive targets | DENY literal catastrophic targets and natural wrappers, including executable heredocs and one substitution level. Protected ancestors can contain writable descendants. | Keep Pi coverage. The disposable Python canary below disproves blanket sandbox redundancy; exact Node/Ruby root-API behavior remains unverified. Evasion-only parsing is out of scope, but removal needs an in-scope coverage map. |
-| Secret paths | DENY literal secret access through Bash and file tools. Pi's OS rules protect named secret paths; the shared checker also checks file tools. | Preserve named-path protections. Public `.pem` fixtures and data heredocs are not automatically secrets or executable payloads; shared refusals remain compatibility blockers. No DLP analysis. |
-| Routine cleanup | ALLOW literal cleanup strictly inside an allowed project/temp root, preserving root, outside-target, symlink and protected-path restrictions. `corpus-131` records the absolute project-path refusal. | Deferred: absolute/tilde project cleanup fails the lexical-root check; `/private/tmp` cleanup also fails an earlier system-directory regex. A single reordering cannot fix both. Capture as one focused follow-up; no change here. |
-| Wrapper failure behavior | Reject unusable cwd/input, fail closed on unhealthy checking, bound resource use, and never execute analyzed input. Existing smoke/degraded suites cover these invariants. | Preserve invariant tests during migration. Subprocess timeout, EPIPE, output caps and process-group cleanup tests retire only with their subprocess path. In-process synchronous work needs bounded-cost evidence; a Promise timeout cannot interrupt it. Qualification probes remain incomplete. |
-| Benign scripts and quoted data | Routine environment changes, scripts and quoted command text should avoid needless confirmation. The benign group measures these costs. | Noted — no action beyond the focused chmod/chown boundary fix. Do not repair every historical over-ask in this change. |
+| Checker | p50 | p95 | Calls over 2 seconds | Timeouts |
+| --- | --- | --- | --- | --- |
+| Pi extension on cc-safety-net 2.6.0 | 1.6 to 1.8 ms | 2.0 to 3.3 ms | 0 | 0 |
+| Bundled entry alone | 1.2 to 1.3 ms | 1.6 to 2.8 ms | 0 | 0 |
+| Analyzer before the switch | 156 to 206 ms | 319 to 374 ms | 0 | 0 |
+
+The extension has no subprocess and no time limit of its own: cc-safety-net's
+checks run in process and synchronously, and no call came near the analyzer's
+2-second limit. Start-up, in a fresh process, is about 0.5 ms to import the
+extension and 19 to 20 ms for its first call, which loads cc-safety-net's entry
+and runs the probe `git config core.hooksPath agent-guard-probe`; Pi's start is
+not delayed, because the first tool call waits for the load. At launch the
+preamble's session copy takes about 45 ms.
+
+## Verdict changes
+
+Of the 473 cases, 227 keep their verdict and 246 change. `baseline` is the
+analyzer's interactive verdict; the extension returns only allow or block. The
+three file-tool rows keep their verdict, because the extension forwards shell
+commands only.
+
+| Group | Same | Ask, now allowed | Ask, now blocked | Block, now allowed | Allow, now blocked |
+| --- | --- | --- | --- | --- | --- |
+| Characterization (414) | 199 | 43 | 31 | 136 | 5 |
+| In scope (34) | 13 | 3 | 7 | 1 | 10 |
+| Benign (25) | 15 | 6 | 0 | 2 | 2 |
+
+- **Ask, now blocked (38):** the whole-tree and forced Git forms D13 denies
+  (`git reset --hard`, `git clean -fd[x]`, force, mirror and `+` pushes, and
+  `core.hooksPath` changes, in every spelling the corpus holds), `rm -rf` of the
+  working folder, its parents, `$HOME`, `/*` and dynamic targets, and
+  `find -delete`, `find -exec rm` and `xargs`/`parallel` forms the checker
+  refuses (the dynamic-target rule is on). The analyzer could be answered by the operator; these now run only
+  outside the guard.
+- **Ask, now allowed (52):** `--force-with-lease`, `git push --delete`, `-d`, a
+  `:ref` refspec and `--prune`, `export PATH=...` and `unset`, `curl -o`, `sudo`
+  (Seatbelt denies running it), interpreter one-liners (`python3 -c`, `node -e`,
+  `awk`) including ones that delete under the project, `xargs rm` and `parallel
+  rm` forms, `git -c core.hooksPath=... status`, and the benign cases the analyzer
+  asked about (`git commit -m "...reset --hard..."`, `export PYTHONPATH`).
+- **Block, now allowed (139):** writes to `/etc`, `/System`, `/Library`, `/usr/local`
+  and `/dev` by redirects, `truncate`, `chmod -R`, `chown -R`, `time -o`, `mv`,
+  `cp`, interpreters, `wipefs` and `mkfs`, `rm -rf {REPO}/build`, and the dynamic
+  interpreter forms `python3 -c "$CODE"` and `node -e "$(...)"`, which the standard
+  level allows. No session
+  can write those places; Seatbelt denies them. The records are in `cases.jsonl`.
+- **Allow, now blocked (17):** `git -C repo reset --hard`, `git reset HEAD --hard`,
+  `git clean -d -f`, `git checkout -- .`, `git restore .`, the `$(pwd)` and
+  `$(git branch ...)` force pushes and the pipe-to-shell chain, which the analyzer
+  missed; an ANSI-C quoted `rm -rf /`; `rm -rf .`; `eval "$VAR"`;
+  `shred`; `cat .env` and `cat ~/.ssh/...`, which Seatbelt already denied reads of;
+  and two benign cases: `cat server.pem` (key and certificate file names are
+  secret paths in bash) and `cat <<EOF` of text that holds `rm -rf /`. The three
+  file-tool rows (`.env`, `~/.ssh` and `server.pem` reads) are allowed, as before.
+
+Not in the corpus, found by hand: `python3 - <<'PY' ... PY` and `node <<'JS' ... JS`
+(an interpreter reading its program from a heredoc) and `eval "$(pyenv init -)"`
+are allowed at the standard level; at the strict level they were blocked as
+`analysis.unsupported-heredoc` and `analysis.dynamic-shell-source`. Still blocked
+at both levels: `sh -c "$CMD"`, `curl ... | sh`, `. "$HOME/.nvm/nvm.sh"`. A
+heredoc that only writes a file is allowed. `.npmrc`, `.pypirc`, `.netrc`,
+`.git-credentials`, `.env.*` variants, `*.key`, `*.p12`, `*.pfx`, `*.jks`,
+`*.keystore`, `*.kdbx` and `id_rsa`-style names would be refused for file reads and
+writes anywhere by the bundled entry, including a project's own `.npmrc` and test
+fixtures; the extension does not forward file tools, so they are not.
+
+## Dispositions under D13
+
+| Group | Verdict now |
+| --- | --- |
+| Remote history | Denied: `--force`, `-f`, `+` refspec, `--mirror`, also behind `-C`, `--git-dir`, `$(pwd)` and redirections. Allowed: `--force-with-lease`, `--delete`, `-d`, `:ref`, `--prune`. |
+| Local discard and hooks | Denied: `git reset --hard` in any order or with `-C`, `git clean -f` in any spelling, `git checkout .` and `git restore .`, and `git config core.hooksPath` in the corpus's spellings. Allowed: path-scoped `git restore` and `git checkout -- <path>`, `git stash drop`, `git branch -D`. `git -c core.hooksPath=<dir> <command>` and `git -C <dir> restore .` are not caught (DESIGN.md section 5). |
+| Pipe to shell | Denied, with and without a following command (`pipe-shell`, `pipe-shell-chain`); the analyzer allowed the second. |
+| Catastrophic recursive targets | Denied by cc-safety-net's rules: root, home, the working folder, its parents and, through `rm.recursive-force-dynamic-target`, which the session copy keeps on, dynamic targets. Writes to system folders and devices by other means are not checked and rest on Seatbelt. |
+| Secret paths | Denied in `bash` (`cat .env`, `cat ~/.ssh/...`, `cat server.pem`). The extension does not forward file tools, so a file-tool read is decided by Seatbelt alone, which denies `.env` files and the credential set. |
+| Routine cleanup | Allowed: literal paths below the working folder, absolute or relative (`corpus-131` is now allowed), and in temp. Denied: `*`, `$DIR` and `$(...)` targets. |
+| Wrapper failure behavior | An unusable cwd, a malformed payload or a checker error blocks; an unhealthy checker blocks every call. `profiles/pi/test/checker.mjs` covers these, and `test/pi-launch.mjs` covers the launch. The analyzer's subprocess timeout, EPIPE, output-cap and process-group tests retire with the analyzer's files. |
+| Benign scripts and quoted data | Environment changes, `curl -o` and interpreter one-liners are allowed. `python3 - <<'PY'`, `node <<'JS'` and `eval "$(tool init -)"` are allowed. `cat <<EOF` of quoted `rm -rf /` and `cat server.pem` are denied; the operator runs them outside the guard. |
 
 The supported `cc-safety-net/api` declaration returns `allow` or `deny`, with one
 `ruleId` for a denial. It takes only `command` and `cwd`; it exposes neither an
-ASK result nor a per-call alternate rulebook. The bundled Pi adapter likewise
-returns block/allow without consulting Pi's confirmation UI. A second ask-list
-evaluation therefore remains a design qualification. Do not import private
-minified exports, fork the vendor or add a parser to make this comparison pass.
+ASK result nor a per-call alternate rulebook, and the bundled Pi entry returns
+block or allow without consulting Pi's confirmation UI. D13 removes the second
+ask-list evaluation this record once named as a qualification. Nothing imports
+private minified exports, forks the vendor or adds a parser.
 
 ## Native containment and limits
 
@@ -98,8 +179,11 @@ read raw command logs; zero hits would not prove a protection redundant.
 
 ## Enforcement totals
 
-The runtime fixes add one directory-node lock grant (0 to 1) and keep the two
-recursive permission-change patterns (2 to 2), now scoped to commands. No checker
-switches, rule families, dependencies or required checks are added. The hosted
-required check remains one with eight file slices. This record and policy table
-add no enforcement authority.
+The switch adds one health probe at load to Pi and OMP and no checker path: the
+extension forwards shell commands only, as the analyzer checked them. It
+adds no switch, rule family or dependency (cc-safety-net was already bundled) and no
+required check; the hosted required check remains one with eight file slices. It
+ends Pi's confirmations and removes the analyzer from the extension's path, with
+its files still in the release. The per-launch session copy replaces no control. The
+earlier runtime fixes keep their one directory-node lock grant (0 to 1) and their
+two recursive permission-change patterns (2 to 2).

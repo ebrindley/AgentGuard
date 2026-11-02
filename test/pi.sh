@@ -57,12 +57,13 @@ if [[ -n ${GITHUB_ACTIONS:-} ]]; then
   corpus=$copy/test/corpus.mjs
   print -r -- "note Pi smoke and corpus run from $copy with four smoke deadlines and configured corpus limits tripled"
 fi
-for t in smoke corpus adapter degraded; do
+for t in smoke corpus; do
   f=$pi/test/$t.mjs
   [[ $t == smoke ]] && f=$smoke
   [[ $t == corpus ]] && f=$corpus
   suite "profiles/pi/test/$t.mjs" $no_pi_writes node "$f"
 done
+suite profiles/pi/test/checker.mjs node "$pi/test/checker.mjs"
 suite profiles/pi/test/shim.mjs node "$pi/test/shim.mjs"
 suite profiles/pi/scripts/check-launchers.mjs node "$pi/scripts/check-launchers.mjs"
 suite profiles/pi/scripts/test-sandbox-profile.sh /usr/bin/env PI_SANDBOX_PROFILE_STRICT=1 /bin/bash "$pi/scripts/test-sandbox-profile.sh"

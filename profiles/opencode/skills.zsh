@@ -70,59 +70,13 @@ opencode_skill_globals() {
 }
 
 # The shared legacy rule remains available to old releases and other CLIs.
-# New sessions get real copies: the checker's scoped reader rejects symlinks.
+# New sessions get real copies: the checker's scoped reader rejects symlinks. The
+# builder is the release's, shared with every harness that has a checker; this
+# adds OpenCode's automatic deletion allowances.
+source "$release/checker/snapshot.zsh"
 opencode_checker_snapshot() {
-  local session=$1 source="$home/.cc-safety-net" dest="$session/checker" name spec file
-  /bin/mkdir -p -- "$dest/rules"
-  if [[ -f $source/rules/rule.json ]]; then
-    /bin/cp -L -- "$source/rules/rule.json" "$dest/rules/rule.json" || return 1
-    /usr/bin/jq -e 'type == "object" and ((.rules // []) | type == "array")' "$dest/rules/rule.json" >/dev/null || return 1
-    for spec in ${(f)"$(/usr/bin/jq -r '(.rules // [])[] | select(type == "string")' "$dest/rules/rule.json")"}; do
-      name=$spec
-      [[ $spec == */*\#*/* ]] && name=${spec:t}
-      [[ $name == [A-Za-z][A-Za-z0-9_-]# ]] || { note "unsupported checker rule source: $name"; return 1; }
-      file="$source/rules/$name/rulebook.json"
-      [[ -e $file ]] || continue
-      /bin/mkdir -p -- "$dest/rules/$name"
-      /bin/cp -L -- "$file" "$dest/rules/$name/rulebook.json" || return 1
-      if [[ $name == agent-guard ]]; then
-        /usr/bin/jq --slurpfile factory "$profile_dir/templates/cc-safety-net/rules/agent-guard/rulebook.json" '
-          if any(.rules[]; . == $factory[0].rules[0]) then
-            .rules |= map(select(. != $factory[0].rules[0]))
-            | if has("tests") then .tests |= map(select(.rule != "recursive-rm")) else . end
-          else . end' "$dest/rules/$name/rulebook.json" > "$dest/rules/$name/.new" &&
-          /bin/mv "$dest/rules/$name/.new" "$dest/rules/$name/rulebook.json" || return 1
-        if /usr/bin/jq -e '.rules | length == 0' "$dest/rules/$name/rulebook.json" >/dev/null; then
-          /usr/bin/jq --arg source "$spec" '.rules -= [$source]' "$dest/rules/rule.json" > "$dest/rules/.new" && /bin/mv "$dest/rules/.new" "$dest/rules/rule.json" || return 1
-        fi
-      fi
-    done
-  else
-    print -r -- '{"version":1,"rules":[],"overrides":{},"transparent_wrappers":["env","exec","nice","nohup","setsid","stdbuf","time","timeout"]}' > "$dest/rules/rule.json"
-  fi
-  # Agent Guard's Git rules (docs/DESIGN.md section 5, Command checker): the
-  # release's copy replaces any rulebook of that name.
-  /bin/mkdir -p -- "$dest/rules/agent-guard-git"
-  /bin/cp -- "$release/checker/agent-guard-git/rulebook.json" "$dest/rules/agent-guard-git/rulebook.json" || return 1
-  /usr/bin/jq '.rules = (((.rules // []) - ["agent-guard-git"]) + ["agent-guard-git"])' "$dest/rules/rule.json" > "$dest/rules/.new" &&
-    /bin/mv "$dest/rules/.new" "$dest/rules/rule.json" || return 1
-  if [[ -f $source/policy.json ]]; then
-    /bin/cp -L -- "$source/policy.json" "$dest/policy.json" || return 1
-  else
-    print -r -- '{"version":1}' > "$dest/policy.json"
-  fi
-  # Resolve paranoid_rm with the same preset/override/legacy-flag precedence as
-  # cc-safety-net. Explicit allowances in the copied policy are never removed.
-  local legacy=${CC_SAFETY_NET_PARANOID_RM-${SAFETY_NET_PARANOID_RM:-}}
-  local paranoid=${CC_SAFETY_NET_PARANOID-${SAFETY_NET_PARANOID:-}}
-  if ! /usr/bin/jq -e 'type == "object" and ((.destructive_command_protection // {}) | type == "object") and ((.destructive_command_protection.allow_paths // []) | type == "array") and ((.destructive_command_protection.overrides // {}) | type == "object") and ((.safety // {}) | type == "object") and ((.safety.overrides // {}) | type == "object")' "$dest/policy.json" >/dev/null 2>&1; then
-    preparation_status=warning
-    note "checker policy copied without automatic deletion allowances: $source/policy.json"
-    return 0
-  fi
-  local -a deletion_roots
-  local root child target
-  local -a content_roots=($skill_roots)
+  local session=$1 name target root child
+  local -a content_roots=($skill_roots) deletion_roots
   for root in $config_roots; do
     for child in agent agents command commands mode modes plugin plugins skill skills tool tools themes node_modules; do
       name="$root/$child" target=${name:A}
@@ -134,20 +88,12 @@ opencode_checker_snapshot() {
     opencode_skill_scope "$name"
     [[ $REPLY == (deny|readonly) ]] || deletion_roots+=("$name")
   done
-  local roots=$(/usr/bin/jq -cn '$ARGS.positional' --args $deletion_roots)
-  # Built-in rules decision D13 allows (docs/DESIGN.md section 15), unless the
-  # user chose the paranoid level; a rule the user's policy names keeps the
-  # user's setting.
-  local allowed=$(/usr/bin/jq -cn '$ARGS.positional' --args git.push-delete git.stash-drop git.branch-force-delete git.tag-delete \
-    git.merge-abort git.rebase-abort git.checkout-double-dash git.checkout-ref-path git.restore-unstaged git.restore-worktree)
-  /usr/bin/jq --arg level "$CC_SAFETY_NET_LEVEL" --arg legacy "${legacy:l}" --arg paranoid "${paranoid:l}" --argjson roots "$roots" --argjson allowed "$allowed" '
-    if type != "object" then error("checker policy must be an object") else . end
-    | ((if ((.safety.overrides // {}) | has("paranoid_rm")) then .safety.overrides.paranoid_rm else ((.safety.level == "paranoid") or ($level == "paranoid")) end)
-       or ($legacy == "1" or $legacy == "true") or ($paranoid == "1" or $paranoid == "true")) as $restricted
-    | if $restricted then . else
-        .destructive_command_protection.allow_paths = (((.destructive_command_protection.allow_paths // []) + $roots) | unique)
-      end
-    | if (.safety.level == "paranoid") or ($level == "paranoid") then . else
-        .destructive_command_protection.overrides = (($allowed | map({(.): "off"}) | add) + (.destructive_command_protection.overrides // {}))
-      end' "$dest/policy.json" > "$dest/.policy" && /bin/mv "$dest/.policy" "$dest/policy.json" || return 1
+  ag_checker_snapshot "$home" "$session/checker" "$release" "$CC_SAFETY_NET_LEVEL" $deletion_roots || {
+    [[ -z $ag_checker_warning ]] || note "$ag_checker_warning"
+    return 1
+  }
+  if [[ -n $ag_checker_warning ]]; then
+    preparation_status=warning
+    note "$ag_checker_warning"
+  fi
 }

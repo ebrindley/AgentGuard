@@ -36,8 +36,9 @@ retain their existing policy.
 
 Agent Guard is a macOS Seatbelt write-containment boundary for terminal coding
 agents. Release 2026.11.01 guards OpenCode, Pi, Oh My Pi (OMP) and Grok. Each harness, and
-every process it starts, runs under `/usr/bin/sandbox-exec`, but OpenCode and Pi
-are guarded by different code with different rules until Pi moves onto Agent
+every process it starts, runs under `/usr/bin/sandbox-exec`. OpenCode, Pi and OMP
+check commands with the same checker, cc-safety-net, under one policy; Pi and OMP
+still run pi-sandbox-guard's profile and launcher until they move onto Agent
 Guard's engine (step 10d of the plan in [docs/DESIGN.md](docs/DESIGN.md#12-plan)).
 Statements about Pi below apply to OMP too unless they name one runtime.
 
@@ -169,7 +170,9 @@ Agent Guard records its adoption differences from pi-sandbox-guard 7ad441f in
 8 and 11); difference 6 is `agent-guard bind`, difference 9 is state-root pinning
 ([changes since the prerelease](#changes-since-the-prerelease)), and difference 10
 is [peer CLI execution](#peer-cli-execution). Difference 11 is in the current
-checkout, after release 0.2.5.
+checkout, after release 0.2.5, and so is difference 17: Pi and OMP check tool
+calls with cc-safety-net, under the policy of decision D13, instead of the
+analyzer, and ask for nothing.
 
 1. Pi and OMP sessions cannot change Agent Guard's engine folder, `~/Agent Guard`,
    `~/Applications/Agent Guard.app`, OpenCode Guard's engine folder,
@@ -193,9 +196,9 @@ checkout, after release 0.2.5.
    A project inside `.opencode` or `.cc-safety-net` is refused, and so is a
    launch where one of these names in the project or launch folder is a link to
    a place the session can write, or holds one.
-7. The analyzer asks before `git push` with `--force` or one of its variants,
-   `--mirror`, `--prune`, `--delete`, a short option cluster containing `f` or
-   `d`, or a refspec that starts with `+` or `:`.
+7. Pushes that rewrite remote history are denied by the checker (difference 17,
+   below): `--force`, `-f`, a `+` refspec and `--mirror`. The analyzer's earlier
+   asks for this (difference 8) are not used since the switch.
 8. Git-selected project roots must match the physical checkout's `.git` directory
    or file. A changed `core.worktree` that selects a sibling or ancestor refuses
    the launch. Review that setting or use explicit `PI_PROJECT` to select another
@@ -209,9 +212,17 @@ migration moves pi-sandbox-guard's backups into the engine folder, including the
 extension backups in `~/.pi/agent/extension-backups/`, which Pi sessions could
 write.
 
-The extension's bash analyzer is advisory. It blocks or asks before shell
-commands it recognizes as destructive, but nothing depends on it for safety. The
-Seatbelt profile is the boundary.
+The extension's checker is advisory. It runs cc-safety-net on every shell command
+with the policy of [decision D13](docs/DESIGN.md#15-risks-and-open-decisions):
+each verdict is allow or block, never a confirmation. It blocks shell commands
+it recognizes as destructive (remote history rewrites, whole-tree discards,
+`git clean -f`, `core.hooksPath`, recursive deletes outside the working folder,
+`rm -rf` of a variable or glob target) at cc-safety-net's `standard` level, which
+lets heredoc interpreters and `eval`/`source` setup lines run, but nothing
+depends on it for safety. It checks shell commands only: file tools
+(`read`, `write`, `edit`) and other tools pass it. The Seatbelt profile is the boundary. If the checker's session copy is
+missing, cc-safety-net fails to load or Agent Guard's Git rules are not in force,
+the extension blocks every tool call and says what to fix.
 
 ### Changes since the prerelease
 
@@ -296,7 +307,8 @@ behind linked ancestors. These changes follow the 0.2.0 prerelease.
   session. A `core.hooksPath` that is home, a system folder or contains the
   launch folder refuses the launch. Not planned.
 - **The command checker denies only rare Git operations that cannot be undone.**
-  In OpenCode sessions cc-safety-net denies force and mirror pushes, whole-tree
+  In OpenCode sessions cc-safety-net, at its standard level and on shell
+  commands only, denies force and mirror pushes, whole-tree
   discards (`git reset --hard`, `git checkout .`, `git restore .`, forced
   switches, `git stash clear`), `git clean -f` and setting `core.hooksPath`, and
   allows per-file `git restore` and `git checkout -- <file>`, `git stash drop`,
@@ -321,8 +333,9 @@ behind linked ancestors. These changes follow the 0.2.0 prerelease.
 
 ### Pi and OMP
 
-Until Pi moves onto Agent Guard's engine (step 10d), Pi's guard is
-pi-sandbox-guard 7ad441f's with the recorded adoption differences, so:
+Until Pi moves onto Agent Guard's engine, Pi's launcher and profile are
+pi-sandbox-guard 7ad441f's with the recorded adoption differences; its checker is
+cc-safety-net (difference 17), so:
 
 - **The Guard List does not apply.** ALLOW entries do not add writes, and DENY
   and READ ONLY entries do not restrict a Pi or OMP session: a DENY entry
@@ -331,24 +344,23 @@ pi-sandbox-guard 7ad441f's with the recorded adoption differences, so:
 - **Nothing refuses tools when Pi or OMP starts outside the guard.** A direct
   start of the real executable runs without Seatbelt. Pi then loads the guard's
   extension from `~/.pi/agent/extensions/`, which warns `FILTER-ONLY` and runs
-  the bash analyzer only, and `pi -ne` removes it. `AGENT_GUARD_BYPASS` has no
-  effect. Planned: step 10d refuses tools in such a session, as OpenCode's plugin
+  the checker, which has no session copy there and so blocks every tool call,
+  and `pi -ne` removes it. `AGENT_GUARD_BYPASS` has no effect. Planned: step 10d
+  refuses tools in such a session on a behavioral probe, as OpenCode's plugin
   does.
-- **Only `bash` is checked in-process.** The analyzer sees `bash` commands, not
-  file tools such as `read`, `edit` and `write`. Seatbelt still applies to every
-  write. Planned: step 10d.
-- **The analyzer does not check local Git discards.** It allows `git checkout --
-  .` and `git restore .`, which cc-safety-net blocks in OpenCode sessions. Some ordinary forms also bypass its reset/clean and force-push checks, including
-  `git -C repo reset --hard`, `git reset HEAD --hard`, `git clean -d -f`,
-  `git -C $(pwd) push --force` and `git push origin $(git branch --show-current) --force`.
-  Seatbelt cannot contain remote history changes. These classifier gaps remain
-  deferred to checker measurement and consolidation (steps 7e and 10d). It checks
-  simpler `git reset --hard`, `git clean` and force-push forms, and
-  asks before the common spellings of pushes that rewrite or delete remote
-  branches; as a pattern match it can miss some quoted or wrapped forms, such as
-  escaped quotes inside `bash -c`. Planned: cc-safety-net for Pi at step 10d.
-  Redirects before Git subcommands, adjacent pipe operators, executable stdin
-  programs and `eval` can also miss asks. These remain checker limitations.
+- **Only shell commands are checked in-process.** The checker sees `bash`
+  commands, not file tools such as `read`, `edit` and `write`, or other tools.
+  Seatbelt denies reads of `.env` files, `~/.ssh`, `~/.aws` and the other
+  credential paths listed above, and applies to every write. A file tool can
+  still read a secret kept in another name, such as `secrets.json` or a `.pem`
+  file in the project.
+- **The checker does not check every Git spelling.** Agent Guard's Git rules and
+  cc-safety-net's built-in rules miss spellings that carry a global option or a
+  glob, such as `git -C repo restore .`, `git -c k=v config core.hooksPath x` and
+  `git checkout -- *` (DESIGN.md section 5, Command checker). Seatbelt cannot
+  contain remote history changes. A check on a command is a pattern match and
+  can miss quoted or wrapped forms, executable stdin programs and `eval`; these
+  remain checker limitations.
 - **The launcher trusts its own folder.** It reads its profile and preamble from
   `~/.local/bin`, beside itself, not from a release folder in the write-protected
   engine folder. Pi sessions cannot write `~/.local/bin`, the launcher refuses a
@@ -388,8 +400,8 @@ pi-sandbox-guard 7ad441f's with the recorded adoption differences, so:
 - **Anything in the project can be changed or deleted,** including build scripts
   and `.git/config`. The active Git hooks are write-denied as resolved at launch,
   but a session can point `core.hooksPath` at a folder it can write, whose hooks
-  then run at the next `git` run outside the guard; the analyzer asks before a
-  `git config` command that changes it. Review changes before running them
+  then run at the next `git` run outside the guard; the checker denies a
+  `git config` command that sets it. Review changes before running them
   outside the guard. Not planned.
   The default `.git/hooks` directory node is writable for `git init`, so a
   session can also replace that directory with a prepared hooks folder. Direct

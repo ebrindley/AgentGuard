@@ -100,17 +100,17 @@ central limitation of this design, and classes 1 and 2 above are where it bites.
 | Damage class | What covers it |
 | --- | --- |
 | 1, outside the grant | The Seatbelt profile. Enforced. |
-| 1, inside the grant | cc-safety-net and Pi's analyzer, then operator review. No boundary. |
-| 2, local history | cc-safety-net and Pi's analyzer. No boundary. |
-| 2, remote history | cc-safety-net and Pi's analyzer. Seatbelt cannot reach it. |
+| 1, inside the grant | cc-safety-net, then operator review. No boundary. |
+| 2, local history | cc-safety-net. No boundary. |
+| 2, remote history | cc-safety-net. Seatbelt cannot reach it. |
 | 3 | The Seatbelt profile. Enforced. |
 | 4 | The profile, for the assets it names; the exceptions in SECURITY.md are accepted. |
 | 5, 6 | The Seatbelt profile. Enforced. |
 
 Two consequences follow, and they pull in opposite directions.
 
-SECURITY.md's statement that the in-process checkers are advisory and "nothing
-depends on them for safety" means they are not a containment boundary and must
+SECURITY.md's statement that the in-process checker is advisory and "nothing
+depends on it for safety" means it is not a containment boundary and must
 never be the stated defence for a class the profile could enforce. A
 boundary-class invariant is defended in the profile or it is not defended;
 adding an advisory check for it manufactures the appearance of a control.
@@ -257,7 +257,17 @@ touch.
 The baseline's decision rule puts literal force-pushes and pipe-to-shell installs
 at ASK. This repository uses no ASK tier; each verdict is deny or allow
 (DESIGN.md section 15, D13). Approved by the operator on 2026-10-29; revised on
-2026-10-30 so that routine work is never denied.
+2026-10-30 so that routine work is never denied. The rule applies to every
+harness with a command checker. Pi and OMP ran pi-sandbox-guard's analyzer, which
+asked, until the switch to cc-safety-net (step 10d); their confirmations ended
+with it, and an operation the analyzer asked about is now allowed or denied by
+the lists below, so that Pi, OMP and OpenCode give the same verdict. The Pi
+extension forwards shell commands only; file tools are covered by Seatbelt.
+Revised 2026-11-02: the checker runs at cc-safety-net's `standard` level, with
+the session copy keeping `rm.recursive-force-dynamic-target` on; heredoc
+interpreters and shell setup lines such as `eval "$(pyenv init -)"` are allowed;
+and OpenCode, like Pi and OMP, checks shell commands only, so cc-safety-net's
+secret-name checks on file tools no longer run.
 
 - **Tightened to DENY:** plain force pushes (`--force`, `-f`, a `+` refspec),
   mirror pushes and force-pushed tags, setting `core.hooksPath`, whole-tree
@@ -266,11 +276,16 @@ at ASK. This repository uses no ASK tier; each verdict is deny or allow
   path. Evidence: the maintainer's Claude Code and Codex history held about 13
   deliberate force or mirror pushes in five and a half months, and no
   `core.hooksPath` writes. The operator runs these outside the guard.
-- **Kept at DENY:** a download piped to a shell, and shell setup such as
-  `eval "$(pyenv init -)"`. Repository fact: these are fixed denials in
-  cc-safety-net 2.6.0, which no setting can lift. Every guarded session runs
-  inside Seatbelt, so allowing them would have been an accepted risk; keeping them
-  costs an agent one retry with the tool's direct form.
+- **Kept at DENY:** a download piped to a shell, and a variable or sourced
+  script run as shell (`sh -c "$CMD"`, `. "$HOME/.nvm/nvm.sh"`). Repository
+  fact: these are fixed denials in cc-safety-net 2.6.0, which no setting can lift.
+  Every guarded session runs inside Seatbelt, so allowing them would have been an
+  accepted risk; keeping them costs an agent one retry with the tool's direct
+  form. Shell setup such as `eval "$(pyenv init -)"` was denied at the strict
+  level and is allowed at the standard level the sessions now run.
+- **Kept at DENY, by setting:** `rm -rf` of a variable or glob target
+  (`rm -rf "$DIR"`, `rm -rf *`): the standard level allows it, and the session
+  copy switches `rm.recursive-force-dynamic-target` on.
 - **Relaxed to ALLOW:** `--force-with-lease`, `git push --delete` and `--prune`,
   path-scoped `git restore` and `git checkout -- <path>`, `git stash drop`,
   `git branch -D`, `git tag -d`, and `git merge --abort` and `git rebase --abort`.

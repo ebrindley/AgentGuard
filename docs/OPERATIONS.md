@@ -623,8 +623,8 @@ checks, and `agent_guard_status` in the guarded OpenCode session.
 CC Safety Net's synthetic self-test uses three fixed commands, no custom
 rules, and the standard baseline with `fail_closed`, `paranoid_rm` and
 `paranoid_interpreters` off. Its allowed result for `rm -rf ./node_modules`
-does not test Agent Guard's effective policy, which uses at least the strict
-preset, scoped deletion allowances and registered custom rules.
+does not test Agent Guard's effective policy, which uses the standard
+preset with the dynamic-target delete rule on, scoped deletion allowances and registered custom rules.
 
 ## Recovery after a failed or interrupted install
 
@@ -699,11 +699,12 @@ to restore it.
 
 Started directly, for example as `/opt/homebrew/bin/pi`, Pi runs without
 Seatbelt. It still loads the guard's extension from `~/.pi/agent/extensions/`:
-the extension prints a `FILTER-ONLY` warning and its bash analyzer still checks
-`bash` commands. Nothing else applies, and `pi -ne` (no extensions) removes the
-analyzer too. A direct start of OMP may load the extension in the same way.
-The current Pi guard does not refuse tools in such a session, where OpenCode's plugin
-refuses them
+the extension prints a `FILTER-ONLY` warning and, finding no session copy of the
+checker policy (the launcher builds it), blocks every tool call. Nothing else
+applies, and `pi -ne` (no extensions) removes the extension too. A direct start of
+OMP may load the extension in the same way. The current Pi guard refuses tools
+because its checker is missing, not because it probed for Seatbelt as OpenCode's
+plugin does
 ([Running OpenCode without the guard](OPERATIONS.md#running-opencode-without-the-guard)).
 `AGENT_GUARD_BYPASS` has no effect on Pi or OMP.
 

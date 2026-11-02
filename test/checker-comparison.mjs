@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { userInfo } from 'node:os';
 import { spawnSync } from 'node:child_process';
@@ -30,7 +30,7 @@ const fixtureEnv = {
   TMPDIR: temporary, LANG: 'en_US.UTF-8', NODE_ENV: 'test',
   XDG_CONFIG_HOME: join(home, '.config'), XDG_CACHE_HOME: join(home, '.cache'),
   XDG_DATA_HOME: join(home, '.local/share'), XDG_STATE_HOME: join(home, '.local/state'),
-  CC_SAFETY_NET_LEVEL: 'strict', CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY: '1',
+  CC_SAFETY_NET_LEVEL: 'standard', CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY: '1',
 };
 for (const key of Object.keys(process.env)) delete process.env[key];
 Object.assign(process.env, fixtureEnv);
@@ -44,14 +44,16 @@ for (const p of ['build/artifact.txt', 'ordinary.txt', '.env', '.env.example', '
 writeFileSync(join(home, '.ssh/id_fixture'), 'SYNTHETIC-FIXTURE\n');
 symlinkSync('/etc', join(project, 'packages/web/critical-link'));
 cpSync(join(root, 'profiles/opencode/templates/cc-safety-net'), join(home, '.cc-safety-net'), { recursive: true });
-writeFileSync(join(home, 'Agent Guard/Guard List.txt'), `ALLOW\n${project}\nREAD ONLY\nDENY\n`);
 stage(root, tree, home);
 const release = layout(tree, engine);
 cpSync(join(tree, 'engine/vendor'), join(release, 'vendor'), { recursive: true });
-const generated = spawnSync('/bin/zsh', [join(release, 'launch'), 'profile'], { cwd: project, env: fixtureEnv, encoding: 'utf8' });
-assert.equal(generated.status, 0, generated.stderr);
-const snapshot = JSON.parse(readFileSync(join(engine, 'state/rules.json'), 'utf8'));
+// The session copy as the Pi launcher builds it (profiles/pi/sandbox/pi-sandbox-preamble.zsh),
+// with the release's builder, in the write-protected state the extension requires.
+const snapshot = { checker: join(engine, 'state/pi', `${basename(release)}.comparison`, 'checker') };
+const built = spawnSync('/bin/zsh', ['-c', 'source "$1/checker/snapshot.zsh" && ag_checker_snapshot "$2" "$3" "$1" standard', '_', release, home, snapshot.checker], { env: fixtureEnv, encoding: 'utf8' });
+assert.equal(built.status, 0, built.stderr);
 process.env.CC_SAFETY_NET_HOME = snapshot.checker;
+process.env.AGENT_GUARD_RELEASE = basename(release);
 const resolveText = value => value.replaceAll('{REPO}', project).replaceAll('{TMP}', temporary).replaceAll('{HOME}', home);
 const normalize = value => typeof value === 'string'
   ? value.replaceAll(project, '{REPO}').replaceAll(home, '{HOME}').replaceAll(temporary, '{TMP}').replaceAll(run, '{FIXTURE}')
@@ -167,7 +169,7 @@ for (const c of cases) {
 const summarize = samples => {
   const sorted = samples.map(x => x.ms).sort((a, b) => a - b);
   return { calls: sorted.length, p50Ms: sorted[Math.floor(sorted.length * .5)], p95Ms: sorted[Math.floor(sorted.length * .95)],
-    timeouts: samples.filter(x => /timed out/i.test(x.reason)).length,
+    timeouts: samples.filter(x => /timed out/i.test(x.reason)).length, over2Seconds: samples.filter(x => x.ms >= 2000).length,
     verdicts: Object.fromEntries(['allow', 'ask', 'block'].map(v => [v, samples.filter(x => x.verdict === v).length])) };
 };
 const summary = {
@@ -175,7 +177,7 @@ const summary = {
   source: spawnSync('/usr/bin/git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim(),
   checkerVersion: JSON.parse(readFileSync(join(release, 'vendor/cc-safety-net/package.json'))).version,
   node: process.versions.node, platform: process.platform, run, temporary, seconds: (Date.now() - started) / 1000,
-  policy: { settings: { level: 'strict', projectTightenOnly: true },
+  policy: { settings: { level: 'standard', projectTightenOnly: true },
     snapshot: normalize(readFileSync(join(snapshot.checker, 'policy.json'), 'utf8')),
     snapshotSha256: createHash('sha256').update(readFileSync(join(snapshot.checker, 'policy.json'))).digest('hex') },
   scope: 'Pre-execution Pi handlers only; confirmation is simulated and declined; no payload executed. Native containment is measured separately.',
@@ -184,8 +186,9 @@ const summary = {
   contractMismatches: rows.filter(r => r.group === 'characterization' &&
     (r.recorded.startsWith('not ') ? r.pi.interactive.verdict === r.recorded.slice(4) : r.pi.interactive.verdict !== r.recorded)).map(r => r.id),
   candidateChanges: rows.filter(r => ['interactive', 'headless'].some(mode => r.baseline[mode].verdict !== r.pi[mode].verdict)).map(r => r.id),
-  differences: rows.filter(r => ['interactive', 'headless'].some(mode => r.pi[mode].verdict !== r.shared[mode].verdict)).map(r => r.id),
-  benignRefusals: rows.filter(r => r.group === 'benign' && (r.pi.interactive.verdict !== 'allow' || r.shared.interactive.verdict !== 'allow')).map(r => r.id),
+  // The extension forwards shell tools only; the bundled entry also checks file tools.
+  differences: rows.filter(r => r.tool === 'bash' && ['interactive', 'headless'].some(mode => r.pi[mode].verdict !== r.shared[mode].verdict)).map(r => r.id),
+  benignRefusals: rows.filter(r => r.group === 'benign' && (r.pi.interactive.verdict !== 'allow')).map(r => r.id),
 };
 writeFileSync(join(output, 'result.json'), JSON.stringify({ summary, rows }, null, 2));
 assert.ok(Object.values(summary.timings).every(modes => Object.values(modes).every(s => s.timeouts === 0)), 'Timeouts invalidate the comparison; keep the host awake and retain the raw capture');
@@ -215,4 +218,6 @@ for (const r of rows) {
 }
 writeFileSync(join(output, 'facts.json'), JSON.stringify(facts, null, 2) + '\n');
 console.log(JSON.stringify(summary, null, 2));
-assert.deepEqual(summary.contractMismatches, [], 'Candidate changed the recorded corpus contract');
+// The extension runs the bundled entry for shell commands, so the columns agree there. Cases whose verdicts
+// differ from the baseline or the recorded corpus contract are listed in the facts.
+assert.deepEqual(summary.differences, [], 'The Pi extension and the bundled entry disagree');

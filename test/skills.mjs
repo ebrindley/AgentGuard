@@ -27,7 +27,7 @@ writeFileSync(list, `ALLOW\n${home}/Projects\nREAD ONLY\n${home}/Projects/refere
 writeFileSync(join(home, "fakebin/opencode"), '#!/bin/sh\nif [ "$1" = --version ]; then echo 1.19.3; exit; fi\nexec "$@"\n', { mode: 0o755 })
 const env = { ...process.env, HOME: home, XDG_CONFIG_HOME: join(home, ".config"), XDG_DATA_HOME: join(home, ".local/share"), XDG_STATE_HOME: join(home, ".local/state"), PATH: join(home, "fakebin") + ":" + process.env.PATH,
               AGENT_GUARD_CONTEXT: "", AGENT_GUARD_RELEASE: "", AGENT_GUARD_SANDBOXED: "", OPENCODE_SANDBOXED: "",
-              CC_SAFETY_NET_PARANOID_RM: "", SAFETY_NET_PARANOID_RM: "", CC_SAFETY_NET_LEVEL: "strict" }
+              CC_SAFETY_NET_PARANOID_RM: "", SAFETY_NET_PARANOID_RM: "", CC_SAFETY_NET_LEVEL: "standard" }
 for (const name of ["OPENCODE_CONFIG", "OPENCODE_CONFIG_DIR", "OPENCODE_CONFIG_CONTENT", "XDG_CACHE_HOME"]) delete env[name]
 function client(mode, extra = {}) {
   const r = spawnSync("/bin/zsh", [join(release, "launch"), "cli", process.execPath, join(root, "test/skills-client.mjs"), join(release, "profiles/opencode/plugin.js"), mode],

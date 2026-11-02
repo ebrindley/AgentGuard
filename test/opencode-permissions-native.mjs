@@ -103,7 +103,7 @@ export const PermissionObserver = async () => {
   const env = { HOME: home, SHELL: "/bin/zsh", PATH: join(home, "fakebin") + ":" + process.env.PATH,
     TMPDIR: process.env.TMPDIR ?? tmpdir(), LANG: process.env.LANG ?? "en_US.UTF-8",
     XDG_CONFIG_HOME: join(home, ".config"), XDG_DATA_HOME: join(home, ".local/share"), XDG_STATE_HOME: join(home, ".local/state"),
-    OPENCODE_MODELS_URL: url + "/models", CC_SAFETY_NET_LEVEL: "strict" }
+    OPENCODE_MODELS_URL: url + "/models", CC_SAFETY_NET_LEVEL: "standard" }
   const args = [join(release, "launch"), "cli", "run", ...(mode === "auto-protection" ? ["--auto"] : []),
     ...(mode === "plan-paths" ? ["--agent", "plan"] : []), "--dir", project, "--model", "guardfixture/test", "--format", "json", "Perform the native permission fixture."]
   const child = spawn("/bin/zsh", args, { cwd: project, env, stdio: ["ignore", "pipe", "pipe"] })
