@@ -221,7 +221,48 @@ pushes, whole-tree discards such as `git reset --hard`, `git checkout .` and
 them in a terminal outside the guard, and use `rm -r <path>` in place of a
 path-scoped `git clean`. Your own `~/.cc-safety-net` settings still apply in
 sessions, and take effect at the next launch.
-`@project` is not supported by the current launcher.
+
+### Grant only the project you start OpenCode in
+
+`@project` is an ALLOW entry for the folder a session was started for, so one
+list grants each session its own project instead of a fixed folder. It is off
+by default: new lists carry it commented out. To turn it on, remove the `#` from
+the `# @project` line under ALLOW, and drop a broad entry such as `~/Projects`
+if you want sessions limited to their own project. Existing lists are never
+rewritten by install, update or migration, so add the line yourself.
+
+```text
+ALLOW
+@project
+```
+
+- `opencode [project]` takes the project argument; `opencode .`, a relative path
+  and a path with spaces all work. A subcommand (`run`, `serve`, ...) or an
+  option value is never taken as the project. `opencode run --dir <folder>`
+  uses that folder.
+- With no project argument, `@project` is the Git top level of the folder you
+  start in, else that folder. Symlinks are resolved first, and a protected name
+  inside the project that is a symlink is handled as in the launch folder.
+- Each launch uses its own rules, so two sessions in different projects each
+  write only their own project.
+- The launch is refused, not widened, when `@project` is `/`, your home, `/Users`,
+  `/Volumes`, `/tmp`, `/private`, `/var` or their private spellings, is or is
+  inside a system folder, `~/.ssh`, `~/.aws`, `~/.config`, `~/.docker`,
+  `~/.gnupg`, `~/.kube`, `~/Library`, `~/Desktop`, `~/Documents` or
+  `~/Downloads`, contains the guard, or is inside a protected agent folder. A
+  home folder that is a Git repository therefore refuses a launch from a folder
+  with no repository of its own; comment out `@project` or start in a project.
+  A relative project that OpenCode 1 and 2 would read differently, through a
+  symlink and `..`, is refused: give a full path. So is an option this launcher
+  does not know when a word follows it, because the word could be the project;
+  write `--option=value`.
+- A project folder that does not exist, and `@project` under READ ONLY or DENY,
+  are skipped and logged. `last-launch-opencode.log` records what `@project`
+  resolved to and any refusal.
+- The desktop app has no single project folder: it opens projects from its own
+  window, and the launcher cannot see which. `@project` resolves to nothing
+  there, so the app keeps the fixed ALLOW folders you list. Pi, OMP and Grok do
+  not use `@project` yet; they skip it.
 
 Imported OpenCode Guard lists keep their introductory text. You can update the
 text above the first heading without changing the policy entries; the current

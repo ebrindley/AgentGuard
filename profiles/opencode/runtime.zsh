@@ -11,6 +11,74 @@ opencode_major() {
   [[ $REPLY == (1|2) ]] || fail "unsupported OpenCode major version: $REPLY"
 }
 
+# The project argument OpenCode itself will open, for @project (docs/DESIGN.md
+# section 4): REPLY is the positional argument of `opencode [project]`, the
+# --dir of `opencode run`, or empty when the command takes none. A subcommand
+# name is never a project, as in OpenCode. It returns 1 with the reason in
+# REPLY when an option this list does not know is followed by a word that could
+# be its value, because the project could then be misread.
+opencode_project_arg() {
+  local arg name next unknown= command dir= letters letter
+  integer i=1 end=0 attached=0
+  local -a args=("$@") positional
+  local -a commands=(completion acp mcp attach run debug providers auth agent upgrade update uninstall serve web
+                     models stats export import github pr session plugin plug db service api mini reload pair)
+  local -a valued=(--log-level --port --hostname --mdns-domain --model --session --prompt --agent --replay-limit
+                   --server --attach --password --username --command --title --format --variant --completions --cwd --dir)
+  local -a listed=(--cors --file)
+  local -a flags=(--print-logs --pure --mdns --continue --fork --auto --yolo --dangerously-skip-permissions
+                  --mini --replay --demo --standalone --wizard --help --version --share --thinking --interactive)
+  while (( i <= $#args )); do
+    arg=$args[i]
+    (( i++ ))
+    if (( end )) || [[ $arg != -* || $arg == - ]]; then positional+=("$arg"); continue; fi
+    [[ $arg == -- ]] && { end=1; continue }
+    next=${args[i]:-}
+    if [[ $arg == --* ]]; then
+      name=${arg%%=*}
+      if [[ $arg == *=* ]]; then
+        [[ $name == --dir ]] && dir=${arg#*=}
+        [[ $name == (--attach|--server) ]] && attached=1
+      elif (( ${valued[(Ie)$arg]} )); then
+        [[ $arg == --dir ]] && dir=$next
+        [[ $arg == (--attach|--server) ]] && attached=1
+        (( i++ ))
+      elif (( ${listed[(Ie)$arg]} )); then
+        (( i++ ))
+        while (( i <= $#args )) && [[ ${args[i]} != -* ]]; do (( i++ )); done
+      elif (( ! ${flags[(Ie)$arg]} )) && [[ $arg != --no-* ]]; then
+        [[ -n $next && $next != -* ]] && unknown=$arg
+      fi
+      continue
+    fi
+    # Short options: m, s, p and u take a value, f takes several, the rest do not.
+    letters=${arg#-}
+    while [[ -n $letters ]]; do
+      letter=${letters[1]}
+      letters=${letters[2,-1]}
+      case $letter in
+        ([msup]) [[ -n $letters ]] || (( i++ ))
+                 letters= ;;
+        (f) [[ -n $letters ]] || { (( i++ )); while (( i <= $#args )) && [[ ${args[i]} != -* ]]; do (( i++ )); done }
+            letters= ;;
+        ([chvi]) ;;
+        (*) [[ -z $next || $next == -* ]] || unknown=$arg ;;
+      esac
+    done
+  done
+  command=${positional[1]:-}
+  if (( ${commands[(Ie)$command]} )); then
+    REPLY=
+    [[ $command == run && $attached == 0 ]] && REPLY=$dir
+    return 0
+  fi
+  if [[ -n $unknown ]]; then
+    REPLY="cannot tell whether the word after $unknown is the project; write $unknown=<value>"
+    return 1
+  fi
+  REPLY=${positional[1]:-}
+}
+
 opencode_cli_args() {
   local arg command subcommand standalone=0 at=1
   local -a prefix rest
