@@ -255,7 +255,7 @@ ALLOW
   A relative project that OpenCode 1 and 2 would read differently, through a
   symlink and `..`, is refused: give a full path. So is an option this launcher
   does not know when a word follows it, because the word could be the project;
-  write `--option=value` or give the project first.
+  write `--option=value`.
 - A project folder that does not exist, and `@project` under READ ONLY or DENY,
   are skipped and logged. `last-launch-opencode.log` records what `@project`
   resolved to and any refusal.

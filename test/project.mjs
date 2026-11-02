@@ -190,6 +190,15 @@ exit 0
   refuse('a launch from inside a protected folder', [], /\.cc-safety-net|protected folder/, { cwd: P('.cc-safety-net/inner') });
   refuse('a link into Documents', [(() => { symlinkSync(P('Documents/proj'), P('Projects/docs-link')); return P('Projects/docs-link') })()], /Documents/);
   refuse('an argument that cannot be read', ['--newflag', 'x'], /cannot tell whether the word after --newflag/);
+  // A differently cased spelling of home is still home, on a case-insensitive volume.
+  if (existsSync(home.toLowerCase())) {
+    refuse('home spelled in lowercase', [home.toLowerCase()], /@project is too broad/);
+    refuse('Documents spelled in lowercase', [P('Documents/proj').toLowerCase()], /is or is inside .*Documents/);
+  }
+  // A folder whose name holds a tab would otherwise add an entry of its own.
+  mkdirSync(P('Projects/tab\tdir'), { recursive: true });
+  refuse('a tab in the folder name', [P('Projects/tab\tdir')], /contains a tab or newline/);
+  refuse('a launch from a folder with a tab in its name', [], /contains a tab or newline/, { cwd: P('Projects/tab\tdir') });
   // Pi's config folders are protected once Pi is installed.
   mkdirSync(join(engine, 'state'), { recursive: true });
   writeFileSync(join(engine, 'state/stamp.json'), JSON.stringify({ harnesses: ['opencode', 'pi'] }));
@@ -217,6 +226,15 @@ exit 0
   assert.ok(profile([], { text: ALLOW(P('Projects/sibling')), cwd: P('Projects/sibling') }).stdout.includes(deny), 'launch folder behaviour');
   rmSync(join(engine, 'state/stamp.json'));
   console.log('ok   a protected name that is a link inside @project has its target write-denied, as in the launch folder');
+
+  // The hooks folder protected is the project's, not the launch folder's.
+  mkdirSync(P('Projects/hooked/custom-hooks'), { recursive: true });
+  git(P('Projects/hooked'), 'init', '-q');
+  git(P('Projects/hooked'), 'config', 'core.hooksPath', P('Projects/hooked/custom-hooks'));
+  const hooks = `(deny file-write* (subpath (h "/${P('Projects/hooked/custom-hooks').slice(home.length + 1)}")))`;
+  assert.ok(profile([P('Projects/hooked')], { text: ALLOW('@project'), cwd: P('Projects/plain') }).stdout.includes(hooks), 'project hooks folder denied');
+  assert.ok(!profile([P('Projects/hooked')], { text: ALLOW(P('Projects/hooked')), cwd: P('Projects/plain') }).stdout.includes(hooks), 'unchanged without @project');
+  console.log('ok   with @project the project\'s active hooks folder is denied; without it the launch folder\'s is used');
 
   // The app has no project folder: @project is skipped and the fixed ALLOW folders stay.
   r = launch('gui', [], { text: ALLOW('@project', P('Projects/sibling')) });

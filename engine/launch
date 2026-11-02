@@ -353,6 +353,13 @@ resolve_project() {
     normalize "$given" literal || { note "skipped, not a full path: $given"; return 1 }
     top=$REPLY
   fi
+  # On a case-insensitive volume normalize keeps the spelling it was given; the
+  # refusals and the grant use the spelling on disk.
+  [[ ! -e $top ]] || top=${top:A}
+  if [[ $top == *[$'\t\n']* ]]; then
+    record "refused @project: the folder name contains a tab or newline: $top"
+    fail "@project folder name contains a tab or newline: $top"
+  fi
   if project_refusal "$given" "$top"; then
     why=$REPLY
     record "refused @project: $top $why"

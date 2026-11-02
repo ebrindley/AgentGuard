@@ -73,7 +73,7 @@ opencode_project_arg() {
     return 0
   fi
   if [[ -n $unknown ]]; then
-    REPLY="cannot tell whether the word after $unknown is the project; write $unknown=<value>, or give the project first"
+    REPLY="cannot tell whether the word after $unknown is the project; write $unknown=<value>"
     return 1
   fi
   REPLY=${positional[1]:-}
