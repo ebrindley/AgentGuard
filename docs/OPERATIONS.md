@@ -1,12 +1,12 @@
 # Installation and maintenance
 
-These procedures describe stable 2026.10.31 unless marked unreleased. For everyday use, see the
+These procedures describe stable 2026.11.01 unless marked unreleased. For everyday use, see the
 [user guide](USAGE.md).
 
 ## Release channels
 
 The latest stable release is
-[2026.10.31](https://github.com/ebrindley/AgentGuard/releases/tag/v2026.10.31), for OpenCode,
+[2026.11.01](https://github.com/ebrindley/AgentGuard/releases/tag/v2026.11.01), for OpenCode,
 Pi, Oh My Pi (OMP) and Grok. Run the installer from Terminal outside any agent session
 or sandbox:
 
