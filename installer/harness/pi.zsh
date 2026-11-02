@@ -15,7 +15,7 @@ ag_h_pi_init() {
   pi_roots=(/opt/homebrew /usr/local) pi_path=$PATH
   # The release's Pi files under profiles/pi, as scripts/release.sh ships them.
   pi_release_files=(LICENSE launchers/pi launchers/example-custom sandbox/pi-sandbox.sb sandbox/pi-sandbox-preamble.zsh
-                    src/index.mjs src/guard-core.mjs src/validate-bash-command.sh
+                    src/index.mjs
                     scripts/extension-entry.ts scripts/test-sandbox-profile.sh scripts/check-launchers.mjs
                     scripts/bind-executable.sh scripts/lib-ops.sh commands/bind.zsh commands/doctor.zsh commands/wrapper.zsh)
   # The installed copies: path, release file, mode. The extension folder's files
@@ -24,9 +24,8 @@ ag_h_pi_init() {
              "$pi_bin/pi-sandbox.sb" sandbox/pi-sandbox.sb 644
              "$pi_bin/pi" launchers/pi 755
              "$pi_bin/omp" launchers/pi 755)
-  pi_ext_files=(index.ts scripts/extension-entry.ts 644 src/index.mjs src/index.mjs 644
-                src/guard-core.mjs src/guard-core.mjs 644 src/validate-bash-command.sh src/validate-bash-command.sh 755)
-  ag_pi_node_path= ag_pi_node_note= ag_pi_cli_done=0
+  pi_ext_files=(index.ts scripts/extension-entry.ts 644 src/index.mjs src/index.mjs 644)
+  ag_pi_node_path= ag_pi_cli_done=0
   typeset -ga ag_pi_entries ag_pi_notes ag_pi_cli_found
   ag_pi_entries=() ag_pi_notes=() ag_pi_cli_found=()
 }
@@ -150,38 +149,39 @@ ag_pi_target() {
   [[ -z $REPLY ]]
 }
 
-# The analyzer's Node, for .guard-node (design section 11, Fresh install): the
-# extension's own while it is usable, else chosen as deploy-local.sh chooses it:
+# The Node that runs a Node entry point of Pi when the launcher's pinned PATH has
+# none (design section 11, Fresh install): chosen as deploy-local.sh chose its Node,
 # process.execPath of the node on PATH, refused in a folder Pi sessions can write,
 # kept as its Homebrew opt link. Sets ag_pi_node_path; fails, saying why.
 ag_pi_node() {
-  local f="$pi_ext/.guard-node" n= lib="$ag_tree/profiles/pi/scripts/lib-ops.sh"
-  ag_pi_node_path= ag_pi_node_note=
-  if [[ -f $f ]]; then { IFS= read -r n < "$f" } 2>/dev/null; fi
-  if [[ -n $n ]]; then
-    if ag_pi_node_ok "$n"; then ag_pi_node_path=$n; return 0; fi
-    ag_pi_node_note="the analyzer's Node in ${f/#$home/~} ($n) is not usable"
-  fi
+  local n lib="$ag_tree/profiles/pi/scripts/lib-ops.sh"
+  ag_pi_node_path=
   n=$(ag_pi_clean_env; node -p process.execPath 2>/dev/null) || n=
   if [[ $n != /* || ! -x $n || -d $n ]]; then
-    ag_err "Pi's guard runs its analyzer on Node, and no node on PATH can be used${n:+ ($n)}. Install Node (for example: brew install node), then run this again. Nothing changed."
+    ag_err "the Pi in ~/.local/bin is a Node script, and recording the Node that runs it needs a node on PATH${n:+ ($n cannot be used)}. Install Node (for example: brew install node), then run this again. Nothing changed."
     return 1
   fi
   if ag_pi_write_root "$n"; then
-    ag_err "the node on PATH ($n) is in a folder Pi sessions can write, so it cannot run Pi's analyzer. Install Node elsewhere (for example: brew install node), then run this again. Nothing changed."
+    ag_err "the node on PATH ($n) is in a folder Pi sessions can write, so it cannot be recorded for the Pi launcher. Install Node elsewhere (for example: brew install node), then run this again. Nothing changed."
     return 1
   fi
   n=$(ag_pi_clean_env; PATH="${n:h}:/usr/bin:/bin" /bin/bash -c '. "$1" && ops_stable_node_path "$2"' _ "$lib" "$n") && [[ $n == /* ]] ||
     { ag_err 'cannot resolve the path of the node on PATH. Nothing changed.'; return 1 }
   ag_pi_node_path=$n
-  [[ -n $ag_pi_node_note ]] && ag_pi_notes+=("$ag_pi_node_note; the analyzer now runs $n")
   return 0
 }
 
-# A recorded Node the launcher accepts: absolute, an executable file, outside the
-# folders Pi sessions can write, as recorded and resolved.
-ag_pi_node_ok() {
-  [[ $1 == /* && -x ${1:A} && ! -d ${1:A} ]] && ! ag_pi_write_root "$1" && ! ag_pi_write_root "${1:A}"
+# True when an entry the staged bindings record is a Node script and no interpreter
+# is recorded for it: the launcher's pinned PATH may hold no node (bind-executable.sh,
+# needs_interpreter). OMP is native.
+ag_pi_needs_node() {
+  local rt t rec
+  ag_pi_conf_get node && return 1
+  for rt t rec in $ag_pi_entries; do
+    (( rec )) && [[ $rt == pi ]] &&
+      /usr/bin/head -c 128 -- "$t" 2>/dev/null | /usr/bin/head -1 | /usr/bin/grep -Eq '^#!.*[ /]node( |$)' && return 0
+  done
+  return 1
 }
 
 # Each entry at ~/.local/bin/pi or omp that is not the guard's (design section 11,
@@ -213,8 +213,9 @@ ag_pi_entries_check() {
   return 0
 }
 
-# Preflight: the analyzer's Node and the entries the launchers replace.
-ag_h_pi_prepare() { ag_pi_node && ag_pi_entries_check }
+# Preflight: the entries the launchers replace and, when one needs it, the Node to
+# record for it.
+ag_h_pi_prepare() { ag_pi_entries_check && { ! ag_pi_needs_node || ag_pi_node } }
 
 # --- The release and the staged copies.
 
@@ -225,7 +226,7 @@ ag_h_pi_assemble() {  # RELEASE-FOLDER
   for f in $pi_release_files; do
     /bin/mkdir -p -- "$r/profiles/pi/${f:h}" && /bin/cp -- "$ag_tree/profiles/pi/$f" "$r/profiles/pi/$f" || return 1
   done
-  /bin/chmod 755 "$r/profiles/pi/launchers/pi" "$r/profiles/pi/launchers/example-custom" "$r/profiles/pi/src/validate-bash-command.sh" \
+  /bin/chmod 755 "$r/profiles/pi/launchers/pi" "$r/profiles/pi/launchers/example-custom" \
     "$r/profiles/pi/scripts/test-sandbox-profile.sh" "$r/profiles/pi/scripts/bind-executable.sh" || return 1
   for f in launchers/pi launchers/example-custom sandbox/pi-sandbox-preamble.zsh commands/{bind,doctor,wrapper}.zsh; do
     /bin/zsh -fn "$r/profiles/pi/$f" || { ag_err "profiles/pi/$f does not parse"; return 1 }
@@ -234,8 +235,10 @@ ag_h_pi_assemble() {  # RELEASE-FOLDER
 }
 
 # The staged copies in stage/<txn>/pi, which the switch renames into place: the
-# launchers, profile and preamble, the extension folder with .guard-node, and the
-# bindings when an entry is recorded.
+# launchers, profile and preamble, the extension folder, and the bindings when an
+# entry is recorded. The extension folder holds only the release's files, so an
+# analyzer, a .guard-node or any other leftover of an earlier release goes when the
+# folder is replaced.
 ag_pi_stage() {
   local rel="$engine/releases/$ag_rid_new/profiles/pi" s="$ag_tstage/pi" f src mode rt t rec
   local -a set
@@ -247,17 +250,10 @@ ag_pi_stage() {
   for f src mode in $pi_ext_files; do
     /bin/cp -- "$rel/$src" "$s/extension/$f" && /bin/chmod $mode "$s/extension/$f" || return 1
   done
-  # The extension's own .guard-node goes along unchanged when it is still usable.
-  if [[ -f $pi_ext/.guard-node && $(<"$pi_ext/.guard-node") == "$ag_pi_node_path" ]]; then
-    /bin/cp -p -- "$pi_ext/.guard-node" "$s/extension/.guard-node" || return 1
-  else
-    print -r -- "$ag_pi_node_path" > "$s/extension/.guard-node" && /bin/chmod 600 "$s/extension/.guard-node" || return 1
-  fi
   for rt t rec in $ag_pi_entries; do
     (( rec )) || continue
     set+=("$rt" "$t")
-    # A Node entry point needs its interpreter recorded: the launcher's pinned PATH
-    # may hold no node (bind-executable.sh, needs_interpreter). OMP is native.
+    # A Node entry point needs its interpreter recorded (ag_pi_needs_node).
     if [[ $rt == pi ]] && /usr/bin/head -c 128 -- "$t" 2>/dev/null | /usr/bin/head -1 | /usr/bin/grep -Eq '^#!.*[ /]node( |$)' &&
        ! ag_pi_conf_get node; then
       set+=(node "$ag_pi_node_path")
@@ -291,41 +287,20 @@ ag_pi_conf_write() {
 }
 
 # P7: the staged copies built and checked before anything outside the engine folder
-# changes: the profile self-test against the staged profile, the analyzer's
-# preflight and one blocked and one allowed command through the staged extension
-# with its .guard-node, and the recorded bindings.
+# changes: the profile self-test against the staged profile and the recorded
+# bindings. agent-guard doctor and the gate's launches exercise the checker.
 ag_h_pi_staged() {
-  local rel="$engine/releases/$ag_rid_new/profiles/pi" s="$ag_tstage/pi" out k v work temp
+  local rel="$engine/releases/$ag_rid_new/profiles/pi" s="$ag_tstage/pi" out k v
   local -a lines
   integer rc bad=0
-  ag_pi_node || { ag_failed+=('FAIL no usable Node for the analyzer'); return 1 }
   ag_pi_entries_check || { ag_failed+=('FAIL an entry in ~/.local/bin cannot be recorded'); return 1 }
+  if ag_pi_needs_node; then ag_pi_node || { ag_failed+=('FAIL no usable Node to record for the Pi launcher'); return 1 }; fi
   ag_pi_stage || { ag_failed+=('FAIL cannot stage the Pi files'); return 1 }
   out=$(ag_pi_clean_env; ag_bounded 120 /usr/bin/env PI_SANDBOX_PROFILE_STRICT=1 /bin/bash "$rel/scripts/test-sandbox-profile.sh" "$s/pi-sandbox.sb" 2>&1)
   rc=$?
   lines=(${(f)out})
   if (( rc == 0 )); then ag_say 'ok   Pi profile self-test of the staged pi-sandbox.sb'
   else ag_failed+=("FAIL Pi profile self-test of the staged pi-sandbox.sb (exit $rc): ${lines[-1]:-no output}"); bad=1
-  fi
-  temp=${$(/usr/bin/getconf DARWIN_USER_TEMP_DIR):A}
-  work=$(/usr/bin/mktemp -d "$temp/agent-guard-staged.XXXXXX") || { ag_failed+=("FAIL cannot create a folder in $temp"); return 1 }
-  # HOME is the scratch folder, so the blocked command is not logged in the
-  # account's security event log.
-  out=$(ag_pi_clean_env; cd "$work" && ag_bounded 60 /usr/bin/env "HOME=$work" "$ag_pi_node_path" --input-type=module -e '
-    import { pathToFileURL } from "node:url";
-    const [ext, cwd] = process.argv.slice(1);
-    const m = await import(pathToFileURL(`${ext}/src/guard-core.mjs`).href);
-    const pre = await m.preflight();
-    const block = await m.analyzeCommand("rm -rf /", { cwd, timeoutMs: 6000 });
-    const allow = await m.analyzeCommand("ls -la", { cwd, timeoutMs: 6000 });
-    console.log(JSON.stringify({ ok: pre.ok === true, missing: pre.missing ?? [], block: block.decision, allow: allow.decision }));' "$s/extension" "$work" 2>&1)
-  rc=$?
-  /bin/rm -rf -- "$work"
-  lines=(${(f)out})
-  if (( rc )) || ! /usr/bin/jq -e '.ok == true and .block == "block" and .allow == "allow"' <<< "${lines[-1]:-}" >/dev/null 2>&1; then
-    ag_failed+=("FAIL Pi analyzer preflight of the staged extension (exit $rc): ${lines[-1]:-no output}"); bad=1
-  else
-    ag_say "ok   Pi analyzer preflight of the staged extension with $ag_pi_node_path; rm -rf / blocked, ls -la allowed"
   fi
   for k in pi omp node; do
     ag_pi_conf_get $k || continue
@@ -530,8 +505,7 @@ ag_h_pi_gate() {
   /bin/rm -rf -- "$work"
 }
 
-# The installed copies, for the stamp's hashes; .guard-node is host data and is not
-# among them.
+# The installed copies, for the stamp's hashes.
 ag_h_pi_files() {
   local f src mode
   reply=()

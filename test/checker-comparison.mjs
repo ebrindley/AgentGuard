@@ -58,7 +58,14 @@ const resolveText = value => value.replaceAll('{REPO}', project).replaceAll('{TM
 const normalize = value => typeof value === 'string'
   ? value.replaceAll(project, '{REPO}').replaceAll(home, '{HOME}').replaceAll(temporary, '{TMP}').replaceAll(run, '{FIXTURE}')
   : value;
-const corpus = JSON.parse(readFileSync(join(root, 'profiles/pi/test/corpus/corpus.json'), 'utf8')).cases;
+// The analyzer's files, its corpus and the baseline extension come from the baseline commit.
+const fromBaseline = path => {
+  const original = spawnSync('/usr/bin/git', ['show', `${baseline}:${path}`], { cwd: root });
+  assert.equal(original.status, 0, `${baseline} has no ${path}: ${original.stderr}`);
+  return original.stdout;
+};
+const corpusBytes = fromBaseline('profiles/pi/test/corpus/corpus.json');
+const corpus = JSON.parse(corpusBytes.toString('utf8')).cases;
 const cases = corpus.map((c, index) => ({
   id: `corpus-${index + 1}`, group: 'characterization', tool: 'bash', command: c.command,
   cwd: c.cwd ?? '{TMP}', recorded: c.expectFail ? c.actual : c.expectOn?.[process.platform] ?? c.expect ?? `not ${c.expectNot}`, note: c.note,
@@ -118,16 +125,11 @@ for (const [id, tool, path, target] of [
   ['file-env-template', 'read', '{REPO}/.env.example', 'allow'], ['file-pem', 'read', '{REPO}/server.pem', 'allow'],
 ]) cases.push({ id, group: target === 'allow' ? 'benign' : 'in-scope', tool, path, target, cwd: '{REPO}' });
 
-const core = await import(pathToFileURL(join(root, 'profiles/pi/src/guard-core.mjs')));
-const health = await core.preflight();
-assert.equal(health.ok, true, JSON.stringify(health));
 const baselineSource = join(run, 'baseline-pi/src');
 mkdirSync(baselineSource, { recursive: true });
-for (const name of ['index.mjs', 'guard-core.mjs', 'validate-bash-command.sh']) {
-  const original = spawnSync('/usr/bin/git', ['show', `${baseline}:profiles/pi/src/${name}`], { cwd: root });
-  assert.equal(original.status, 0, original.stderr.toString());
-  writeFileSync(join(baselineSource, name), original.stdout);
-}
+for (const name of ['index.mjs', 'guard-core.mjs', 'validate-bash-command.sh']) writeFileSync(join(baselineSource, name), fromBaseline(`profiles/pi/src/${name}`));
+const health = await (await import(pathToFileURL(join(baselineSource, 'guard-core.mjs')))).preflight();
+assert.equal(health.ok, true, JSON.stringify(health));
 const handlers = {};
 const capture = key => ({ on: (event, handler) => { if (event === 'tool_call') handlers[key] = handler; }, registerCommand: () => {} });
 (await import(pathToFileURL(join(baselineSource, 'index.mjs')))).default(capture('baseline'));
@@ -207,8 +209,8 @@ const caseBytes = compact.map(r => JSON.stringify(r) + '\n').join('');
 writeFileSync(join(output, 'cases.jsonl'), caseBytes);
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const facts = Object.fromEntries(['baseline', 'checkerVersion', 'node', 'platform', 'scope', 'counts', 'candidateChanges', 'contractMismatches', 'differences', 'benignRefusals'].map(k => [k, summary[k]]));
-facts.analyzerSha256 = hash(readFileSync(join(root, 'profiles/pi/src/validate-bash-command.sh')));
-facts.corpusSha256 = hash(readFileSync(join(root, 'profiles/pi/test/corpus/corpus.json')));
+facts.analyzerSha256 = hash(fromBaseline('profiles/pi/src/validate-bash-command.sh'));
+facts.corpusSha256 = hash(corpusBytes);
 facts.casesSha256 = hash(caseBytes);
 facts.policy = { ...summary.policy, snapshotSha256: hash(summary.policy.snapshot) };
 facts.candidateToSharedTransitions = {};

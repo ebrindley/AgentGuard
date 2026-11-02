@@ -203,9 +203,11 @@ executable, a failure and a kill at each Grok test point, the update, doctor, a
 link put back by Grok, a regular file at `~/.local/bin/grok`, and uninstall
 restoring what was there. Both run in the full validation.
 
-`zsh test/pi.sh` tests Pi's guard. It runs pi-sandbox-guard's suites from
-`profiles/pi/test` and `profiles/pi/scripts` against Agent Guard's copy, changed
-for recorded behavior differences and test diagnostics; `test/pi-files.mjs`,
+`zsh test/pi.sh` tests Pi's guard. It runs pi-sandbox-guard's launcher and profile
+suites from `profiles/pi/test` and `profiles/pi/scripts` against Agent Guard's
+copy, changed for recorded behavior differences and test diagnostics;
+`profiles/pi/test/checker.mjs`, which tests the extension against cc-safety-net;
+`test/pi-files.mjs`,
 which compares `profiles/pi` with pi-sandbox-guard 7ad441f and allows only the
 changes in `test/fixtures/differences/pi.json` and `pi.patch`; and
 `test/pi-launch.mjs`, which tests each recorded difference and the nested

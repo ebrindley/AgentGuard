@@ -1,7 +1,7 @@
 {
   "source": "pi-sandbox-guard",
   "commit": "7ad441f",
-  "reason": "profiles/pi carries pi-sandbox-guard 7ad441f's Pi profile with the protections Agent Guard adds to Pi sessions (docs/DESIGN.md section 11). Every change to a vendored file is in the patch and listed here; test/pi-files.mjs checks both, test/pi-launch.mjs tests differences 1 to 5, 7, 9 and 13, test/pi-commands.sh difference 6, profiles/pi/test/checker.mjs difference 17 and the corpus difference 8.",
+  "reason": "profiles/pi carries pi-sandbox-guard 7ad441f's Pi profile with the protections Agent Guard adds to Pi sessions (docs/DESIGN.md section 11). Every change to a vendored file is in the patch and listed here; test/pi-files.mjs checks both, test/pi-launch.mjs tests differences 1 to 5, 7, 9, 13 and 18, test/pi-commands.sh difference 6 and profiles/pi/test/checker.mjs difference 17.",
   "patch": "pi.patch",
   "files": {
     "LICENSE": { "mode": "644", "blob": "18a32b25985be476250a26c9e8c47f823ae92172", "commit": "b60240a", "note": "From b60240a, the pi-sandbox-guard commit after 7ad441f that changed only LICENSE's copyright line, to name pi-sandbox-guard contributors." },
@@ -14,14 +14,9 @@
     "scripts/extension-entry.ts": { "mode": "644", "blob": "28af70dc91218de34d442b6d09287e2d0033331c" },
     "scripts/lib-ops.sh": { "mode": "755", "blob": "aca2e2124e45d60a239bc088bcf0648fdc783695" },
     "scripts/test-sandbox-profile.sh": { "mode": "755", "blob": "4dcdf9c919b45acd4afbf41844c147d8846be627" },
-    "src/guard-core.mjs": { "mode": "644", "blob": "8969f00f5d6cde5a5a44d7a328cc78e83421b7e0" },
     "src/index.mjs": { "mode": "644", "blob": "d997be1bc417effcf0c0318cdc2e3bafb542b342" },
     "src/pi-types.d.ts": { "mode": "644", "blob": "8a88e39d7dd5f5a2609914ed22eda0d57716655d" },
-    "src/validate-bash-command.sh": { "mode": "755", "blob": "5c2099698cecb8289853a960fca38177e512b84f" },
-    "test/corpus.mjs": { "mode": "644", "blob": "ca5197ce6a8de824d2a0e7362713718d309761b3" },
-    "test/corpus/corpus.json": { "mode": "644", "blob": "53ef5270cc221964207f493b819717ba934a913f" },
-    "test/shim.mjs": { "mode": "644", "blob": "98d10e2434e169a416f0b2b1472714beca978de2" },
-    "test/smoke.mjs": { "mode": "644", "blob": "c31f80d4745fc151903f3f8a1cdae9293995a619" }
+    "test/shim.mjs": { "mode": "644", "blob": "98d10e2434e169a416f0b2b1472714beca978de2" }
   },
   "added": {
     "package.json": "Replaces 7ad441f's package.json, whose scripts run the npm deploy, bind and status commands that Agent Guard replaces; keeps the module fields.",
@@ -35,6 +30,7 @@
     "scripts/deploy-all.sh, scripts/deploy-launchers.sh, scripts/deploy-local.sh, scripts/setup-hooks.sh, .githooks/pre-push": "Replaced by Agent Guard's installer and CI.",
     "scripts/status.sh, scripts/check-path.sh": "Replaced by agent-guard doctor; the vendored suites do not need them.",
     "test/e2e-demo.mjs": "A manual demonstration, not a suite.",
+    "src/guard-core.mjs, src/validate-bash-command.sh, test/smoke.mjs, test/corpus.mjs, test/corpus/corpus.json": "The analyzer and the suites that tested only it, retired when Pi and OMP moved to cc-safety-net (difference 17). They are 7ad441f's apart from Agent Guard's differences 8 and 15 and test edits, which were retired with them; the last commit that holds them is the one before the release that removed them.",
     "config/, docs/, README.md, SECURITY.md, CONTRIBUTING.md, .github/": "pi-sandbox-guard's own documentation and repository files."
   },
   "differences": [
@@ -76,18 +72,13 @@
     },
     {
       "id": 6,
-      "change": "scripts/bind-executable.sh runs as agent-guard bind (commands/bind.zsh) instead of npm run bind: its usage, hints and executables.conf header name agent-guard bind; every mode but --show stops when node is not on PATH, which npm run guaranteed; --show also prints the checker Node; --checker-node [PATH] records the analyzer's Node in the extension's .guard-node as deploy-local.sh did (validated outside every sandbox-writable root, a Homebrew Cellar path kept as its opt link, mode 0600; without a path, the node on PATH) and cannot be combined with another mode; an executables.conf or .guard-node that is a symbolic link or not a regular file is refused before it is written. scripts/lib-ops.sh is unchanged.",
+      "change": "scripts/bind-executable.sh runs as agent-guard bind (commands/bind.zsh) instead of npm run bind: its usage, hints and executables.conf header name agent-guard bind; every mode but --show stops when node is not on PATH, which npm run guaranteed; --checker-node [PATH], which recorded the analyzer's Node in the extension's .guard-node, is accepted and ignored with one line on stderr, and alone it does nothing; an executables.conf that is a symbolic link or not a regular file is refused before it is written. scripts/lib-ops.sh is unchanged.",
       "files": ["scripts/bind-executable.sh"]
     },
     {
       "id": 7,
       "change": "Step 7f (docs/DESIGN.md section 12): the project agent config deny write-denies all of .opencode instead of .opencode/plugins, OpenCode's config file names (opencode.json, opencode.jsonc, tui.json, tui.jsonc) and .cc-safety-net, anywhere under the project. Without it a Pi session could plant an OpenCode plugin or config that a later OpenCode session in the project loads, or a .cc-safety-net/policy.json that switches off cc-safety-net's built-in rules there. The preamble's PROJECT refusal patterns, kept in step with the folder rules, refuse a project inside .opencode or .cc-safety-net; the file-name rules match only the file itself and need no refusal. Seatbelt checks the resolved path, so the preamble's symlinked-config check also refuses a launch where one of these names in the project or launch folder is a link whose target the session can write, or where a link inside .opencode or .cc-safety-net resolves to a writable place outside it, as it refuses a symlinked .pi or .omp; a link to a place the session cannot write, or to a project path whose own name the profile denies, launches, and one whose target is missing is refused, at the name or inside .opencode or .cc-safety-net.",
       "files": ["sandbox/pi-sandbox.sb", "sandbox/pi-sandbox-preamble.zsh"]
-    },
-    {
-      "id": 8,
-      "change": "Step 7f: the analyzer asks before a git push that rewrites or deletes remote refs: --force and its variants (--force-with-lease, --force-if-includes), --mirror, --prune, --delete, a short option cluster containing f or d, or a refspec starting with + or :, with only Git's global options (such as -C <dir> or --no-pager) allowed before push; quoted and backslash-escaped words count as one, redirections are skipped, and no word crosses a shell separator, which can also end the option. Seatbelt cannot stop a push, and pi-sandbox-guard allowed all of these. A plain push, long options such as --follow-tags and a refspec such as main:main stay allowed.",
-      "files": ["src/validate-bash-command.sh"]
     },
     {
       "id": 9,
@@ -120,11 +111,6 @@
       "files": ["sandbox/pi-sandbox.sb"]
     },
     {
-      "id": 15,
-      "change": "Keep recursive chmod/chown flags and protected targets within one command. A later read of a system directory after a shell separator is not an operand of an earlier permission change. Neutralize the original and stripped copies independently so quoted status text cannot carry quote state into a later permission check. The protected-root patterns themselves remain in force.",
-      "files": ["src/validate-bash-command.sh"]
-    },
-    {
       "id": 16,
       "change": "Deny connections to the agents that hold keys, unless the operator sets AGENT_GUARD_SSH_AGENT=allow outside the guard: ssh-agent's launchd socket under /private/var/run or /private/tmp, and sockets under ~/.ssh and ~/.gnupg, where gpg-agent and SSH control sockets live. Sessions already run without SSH_AUTH_SOCK and cannot read those folders, but a file deny does not stop a socket connection, so the agents could be used with every loaded key (docs/DESIGN.md decision D15). Other Unix sockets stay reachable.",
       "files": ["sandbox/pi-sandbox.sb", "sandbox/pi-sandbox-preamble.zsh"],
@@ -132,34 +118,33 @@
     },
     {
       "id": 17,
-      "change": "The extension checks tool calls with cc-safety-net's Pi entry from the release (vendor/cc-safety-net/dist/pi/index.js), through a stand-in Pi API that captures its tool_call handler, for shell tools only (bash and powershell; file tools and other tools pass), once for each candidate working folder with the worst result kept, in place of the analyzer; the analyzer files stay in the profile, unused, until a later release removes them. The verdicts are allow or block: there are no confirmations. The policy is the session copy of the user's cc-safety-net configuration under decision D13 (docs/DESIGN.md section 5, Command checker), which the preamble builds at launch, outside the sandbox, with the release's checker/snapshot.zsh into <engine>/state/pi/<release>.XXXXXXXX/checker, a folder the profile write-protects with the engine folder; the preamble exports CC_SAFETY_NET_HOME, AGENT_GUARD_RELEASE, CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY=1 and the level (standard unless CC_SAFETY_NET_LEVEL=paranoid), clears the other CC_SAFETY_NET_* selectors, and removes, in the background, session folders from before the last boot. The extension blocks every tool call, naming the repair, when the session copy is missing or outside that state folder, cc-safety-net fails to load, or the probe `git config core.hooksPath agent-guard-probe` is not denied by Agent Guard's hooks-path rule; it also blocks when the copy's rule.json or Agent Guard's rulebook disappears later. The FILTER-ONLY diagnostic and the per-event de-duplication stay. A Pi started without the shim has no session copy, so its extension blocks every call.",
+      "change": "The extension checks tool calls with cc-safety-net's Pi entry from the release (vendor/cc-safety-net/dist/pi/index.js), through a stand-in Pi API that captures its tool_call handler, for shell tools only (bash and powershell; file tools and other tools pass), once for each candidate working folder with the worst result kept, in place of the analyzer, whose files (src/guard-core.mjs, src/validate-bash-command.sh) and suites (test/smoke.mjs, test/corpus.mjs, test/corpus/corpus.json) are no longer in the profile, with the analyzer's differences 8 and 15. The verdicts are allow or block: there are no confirmations. The policy is the session copy of the user's cc-safety-net configuration under decision D13 (docs/DESIGN.md section 5, Command checker), which the preamble builds at launch, outside the sandbox, with the release's checker/snapshot.zsh into <engine>/state/pi/<release>.XXXXXXXX/checker, a folder the profile write-protects with the engine folder; the preamble exports CC_SAFETY_NET_HOME, AGENT_GUARD_RELEASE, CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY=1 and the level (standard unless CC_SAFETY_NET_LEVEL=paranoid), clears the other CC_SAFETY_NET_* selectors, and removes, in the background, session folders from before the last boot. The extension blocks every tool call, naming the repair, when the session copy is missing or outside that state folder, cc-safety-net fails to load, or the probe `git config core.hooksPath agent-guard-probe` is not denied by Agent Guard's hooks-path rule; it also blocks when the copy's rule.json or Agent Guard's rulebook disappears later. The FILTER-ONLY diagnostic and the per-event de-duplication stay. A Pi started without the shim has no session copy, so its extension blocks every call.",
       "files": ["sandbox/pi-sandbox-preamble.zsh", "src/index.mjs"]
+    },
+    {
+      "id": 18,
+      "change": "The launcher no longer reads the extension folder's .guard-node, which recorded the Node that ran the analyzer, and no longer refuses to launch when it is invalid, stale or inside a sandbox-writable root. The analyzer is retired (difference 17), so a leftover .guard-node, which Agent Guard's update and uninstall remove, has no effect; this also ends the defect that a Pi started inside a Pi session exited with HOME_CANON: parameter not set whenever .guard-node existed.",
+      "files": ["launchers/pi"]
     }
   ],
   "test_notes": [
-    "test/pi.sh runs profiles/pi/test/shim.mjs unchanged: its launch cases run the preamble against the account's real home, because its fixtures keep the real directory-service lookup. Since difference 4 they create ~/.cache/opencode/bin in that account when it is missing, as they already create and remove ~/.local/share/pi-sandbox-bindable-* folders. Difference 9 also prepares active Pi/OMP roots there, including ~/.omp/agent, ~/.omp/profiles and named profiles; run these cases in a disposable account.",
-    "test/pi.sh runs the analyzer suites (smoke, corpus) with the account's home, which corpus.mjs needs, under a Seatbelt profile that denies writes to ~/.pi, so the analyzer's security log is not appended to."
+    "test/pi.sh runs profiles/pi/test/shim.mjs with the recorded edit: its launch cases run the preamble against the account's real home, because its fixtures keep the real directory-service lookup. Since difference 4 they create ~/.cache/opencode/bin in that account when it is missing, as they already create and remove ~/.local/share/pi-sandbox-bindable-* folders. Difference 9 also prepares active Pi/OMP roots there, including ~/.omp/agent, ~/.omp/profiles and named profiles; run these cases in a disposable account."
   ],
   "test_edits": [
-    {
-      "file": "test/smoke.mjs",
-      "differences": [],
-      "change": "The four smoke timing cases include elapsed milliseconds, the configured timeout, the verdict reason and metadata in assertion failures. Their commands, deadlines and verdict assertions remain unchanged."
-    },
     {
       "file": "scripts/test-sandbox-profile.sh",
       "differences": [1, 4, 9, 12, 13],
       "change": "sb, sb_omp and sb_pi_relocated pass the profile's AG_* parameters with inert values (the cache roots as HOME/.cache), read from the profile, since a missing parameter stops the profile from compiling. The relocated Pi fixture creates its root before confinement, as the launcher does, so the root pin does not deny first-launch runtime setup. check_user_state_protection also checks mcp.json, bin and tools at each Pi and OMP state root."
     },
     {
-      "file": "test/shim.mjs",
-      "differences": [1, 4, 5],
-      "change": "runNestedShim passes the profile's AG_* parameters with inert values (the cache roots as HOME/.cache), read from the profile; the ambient-override refusal case expects agent-guard bind instead of npm run bind."
+      "file": "scripts/check-launchers.mjs",
+      "differences": [18],
+      "change": "The launcher check no longer requires executable_under_sandbox_write_root, which the launcher used only to validate the guard Node binding."
     },
     {
-      "file": "test/corpus/corpus.json",
-      "differences": [8, 15],
-      "change": "Ten cases after git clean -fdx: eight push forms that ask (--force, -uf, --force-with-lease=..., a + refspec, a : refspec, -d, --mirror, git -C repo push --force) and two that stay allowed (git push -u origin feature, git push --follow-tags origin main:main). Thirteen command-boundary cases cover benign chmod/chown compounds, quoted status text and retained protected-root blocks."
+      "file": "test/shim.mjs",
+      "differences": [1, 4, 5, 18],
+      "change": "runNestedShim passes the profile's AG_* parameters with inert values (the cache roots as HOME/.cache), read from the profile; the ambient-override refusal case expects agent-guard bind instead of npm run bind; the case that a .guard-node inside PROJECT refuses the launch now expects the launch to succeed."
     }
   ]
 }

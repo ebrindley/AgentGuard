@@ -33,14 +33,14 @@ console.log(JSON.stringify({
 # pi_doctor [--json]: prints one ok, FAIL or skip line per check; with --json it
 # prints nothing and sets REPLY to status.sh --json's fields. pi_lines holds the
 # lines either way. Returns 1 when a check failed. drift counts what status.sh
-# counted: installed files, links, the checker Node, wrappers and relocation
-# variables; a stale binding fails the doctor but is not drift.
+# counted: installed files, links, wrappers and relocation variables; a stale
+# binding fails the doctor but is not drift.
 pi_doctor() {
   emulate -L zsh
   setopt no_unset pipe_fail extended_glob
   local cur="$engine/current" bin="$home/.local/bin" ext="$home/.pi/agent/extensions/pi-sandbox-guard"
   local conf="$home/.config/pi-sandbox-guard/executables.conf" wrec="$engine/state/wrappers.json"
-  local scripts="$release/profiles/pi/scripts" checker= jsnode= state=unbound pi_rec= omp_rec= node_rec=
+  local scripts="$release/profiles/pi/scripts" jsnode= state=unbound pi_rec= omp_rec= node_rec=
   local p rel rt label rec out err want sum work darwin_temp l rid= rg= rl= match=absent copy= sdir=
   local -a names lines wnames
   local -A where
@@ -55,8 +55,7 @@ pi_doctor() {
   [[ -f $bin/pi-sandbox.sb || -f $bin/pi || -f $bin/omp ]] && launchers_present=1
   for p rel in "$bin/pi" launchers/pi "$bin/omp" launchers/pi \
       "$bin/pi-sandbox.sb" sandbox/pi-sandbox.sb "$bin/pi-sandbox-preamble.zsh" sandbox/pi-sandbox-preamble.zsh \
-      "$ext/index.ts" scripts/extension-entry.ts "$ext/src/index.mjs" src/index.mjs \
-      "$ext/src/guard-core.mjs" src/guard-core.mjs "$ext/src/validate-bash-command.sh" src/validate-bash-command.sh; do
+      "$ext/index.ts" scripts/extension-entry.ts "$ext/src/index.mjs" src/index.mjs; do
     if [[ ! -f $cur/profiles/pi/$rel ]]; then pi_doctor_say "FAIL the current release has no profiles/pi/$rel" drift
     elif [[ -L $p ]]; then pi_doctor_say "FAIL ${p/#$home/~} is a link, not a copy of profiles/pi/$rel" drift
     elif [[ ! -f $p ]]; then pi_doctor_say "FAIL ${p/#$home/~} is missing" drift
@@ -89,29 +88,15 @@ pi_doctor() {
   pi_doctor_resolves pi 'the guard'
   pi_doctor_resolves omp 'the guard'
 
-  # The checker Node, validated as deploy-local.sh and the launcher validate it.
-  p="$ext/.guard-node"
-  if [[ ! -f $p ]]; then
-    pi_doctor_say "FAIL checker Node: ${p/#$home/~} is missing; record it with agent-guard bind --checker-node" drift
-  else
-    { IFS= read -r out < "$p" } 2>/dev/null || true
-    if [[ $out != /* ]]; then pi_doctor_say "FAIL checker Node in ${p/#$home/~} is not an absolute path: $out" drift
-    elif [[ ! -x ${out:A} || -d ${out:A} ]]; then pi_doctor_say "FAIL checker Node $out is not an executable file; record one with agent-guard bind --checker-node" drift
-    elif pi_doctor_write_root "$out" || pi_doctor_write_root "${out:A}"; then pi_doctor_say "FAIL checker Node $out is inside a sandbox-writable root" drift
-    else checker=$out; pi_doctor_say "ok   checker Node: $out"
-    fi
-  fi
-
-  # Bindings, with status.sh's states: bind --check decides, and only when a Pi
-  # binding is recorded. The checker Node's folder goes first on PATH because bind
-  # resolves paths with node.
+  # The recorded bindings, with status.sh's states: bind --check decides, and only
+  # when a Pi binding is recorded. A Node for bind and for the checker below comes
+  # first on PATH because bind resolves paths with node.
   if [[ -f $conf ]]; then
     pi_rec=$(/usr/bin/sed -n 's/^[[:space:]]*pi[[:space:]]*=[[:space:]]*//p' "$conf" | /usr/bin/head -1)
     omp_rec=$(/usr/bin/sed -n 's/^[[:space:]]*omp[[:space:]]*=[[:space:]]*//p' "$conf" | /usr/bin/head -1)
     node_rec=$(/usr/bin/sed -n 's/^[[:space:]]*node[[:space:]]*=[[:space:]]*//p' "$conf" | /usr/bin/head -1)
   fi
-  jsnode=$checker
-  [[ -n $jsnode ]] || { pi_doctor_node && jsnode=$REPLY }
+  pi_doctor_node && jsnode=$REPLY
   if [[ -z $pi_rec ]]; then
     pi_doctor_say "skip bindings: no Pi binding recorded in ${conf/#$home/~}"
   elif out=$(pi_doctor_bind --check 2>&1); then
@@ -300,7 +285,7 @@ pi_doctor_reason() {
   fi
 }
 
-# lib-ops.sh's rule, as status.sh applies it to the checker Node.
+# lib-ops.sh's rule: PATH lies in a folder Pi sessions can write.
 pi_doctor_write_root() {
   /bin/bash -c '. "$1" && ops_path_is_known_sandbox_write_root "$2" "$3"' _ "$scripts/lib-ops.sh" "$1" "$home"
 }
@@ -323,7 +308,7 @@ pi_doctor_node() {
 
 pi_doctor_bind() {
   local p=$PATH
-  [[ -n $checker ]] && p="${checker:h}:$PATH"
+  [[ -n $jsnode ]] && p="${jsnode:h}:$PATH"
   /usr/bin/env -u PI_SANDBOX_CONFIG_DIR -u PI_SANDBOX_SHIM -u OMP_SANDBOX_SHIM "HOME=$home" "PATH=$p" \
     /bin/bash "$scripts/bind-executable.sh" "$@"
 }

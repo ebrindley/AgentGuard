@@ -1113,7 +1113,7 @@ check('bound OMP executable inside alternate OMP state is classified writable', 
   assert.match(r.stdout, /writable/);
 });
 
-nativeCheck('guard Node binding inside PROJECT is refused before launch', () => {
+nativeCheck('a leftover .guard-node, stale or inside PROJECT, does not stop a launch', () => {
   const fx = fixture();
   const project = bindableDir();
   const node = join(project, 'guard-node');
@@ -1126,8 +1126,8 @@ nativeCheck('guard Node binding inside PROJECT is refused before launch', () => 
     { PI_EXECUTABLE: TRUSTED_ECHO, PI_PROJECT: project },
     ['x'],
   );
-  assert.notEqual(r.status, 0);
-  assert.match(r.stderr, /guard Node.*sandbox-writable root/i);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /x/);
 });
 
 check('OMP agent-dir override outside its state root is refused', () => {

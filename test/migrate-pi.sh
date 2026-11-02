@@ -15,7 +15,7 @@
 emulate -L zsh
 setopt no_unset pipe_fail extended_glob
 unset AGENT_GUARD_RELEASE AGENT_GUARD_SANDBOXED OPENCODE_SANDBOXED
-command -v node >/dev/null || { print -ru2 'Node is required for the release server, the analyzer and the fake Pi'; exit 1 }
+command -v node >/dev/null || { print -ru2 'Node is required for the release server, pi-sandbox-guard'"'"'s analyzer and the fake Pi'; exit 1 }
 
 source_root=${0:A:h:h}
 adapter="$source_root/test/engines/zsh.mjs"
@@ -79,7 +79,8 @@ exec '$node_bin' '$source_root/test/fake-opencode.mjs' \"\$@\"" > "$fakebin/open
 /bin/chmod 755 "$fakebin/opencode"
 /bin/ln -s "$node_bin" "$nodebin/node"
 base="$fakebin:$nodebin:/usr/bin:/bin:/usr/sbin:/sbin"
-# The analyzer's Node as deploy-local.sh records it: the resolved node, or its
+# The Node as deploy-local.sh records it for pi-sandbox-guard's analyzer, and as the
+# installer records an interpreter for a Node script: the resolved node, or its
 # Homebrew opt link.
 stable_node() {
   local r=${1:A} s
@@ -322,14 +323,14 @@ bad=
 for f rel in pi launchers/pi omp launchers/pi pi-sandbox.sb sandbox/pi-sandbox.sb pi-sandbox-preamble.zsh sandbox/pi-sandbox-preamble.zsh; do
   [[ -f $lb/$f && ! -L $lb/$f ]] && /usr/bin/cmp -s "$lb/$f" "$cur/$rel" || bad+=" $f"
 done
-for f rel in index.ts scripts/extension-entry.ts src/index.mjs src/index.mjs src/guard-core.mjs src/guard-core.mjs src/validate-bash-command.sh src/validate-bash-command.sh; do
+for f rel in index.ts scripts/extension-entry.ts src/index.mjs src/index.mjs; do
   /usr/bin/cmp -s "$ext/$f" "$cur/$rel" || bad+=" $f"
 done
 [[ -z $bad ]] && pass "the launchers, profile, preamble and extension are the release's copies" || fail "not the release's:$bad"
-[[ $(/usr/bin/stat -f %Lp "$lb/pi") == 755 && $(/usr/bin/stat -f %Lp "$lb/pi-sandbox.sb") == 644 && $(/usr/bin/stat -f %Lp "$ext/src/validate-bash-command.sh") == 755 ]] &&
-  pass 'modes 755 for the launchers and the analyzer, 644 for the profile' || fail 'modes'
-saved psg "$ext/.guard-node"
-/usr/bin/cmp -s "$ext/.guard-node" "$REPLY" && [[ ! -e $ext/.deployed-version ]] && pass '.guard-node kept; no .deployed-version' || fail '.guard-node or .deployed-version'
+[[ $(/usr/bin/stat -f %Lp "$lb/pi") == 755 && $(/usr/bin/stat -f %Lp "$lb/pi-sandbox.sb") == 644 && $(/usr/bin/stat -f %Lp "$ext/src/index.mjs") == 644 ]] &&
+  pass 'modes 755 for the launchers, 644 for the profile and the extension' || fail 'modes'
+[[ $(print -l "$ext"/**/*(DN.) | /usr/bin/sed "s|^$ext/||" | /usr/bin/sort) == $'index.ts\nsrc/index.mjs' ]] &&
+  pass 'the extension folder holds only the files of the release: no analyzer, .guard-node or .deployed-version' || fail "extension folder: $(print -l "$ext"/**/*(DN.))"
 [[ $(/usr/bin/readlink "$engine/current/bin/pi") == "$lb/pi" && $(/usr/bin/readlink "$engine/current/bin/omp") == "$lb/omp" ]] &&
   pass "bin/pi and bin/omp link to ~/.local/bin" || fail 'bin/pi and bin/omp'
 h=$(sha "$run/wrappers-2/pi-local")
@@ -614,6 +615,42 @@ rc=$?
 same 'the state is as after an uninterrupted update' "$run/updated.state" pi_state
 print -r -- v0.0.1 > "$served/latest.txt"
 
+# --- An install that still carries an earlier release's analyzer files and
+# .guard-node: update replaces the extension folder with the release's files, and
+# uninstall removes it; neither fails or warns about them. The security event log
+# stays.
+leftovers() {
+  print -r -- "$want_node" > "$ext/.guard-node"
+  print -r -- '// analyzer' > "$ext/src/guard-core.mjs"
+  print -r -- '#!/bin/bash' > "$ext/src/validate-bash-command.sh"
+  /bin/chmod 755 "$ext/src/validate-bash-command.sh"
+}
+label='update, analyzer leftovers'
+restore M1
+leftovers
+print -r -- v0.0.2 > "$served/latest.txt"
+point= ag update
+rc=$?
+(( rc == 0 )) && /usr/bin/jq -e '.version == "0.0.2"' "$state/stamp.json" >/dev/null && pass 'updated to 0.0.2' || { fail "update (exit $rc)"; show }
+[[ ! -e $ext/.guard-node && ! -e $ext/src/guard-core.mjs && ! -e $ext/src/validate-bash-command.sh ]] && pass '.guard-node and the analyzer files are removed' || fail 'leftovers remain'
+[[ $(print -l "$ext"/**/*(DN.) | /usr/bin/sed "s|^$ext/||" | /usr/bin/sort) == $'index.ts\nsrc/index.mjs' ]] && pass 'the extension folder holds only the files of the release' || fail "extension folder: $(print -l "$ext"/**/*(DN.))"
+! /usr/bin/grep -qiE 'guard-node|analyzer|guard-core|validate-bash' "$out" && pass 'the update says nothing about them' || { fail 'the update mentions them'; show }
+[[ -f $seclog ]] && pass 'the security event log stays' || fail 'the security event log is gone'
+point= ag version
+rc=$?
+(( rc == 0 )) && pass 'no drift' || { fail "version (exit $rc)"; show }
+point= ag doctor
+rc=$?
+(( rc == 0 )) && /usr/bin/grep -qF 'ok   the installed extension allows ls -la' "$out" && pass 'agent-guard doctor passes and the extension checks commands' || { fail "doctor (exit $rc)"; show }
+label='uninstall, analyzer leftovers'
+restore M1
+leftovers
+point= ag uninstall
+rc=$?
+(( rc == 0 )) && [[ ! -e $ext && ! -e $engine ]] && ! /usr/bin/grep -qiE 'guard-node|analyzer|guard-core|validate-bash' "$out" && [[ -f $seclog ]] &&
+  pass 'the extension folder goes with its leftovers, quietly; the security event log stays' || { fail "uninstall (exit $rc)"; show }
+print -r -- v0.0.1 > "$served/latest.txt"
+
 # --- Fresh install over a real Pi in npm's user prefix: ~/.local/bin/pi is npm's
 # relative link to dist/cli.js. It is recorded, replaced, kept and put back.
 label='fresh install over npm link'
@@ -646,7 +683,7 @@ ran=(${ran:#node $source_root/test/fake-opencode.mjs*})
   pass 'executables.conf records pi= and the node its shebang needs, mode 600' || { fail 'executables.conf'; /bin/cat "$conf" 2>&1 | /usr/bin/sed 's/^/    /' }
 [[ -L $replaced/pi && $(/usr/bin/readlink "$replaced/pi") == "../$pkg" ]] && pass 'the replaced link is kept with its original target text' || fail 'replaced link'
 /usr/bin/grep -qF "~/.local/bin/pi was not the guard's launcher; it is replaced and kept in" "$out" && pass 'the replacement is reported' || { fail 'report'; show }
-[[ $(<"$ext/.guard-node") == "$want_node" ]] && pass ".guard-node holds $want_node" || fail ".guard-node: $(<"$ext/.guard-node")"
+[[ ! -e $ext/.guard-node ]] && pass 'no .guard-node is written' || fail '.guard-node is written'
 /usr/bin/grep -qF 'ok   pi --version through bin/pi: fake pi 0.70.0' "$out" && /usr/bin/grep -qF 'skip omp --version through bin/omp' "$out" &&
   pass 'the gate runs Pi and skips OMP, which has no binding and no CLI' || { fail 'gate'; show }
 pi_state > "$run/npm.state"
@@ -702,14 +739,14 @@ for p in pi-bindings pi-launcher-pi; do
   same 'the state is as after an uninterrupted install' "$run/npm.state" pi_state
 done
 
-# A Mac where only OMP is found gets the guard too, with the analyzer's Node.
+# A Mac where only OMP is found gets the guard too; OMP is native, so no Node is recorded.
 label='fresh install, OMP only'
 restore bare
 fake_omp "$home/.bun/bin/omp"
 point= boot
 rc=$?
-(( rc == 0 )) && /usr/bin/jq -e '.harnesses == ["opencode", "pi"]' "$state/stamp.json" >/dev/null && [[ $(<"$ext/.guard-node") == "$want_node" ]] &&
-  pass 'installed with the analyzer Node' || { fail "install (exit $rc)"; show }
+(( rc == 0 )) && /usr/bin/jq -e '.harnesses == ["opencode", "pi"]' "$state/stamp.json" >/dev/null && [[ ! -e $ext/.guard-node && ! -e $conf ]] &&
+  pass 'installed; no Node is recorded' || { fail "install (exit $rc)"; show }
 
 # An OMP binary stored at ~/.local/bin/omp would be overwritten: refused before any change.
 label='fresh install over an OMP binary'

@@ -441,9 +441,10 @@ real OMP qualification requires an OMP installation.
   Guard's `opencode` called by its full path steps aside, as below.
 - `omp` inside a Pi session and `pi` inside an OMP session refuse.
 - A runtime started inside its own session, such as `pi` inside a Pi session,
-  exits with `HOME_CANON: parameter not set`. This is a pi-sandbox-guard defect,
-  present in the current Pi guard whenever `.guard-node` exists, which every
-  Agent Guard install records. It fails closed: nothing starts.
+  runs under the enclosing session's sandbox once its confinement checks pass.
+  Releases before this one exited with `HOME_CANON: parameter not set`
+  whenever `.guard-node` existed, which every earlier Agent Guard install
+  recorded; this release does not read `.guard-node`.
 
 ### Inside another sandbox
 

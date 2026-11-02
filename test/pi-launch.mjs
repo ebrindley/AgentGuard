@@ -808,16 +808,13 @@ try {
       assert.match(r.stderr, /nested profile digest mismatch or confinement probes failed; refusing/);
       assert.equal(r.stdout, '');
     });
-    check('nesting: Pi inside Pi exits when .guard-node exists (7ad441f defect, fails closed; DESIGN.md section 11)', () => {
-      // The preamble returns before HOME_CANON, PROJECT and TMPDIR_CANON are set,
-      // and the launcher's .guard-node check reads them under set -u.
+    check('nesting: Pi inside Pi passes through although a leftover .guard-node exists (difference 18)', () => {
       writeFileSync(join(home, '.pi/agent/extensions/pi-sandbox-guard/.guard-node'), '/usr/bin/true\n');
       try {
         const r = inner('pi');
-        assert.notEqual(r.status, 0);
-        assert.match(r.stderr, /existing pi-sandbox-guard confinement detected/);
-        assert.match(r.stderr, /HOME_CANON: parameter not set/);
-        assert.equal(r.stdout, '');
+        assert.equal(r.status, 0, r.stderr);
+        assert.match(r.stderr, /existing pi-sandbox-guard confinement detected; skipping nested wrap/);
+        assert.equal(r.stdout, 'inner-started\n');
       } finally {
         rmSync(join(home, '.pi/agent/extensions/pi-sandbox-guard/.guard-node'));
       }

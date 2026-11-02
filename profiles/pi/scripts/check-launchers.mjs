@@ -362,9 +362,6 @@ function checkPiShim(path, { required }) {
   if (!content.includes('export OMP_PROFILE=')) {
     fail(`${path} does not mirror OMP --profile into the pre-sandbox state boundary`);
   }
-  if (!content.includes('executable_under_sandbox_write_root')) {
-    fail(`${path} does not validate the pinned guard Node against active writable roots`);
-  }
 }
 
 

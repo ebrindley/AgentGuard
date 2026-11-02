@@ -27,7 +27,7 @@ expected=(
   installer/{lib.zsh,actions.zsh,harness/{opencode,pi,grok}.zsh,migrate/{opencode-guard,pi-sandbox-guard}.zsh}
   profiles/opencode/assets/{AgentGuard.icns,AgentGuard.entitlements}
   profiles/pi/{LICENSE,launchers/{pi,example-custom},sandbox/{pi-sandbox.sb,pi-sandbox-preamble.zsh}}
-  profiles/pi/src/{index.mjs,guard-core.mjs,validate-bash-command.sh}
+  profiles/pi/src/index.mjs
   profiles/pi/scripts/{extension-entry.ts,test-sandbox-profile.sh,check-launchers.mjs,bind-executable.sh,lib-ops.sh}
   profiles/pi/commands/{bind,doctor,wrapper}.zsh
   profiles/grok/{harness.zsh,args.zsh,hooks.zsh,credentials.sb,grok}

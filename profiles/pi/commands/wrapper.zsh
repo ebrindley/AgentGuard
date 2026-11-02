@@ -166,21 +166,23 @@ pi_wrapper_add() {
   pi_wrapper_stage=
 }
 
-# The checker Node from the guard extension's .guard-node runs check-launchers.mjs,
-# accepted as doctor accepts it: outside every sandbox-writable root (lib-ops.sh).
+# The Node that runs check-launchers.mjs: the interpreter recorded in
+# executables.conf, else the node on PATH or in Homebrew's folders; an absolute
+# executable file outside every sandbox-writable root (lib-ops.sh), as doctor
+# accepts one.
 pi_wrapper_node() {
-  local f="$home/.pi/agent/extensions/pi-sandbox-guard/.guard-node" n= p
-  { IFS= read -r n < "$f" } 2>/dev/null
-  if [[ $n == /* && -x ${n:A} && ! -d ${n:A} ]]; then
-    for p in "$n" "${n:A}"; do
+  local conf="$home/.config/pi-sandbox-guard/executables.conf" rec= c p ok
+  [[ -f $conf ]] && rec=$(/usr/bin/sed -n 's/^[[:space:]]*node[[:space:]]*=[[:space:]]*//p' "$conf" | /usr/bin/head -1)
+  for c in "$rec" "$(command -v node 2>/dev/null)" /opt/homebrew/bin/node /usr/local/bin/node; do
+    [[ $c == /* && -x ${c:A} && ! -d ${c:A} ]] || continue
+    ok=1
+    for p in "$c" "${c:A}"; do
       /bin/bash -c '. "$1" && ops_path_is_known_sandbox_write_root "$2" "$3"' _ \
-        "$release/profiles/pi/scripts/lib-ops.sh" "$p" "$home" && n=
+        "$release/profiles/pi/scripts/lib-ops.sh" "$p" "$home" && ok=0
     done
-  else
-    n=
-  fi
-  [[ -n $n ]] || pi_wrapper_die "no usable checker Node in $f; record one with agent-guard bind --checker-node"
-  REPLY=$n
+    (( ok )) && { REPLY=$c; return 0 }
+  done
+  pi_wrapper_die 'no usable node to run the wrapper check; install Node (for example: brew install node)'
 }
 
 pi_wrapper_remove() {
