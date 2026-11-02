@@ -145,8 +145,9 @@ fixture uses a test bundle with the real backend. Logs remain under `test/.run-*
 These focused runners use disposable homes and require no additional account.
 
 Suites that create fixture homes under the checkout and exercise write denial
-or executable binding need that checkout outside sandbox-writable temporary
-roots: `/private/tmp` (`/tmp`), `/private/var/tmp` (`/var/tmp`), and Darwin
+or executable binding need that checkout outside temporary roots that are
+sandbox-writable or refused for pinned Pi executables: `/private/tmp` (`/tmp`),
+`/private/var/tmp` (`/var/tmp`), and Darwin
 per-user temporary directories. Otherwise a temporary-directory grant can
 invalidate a write-denial check, or Pi can refuse a fixture executable. This
 does not restrict offline checks or change the native V2 runner's OS-temporary
