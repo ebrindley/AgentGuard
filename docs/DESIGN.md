@@ -1465,7 +1465,7 @@ Planned for steps 7b and 7c:
 
 ### Public claims until step 10d
 
-README and SECURITY.md (step 7d) describe Pi's guard as pi-sandbox-guard's policy plus the seven session differences above, and say what it does not do until step 10d: it does not read the Guard List; it has no refusal when Pi is started outside the guard (a direct start runs the analyzer only, and `pi -ne` removes it); it checks `bash` only, not file tools; its launcher trusts its own folder in `~/.local/bin` rather than a release folder; OMP's runtime folders were observed on OMP 17.2.10. SECURITY.md's vulnerability definition is stated per harness.
+README and SECURITY.md (step 7d) describe Pi's guard as pi-sandbox-guard's policy plus the seven session differences above, and say what it does not do until step 10d: it does not read the Guard List; a direct start outside the guard refuses every tool call, since no session copy exists, and `pi -ne` removes the extension; it checks `bash` only, not file tools; its launcher trusts its own folder in `~/.local/bin` rather than a release folder; OMP's runtime folders were observed on OMP 17.2.10. SECURITY.md's vulnerability definition is stated per harness.
 
 ### Defects kept until step 10d
 
@@ -1615,15 +1615,15 @@ Differences between the adopted guard (from 0.2.0) and the shared engine, per ha
 
 | Operation | Adopted guard | From step 10d |
 |---|---|---|
-| Direct start of the real binary | runs; FILTER-ONLY warning | tools refused after the probe; filter-only use ends. `pi -ne` or a settings entry removes the discovered copy on a direct start; a guarded start is unaffected |
+| Direct start of the real binary | runs; FILTER-ONLY warning; every tool call refused, since no session copy exists | tools refused after the probe; filter-only use ends. `pi -ne` or a settings entry removes the discovered copy on a direct start; a guarded start is unaffected |
 | File tools (`read`, `edit`, `write`, `grep`, `find`, `ls`) | not checked in-process | checked against the projection: refusals with a message where Seatbelt already denies, plus reads under DENY; cc-safety-net does not see them |
-| Shell commands | pi-sandbox-guard's analyzer, `bash` only; asks before `git reset --hard`, `git clean`, `find -delete`, interpreter one-liners, `core.hooksPath` changes and others; it also asks before force-pushes in their common spellings (step 7f); Git discards and secret reads allowed | cc-safety-net for `bash` and `powershell`, then Agent Guard's rules (section 5, Command checker): force-pushes, Git discards and secret reads blocked; asks only for the ask list, which starts with `core.hooksPath`; the analyzer's other asks become blocks or allows, as step 7e records |
-| Recursive deletes | the analyzer's rules | the policy every harness uses (section 5, Recursive deletes) |
+| Shell commands | cc-safety-net for `bash` and `powershell` with the session copy and Agent Guard's Git rulebook (section 5, Command checker); every verdict is allow or deny | unchanged |
+| Recursive deletes | the policy every harness uses (section 5, Recursive deletes) | unchanged |
 | The Guard List | not read; writes only to the project, temp, state and caches | read: every ALLOW entry adds writes (decision D1), and DENY and READ ONLY entries apply |
 | Writes to OpenCode's protected names (`.opencode`, `opencode.json`, `opencode.jsonc`, `tui.json`, `tui.jsonc`) | denied inside the project only, with `.cc-safety-net` (step 7f) | denied: the protection union (section 3, Every installed harness) |
 | Device and cache grants | Pi's set | the base template's set (adds `/dev/ptmx`, `/dev/dtracehelper`, all of `/dev/fd`, `DARWIN_CACHE`). Pi's `/dev/stdout` and `/dev/stderr` literals stay in the Pi profile unless a conformance case shows the base set already covers them (section 15, To verify) |
 | `PI_PACKAGE_DIR` set | runs; `doctor` reports it | launch refused |
-| Command log | the analyzer's `~/.pi/agent/security-events.log` | cc-safety-net's audit log in `~/.cc-safety-net/logs`, as for OpenCode; the analyzer's log is left in place |
+| Command log | cc-safety-net's audit log in `~/.cc-safety-net/logs`, as for OpenCode; the analyzer's `~/.pi/agent/security-events.log` is left in place | unchanged |
 | Bindings | `~/.config/pi-sandbox-guard/executables.conf`, written by `agent-guard bind`; `.guard-node` is no longer written or read | `state/bindings.toml` in the engine folder, written by `agent-guard bind` |
 | Inference credentials: `~/.aws/credentials`, `~/.aws/config`, `~/.config/gcloud` | read- and write-denied | readable; the AWS token caches (`~/.aws/sso/cache`, `~/.aws/login/cache`, `~/.aws/cli/cache`) writable; configuration stays write-denied. A loosening, needed for Bedrock and Vertex (section 3, Credentials) |
 | `.env` and `.env.*` files | unreadable anywhere | unreadable, apart from `.env.example`, `.env.sample` and `.env.template`, and OMP's own two `.env` files, which are readable and checked at launch (section 3, Credentials) |
