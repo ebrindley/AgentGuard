@@ -32,7 +32,11 @@ jobs:
           node-version: '24'
       # test/test.sh launches the real OpenCode CLI; 1.18.33 is the version the suites are written against.
       - id: setup
-        run: npm install -g opencode-ai@1.18.33 && opencode --version
+        run: |
+          brew install ripgrep
+          rg --version
+          npm install -g opencode-ai@1.18.33
+          opencode --version
       - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node test/golden.mjs
       # Offline focused scopes also run in the seven-file local gate.
