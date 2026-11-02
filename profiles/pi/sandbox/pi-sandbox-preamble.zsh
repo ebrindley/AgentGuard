@@ -1317,7 +1317,7 @@ fi
 # variable unset, and the extension then blocks every tool call and says why.
 unset CC_SAFETY_NET_HOME CC_SAFETY_NET_WORKTREE SAFETY_NET_WORKTREE CC_SAFETY_NET_AUDIT_HOME AGENT_GUARD_RELEASE
 export CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY=1
-[[ ${CC_SAFETY_NET_LEVEL:-} == paranoid ]] || export CC_SAFETY_NET_LEVEL=standard
+[[ ${CC_SAFETY_NET_LEVEL:-} == (strict|paranoid) ]] || export CC_SAFETY_NET_LEVEL=standard
 AG_ENGINE_STATE="$HOME_CANON/Library/Application Support/AgentGuard/state"
 AG_RELEASE_DIR="${AG_PEER_RELEASE:A}"
 if [[ "${AG_RELEASE_DIR:h}" == "${AG_ENGINE_STATE:h}/releases" && -f "$AG_RELEASE_DIR/RELEASE" \

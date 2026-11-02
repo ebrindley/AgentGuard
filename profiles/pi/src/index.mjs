@@ -166,7 +166,7 @@ async function loadChecker() {
   const found = locate();
   if (found.failure) return { failure: found.failure };
   for (const name of UNSAFE_NET_ENV) delete process.env[name];
-  if (process.env.CC_SAFETY_NET_LEVEL !== 'paranoid') process.env.CC_SAFETY_NET_LEVEL = 'standard';
+  if (!['strict', 'paranoid'].includes(process.env.CC_SAFETY_NET_LEVEL)) process.env.CC_SAFETY_NET_LEVEL = 'standard';
   process.env.CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY = '1';
   process.env.CC_SAFETY_NET_HOME = found.copy;
   let handler = null;

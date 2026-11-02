@@ -199,7 +199,7 @@ async function guard(input) {
   if (!rules && !outer) failure("rules-load", "rules-unavailable", "relaunch", rulesErrno)
   if (guarded) {
     for (const name of UNSAFE_NET_ENV) delete process.env[name]
-    if (process.env.CC_SAFETY_NET_LEVEL !== "paranoid") process.env.CC_SAFETY_NET_LEVEL = "standard"
+    if (!["strict", "paranoid"].includes(process.env.CC_SAFETY_NET_LEVEL)) process.env.CC_SAFETY_NET_LEVEL = "standard"
     process.env.CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY = "1"
     if (rules) process.env.CC_SAFETY_NET_HOME = rules.checker
   }
