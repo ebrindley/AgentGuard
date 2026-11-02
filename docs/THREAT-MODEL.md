@@ -261,7 +261,8 @@ at ASK. This repository uses no ASK tier; each verdict is deny or allow
 harness with a command checker. Pi and OMP ran pi-sandbox-guard's analyzer, which
 asked, until the switch to cc-safety-net (step 10d); their confirmations ended
 with it, and an operation the analyzer asked about is now allowed or denied by
-the lists below, so that Pi, OMP and OpenCode give the same verdict.
+the lists below, so that Pi, OMP and OpenCode give the same verdict. The Pi
+extension forwards shell commands only; file tools are covered by Seatbelt.
 
 - **Tightened to DENY:** plain force pushes (`--force`, `-f`, a `+` refspec),
   mirror pushes and force-pushed tags, setting `core.hooksPath`, whole-tree

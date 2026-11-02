@@ -1,8 +1,8 @@
 // index.mjs — shared Pi/OMP extension entry point.
 //
-// A best-effort PRE-EXECUTION guard: every tool call goes to cc-safety-net's Pi
+// A best-effort PRE-EXECUTION guard: shell commands go to cc-safety-net's Pi
 // entry (vendor/cc-safety-net/dist/pi/index.js in the Agent Guard release), which
-// checks bash commands and routes the file tools through its secret-path checks.
+// checks shell commands. Only `bash` and `powershell` calls are forwarded to it.
 // It is NOT a sandbox: Pi allows later handlers to mutate event.input with no
 // re-validation, so this is authoritative only if it runs last and nothing
 // rewrites the command afterward. Seatbelt is the layer that does not depend on it.
@@ -45,6 +45,8 @@ export function processedEventCountForTests() {
 
 const SENTINEL_COMMAND = 'git config core.hooksPath agent-guard-probe';
 const SENTINEL_RULE = 'custom.agent-guard-git/hooks-path';
+// The tools whose commands the entry checks; every other tool passes.
+const SHELL_TOOLS = new Set(['bash', 'powershell']);
 const UNSAFE_NET_ENV = ['CC_SAFETY_NET_WORKTREE', 'SAFETY_NET_WORKTREE', 'CC_SAFETY_NET_AUDIT_HOME'];
 
 const isDirectory = (p) => {
@@ -249,14 +251,12 @@ export default function (pi) {
       return block(`[pi-sandbox-guard] Guard unavailable: ${checker.failure}. All tool calls are blocked until the guard is restored.`);
     }
 
+    // Only shell tools go to the checker, as in OpenCode's plugin. File tools and
+    // other tools pass: Seatbelt denies reads of .env files and the credential set.
+    if (!event || typeof event !== 'object' || !SHELL_TOOLS.has(event.toolName)) return;
+
     // A genuinely empty bash invocation is a no-op.
-    if (
-      event &&
-      typeof event === 'object' &&
-      event.toolName === 'bash' &&
-      typeof event.input?.command === 'string' &&
-      event.input.command.trim().length === 0
-    ) {
+    if (event.toolName === 'bash' && typeof event.input?.command === 'string' && event.input.command.trim().length === 0) {
       return;
     }
 

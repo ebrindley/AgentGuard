@@ -217,8 +217,8 @@ with the policy of [decision D13](docs/DESIGN.md#15-risks-and-open-decisions):
 each verdict is allow or block, never a confirmation. It blocks shell commands
 it recognizes as destructive (remote history rewrites, whole-tree discards,
 `git clean -f`, `core.hooksPath`, recursive deletes outside the working folder)
-and file reads, writes and edits of secret paths, but nothing depends on it for
-safety. The Seatbelt profile is the boundary. If the checker's session copy is
+but nothing depends on it for safety. It checks shell commands only: file tools
+(`read`, `write`, `edit`) and other tools pass it. The Seatbelt profile is the boundary. If the checker's session copy is
 missing, cc-safety-net fails to load or Agent Guard's Git rules are not in force,
 the extension blocks every tool call and says what to fix.
 
@@ -345,14 +345,12 @@ cc-safety-net (difference 17), so:
   and `pi -ne` removes it. `AGENT_GUARD_BYPASS` has no effect. Planned: step 10d
   refuses tools in such a session on a behavioral probe, as OpenCode's plugin
   does.
-- **File tools are checked for secret paths only.** The checker refuses `read`,
-  `write`, `edit` and similar tools on `.env` files and variants (not
-  `.env.example`), `.npmrc`, `.netrc`, `.pypirc`, `.git-credentials`, key and
-  certificate files (`*.pem`, `*.key`, `*.p12`, `*.pfx`, `*.jks`, `*.keystore`,
-  `*.kdbx`), SSH key names such as `id_rsa`, and credential folders such as
-  `~/.ssh` and `~/.aws`, wherever they are, including public certificates and
-  test fixtures in a project. It checks nothing else about file tools; Seatbelt
-  still applies to every write. A tool the checker does not know passes.
+- **Only shell commands are checked in-process.** The checker sees `bash`
+  commands, not file tools such as `read`, `edit` and `write`, or other tools.
+  Seatbelt denies reads of `.env` files, `~/.ssh`, `~/.aws` and the other
+  credential paths listed above, and applies to every write. A file tool can
+  still read a secret kept in another name, such as `secrets.json` or a `.pem`
+  file in the project.
 - **The checker does not check every Git spelling.** Agent Guard's Git rules and
   cc-safety-net's built-in rules miss spellings that carry a global option or a
   glob, such as `git -C repo restore .`, `git -c k=v config core.hooksPath x` and

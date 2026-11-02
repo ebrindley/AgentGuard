@@ -78,14 +78,16 @@ preamble's session copy takes about 45 ms.
 
 ## Verdict changes
 
-Of the 473 cases, 224 keep their verdict and 249 change. `baseline` is the
-analyzer's interactive verdict; the extension returns only allow or block.
+Of the 473 cases, 227 keep their verdict and 246 change. `baseline` is the
+analyzer's interactive verdict; the extension returns only allow or block. The
+three file-tool rows keep their verdict, because the extension forwards shell
+commands only.
 
 | Group | Same | Ask, now allowed | Ask, now blocked | Block, now allowed | Allow, now blocked |
 | --- | --- | --- | --- | --- | --- |
 | Characterization (414) | 199 | 43 | 31 | 134 | 7 |
-| In scope (34) | 11 | 3 | 7 | 1 | 12 |
-| Benign (25) | 14 | 6 | 0 | 2 | 3 |
+| In scope (34) | 13 | 3 | 7 | 1 | 10 |
+| Benign (25) | 15 | 6 | 0 | 2 | 2 |
 
 - **Ask, now blocked (38):** the whole-tree and forced Git forms D13 denies
   (`git reset --hard`, `git clean -fd[x]`, force, mirror and `+` pushes, and
@@ -104,24 +106,23 @@ analyzer's interactive verdict; the extension returns only allow or block.
   and `/dev` by redirects, `truncate`, `chmod -R`, `chown -R`, `time -o`, `mv`,
   `cp`, interpreters, `wipefs` and `mkfs`, and `rm -rf {REPO}/build`. No session
   can write those places; Seatbelt denies them. The records are in `cases.jsonl`.
-- **Allow, now blocked (22):** `git -C repo reset --hard`, `git reset HEAD --hard`,
+- **Allow, now blocked (19):** `git -C repo reset --hard`, `git reset HEAD --hard`,
   `git clean -d -f`, `git checkout -- .`, `git restore .`, the `$(pwd)` and
   `$(git branch ...)` force pushes and the pipe-to-shell chain, which the analyzer
   missed; an ANSI-C quoted `rm -rf /`; `rm -rf .`; `eval "$VAR"`, `python3 -c "$CODE"` and `node -e "$(...)"`;
-  `shred`; `cat .env`, `cat ~/.ssh/...` and the file-tool reads of the same
-  paths, which Seatbelt already denied reads of; and three benign cases:
-  `cat server.pem` and a file-tool read of it (key and certificate file names are
-  secret paths anywhere), and `cat <<EOF` of text that holds `rm -rf /`.
+  `shred`; `cat .env` and `cat ~/.ssh/...`, which Seatbelt already denied reads of;
+  and two benign cases: `cat server.pem` (key and certificate file names are
+  secret paths in bash) and `cat <<EOF` of text that holds `rm -rf /`. The three
+  file-tool rows (`.env`, `~/.ssh` and `server.pem` reads) are allowed, as before.
 
 Not in the corpus, found by hand: `python3 - <<'PY' ... PY` and `node <<'JS' ... JS`
 (an interpreter reading its program from a heredoc) are blocked as
 `analysis.unsupported-heredoc`, where the analyzer allowed them; a heredoc that
 only writes a file is allowed. `.npmrc`, `.pypirc`, `.netrc`,
 `.git-credentials`, `.env.*` variants, `*.key`, `*.p12`, `*.pfx`, `*.jks`,
-`*.keystore`, `*.kdbx` and `id_rsa`-style names are refused for file reads and
-writes anywhere, including a project's own `.npmrc` and test fixtures. Names such
-as `secrets.json`, `credentials.json`, `*.tfvars`, `.env.example` and `.envrc` are
-allowed.
+`*.keystore`, `*.kdbx` and `id_rsa`-style names would be refused for file reads and
+writes anywhere by the bundled entry, including a project's own `.npmrc` and test
+fixtures; the extension does not forward file tools, so they are not.
 
 ## Dispositions under D13
 
@@ -131,7 +132,7 @@ allowed.
 | Local discard and hooks | Denied: `git reset --hard` in any order or with `-C`, `git clean -f` in any spelling, `git checkout .` and `git restore .`, and `git config core.hooksPath` in the corpus's spellings. Allowed: path-scoped `git restore` and `git checkout -- <path>`, `git stash drop`, `git branch -D`. `git -c core.hooksPath=<dir> <command>` and `git -C <dir> restore .` are not caught (DESIGN.md section 5). |
 | Pipe to shell | Denied, with and without a following command (`pipe-shell`, `pipe-shell-chain`); the analyzer allowed the second. |
 | Catastrophic recursive targets | Denied by cc-safety-net's strict rules: root, home, the working folder, its parents and dynamic targets. Writes to system folders and devices by other means are not checked and rest on Seatbelt. |
-| Secret paths | Denied in `bash` and in the file tools, also for key and certificate files and for the names listed above anywhere in a project. |
+| Secret paths | Denied in `bash` (`cat .env`, `cat ~/.ssh/...`, `cat server.pem`). The extension does not forward file tools, so a file-tool read is decided by Seatbelt alone, which denies `.env` files and the credential set. |
 | Routine cleanup | Allowed: literal paths below the working folder, absolute or relative (`corpus-131` is now allowed), and in temp. Denied: `*`, `$DIR` and `$(...)` targets. |
 | Wrapper failure behavior | An unusable cwd, a malformed payload or a checker error blocks; an unhealthy checker blocks every call. `profiles/pi/test/checker.mjs` covers these, and `test/pi-launch.mjs` covers the launch. The analyzer's subprocess timeout, EPIPE, output-cap and process-group tests retire with the analyzer's files. |
 | Benign scripts and quoted data | Environment changes, `curl -o` and interpreter one-liners are allowed. `cat <<EOF` of quoted `rm -rf /`, `python3 - <<'PY'`, `node <<'JS'`, `cat server.pem` and `eval "$(tool init -)"` are denied; the operator runs them outside the guard. |
@@ -171,8 +172,8 @@ read raw command logs; zero hits would not prove a protection redundant.
 
 ## Enforcement totals
 
-The switch adds one checker path to Pi and OMP, cc-safety-net's secret-path checks
-on the file tools, which the analyzer never ran, and one health probe at load. It
+The switch adds one health probe at load to Pi and OMP and no checker path: the
+extension forwards shell commands only, as the analyzer checked them. It
 adds no switch, rule family or dependency (cc-safety-net was already bundled) and no
 required check; the hosted required check remains one with eight file slices. It
 ends Pi's confirmations and removes the analyzer from the extension's path, with

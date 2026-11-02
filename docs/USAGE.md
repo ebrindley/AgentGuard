@@ -301,14 +301,9 @@ piped to a shell; `eval "$(tool init -)"` shell setup; and an interpreter that
 reads its program from a heredoc, such as `python3 - <<'PY'` (write the program to
 a file first). Run a refused command in a terminal outside the guard. The refusal names the rule.
 
-The file tools `read`, `write` and `edit` are checked for secret paths: `.env`
-files and variants (`.env.example` is fine), `.npmrc`, `.netrc`, `.pypirc`,
-`.git-credentials`, key and certificate files (`*.pem`, `*.key`, `*.p12`, `*.pfx`,
-`*.jks`, `*.keystore`, `*.kdbx`), SSH key names such as `id_rsa`, and the
-credential folders under `~`. This applies to those names anywhere, including a
-public `.pem` fixture in the project; edit such a file outside the guard. Other
-files, paths outside the project and paths with spaces are not refused by the
-checker; Seatbelt still decides writes.
+Only shell commands are checked. The file tools `read`, `write`, `edit` and
+`grep`, and other tools, pass the checker; Seatbelt decides what they can read
+and write, and it denies reads of `.env` files and the credential paths.
 
 If the checker cannot run, every tool call is refused and the message says what
 to fix: relaunch through `pi` or `omp` for a missing session copy, fix

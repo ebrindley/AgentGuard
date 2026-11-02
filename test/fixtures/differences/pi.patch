@@ -690,7 +690,7 @@ index 4dcdf9c..7bcfc7c 100755
      target="$state_root/$relative"
      mkdir -p "$(dirname "$target")"
 diff --git a/src/index.mjs b/src/index.mjs
-index d997be1..743797f 100644
+index d997be1..160f7a8 100644
 --- a/src/index.mjs
 +++ b/src/index.mjs
 @@ -1,15 +1,23 @@
@@ -699,9 +699,9 @@ index d997be1..743797f 100644
  //
 -// A best-effort, fail-closed PRE-EXECUTION guard for the `bash` tool. It is NOT
 -// a sandbox: Pi allows later handlers to mutate event.input with no
-+// A best-effort PRE-EXECUTION guard: every tool call goes to cc-safety-net's Pi
++// A best-effort PRE-EXECUTION guard: shell commands go to cc-safety-net's Pi
 +// entry (vendor/cc-safety-net/dist/pi/index.js in the Agent Guard release), which
-+// checks bash commands and routes the file tools through its secret-path checks.
++// checks shell commands. Only `bash` and `powershell` calls are forwarded to it.
 +// It is NOT a sandbox: Pi allows later handlers to mutate event.input with no
  // re-validation, so this is authoritative only if it runs last and nothing
 -// rewrites the command afterward (documented limitation — see README).
@@ -725,12 +725,14 @@ index d997be1..743797f 100644
  
  const EVENT_STATE_KEY = Symbol.for('@ebrindley/pi-sandbox-guard/event-state');
  const eventState = globalThis[EVENT_STATE_KEY] ?? {
-@@ -35,14 +43,25 @@ export function processedEventCountForTests() {
+@@ -35,14 +43,27 @@ export function processedEventCountForTests() {
    return eventState.processed;
  }
  
 +const SENTINEL_COMMAND = 'git config core.hooksPath agent-guard-probe';
 +const SENTINEL_RULE = 'custom.agent-guard-git/hooks-path';
++// The tools whose commands the entry checks; every other tool passes.
++const SHELL_TOOLS = new Set(['bash', 'powershell']);
 +const UNSAFE_NET_ENV = ['CC_SAFETY_NET_WORKTREE', 'SAFETY_NET_WORKTREE', 'CC_SAFETY_NET_AUDIT_HOME'];
 +
 +const isDirectory = (p) => {
@@ -755,7 +757,7 @@ index d997be1..743797f 100644
   */
  function candidateCwds(event, ctx) {
    const raw = [event?.input?.cwd, event?.cwd, ctx && ctx.cwd];
-@@ -51,33 +70,11 @@ function candidateCwds(event, ctx) {
+@@ -51,33 +72,11 @@ function candidateCwds(event, ctx) {
    for (const c of raw) {
      if (typeof c !== 'string' || c.length === 0 || seen.has(c)) continue;
      seen.add(c);
@@ -790,7 +792,7 @@ index d997be1..743797f 100644
  /**
   * Announce filter-only operation when the protected shim's launch marker is
   * absent. This is a MISINSTALL DIAGNOSTIC, not a security control:
-@@ -94,24 +91,132 @@ function trustedPolicyEnv() {
+@@ -94,24 +93,132 @@ function trustedPolicyEnv() {
   *   - Wording says "could not verify" rather than "not detected" because an
   *     unrelated but valid Seatbelt profile would also lack this marker.
   *
@@ -930,7 +932,7 @@ index d997be1..743797f 100644
  /**
   * Pi extension default export.
   * @param {import('./pi-types').ExtensionAPI} pi
-@@ -119,148 +224,63 @@ function warnIfUnverifiedSandbox() {
+@@ -119,148 +226,61 @@ function warnIfUnverifiedSandbox() {
  export default function (pi) {
    warnIfUnverifiedSandbox();
  
@@ -994,7 +996,10 @@ index d997be1..743797f 100644
 -    if (command.trim().length === 0) return;
  
 -    await ready;
--
++    // Only shell tools go to the checker, as in OpenCode's plugin. File tools and
++    // other tools pass: Seatbelt denies reads of .env files and the credential set.
++    if (!event || typeof event !== 'object' || !SHELL_TOOLS.has(event.toolName)) return;
+ 
 -    // Guard unavailable (missing analyzer, missing helpers, or win32): BLOCK ALL
 -    // bash unconditionally. A partial-regex allowlist has been proved to miss real
 -    // catastrophic commands (find -delete, shred, truncate, wipefs, ANSI-C quoted
@@ -1013,13 +1018,7 @@ index d997be1..743797f 100644
 -        reason: `[pi-sandbox-guard] Guard unavailable (${why}); all bash commands are blocked until the guard is restored.`,
 -      };
 +    // A genuinely empty bash invocation is a no-op.
-+    if (
-+      event &&
-+      typeof event === 'object' &&
-+      event.toolName === 'bash' &&
-+      typeof event.input?.command === 'string' &&
-+      event.input.command.trim().length === 0
-+    ) {
++    if (event.toolName === 'bash' && typeof event.input?.command === 'string' && event.input.command.trim().length === 0) {
 +      return;
      }
  

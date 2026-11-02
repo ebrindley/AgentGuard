@@ -139,19 +139,14 @@ async function main() {
     assert.equal(await run(bash('ls', join(base, 'gone'))), undefined);
   });
 
-  await check('file tools: ordinary reads and edits, also with spaces in the path, are allowed', async () => {
-    for (const tool of ['read', 'write', 'edit']) {
-      assert.equal(await run(file(tool, join(project, 'src/a b.ts'))), undefined);
-      assert.equal(await run(file(tool, 'relative/file.txt')), undefined);
+  await check('file tools pass the checker untouched, secret-looking paths included (Seatbelt covers reads)', async () => {
+    for (const tool of ['read', 'write', 'edit', 'grep', 'find', 'ls']) {
+      for (const path of ['src/a b.ts', 'relative/file.txt', '/etc/hosts', join(project, '.env'), join(project, 'server.pem'), join(home, '.ssh/id_ed25519')])
+        assert.equal(await run(file(tool, path)), undefined, `${tool} ${path}`);
     }
-    assert.equal(await run(file('read', '/etc/hosts')), undefined);
-    assert.equal(await run(file('read', join(project, '.env.example'))), undefined);
   });
-  await check('file tools: secret paths are refused for read, write and edit', async () => {
-    for (const tool of ['read', 'write', 'edit']) {
-      blocked(await run(file(tool, join(project, '.env'))), 'secret.basename.env');
-      blocked(await run(file(tool, join(home, '.ssh/id_ed25519'))), 'secret.home.ssh');
-    }
+  await check('powershell commands go to the checker', async () => {
+    blocked(await run({ type: 'tool_call', toolName: 'powershell', input: { command: 'git reset --hard' } }), 'git.reset-hard');
   });
 
   await check('another tool name passes through', async () => {

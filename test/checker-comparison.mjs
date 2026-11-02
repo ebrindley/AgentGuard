@@ -186,8 +186,9 @@ const summary = {
   contractMismatches: rows.filter(r => r.group === 'characterization' &&
     (r.recorded.startsWith('not ') ? r.pi.interactive.verdict === r.recorded.slice(4) : r.pi.interactive.verdict !== r.recorded)).map(r => r.id),
   candidateChanges: rows.filter(r => ['interactive', 'headless'].some(mode => r.baseline[mode].verdict !== r.pi[mode].verdict)).map(r => r.id),
-  differences: rows.filter(r => ['interactive', 'headless'].some(mode => r.pi[mode].verdict !== r.shared[mode].verdict)).map(r => r.id),
-  benignRefusals: rows.filter(r => r.group === 'benign' && (r.pi.interactive.verdict !== 'allow' || r.shared.interactive.verdict !== 'allow')).map(r => r.id),
+  // The extension forwards shell tools only; the bundled entry also checks file tools.
+  differences: rows.filter(r => r.tool === 'bash' && ['interactive', 'headless'].some(mode => r.pi[mode].verdict !== r.shared[mode].verdict)).map(r => r.id),
+  benignRefusals: rows.filter(r => r.group === 'benign' && (r.pi.interactive.verdict !== 'allow')).map(r => r.id),
 };
 writeFileSync(join(output, 'result.json'), JSON.stringify({ summary, rows }, null, 2));
 assert.ok(Object.values(summary.timings).every(modes => Object.values(modes).every(s => s.timeouts === 0)), 'Timeouts invalidate the comparison; keep the host awake and retain the raw capture');
@@ -217,6 +218,6 @@ for (const r of rows) {
 }
 writeFileSync(join(output, 'facts.json'), JSON.stringify(facts, null, 2) + '\n');
 console.log(JSON.stringify(summary, null, 2));
-// The extension runs the bundled entry, so the two columns agree. Cases whose verdicts
+// The extension runs the bundled entry for shell commands, so the columns agree there. Cases whose verdicts
 // differ from the baseline or the recorded corpus contract are listed in the facts.
 assert.deepEqual(summary.differences, [], 'The Pi extension and the bundled entry disagree');

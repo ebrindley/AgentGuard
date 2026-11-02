@@ -255,10 +255,7 @@
     "python-process",
     "data-heredoc",
     "quoted-newline",
-    "pem-fixture",
-    "file-env",
-    "file-ssh",
-    "file-pem"
+    "pem-fixture"
   ],
   "contractMismatches": [
     "corpus-10",
@@ -480,12 +477,11 @@
   "differences": [],
   "benignRefusals": [
     "data-heredoc",
-    "pem-fixture",
-    "file-pem"
+    "pem-fixture"
   ],
   "analyzerSha256": "af7636bd8b9d56901102347ab37feb9ba3211256b4bdeea74e418d94462d235d",
   "corpusSha256": "864a4f146289e5eb4b20ba10ab732f7248d00e6a6af3d9f1cb4442620f7bb784",
-  "casesSha256": "d4c349ffdfd73fa8c6717d2b0a07aee53af1e093d1c9bebfc6e38d5d3417a708",
+  "casesSha256": "455d7cfbe9f67cd5a8cc23888a3a544065455b375e2e7281485402eb12a4b0be",
   "policy": {
     "settings": {
       "level": "strict",
@@ -496,6 +492,7 @@
   },
   "candidateToSharedTransitions": {
     "allow->allow": 324,
-    "block->block": 149
+    "block->block": 146,
+    "allow->block": 3
   }
 }
