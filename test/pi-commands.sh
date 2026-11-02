@@ -2,17 +2,15 @@
 # agent-guard bind, agent-guard wrapper add|remove|list and the Pi checks of
 # agent-guard doctor and doctor --json (docs/DESIGN.md section 11, Commands), in a
 # disposable home. The release's Pi files and the installed copies are
-# pi-sandbox-guard 7ad441f's (test/fixtures/installs/pi-sandbox-guard-7ad441f),
-# with the preamble's directory lookup pointed at the disposable home; the Pi and
-# OMP runtimes are fakes. Runs outside any sandbox, from a checkout; needs Node.
+# profiles/pi's, with the preamble's directory lookup pointed at the disposable
+# home; the Pi and OMP runtimes are fakes. Runs outside any sandbox, from a checkout; needs Node.
 emulate -L zsh
 setopt no_unset pipe_fail extended_glob
 unset AGENT_GUARD_RELEASE AGENT_GUARD_SANDBOXED OPENCODE_SANDBOXED
-command -v node >/dev/null || { print -ru2 'Node is required for the checker Node and the wrapper check'; exit 1 }
+command -v node >/dev/null || { print -ru2 'Node is required for the checker and the wrapper check'; exit 1 }
 
 source_root=${0:A:h:h}
 adapter="$source_root/test/engines/zsh.mjs"
-fixture="$source_root/test/fixtures/installs/pi-sandbox-guard-7ad441f"
 integer fails=0 checks=0
 label=
 out=
@@ -54,7 +52,8 @@ replace_once() {
 node "$adapter" stage "$source_root" "$run/tree" "$home" || { fail 'cannot stage the tree'; finish }
 node "$adapter" isolate "$run/tree" || { fail 'cannot isolate harness discovery'; finish }
 
-# The release folder, as the installer lays it out, with the Pi files from the fixture.
+# The release folder, as the installer lays it out, with profiles/pi's files, the
+# vendored cc-safety-net and the checker's templates.
 /bin/mkdir -p "$rel/bin" "$rel/profiles/opencode" "$rel/profiles/pi/scripts" "$engine/state" "$home/Agent Guard" "$home/.cc-safety-net"
 /bin/cp "$run/tree/engine/"{launch,profile.sb,account.zsh,peers.zsh,peer-runtime.sb} "$run/tree/profiles/opencode/"{install.sh,uninstall.sh} "$rel/"
 /bin/cp -R "$run/tree/engine/peers" "$rel/peers"
@@ -90,14 +89,14 @@ print -r -- ${(qq):-NFSHomeDirectory: $home}" > "$run/dscl"
 /bin/chmod 755 "$run/dscl"
 replace_once "$rel/profiles/pi/sandbox/pi-sandbox-preamble.zsh" 'typeset -r DSCL_BIN="/usr/bin/dscl"' "typeset -r DSCL_BIN=${(qq)run}/dscl"
 
-# What pi-sandbox-guard's deploy scripts install, without .guard-node (bind writes it).
+# What the installer puts in place.
 /bin/mkdir -p "$lb" "$ext/src"
 /bin/cp "$rel/profiles/pi/launchers/pi" "$lb/pi"
 /bin/cp "$rel/profiles/pi/launchers/pi" "$lb/omp"
 /bin/chmod 755 "$lb/pi" "$lb/omp"
 /bin/cp "$rel/profiles/pi/sandbox/"{pi-sandbox.sb,pi-sandbox-preamble.zsh} "$lb/"
 /bin/cp "$rel/profiles/pi/scripts/extension-entry.ts" "$ext/index.ts"
-/bin/cp "$rel/profiles/pi/src/"{index.mjs,guard-core.mjs,validate-bash-command.sh} "$ext/src/"
+/bin/cp "$rel/profiles/pi/src/index.mjs" "$ext/src/"
 print -r -- 'export PATH="$HOME/.local/bin:$PATH"' > "$home/.zprofile"
 
 # Fake runtimes outside every sandbox-writable root.
@@ -118,7 +117,7 @@ node_bin=${$(command -v node):A}
 /bin/ln -s "$node_bin" "$run/nodebin/node"
 darwin_temp=${$(/usr/bin/getconf DARWIN_USER_TEMP_DIR):A}
 base="$run/nodebin:/usr/bin:/bin:/usr/sbin:/sbin"
-# The checker Node bind records: the resolved node, or its Homebrew opt link.
+# The Node bind records: the resolved node, or its Homebrew opt link.
 stable_node() {
   local r=${1:A} s
   if [[ $r == (#b)(/opt/homebrew|/usr/local)/Cellar/(node(|@<->))/[^/]##/bin/node ]]; then
@@ -173,7 +172,7 @@ runs 'refuses a record that is a link' 2 "$conf is a symbolic link or not a regu
 /usr/bin/grep -q '^# pi-sandbox-guard executable binding — written by agent-guard bind\.$' "$conf" && pass 'the record header names agent-guard bind' ||
   fail 'the record header names agent-guard bind'
 runs 'show prints the bindings' 0 "pi   = $fake_pi"$'\n'"omp  = $fake_omp" bind --show
-[[ $out == *"checker node = (unset"* ]] && pass 'show names the missing checker Node' || fail 'show names the missing checker Node'
+[[ $out != *"checker node"* ]] && pass 'show prints no checker Node' || fail 'show prints no checker Node'
 runs 'check passes' 0 "binding ok: $fake_pi"$'\n'"omp: $fake_omp" bind --check
 /bin/mv "$home/opt/omp" "$home/opt/omp.off"
 runs 'check finds a stale binding' 3 "invalid: omp does not exist: $fake_omp"$'\n'"  re-record: agent-guard bind --detect" bind --check
@@ -206,51 +205,12 @@ fi
 runs 're-records the fakes; node= goes with a native target' 0 "recorded in $conf" bind --pi "$fake_pi" --omp "$fake_omp" --yes
 [[ $(/usr/bin/grep -v '^#' "$conf") == "pi=$fake_pi"$'\n'"omp=$fake_omp" ]] && pass 'the record holds pi= and omp= only' || fail 'the record holds pi= and omp= only'
 
-# The checker Node.
-/bin/mv "$ext" "$ext.off"
-runs 'checker-node refuses without the extension' 2 "the guard extension is not installed at $ext" bind --checker-node "$node_bin" --yes
-/bin/mv "$ext.off" "$ext"
-runs 'checker-node cannot be combined' 2 '--checker-node cannot be combined' bind --pi "$fake_pi" --checker-node --yes
-runs 'checker-node records a path' 0 "recorded in $ext/.guard-node" bind --checker-node "$run/nodebin/node" --yes
-[[ $(<"$ext/.guard-node") == "$want_node" && $(mode "$ext/.guard-node") == 600 ]] && pass ".guard-node holds $want_node, mode 600" ||
-  fail ".guard-node holds $want_node, mode 600"
-/bin/mv "$ext/.guard-node" "$run/guard-node"
-/bin/mkdir "$run/guard-node-dir"
-/bin/ln -s "$run/guard-node-dir" "$ext/.guard-node"
-runs 'checker-node refuses a .guard-node that is a link' 2 "$ext/.guard-node is a symbolic link or not a regular file" bind --checker-node "$run/nodebin/node" --yes
-[[ -z $(print -l "$run/guard-node-dir"/*(DN) "$ext"/.guard-node.*(DN)) ]] && pass 'nothing is written through the link' || fail 'nothing is written through the link'
-/bin/rm "$ext/.guard-node"
-/bin/mv "$run/guard-node" "$ext/.guard-node"
-print -r -- /stale > "$ext/.guard-node"
-runs 'checker-node detects the node on PATH' 0 "checker node = $want_node" bind --checker-node --yes
-[[ $(<"$ext/.guard-node") == "$want_node" ]] && pass 'detection records the same Node' || fail 'detection records the same Node'
-# bind checks and records the resolved path, so a link in a writable root to a Node
-# outside one records that Node; the doctor checks below refuse such a link.
-/bin/mkdir -p "$home/.cache/n"
-/bin/ln -s "$node_bin" "$home/.cache/n/node"
-runtime "$home/.cache/real/node" ':'
-runtime "$home/.npm/node" ':'
-tmp_node="$darwin_temp/agent-guard-test-$$/node"
-runtime "$tmp_node" ':'
-for p in "$home/.cache/real/node" "$home/.npm/node" "$tmp_node"; do
-  runs "checker-node refuses ${p/#$home/~}" 2 "checker node is inside a sandbox-writable root (${p:A})" bind --checker-node "$p" --yes
-done
-/bin/rm -r "${tmp_node:h}"
-runs 'checker-node refuses a relative path' 2 'checker node must be an absolute path: node' bind --checker-node node --yes
-[[ $(<"$ext/.guard-node") == "$want_node" ]] && pass 'refusals leave .guard-node unchanged' || fail 'refusals leave .guard-node unchanged'
-runtime "$home/opt/n/node" ':'
-/bin/ln -s "$home/opt/n" "$home/.cache/n2"
-runs 'checker-node records the target of a link' 0 "checker node = $home/opt/n/node" bind --checker-node "$home/.cache/n2/node" --yes
-runs 'checker-node records the node on PATH again' 0 recorded bind --checker-node --yes
-brew=(/opt/homebrew/opt/node(|@<->)/bin/node(N) /usr/local/opt/node(|@<->)/bin/node(N))
-brew=(${^brew}(N-.))
-if (( $#brew )) && [[ ${brew[1]:A} == */Cellar/* ]]; then
-  runs "checker-node keeps Homebrew's opt link for ${brew[1]:A}" 0 "checker node = $brew[1]" bind --checker-node "${brew[1]:A}" --yes
-  runs 'checker-node records the node on PATH again' 0 recorded bind --checker-node --yes
-else
-  print -r -- "skip Homebrew opt link: no Homebrew Node on this Mac"
-fi
-runs 'show prints the checker Node' 0 "checker node = $want_node" bind --show
+# --checker-node is accepted and ignored, with one line, and records nothing.
+runs 'checker-node is ignored' 0 '--checker-node is ignored' bind --checker-node "$run/nodebin/node" --yes
+[[ ! -e $ext/.guard-node ]] && pass 'nothing is recorded' || fail 'nothing is recorded'
+runs 'checker-node without a path is ignored' 0 '--checker-node is ignored' bind --checker-node
+runs 'checker-node beside another mode is ignored' 0 "recorded in $conf" bind --pi "$fake_pi" --omp "$fake_omp" --checker-node --yes
+[[ ! -e $ext/.guard-node && $(/usr/bin/grep -v '^#' "$conf") == "pi=$fake_pi"$'\n'"omp=$fake_omp" ]] && pass 'only the bindings are recorded' || fail 'only the bindings are recorded'
 
 # --- wrapper
 label=wrapper
@@ -335,11 +295,6 @@ refused 'refuses a wrapper that runs Pi directly' "$w/bad/direct invokes Pi dire
 refused 'refuses an unsafe helper before the sandbox' "$w/bad/helper invokes unsafe absolute helper '/bin/sh' before the protected shim" "$w/bad/helper"
 refused 'refuses a wrapper that does not hand off' "$w/bad/nohandoff does not hand off to the sibling protected pi shim" "$w/bad/nohandoff"
 [[ $out == *'wrapper check failed; nothing installed'* ]] && pass 'the check failure says nothing was installed' || fail 'the check failure says nothing was installed'
-/bin/mv "$ext/.guard-node" "$run/guard-node"
-refused 'refuses without a checker Node' 'no usable checker Node' "$w/good"
-print -r -- "$home/.cache/n/node" > "$ext/.guard-node"
-refused 'refuses a checker Node in a sandbox-writable root' 'no usable checker Node' "$w/good"
-/bin/mv "$run/guard-node" "$ext/.guard-node"
 write_stamp opencode
 refused 'refuses when Pi is not installed' 'Pi is not installed' "$w/good"
 write_stamp opencode pi
@@ -400,7 +355,7 @@ runs 're-adding a historical name records it again' 0 "installed $lb/w1" wrapper
 /bin/rm -f "$lb/w1"
 runs 'removes a wrapper that is already absent' 0 "$lb/w1 was already absent" wrapper remove w1
 /usr/bin/jq -e '.historical == ["w1"]' "$wrec" >/dev/null && pass 'w1 is historical' || fail 'w1 is historical'
-runs "pi-sandbox-guard's example wrapper passes the check" 0 "installed $lb/example-custom" wrapper add "$fixture/launchers/example-custom"
+runs "pi-sandbox-guard's example wrapper passes the check" 0 "installed $lb/example-custom" wrapper add "$run/tree/profiles/pi/launchers/example-custom"
 runs 'removes it' 0 "removed $lb/example-custom" wrapper remove example-custom
 [[ -z $(print -l "$engine/state"/.wrapper-stage.*(DN)) ]] && pass 'no staging folder is left' || fail 'no staging folder is left'
 [[ $(<"$engine/state/permissions.json") == '{"/x/opencode.json":{}}' ]] && pass 'the permission record is untouched' || fail 'the permission record is untouched'
@@ -455,10 +410,10 @@ cc_before=$(cc_tree)
 doctor_fails 'all checks pass'
 [[ $(cc_tree) == "$cc_before" ]] && pass '~/.cc-safety-net, with an existing log, is unchanged by doctor' || fail '~/.cc-safety-net changed'
 for l in 'ok   protected write denied' 'ok   ~/.local/bin/pi matches the release' 'ok   ~/.local/bin/omp matches the release' \
-    'ok   ~/.pi/agent/extensions/pi-sandbox-guard/src/validate-bash-command.sh matches the release' \
+    'ok   ~/.pi/agent/extensions/pi-sandbox-guard/src/index.mjs matches the release' \
     'ok   ~/Library/Application Support/AgentGuard/bin/pi links to ~/.local/bin/pi' \
     "ok   pi resolves to the guard in a login shell ($lb/pi)" "ok   omp resolves to the guard in a login shell ($lb/omp)" \
-    "ok   checker Node: $want_node" "ok   bindings valid: pi=$fake_pi, omp=$fake_omp" \
+    "ok   bindings valid: pi=$fake_pi, omp=$fake_omp" \
     'ok   wrapper ~/.local/bin/good matches its recorded hash' "ok   good resolves to ~/.local/bin/good in a login shell ($lb/good)" \
     'ok   profile self-test of ~/.local/bin/pi-sandbox.sb' \
     "ok   the checker's session copy is built from ~/.cc-safety-net" 'ok   the installed extension allows ls -la' \
@@ -539,16 +494,6 @@ fi
 /bin/mv "$run/conf" "$conf"
 runs 'restores the omp binding' 0 recorded bind --pi "$fake_pi" --omp "$fake_omp" --yes
 
-/bin/cp "$ext/.guard-node" "$run/guard-node"
-print -r -- "$home/missing/node" > "$ext/.guard-node"
-doctor_fails 'a checker Node that is not there' "checker Node $home/missing/node is not an executable file*"
-json_is '--json: a stale checker Node is drift' '.drift == 1 and .runtime_binding == "ok"'
-print -r -- "$home/.cache/n/node" > "$ext/.guard-node"
-doctor_fails 'a checker Node in a sandbox-writable root' "checker Node $home/.cache/n/node is inside a sandbox-writable root"
-/bin/rm "$ext/.guard-node"
-doctor_fails 'no checker Node' 'checker Node: ~/.pi/agent/extensions/pi-sandbox-guard/.guard-node is missing*'
-/bin/mv "$run/guard-node" "$ext/.guard-node"
-
 # The checker: the session copy and the installed extension's verdicts.
 /bin/cp "$home/.cc-safety-net/rules/rule.json" "$run/rule.json"
 print -r -- 'not json' > "$home/.cc-safety-net/rules/rule.json"
@@ -591,9 +536,10 @@ doctor_fails 'a profile that fails the self-test' "~/.local/bin/pi-sandbox.sb di
   'profile self-test of ~/.local/bin/pi-sandbox.sb: SECURITY: *'
 /bin/mv "$run/profile" "$lb/pi-sandbox.sb"
 
-/bin/mv "$ext/src/validate-bash-command.sh" "$run/analyzer"
-doctor_fails 'an extension without its analyzer' '~/.pi/agent/extensions/pi-sandbox-guard/src/validate-bash-command.sh is missing'
-/bin/mv "$run/analyzer" "$ext/src/validate-bash-command.sh"
+/bin/mv "$ext/src/index.mjs" "$run/index.mjs"
+doctor_fails 'an extension without its entry file' '~/.pi/agent/extensions/pi-sandbox-guard/src/index.mjs is missing' \
+  'the installed extension did not run*'
+/bin/mv "$run/index.mjs" "$ext/src/index.mjs"
 
 runtime "$fake_pi" 'print -ru2 -- boom; exit 3'
 runtime "$fake_omp" '/bin/sleep 90'

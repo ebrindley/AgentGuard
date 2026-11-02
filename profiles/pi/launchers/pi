@@ -153,29 +153,6 @@ if [ ! -f "$PI_SANDBOX_GUARD_EXTENSION" ]; then
   exit 1
 fi
 
-PI_SANDBOX_GUARD_NODE_FILE="${PI_SANDBOX_GUARD_EXTENSION:h}/.guard-node"
-if [ -f "$PI_SANDBOX_GUARD_NODE_FILE" ]; then
-  PI_SANDBOX_GUARD_NODE=""
-  IFS= read -r PI_SANDBOX_GUARD_NODE < "$PI_SANDBOX_GUARD_NODE_FILE" || true
-  case "$PI_SANDBOX_GUARD_NODE" in
-    /*) PI_SANDBOX_GUARD_NODE="${PI_SANDBOX_GUARD_NODE:A}" ;;
-    *)
-      print -u2 -- "[pi-sandbox-guard] invalid guard Node binding; refusing to launch."
-      exit 1
-      ;;
-  esac
-  if [ ! -x "$PI_SANDBOX_GUARD_NODE" ] || [ -d "$PI_SANDBOX_GUARD_NODE" ]; then
-    print -u2 -- "[pi-sandbox-guard] stale guard Node binding; refusing to launch."
-    exit 1
-  fi
-  if executable_under_sandbox_write_root \
-       "$PI_SANDBOX_GUARD_NODE" "$HOME_CANON" "$PROJECT" "$TMPDIR_CANON"; then
-    print -u2 -- "[pi-sandbox-guard] guard Node is inside a sandbox-writable root; refusing to launch."
-    exit 1
-  fi
-fi
-unset PI_SANDBOX_GUARD_NODE_FILE PI_SANDBOX_GUARD_NODE
-
 # PI_LAUNCH_VECTOR is (executable) normally, or (interpreter executable) when the
 # resolved target is a `node` shebang script and an interpreter was recorded. Execing
 # the vector instead of "$PI_EXECUTABLE" is what makes a recorded interpreter real:

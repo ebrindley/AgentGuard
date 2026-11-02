@@ -35,7 +35,10 @@ cmp /private/tmp/guard-comparison-a/facts.json /private/tmp/guard-comparison-b/f
 ```
 
 The committed fixtures were generated with BASELINE_REF `f098322`, the last commit
-whose Pi extension calls the analyzer; two runs gave identical files. Use fresh
+whose Pi extension calls the analyzer; two runs gave identical files. The analyzer,
+its corpus and its extension are no longer in the working tree: the runner reads
+them from BASELINE_REF, so the baseline must be a commit that still has them, and
+the hashes in `facts.json` are of those files. Use fresh
 output directories on the same host/runtime and the same baseline commit.
 Disposable homes and repositories live outside the analyzer's temp safe roots.
 Only fake secrets are created. Corpus paths with fixed parent counts are relocated

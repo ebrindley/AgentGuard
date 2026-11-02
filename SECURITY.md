@@ -158,7 +158,8 @@ and `.opencode`, the project's active Git hooks, or credential paths. It cannot
 read `~/.ssh`, `~/.aws/credentials`, `~/.aws/config`, `~/.docker/config.json`,
 `~/.kube/config`, `~/.gnupg`, `~/.config/gh`, `~/.config/gcloud`, Git's credential
 stores, `~/.netrc`, `~/.npmrc`, `~/.secrets`, `.env` files anywhere or the
-analyzer's log, `~/.pi/agent/security-events.log`. The launcher refuses a project
+event log of the retired analyzer, `~/.pi/agent/security-events.log`, which nothing
+writes now. The launcher refuses a project
 that is too broad or sensitive, or that contains its own folder,
 `~/.local/bin`. The full 7ad441f policy is in pi-sandbox-guard's
 [SECURITY.md](https://github.com/ebrindley/pi-sandbox-guard/blob/7ad441f51c249eafe6f92d16e92d2fbf37622d67/SECURITY.md)
@@ -170,9 +171,12 @@ Agent Guard records its adoption differences from pi-sandbox-guard 7ad441f in
 8 and 11); difference 6 is `agent-guard bind`, difference 9 is state-root pinning
 ([changes since the prerelease](#changes-since-the-prerelease)), and difference 10
 is [peer CLI execution](#peer-cli-execution). Difference 11 is in the current
-checkout, after release 0.2.5, and so is difference 17: Pi and OMP check tool
-calls with cc-safety-net, under the policy of decision D13, instead of the
-analyzer, and ask for nothing.
+checkout, after release 0.2.5, and so are differences 17 and 18: Pi and OMP check
+tool calls with cc-safety-net, under the policy of decision D13, instead of the
+analyzer, and ask for nothing; and the launcher no longer reads `.guard-node`,
+which recorded the analyzer's Node. The analyzer's files are removed, with its
+differences 8 and 15, and an update or uninstall clears them from an install that
+still has them.
 
 1. Pi and OMP sessions cannot change Agent Guard's engine folder, `~/Agent Guard`,
    `~/Applications/Agent Guard.app`, OpenCode Guard's engine folder,
@@ -198,7 +202,7 @@ analyzer, and ask for nothing.
    a place the session can write, or holds one.
 7. Pushes that rewrite remote history are denied by the checker (difference 17,
    below): `--force`, `-f`, a `+` refspec and `--mirror`. The analyzer's earlier
-   asks for this (difference 8) are not used since the switch.
+   asks for this (difference 8) ended with the analyzer.
 8. Git-selected project roots must match the physical checkout's `.git` directory
    or file. A changed `core.worktree` that selects a sibling or ancestor refuses
    the launch. Review that setting or use explicit `PI_PROJECT` to select another
@@ -207,7 +211,7 @@ analyzer, and ask for nothing.
 Taking over from pi-sandbox-guard also changes what surrounds the profile:
 Agent Guard's installer, `agent-guard update` and `agent-guard uninstall`
 replace pi-sandbox-guard's npm scripts; `agent-guard bind` writes only
-`executables.conf`, the file the launcher reads, and `.guard-node`; and a
+`executables.conf`, the file the launcher reads; and a
 migration moves pi-sandbox-guard's backups into the engine folder, including the
 extension backups in `~/.pi/agent/extension-backups/`, which Pi sessions could
 write.
@@ -416,11 +420,10 @@ cc-safety-net (difference 17), so:
   `IdentityAgent`, is not covered (DESIGN.md decision D15).
 
 pi-sandbox-guard defects kept until step 10d, because the launcher, preamble and
-extension are reused unchanged apart from the recorded adoption differences:
+extension are reused unchanged apart from the recorded adoption differences (a
+runtime started inside its own session no longer exits with `HOME_CANON:
+parameter not set`; difference 18 removed the `.guard-node` check behind it):
 
-- A runtime started inside its own session, such as `pi` inside a Pi session,
-  exits with `HOME_CANON: parameter not set` whenever `.guard-node` exists, which
-  every Agent Guard install records. It fails closed: nothing starts.
 - Home is passed to Seatbelt as the account database names it, not resolved, so
   with a home folder reached through a link the read denies may not match
   (inference, not tested).
@@ -461,7 +464,7 @@ For Pi and OMP:
 - write what the profile denies there: Pi's or OMP's configuration, extensions or
   packages, a project's `.pi` or `.omp` folder or the other agent folders the
   profile protects, the project's active Git hooks, or a credential path;
-- read a credential path the profile denies, a `.env` file or the analyzer's log;
+- read a credential path the profile denies, a `.env` file or the old analyzer log;
 - change Agent Guard's files, OpenCode's configuration, `~/.cc-safety-net`,
   `~/Library/LaunchAgents`, a shell startup file or its link target, or
   OpenCode's package stores, `bin` folder or model catalog;
@@ -480,8 +483,8 @@ Report those through the advisory form.
 
 Everything else is a bug and goes to a public issue (see
 [CONTRIBUTING.md](CONTRIBUTING.md)): a refusal by the plugin, cc-safety-net or
-Pi's analyzer that should not happen, a destructive command cc-safety-net or the
-analyzer misses while Seatbelt still holds, an install, update, migration or
+Pi's checker that should not happen, a destructive command cc-safety-net
+misses while Seatbelt still holds, an install, update, migration or
 uninstall failure, and the limitations above. When unsure, use the advisory form.
 
 ## Peer CLI execution

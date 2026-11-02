@@ -25,9 +25,8 @@
 #
 # Pi is required by setup; OMP is optional.
 #
-# The checker Node is the Node the guard extension's analyzer runs (OMP's release
-# binary is not Node). It is recorded in the extension's .guard-node, only by
-# --checker-node.
+# --checker-node [<abs-path>] is accepted and ignored: the command checker runs in
+# Pi's own process and no longer needs a recorded Node.
 #
 # Usage (agent-guard bind runs this script with HOME set to the account home):
 #   agent-guard bind --detect            propose an install, confirm, then record
@@ -35,9 +34,6 @@
 #   agent-guard bind --show              print the current binding
 #   agent-guard bind --check             verify the binding still resolves (exit 3 if not)
 #   agent-guard bind --detect --yes      non-interactive (CI/scripted setup)
-#   agent-guard bind --checker-node [<abs-path>]
-#                                        record the checker Node; without a path,
-#                                        the node on PATH
 #
 # Exit codes: 0 ok; 2 usage/validation failure; 3 binding missing or stale (--check).
 
@@ -49,15 +45,12 @@ CONFIG_DIR="${PI_SANDBOX_CONFIG_DIR:-$HOME/.config/pi-sandbox-guard}"
 CONFIG="$CONFIG_DIR/executables.conf"
 SHIM="${PI_SANDBOX_SHIM:-$HOME/.local/bin/pi}"
 OMP_SHIM="${OMP_SANDBOX_SHIM:-$HOME/.local/bin/omp}"
-GUARD_DIR="$HOME/.pi/agent/extensions/pi-sandbox-guard"
-GUARD_NODE_FILE="$GUARD_DIR/.guard-node"
 
 MODE=""
 PI_PATH=""
 OMP_PATH=""
 NODE_PATH=""
 CHECKER=0
-CHECKER_NODE_PATH=""
 ASSUME_YES=0
 
 die() { printf 'bind: %s\n' "$*" >&2; exit 2; }
@@ -87,7 +80,7 @@ while [ $# -gt 0 ]; do
       CHECKER=1
       case "${2:-}" in
         ""|-*) shift ;;
-        *) CHECKER_NODE_PATH="$2"; shift 2 ;;
+        *) shift 2 ;;
       esac ;;
     --yes|-y) ASSUME_YES=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -95,8 +88,8 @@ while [ $# -gt 0 ]; do
   esac
 done
 if [ "$CHECKER" -eq 1 ]; then
-  [ -z "$MODE" ] || die "--checker-node cannot be combined with --detect, --show, --check, --pi, --omp or --node"
-  MODE="checker-node"
+  echo "bind: --checker-node is ignored; the command checker no longer needs a recorded Node" >&2
+  [ -n "$MODE" ] || exit 0
 fi
 # Bare invocation means --detect, so `agent-guard bind` alone detects and records.
 [ -n "$MODE" ] || MODE="detect"
@@ -327,7 +320,6 @@ case "$MODE" in
     printf 'pi   = %s\n' "$(read_key pi || echo '(unset)')"
     printf 'omp  = %s\n' "$(read_key omp || echo '(unset)')"
     printf 'node = %s\n' "$(read_key node || echo '(unset — shebang resolves via sanitized PATH)')"
-    printf 'checker node = %s\n' "$(head -1 "$GUARD_NODE_FILE" 2>/dev/null || echo "(unset — no $GUARD_NODE_FILE)")"
     exit 0 ;;
   check)
     pi_rec="$(read_key pi || true)"
@@ -363,37 +355,6 @@ case "$MODE" in
     echo "  re-record: agent-guard bind --detect"
     exit 3 ;;
 esac
-
-# --- checker node ------------------------------------------------------------
-# Recorded as deploy-local.sh records it: an absolute executable file outside every
-# sandbox-writable root, a Homebrew Cellar path kept as its stable opt link, mode
-# 0600. Without a path, the node on PATH, as deploy-local.sh pins the node it runs.
-if [ "$MODE" = "checker-node" ]; then
-  { [ -d "$GUARD_DIR" ] && [ ! -L "$GUARD_DIR" ]; } || die "the guard extension is not installed at $GUARD_DIR"
-  regular_or_absent "$GUARD_NODE_FILE"
-  if [ -z "$CHECKER_NODE_PATH" ]; then
-    CHECKER_NODE_PATH="$(node -p 'process.execPath' 2>/dev/null || true)"
-    [ -n "$CHECKER_NODE_PATH" ] || die "cannot run the node on PATH; pass --checker-node <abs-path>"
-  fi
-  CHECKER_CANON="$(validate_target "$CHECKER_NODE_PATH" "checker node")"
-  CHECKER_CANON="$(ops_stable_node_path "$CHECKER_CANON")"
-  echo "About to record:"
-  printf '  checker node = %s\n' "$CHECKER_CANON"
-  printf '  file         = %s\n' "$GUARD_NODE_FILE"
-  echo "The guard's analyzer runs this program to check every bash command."
-  if [ "$ASSUME_YES" -eq 0 ]; then
-    printf 'Record it? [y/N] '
-    read -r ans </dev/tty || die "no tty to confirm; re-run with --yes to accept non-interactively"
-    case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "aborted; nothing written"; exit 0 ;; esac
-  fi
-  tmp="$(mktemp "$GUARD_DIR/.guard-node.XXXXXX")"
-  printf '%s\n' "$CHECKER_CANON" >"$tmp"
-  chmod 600 "$tmp"
-  regular_or_absent "$GUARD_NODE_FILE" "$tmp"
-  mv -f "$tmp" "$GUARD_NODE_FILE"
-  echo "recorded in $GUARD_NODE_FILE"
-  exit 0
-fi
 
 # --- detect / explicit -------------------------------------------------------
 if [ "$MODE" = "detect" ] && [ -z "$PI_PATH" ]; then

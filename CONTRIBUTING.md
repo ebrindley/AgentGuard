@@ -42,7 +42,7 @@ harness's profile should stop: write where the harness may not, read a denied
 path, change the guard or the harness's config and plugins, or start the harness
 unguarded through an Agent Guard entry point. SECURITY.md lists these
 [for each harness](SECURITY.md#bug-or-vulnerability). A wrong refusal, a
-destructive command cc-safety-net or Pi's analyzer misses while Seatbelt still
+destructive command cc-safety-net misses while Seatbelt still
 holds, an install, update or uninstall failure, and the documented limitations
 are bugs. When unsure, use the advisory form.
 

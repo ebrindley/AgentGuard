@@ -20,8 +20,42 @@ index 2f94258..d86d372 100755
    exit 1
  fi
  
+diff --git a/launchers/pi b/launchers/pi
+index f5e94c2..3ac0a8e 100755
+--- a/launchers/pi
++++ b/launchers/pi
+@@ -153,29 +153,6 @@ if [ ! -f "$PI_SANDBOX_GUARD_EXTENSION" ]; then
+   exit 1
+ fi
+ 
+-PI_SANDBOX_GUARD_NODE_FILE="${PI_SANDBOX_GUARD_EXTENSION:h}/.guard-node"
+-if [ -f "$PI_SANDBOX_GUARD_NODE_FILE" ]; then
+-  PI_SANDBOX_GUARD_NODE=""
+-  IFS= read -r PI_SANDBOX_GUARD_NODE < "$PI_SANDBOX_GUARD_NODE_FILE" || true
+-  case "$PI_SANDBOX_GUARD_NODE" in
+-    /*) PI_SANDBOX_GUARD_NODE="${PI_SANDBOX_GUARD_NODE:A}" ;;
+-    *)
+-      print -u2 -- "[pi-sandbox-guard] invalid guard Node binding; refusing to launch."
+-      exit 1
+-      ;;
+-  esac
+-  if [ ! -x "$PI_SANDBOX_GUARD_NODE" ] || [ -d "$PI_SANDBOX_GUARD_NODE" ]; then
+-    print -u2 -- "[pi-sandbox-guard] stale guard Node binding; refusing to launch."
+-    exit 1
+-  fi
+-  if executable_under_sandbox_write_root \
+-       "$PI_SANDBOX_GUARD_NODE" "$HOME_CANON" "$PROJECT" "$TMPDIR_CANON"; then
+-    print -u2 -- "[pi-sandbox-guard] guard Node is inside a sandbox-writable root; refusing to launch."
+-    exit 1
+-  fi
+-fi
+-unset PI_SANDBOX_GUARD_NODE_FILE PI_SANDBOX_GUARD_NODE
+-
+ # PI_LAUNCH_VECTOR is (executable) normally, or (interpreter executable) when the
+ # resolved target is a `node` shebang script and an interpreter was recorded. Execing
+ # the vector instead of "$PI_EXECUTABLE" is what makes a recorded interpreter real:
 diff --git a/sandbox/pi-sandbox-preamble.zsh b/sandbox/pi-sandbox-preamble.zsh
-index 9b7c788..c4e7314 100644
+index 9b7c788..e9f2852 100644
 --- a/sandbox/pi-sandbox-preamble.zsh
 +++ b/sandbox/pi-sandbox-preamble.zsh
 @@ -48,6 +48,7 @@ unset _PI_GIT_ENV_NAME
@@ -621,6 +655,20 @@ index f560a31..213a568 100644
 +  (literal (param "OMP_STATE_ROOT"))
 +  (literal (param "OMP_BASE_ROOT"))
 +  (literal (string-append (param "OMP_BASE_ROOT") "/profiles")))
+diff --git a/scripts/check-launchers.mjs b/scripts/check-launchers.mjs
+index e69270f..6a13326 100644
+--- a/scripts/check-launchers.mjs
++++ b/scripts/check-launchers.mjs
+@@ -362,9 +362,6 @@ function checkPiShim(path, { required }) {
+   if (!content.includes('export OMP_PROFILE=')) {
+     fail(`${path} does not mirror OMP --profile into the pre-sandbox state boundary`);
+   }
+-  if (!content.includes('executable_under_sandbox_write_root')) {
+-    fail(`${path} does not validate the pinned guard Node against active writable roots`);
+-  }
+ }
+ 
+ 
 diff --git a/scripts/test-sandbox-profile.sh b/scripts/test-sandbox-profile.sh
 index 4dcdf9c..7bcfc7c 100755
 --- a/scripts/test-sandbox-profile.sh
@@ -686,7 +734,7 @@ index 4dcdf9c..7bcfc7c 100755
      target="$state_root/$relative"
      mkdir -p "$(dirname "$target")"
 diff --git a/src/index.mjs b/src/index.mjs
-index d997be1..9251296 100644
+index d997be1..fd83726 100644
 --- a/src/index.mjs
 +++ b/src/index.mjs
 @@ -1,15 +1,23 @@
@@ -1119,108 +1167,8 @@ index d997be1..9251296 100644
    };
  
    pi.on('tool_call', (event, ctx) => {
-diff --git a/src/validate-bash-command.sh b/src/validate-bash-command.sh
-index 5c20996..099c604 100755
---- a/src/validate-bash-command.sh
-+++ b/src/validate-bash-command.sh
-@@ -2871,8 +2871,28 @@ case "$dangerous_scan_text" in
-         dangerous_scan_text="$dangerous_scan_text"$'\n'"$_dst_stripped" ;;
- esac
- 
-+# Permission arguments can contain $(...) and ${...}. Keep pre-grouping text
-+# so the grouping rewrite does not turn those arguments into separators.
-+permission_scan_text="$execution_scan_text"
-+_permission_stripped=""
-+case "$permission_scan_text" in
-+    *\\*|*\"*|*\'*)
-+        _permission_stripped="${execution_scan_text//\\/}"; _permission_stripped="${_permission_stripped//\"/}"; _permission_stripped="${_permission_stripped//\'/}"
-+        permission_scan_text="$permission_scan_text"$'\n'"$_permission_stripped" ;;
-+esac
-+case "$permission_scan_text" in
-+    *chmod*|*chown*)
-+        permission_scan_text="$(neutralize_command_substs "$execution_scan_text")"
-+        # Each copy needs fresh quote state before command splitting.
-+        if [[ -n "$_permission_stripped" ]]; then
-+            permission_scan_text="$permission_scan_text"$'\n'"$(neutralize_command_substs "$_permission_stripped")"
-+        fi
-+        permission_scan_text="$(printf '%s' "$permission_scan_text" | awk "$SEGMENT_AWK")" ;;
-+esac
- for pattern in "${dangerous_patterns[@]}"; do
--    if echo "$dangerous_scan_text" | grep -E "$pattern" &>/dev/null; then
-+    scan_text="$dangerous_scan_text"
-+    case "$pattern" in chmod*|chown*) scan_text="$permission_scan_text" ;; esac
-+    if echo "$scan_text" | grep -E "$pattern" &>/dev/null; then
-         log_security_event "BLOCKED" "$pattern" "$command"
-         echo "❌ BLOCKED: Dangerous command pattern: $command" >&2
-         echo "   Pattern matched: $pattern" >&2
-@@ -3792,6 +3812,15 @@ warning_patterns=(
-     # Git destructive operations
-     "git[[:space:]]+reset[[:space:]]+--hard"
-     "git[[:space:]]+clean[[:space:]]+-[a-zA-Z]*f"
-+    # Agent Guard difference 8 (Agent Guard's test/fixtures/differences/pi.json):
-+    # pushes that rewrite or delete remote refs, which Seatbelt cannot stop:
-+    # --force and its variants, --mirror, --prune, --delete, a short option
-+    # cluster with f or d, and a refspec starting with + or :. Only Git's global
-+    # options may come before push, such as -C <dir> or --no-pager, so a pathspec
-+    # or another command's words named push do not match. Words may be quoted or
-+    # hold backslash escapes, redirections are skipped, and no word crosses a shell
-+    # separator, which can also end the option.
-+    "(^|[^[:alnum:]_.-])git([[:space:]]+(-[cC]|--(git-dir|work-tree|namespace|config-env))[[:space:]]+([^[:space:];&|()<>\"'\\\\]|\\\\.|\"([^\"\\\\]|\\\\.)*\"|'[^']*')+|[[:space:]]+-([^[:space:];&|()<>\"'\\\\]|\\\\.|\"([^\"\\\\]|\\\\.)*\"|'[^']*')*)*[[:space:]]+push([[:space:]]+(([^[:space:];&|()<>\"'\\\\]|\\\\.|\"([^\"\\\\]|\\\\.)*\"|'[^']*')+|[0-9]*(>>?|<|>&|&>>?)[[:space:]]*([^[:space:];&|()<>\"'\\\\]|\\\\.|\"([^\"\\\\]|\\\\.)*\"|'[^']*')+))*[[:space:]]+(--force([=-][^[:space:];&|()<>]*)?|--mirror|--prune|--delete|-[a-zA-Z]*[fd][a-zA-Z]*|[+:][^[:space:];&|()<>]+)([[:space:];&|()<>]|$)"
-     # core.hooksPath repointing is handled by the option-aware token scan below:
-     # git config keys are CASE-INSENSITIVE and the key can be quote-split
-     # (core."hooksPath"), neither of which a flat ERE handles.
-diff --git a/test/corpus/corpus.json b/test/corpus/corpus.json
-index 53ef527..9824a78 100644
---- a/test/corpus/corpus.json
-+++ b/test/corpus/corpus.json
-@@ -112,6 +112,24 @@
-     { "command": "rm -rf ${DIR}", "expect": "ask", "note": "unknown variable target" },
-     { "command": "rm -rf /*", "expect": "ask", "note": "root glob is confirm tier in current analyzer (glob expansion unresolvable statically)" },
-     { "command": "git clean -fdx", "expect": "ask", "note": "destructive but repo-scoped -> confirm" },
-+    { "command": "git push --force origin main", "expect": "ask", "note": "Agent Guard difference 8: rewrites remote history, which Seatbelt cannot stop" },
-+    { "command": "git push -uf origin main", "expect": "ask", "note": "Agent Guard difference 8: f inside a short option cluster" },
-+    { "command": "git push --force-with-lease=main:abc123 origin main", "expect": "ask", "note": "Agent Guard difference 8" },
-+    { "command": "git push origin +main", "expect": "ask", "note": "Agent Guard difference 8: a + refspec forces" },
-+    { "command": "git push origin :old-branch", "expect": "ask", "note": "Agent Guard difference 8: an empty source deletes the remote branch" },
-+    { "command": "git push -d origin old-branch", "expect": "ask", "note": "Agent Guard difference 8" },
-+    { "command": "git push --mirror backup", "expect": "ask", "note": "Agent Guard difference 8: --mirror overwrites and deletes remote refs" },
-+    { "command": "git -C repo push --force", "expect": "ask", "note": "Agent Guard difference 8: global options before push" },
-+    { "command": "git push -u origin feature", "expect": "allow", "note": "Agent Guard difference 8: a plain push stays allowed" },
-+    { "command": "git push --follow-tags origin main:main", "expect": "allow", "note": "Agent Guard difference 8: long options and a plain refspec stay allowed" },
-+    { "command": "git push origin main --force; git status", "expect": "ask", "note": "Agent Guard difference 8: a shell separator ends the option" },
-+    { "command": "(git push -f)", "expect": "ask", "note": "Agent Guard difference 8: in a subshell" },
-+    { "command": "git --git-dir .git push --force", "expect": "ask", "note": "Agent Guard difference 8: a global option with its argument before push" },
-+    { "command": "git -C \"release repo\" push origin main --force", "expect": "ask", "note": "Agent Guard difference 8: a quoted argument with a space" },
-+    { "command": "git push >push.log origin main --force", "expect": "ask", "note": "Agent Guard difference 8: a redirection before the option" },
-+    { "command": "git -C O\\'Reilly push origin main --force", "expect": "ask", "note": "Agent Guard difference 8: a backslash-escaped quote is part of the word" },
-+    { "command": "git push origin main && ls -d /tmp", "expect": "allow", "note": "Agent Guard difference 8: another command's options do not count" },
-+    { "command": "git diff -- push -d", "expect": "allow", "note": "Agent Guard difference 8: a pathspec named push is not the subcommand" },
-     { "command": "find . -name \"*.tmp\" -delete", "expect": "ask" },
-     { "command": "export PATH=/tmp/bin:$PATH", "expect": "ask", "note": "critical env manipulation -> warn tier (exit 1)" },
-     { "command": "unset DYLD_LIBRARY_PATH", "expect": "ask" },
-@@ -397,6 +415,19 @@
-     { "command": "git config --unset core.hooksPath", "expect": "allow", "note": "reads and the REMEDIATION do not repoint anything; gating them trains click-through without adding cover" },
-     { "command": "git config set core.hooksPath /tmp/evil", "expect": "ask", "note": "git >= 2.46 `config set` subcommand: without it the parser read `set` as the key and allowed the repoint" },
-     { "command": "git config --file .git/config core.hooksPath /tmp/evil", "expect": "ask", "note": "value-taking option must be consumed, or its value is counted as the key" },
--    { "command": "git config get core.hooksPath", "expect": "allow", "note": "subcommand spelling of a read stays allow, same as --get" }
-+    { "command": "git config get core.hooksPath", "expect": "allow", "note": "subcommand spelling of a read stays allow, same as --get" },
-+    {"command": "chmod -R 755 dist && ls /usr/local/bin", "cwd": "{REPO}", "expect": "allow", "note": "Command boundary: permission patterns do not cross a separate command"},
-+    {"command": "chown -R 123 dist && ls /etc", "cwd": "{REPO}", "expect": "allow", "note": "Command boundary: permission patterns do not cross a separate command"},
-+    {"command": "chmod -R 755 dist; printf '%s' /etc", "cwd": "{REPO}", "expect": "allow", "note": "Command boundary: permission patterns do not cross a separate command"},
-+    {"command": "chmod -R 755 dist | ls /etc", "cwd": "{REPO}", "expect": "allow", "note": "Command boundary: permission patterns do not cross a separate command"},
-+    {"command": "chmod -R 755 /etc", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: permission patterns do not cross a separate command"},
-+    {"command": "chmod 755 -R /etc", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: permission patterns do not cross a separate command"},
-+    {"command": "chown -R 123 /etc", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: permission patterns do not cross a separate command"},
-+    {"command": "chmod -R 755 dist && chown -R 123 /etc", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: permission patterns do not cross a separate command"},
-+    {"command": "chmod -R 755 'dist;docs' /etc", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: quoted separators remain part of an operand"},
-+    {"command": "chown -R 123 'dist|docs' /etc", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: quoted separators remain part of an operand"},
-+    {"command": "chown -R $(whoami) /usr/local", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: ordinary substitutions do not separate a protected operand from its flags"},
-+    {"command": "chown -R ${USER} /usr/local", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: ordinary substitutions do not separate a protected operand from its flags"},
-+    {"command": "echo \"Fixing Homebrew's permissions\" && chown -R $(whoami) /usr/local", "cwd": "{REPO}", "expect": "block", "note": "Command boundary: quoted status text does not carry quote state into the stripped permission scan"}
-   ]
- }
 diff --git a/test/shim.mjs b/test/shim.mjs
-index 98d10e2..bd11001 100644
+index 98d10e2..a9aa3d7 100644
 --- a/test/shim.mjs
 +++ b/test/shim.mjs
 @@ -237,6 +237,16 @@ function runOmpShim(fx, extraEnv = {}, args = ['hello']) {
@@ -1261,89 +1209,31 @@ index 98d10e2..bd11001 100644
  });
  
  check('env cannot borrow the exemption granted to a recorded binding', () => {
-diff --git a/test/smoke.mjs b/test/smoke.mjs
-index c31f80d..1b416cb 100644
---- a/test/smoke.mjs
-+++ b/test/smoke.mjs
-@@ -46,6 +46,15 @@ async function check(name, fn) {
-   }
- }
+@@ -1102,7 +1113,7 @@ check('bound OMP executable inside alternate OMP state is classified writable',
+   assert.match(r.stdout, /writable/);
+ });
  
-+function timingDetails(verdict, started, options) {
-+  return JSON.stringify({
-+    elapsedMs: Math.round(performance.now() - started),
-+    timeoutMs: options.timeoutMs,
-+    reason: verdict.reason,
-+    meta: verdict.meta,
-+  });
-+}
-+
- const decisionCases = [
-   { name: 'benign command -> allow', command: 'ls -la', expect: 'allow' },
-   { name: 'catastrophic rm -rf / -> block', command: 'rm -rf /', expect: 'block' },
-@@ -112,33 +121,45 @@ async function main() {
-   await check('benign substitution fan-out stays within the production timeout', async () => {
-     if (!pf.ok) return;
-     const command = `echo ${'$(printf x) '.repeat(1000)}`;
--    const v = await analyzeCommand(command, { cwd: CWD, timeoutMs: 2000 });
--    assert.equal(v.decision, 'allow');
--    assert.equal(v.meta.timedOut, false);
-+    const options = { cwd: CWD, timeoutMs: 2000 };
-+    const started = performance.now();
-+    const v = await analyzeCommand(command, options);
-+    const details = timingDetails(v, started, options);
-+    assert.equal(v.decision, 'allow', details);
-+    assert.equal(v.meta.timedOut, false, details);
-   });
+-nativeCheck('guard Node binding inside PROJECT is refused before launch', () => {
++nativeCheck('a leftover .guard-node, stale or inside PROJECT, does not stop a launch', () => {
+   const fx = fixture();
+   const project = bindableDir();
+   const node = join(project, 'guard-node');
+@@ -1115,8 +1126,8 @@ nativeCheck('guard Node binding inside PROJECT is refused before launch', () =>
+     { PI_EXECUTABLE: TRUSTED_ECHO, PI_PROJECT: project },
+     ['x'],
+   );
+-  assert.notEqual(r.status, 0);
+-  assert.match(r.stderr, /guard Node.*sandbox-writable root/i);
++  assert.equal(r.status, 0, r.stderr);
++  assert.match(r.stdout, /x/);
+ });
  
-   await check('repeated benign substitutions are memoized outside echo', async () => {
-     if (!pf.ok) return;
-     const command = `command printf '%s\\n' ${'$(printf x) '.repeat(25)}`;
--    const v = await analyzeCommand(command, { cwd: CWD, timeoutMs: 2000 });
--    assert.equal(v.decision, 'allow');
--    assert.equal(v.meta.timedOut, false);
-+    const options = { cwd: CWD, timeoutMs: 2000 };
-+    const started = performance.now();
-+    const v = await analyzeCommand(command, options);
-+    const details = timingDetails(v, started, options);
-+    assert.equal(v.decision, 'allow', details);
-+    assert.equal(v.meta.timedOut, false, details);
-   });
- 
-   await check('distinct output-only substitutions stay within timeout', async () => {
-     if (!pf.ok) return;
-     const substitutions = Array.from({ length: 90 }, (_, i) => `$(git config k${i})`).join(' ');
--    const v = await analyzeCommand(`echo ${substitutions}`, { cwd: CWD, timeoutMs: 2000 });
--    assert.equal(v.decision, 'allow');
--    assert.equal(v.meta.timedOut, false);
-+    const options = { cwd: CWD, timeoutMs: 2000 };
-+    const started = performance.now();
-+    const v = await analyzeCommand(`echo ${substitutions}`, options);
-+    const details = timingDetails(v, started, options);
-+    assert.equal(v.decision, 'allow', details);
-+    assert.equal(v.meta.timedOut, false, details);
-   });
- 
-   await check('benign brace-path fan-out stays within the production timeout', async () => {
-     if (!pf.ok) return;
-     const operands = Array.from({ length: 250 }, (_, i) => `/tmp/x${i}{a,b}`).join(' ');
--    const v = await analyzeCommand(`truncate ${operands}`, { cwd: CWD, timeoutMs: 2000 });
--    assert.equal(v.decision, 'allow');
--    assert.equal(v.meta.timedOut, false);
-+    const options = { cwd: CWD, timeoutMs: 2000 };
-+    const started = performance.now();
-+    const v = await analyzeCommand(`truncate ${operands}`, options);
-+    const details = timingDetails(v, started, options);
-+    assert.equal(v.decision, 'allow', details);
-+    assert.equal(v.meta.timedOut, false, details);
-   });
- 
-   // --- Regression: FIX 3 — missing/invalid cwd MUST fail closed (block) ---
+ check('OMP agent-dir override outside its state root is refused', () => {
 diff --git a/scripts/bind-executable.sh b/scripts/bind-executable.sh
-index 3fe1692..38451e9 100755
+index 3fe1692..85980b8 100755
 --- a/scripts/bind-executable.sh
 +++ b/scripts/bind-executable.sh
-@@ -25,12 +25,19 @@
+@@ -25,12 +25,15 @@
  #
  # Pi is required by setup; OMP is optional.
  #
@@ -1353,9 +1243,8 @@ index 3fe1692..38451e9 100755
 -#   bind-executable.sh --show              print the current binding
 -#   bind-executable.sh --check             verify the binding still resolves (exit 3 if not)
 -#   bind-executable.sh --detect --yes      non-interactive (CI/scripted setup)
-+# The checker Node is the Node the guard extension's analyzer runs (OMP's release
-+# binary is not Node). It is recorded in the extension's .guard-node, only by
-+# --checker-node.
++# --checker-node [<abs-path>] is accepted and ignored: the command checker runs in
++# Pi's own process and no longer needs a recorded Node.
 +#
 +# Usage (agent-guard bind runs this script with HOME set to the account home):
 +#   agent-guard bind --detect            propose an install, confirm, then record
@@ -1363,25 +1252,14 @@ index 3fe1692..38451e9 100755
 +#   agent-guard bind --show              print the current binding
 +#   agent-guard bind --check             verify the binding still resolves (exit 3 if not)
 +#   agent-guard bind --detect --yes      non-interactive (CI/scripted setup)
-+#   agent-guard bind --checker-node [<abs-path>]
-+#                                        record the checker Node; without a path,
-+#                                        the node on PATH
  #
  # Exit codes: 0 ok; 2 usage/validation failure; 3 binding missing or stale (--check).
  
-@@ -42,15 +49,29 @@ CONFIG_DIR="${PI_SANDBOX_CONFIG_DIR:-$HOME/.config/pi-sandbox-guard}"
- CONFIG="$CONFIG_DIR/executables.conf"
- SHIM="${PI_SANDBOX_SHIM:-$HOME/.local/bin/pi}"
- OMP_SHIM="${OMP_SANDBOX_SHIM:-$HOME/.local/bin/omp}"
-+GUARD_DIR="$HOME/.pi/agent/extensions/pi-sandbox-guard"
-+GUARD_NODE_FILE="$GUARD_DIR/.guard-node"
- 
- MODE=""
+@@ -47,10 +50,21 @@ MODE=""
  PI_PATH=""
  OMP_PATH=""
  NODE_PATH=""
 +CHECKER=0
-+CHECKER_NODE_PATH=""
  ASSUME_YES=0
  
  die() { printf 'bind: %s\n' "$*" >&2; exit 2; }
@@ -1399,7 +1277,7 @@ index 3fe1692..38451e9 100755
  usage() { sed -n '2,/^set -euo pipefail$/s/^# \{0,1\}//p' "$0"; }
  
  while [ $# -gt 0 ]; do
-@@ -61,16 +82,29 @@ while [ $# -gt 0 ]; do
+@@ -61,16 +75,29 @@ while [ $# -gt 0 ]; do
      --pi)   [ $# -ge 2 ] || die "--pi needs an absolute path";   PI_PATH="$2";   MODE="${MODE:-explicit}"; shift 2 ;;
      --omp)  [ $# -ge 2 ] || die "--omp needs an absolute path";  OMP_PATH="$2";  MODE="${MODE:-explicit}"; shift 2 ;;
      --node) [ $# -ge 2 ] || die "--node needs an absolute path"; NODE_PATH="$2"; MODE="${MODE:-explicit}"; shift 2 ;;
@@ -1408,7 +1286,7 @@ index 3fe1692..38451e9 100755
 +      CHECKER=1
 +      case "${2:-}" in
 +        ""|-*) shift ;;
-+        *) CHECKER_NODE_PATH="$2"; shift 2 ;;
++        *) shift 2 ;;
 +      esac ;;
      --yes|-y) ASSUME_YES=1; shift ;;
      -h|--help) usage; exit 0 ;;
@@ -1420,8 +1298,8 @@ index 3fe1692..38451e9 100755
 -# to `--detect --check` and die on the one-mode rule, so the documented --show/--check
 -# verbs would be unreachable through npm.
 +if [ "$CHECKER" -eq 1 ]; then
-+  [ -z "$MODE" ] || die "--checker-node cannot be combined with --detect, --show, --check, --pi, --omp or --node"
-+  MODE="checker-node"
++  echo "bind: --checker-node is ignored; the command checker no longer needs a recorded Node" >&2
++  [ -n "$MODE" ] || exit 0
 +fi
 +# Bare invocation means --detect, so `agent-guard bind` alone detects and records.
  [ -n "$MODE" ] || MODE="detect"
@@ -1433,7 +1311,7 @@ index 3fe1692..38451e9 100755
  
  # canonicalize <path> — absolute, symlinks resolved. Empty on failure.
  #
-@@ -78,7 +112,7 @@ done
+@@ -78,7 +105,7 @@ done
  # is a Command Line Tools shim that can be absent on a clean macOS host, and failing
  # here is not a no-op — every path in this script routes through canonicalize(), so an
  # absent python3 made `npm run bind` die with "cannot be canonicalized" and no hint.
@@ -1442,13 +1320,7 @@ index 3fe1692..38451e9 100755
  # Must match os.path.realpath on MISSING paths too, and that is not the same as
  # "realpathSync, else path.resolve". realpathSync throws if any component is absent,
  # and a lexical fallback then discards symlinks already resolved in the surviving
-@@ -293,12 +327,13 @@ case "$MODE" in
-     printf 'pi   = %s\n' "$(read_key pi || echo '(unset)')"
-     printf 'omp  = %s\n' "$(read_key omp || echo '(unset)')"
-     printf 'node = %s\n' "$(read_key node || echo '(unset — shebang resolves via sanitized PATH)')"
-+    printf 'checker node = %s\n' "$(head -1 "$GUARD_NODE_FILE" 2>/dev/null || echo "(unset — no $GUARD_NODE_FILE)")"
-     exit 0 ;;
-   check)
+@@ -298,7 +325,7 @@ case "$MODE" in
      pi_rec="$(read_key pi || true)"
      if [ -z "$pi_rec" ]; then
        echo "no pi= binding recorded in $CONFIG"
@@ -1457,7 +1329,7 @@ index 3fe1692..38451e9 100755
        exit 3
      fi
      ok=1
-@@ -325,10 +360,41 @@ case "$MODE" in
+@@ -325,7 +352,7 @@ case "$MODE" in
        [ -n "$node_rec" ] && echo "interpreter: $node_rec"
        exit 0
      fi
@@ -1466,41 +1338,7 @@ index 3fe1692..38451e9 100755
      exit 3 ;;
  esac
  
-+# --- checker node ------------------------------------------------------------
-+# Recorded as deploy-local.sh records it: an absolute executable file outside every
-+# sandbox-writable root, a Homebrew Cellar path kept as its stable opt link, mode
-+# 0600. Without a path, the node on PATH, as deploy-local.sh pins the node it runs.
-+if [ "$MODE" = "checker-node" ]; then
-+  { [ -d "$GUARD_DIR" ] && [ ! -L "$GUARD_DIR" ]; } || die "the guard extension is not installed at $GUARD_DIR"
-+  regular_or_absent "$GUARD_NODE_FILE"
-+  if [ -z "$CHECKER_NODE_PATH" ]; then
-+    CHECKER_NODE_PATH="$(node -p 'process.execPath' 2>/dev/null || true)"
-+    [ -n "$CHECKER_NODE_PATH" ] || die "cannot run the node on PATH; pass --checker-node <abs-path>"
-+  fi
-+  CHECKER_CANON="$(validate_target "$CHECKER_NODE_PATH" "checker node")"
-+  CHECKER_CANON="$(ops_stable_node_path "$CHECKER_CANON")"
-+  echo "About to record:"
-+  printf '  checker node = %s\n' "$CHECKER_CANON"
-+  printf '  file         = %s\n' "$GUARD_NODE_FILE"
-+  echo "The guard's analyzer runs this program to check every bash command."
-+  if [ "$ASSUME_YES" -eq 0 ]; then
-+    printf 'Record it? [y/N] '
-+    read -r ans </dev/tty || die "no tty to confirm; re-run with --yes to accept non-interactively"
-+    case "$ans" in [yY]|[yY][eE][sS]) ;; *) echo "aborted; nothing written"; exit 0 ;; esac
-+  fi
-+  tmp="$(mktemp "$GUARD_DIR/.guard-node.XXXXXX")"
-+  printf '%s\n' "$CHECKER_CANON" >"$tmp"
-+  chmod 600 "$tmp"
-+  regular_or_absent "$GUARD_NODE_FILE" "$tmp"
-+  mv -f "$tmp" "$GUARD_NODE_FILE"
-+  echo "recorded in $GUARD_NODE_FILE"
-+  exit 0
-+fi
-+
- # --- detect / explicit -------------------------------------------------------
- if [ "$MODE" = "detect" ] && [ -z "$PI_PATH" ]; then
-   # Not mapfile: macOS ships bash 3.2, where it does not exist. Read line-by-line so
-@@ -343,8 +409,8 @@ if [ "$MODE" = "detect" ] && [ -z "$PI_PATH" ]; then
+@@ -343,8 +370,8 @@ if [ "$MODE" = "detect" ] && [ -z "$PI_PATH" ]; then
    # present. Name that case: the fix is one flag, not a reinstall.
    [ "${#found[@]}" -gt 0 ] || die "no Pi install found in the layouts this script knows.
    If Pi IS installed (Nix or another custom prefix), record it explicitly:
@@ -1511,7 +1349,7 @@ index 3fe1692..38451e9 100755
    if [ "${#found[@]}" -gt 1 ] && [ "$ASSUME_YES" -eq 0 ]; then
      echo "Multiple Pi installs found:"
      i=1; for f in "${found[@]}"; do printf '  %d) %s\n' "$i" "$f"; i=$((i+1)); done
-@@ -399,6 +465,7 @@ if [ -n "$NODE_CANON" ]; then
+@@ -399,6 +426,7 @@ if [ -n "$NODE_CANON" ]; then
    NODE_CANON="$(ops_stable_node_path "$NODE_CANON")"
  fi
  
@@ -1519,7 +1357,7 @@ index 3fe1692..38451e9 100755
  echo "About to record:"
  printf '  pi   = %s\n' "$PI_CANON"
  if [ -n "$OMP_CANON" ]; then
-@@ -431,10 +498,10 @@ if [ -f "$CONFIG" ]; then
+@@ -431,10 +459,10 @@ if [ -f "$CONFIG" ]; then
        print }' "$CONFIG" >>"$tmp"
  else
    {
@@ -1532,7 +1370,7 @@ index 3fe1692..38451e9 100755
      echo "# that moves these paths (nvm/volta/mise version bumps, brew upgrades)."
    } >>"$tmp"
  fi
-@@ -442,5 +509,6 @@ printf 'pi=%s\n' "$PI_CANON" >>"$tmp"
+@@ -442,5 +470,6 @@ printf 'pi=%s\n' "$PI_CANON" >>"$tmp"
  [ -n "$OMP_CANON" ] && printf 'omp=%s\n' "$OMP_CANON" >>"$tmp"
  [ -n "$NODE_CANON" ] && printf 'node=%s\n' "$NODE_CANON" >>"$tmp"
  chmod 600 "$tmp"

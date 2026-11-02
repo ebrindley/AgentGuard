@@ -74,8 +74,6 @@ files=(
   profiles/pi/sandbox/pi-sandbox.sb
   profiles/pi/sandbox/pi-sandbox-preamble.zsh
   profiles/pi/src/index.mjs
-  profiles/pi/src/guard-core.mjs
-  profiles/pi/src/validate-bash-command.sh
   profiles/pi/scripts/extension-entry.ts
   profiles/pi/scripts/test-sandbox-profile.sh
   profiles/pi/scripts/check-launchers.mjs

@@ -186,9 +186,10 @@ support; this source change does not claim that UI feature.
   is installed on every Mac; without the CLI or the app the checks that need
   them are skipped and say so.
 - Pi and OMP, for their guard: Pi (`@earendil-works/pi-coding-agent`), OMP, or
-  both, and a Node on PATH outside every folder a Pi session can write (a
-  Homebrew Node, for example, not one under `~/.cache`). The bash analyzer runs
-  on that Node for both runtimes. An OMP binary stored at `~/.local/bin/omp`
+  both. The command checker runs inside Pi or OMP, so it needs no Node of its
+  own. A Pi that is a Node script needs a Node recorded for it: the `node` on
+  PATH outside every folder a Pi session can write (a Homebrew Node, for
+  example, not one under `~/.cache`). An OMP binary stored at `~/.local/bin/omp`
   must be moved out of `~/.local/bin` first, because the launcher takes that
   path.
 - Terminal, outside any agent session or other sandbox, for install, update and
@@ -366,9 +367,10 @@ same paths. It does not run pi-sandbox-guard's npm scripts:
    the Pi and OMP executables, not for a process named `pi`. When it cannot list
    processes, it stops and asks to be run outside any sandbox. It checks again
    just before the switch.
-2. It assembles the new launchers, profile, preamble and extension, with your
-   existing `.guard-node`, checks the bindings in `executables.conf` and
-   `.guard-node`, and runs the profile's self-test against the staged copies.
+2. It assembles the new launchers, profile, preamble and extension, checks the
+   bindings in `executables.conf`, and runs the profile's self-test against the
+   staged copies. The extension folder holds only the release's files, so
+   pi-sandbox-guard's analyzer and `.guard-node` are not carried over.
 3. It imports your custom wrappers from pi-sandbox-guard's launcher stamp: their
    names, the names installed before and their hashes. The wrappers stay in
    `~/.local/bin`. A wrapper whose content no longer matches its recorded hash,
@@ -392,7 +394,7 @@ same paths. It does not run pi-sandbox-guard's npm scripts:
    `~/.pi/agent/extension-backups/`, move into
    `~/Library/Application Support/AgentGuard/state/legacy/pi-sandbox-guard/`,
    which no session can write. Nothing is deleted. `executables.conf` stays in
-   place as the live bindings, and the analyzer's log stays at
+   place as the live bindings, and pi-sandbox-guard's event log stays at
    `~/.pi/agent/security-events.log`.
 
 Afterwards, run Pi and OMP as before. `pi`, `omp` and your wrappers keep their
@@ -412,7 +414,7 @@ Agent Guard's commands replace pi-sandbox-guard's:
 | `npm run setup`, `deploy`, `deploy:all` | the one-line install and `agent-guard update` |
 | `npm run deploy:launchers -- --extra-launchers <dir>` | `agent-guard wrapper add` |
 | `npm run bind` | `agent-guard bind` |
-| `npm run status`, `check:path`, `preflight` | `agent-guard doctor` |
+| `npm run status`, `check:path`, `preflight` | `agent-guard doctor` (the command checker's check replaces the analyzer's preflight) |
 
 pi-sandbox-guard's checkout is no longer used. Its deploy scripts write the
 same paths: run after the switch, they replace Agent Guard's files, and
@@ -425,7 +427,7 @@ prints the steps that reinstate pi-sandbox-guard from that copy: its `pi`, `omp`
 `pi-sandbox.sb` and `pi-sandbox-preamble.zsh` back into `~/.local/bin` and its
 extension folder back into `~/.pi/agent/extensions/`, or `npm run setup` in a
 pi-sandbox-guard checkout. It does not reinstate pi-sandbox-guard itself.
-`executables.conf`, the analyzer's log and your wrappers stay where they are.
+`executables.conf`, pi-sandbox-guard's event log and your wrappers stay where they are.
 
 ## Pi's files
 
@@ -434,17 +436,19 @@ Pi's guard stays where pi-sandbox-guard puts it:
 - `~/.local/bin/pi` and `~/.local/bin/omp`: identical copies of the launcher,
   which takes its runtime from its own file name, with `pi-sandbox.sb` and
   `pi-sandbox-preamble.zsh` beside them, and your custom wrappers;
-- `~/.pi/agent/extensions/pi-sandbox-guard/`: the extension and its analyzer,
-  and `.guard-node`, the path of the Node the analyzer runs on;
+- `~/.pi/agent/extensions/pi-sandbox-guard/`: the extension, `index.ts` and
+  `src/index.mjs`, which runs cc-safety-net from the release. Releases before
+  this one also placed the analyzer (`src/guard-core.mjs`,
+  `src/validate-bash-command.sh`) and `.guard-node` there; an update or an
+  uninstall removes them, and nothing needs doing by hand;
 - `~/.config/pi-sandbox-guard/executables.conf`: the Pi, OMP and Node
   executables the launcher runs (`agent-guard bind`);
-- `~/.pi/agent/security-events.log`: the analyzer's log of flagged commands.
-  Pi sessions can write it but not read it, so a session can also empty or
-  overwrite it; it is not an append-only record.
+- `~/.pi/agent/security-events.log`: the event log of pi-sandbox-guard's analyzer.
+  Nothing writes it now; Agent Guard leaves it where it is, and Pi sessions
+  still cannot read it. cc-safety-net's audit log is in `~/.cc-safety-net/logs`.
 
 Agent Guard's version stamp records the hashes of the launchers, the profile,
-the preamble and the extension's code, not of `.guard-node`;
-pi-sandbox-guard's own stamps, `.pi-sandbox-launchers-version` and
+the preamble and the extension's code; pi-sandbox-guard's own stamps, `.pi-sandbox-launchers-version` and
 `.deployed-version`, are not written. In the engine folder, `bin/pi` and
 `bin/omp` link to the launchers, `state/wrappers.json` holds the wrapper records
 and `state/legacy/` holds what a pi-sandbox-guard migration retired and what a
@@ -462,9 +466,10 @@ from the project and its parents without asking. Where either name in the
 launch folder is a link, its target is protected too.
 
 On a Mac without pi-sandbox-guard, the installer places these files when it finds
-Pi or OMP. The analyzer's Node is the `node` on PATH, refused when it lies in a
-folder Pi sessions can write, and recorded as its Homebrew `opt` link when it has
-one, so a formula upgrade needs no new binding. A file already at
+Pi or OMP. When the entry it records is a Node script, the Node recorded beside
+it is the `node` on PATH, refused when it lies in a folder Pi sessions can write,
+and recorded as its Homebrew `opt` link when it has one, so a formula upgrade
+needs no new binding. A file already at
 `~/.local/bin/pi` or `omp` that is not pi-sandbox-guard's, such as npm's `pi`
 link for an npm prefix of `~/.local`, gives way to the launcher. The launcher's
 PATH does not include `~/.local`, so before the switch the installer resolves
@@ -489,13 +494,16 @@ loaded; `/reload` loads the extension now on disk.
   terminal and `zsh -c` find first, and, with Pi's guard installed, Pi's checks:
   - everything pi-sandbox-guard's `npm run status` and `npm run check:path`
     checked, comparing the installed Pi files with the stamp's hashes;
-  - the profile's self-test, the analyzer's preflight, and one allowed and one
-    blocked command through the installed extension;
+  - the profile's self-test, the checker's session copy built from
+    `~/.cc-safety-net`, and one allowed command and two blocked ones through the
+    installed extension, which proves cc-safety-net loads and Agent Guard's Git
+    rules are in force. This check runs on the recorded Node or the `node` on
+    PATH and is skipped, and named, when there is none. Its audit entries go to a scratch folder, so `~/.cc-safety-net` is not changed;
   - that `pi`, `omp` and each recorded wrapper resolve, in a login shell, to the
     installed files, which also catches an npm update that put a real `pi` back
     in `~/.local/bin`;
-  - that the bindings in `executables.conf` and `.guard-node` are still usable;
-    a stale binding fails;
+  - that the bindings in `executables.conf` are still usable; a stale binding
+    fails;
   - each recorded wrapper's hash, and earlier wrapper names that are still
     executable;
   - `PI_CODING_AGENT_DIR` and `PI_PACKAGE_DIR`, which move Pi's folders,
@@ -516,7 +524,7 @@ loaded; `/reload` loads the extension now on disk.
   went missing, and each file added to the release folder. With Pi's guard
   installed, the recorded files include `pi`, `omp`, `pi-sandbox.sb` and
   `pi-sandbox-preamble.zsh` in `~/.local/bin` and the extension's code. It does
-  not check `.guard-node`, `executables.conf` or the custom wrappers, whose
+  not check `executables.conf` or the custom wrappers, whose
   hashes `agent-guard doctor` checks, and it does not notice a file added
   outside the release folder, such as in the extension folder. It exits 1 if
   anything drifted.
@@ -553,7 +561,8 @@ loaded; `/reload` loads the extension now on disk.
   files to `~/Agent Guard/pi-sandbox-guard-legacy/` and prints how to reinstate
   pi-sandbox-guard from there ([Moving from pi-sandbox-guard](#moving-from-pi-sandbox-guard));
   if that copy or the copy of replaced entries fails, it keeps the engine folder
-  and exits 1. It leaves `executables.conf`, the analyzer's log and your custom
+  and exits 1. It removes the extension folder with whatever an earlier release left
+  in it. It leaves `executables.conf`, pi-sandbox-guard's event log and your custom
   wrappers, and names the wrappers it leaves. A wrapper then runs whatever `pi`
   is beside it: Pi unguarded when an npm `pi` was put back, or an error when
   there is none. What it leaves on purpose, the wrappers, a `pi` or `omp` that is
@@ -575,9 +584,10 @@ loaded; `/reload` loads the extension now on disk.
   modes: `--detect` proposes the installs it finds and records them once you
   confirm; `--pi`, `--omp` and `--node` record absolute paths, `--node` being the
   interpreter for a Pi that is a Node script; `--show` prints the bindings;
-  `--check` exits 3 when one is missing or stale. `--checker-node` records the
-  Node the analyzer runs on, in the extension's `.guard-node`. The launcher
-  refuses a stale binding and names this command. Bind again after an upgrade
+  `--check` exits 3 when one is missing or stale. `--checker-node`, which
+  recorded the analyzer's Node, is accepted and ignored with one line, so older
+  scripts keep working. The launcher refuses a stale binding and names this
+  command. Bind again after an upgrade
   that moves an executable, such as a new Node under a version manager.
   `bind` needs Pi: on a Mac with OMP and no Pi binding, `--detect` stops because
   it finds no Pi, and `--omp` stops with `no Pi path supplied or previously
