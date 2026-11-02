@@ -20,6 +20,8 @@ Build tools with their own folders in your home, such as ~/.cargo or ~/go, need
 those folders under ALLOW.
 
 ALLOW - agents may create, change and delete things inside these:
+# @project grants only the folder OpenCode is started for (its project argument, else the git folder you are in); the desktop app ignores it.
+# @project
 
 READ ONLY - agents may look but never change or delete:
 

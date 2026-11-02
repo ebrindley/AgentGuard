@@ -16,6 +16,7 @@ protected=($protected_paths "$home/.cc-safety-net")
 protected_names=()
 protected_fragment=protected.sb
 state_hook=opencode_state_roots
+start_hook=opencode_project_arg
 gui_args=(--no-sandbox)
 credential_paths=("$home"/{.ssh,.gnupg,.aws,.git-credentials,.netrc,.npmrc,.secrets,.docker/config.json,.kube/config,.config/git/credentials})
 credential_fragment=credentials.sb

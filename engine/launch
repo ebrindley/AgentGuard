@@ -13,6 +13,7 @@ fi
 mode=${1:-}
 log=
 (( $# )) && shift
+launch_args=("$@")
 
 fail() {
   if [[ -n ${log:-} && -d ${log:h} ]]; then
@@ -68,7 +69,7 @@ fi
 # Profile fields a harness may leave unset.
 typeset -a libs=() app_paths=() writable_gui=() protected_names=() env_unset=() env_set=()
 typeset -aU credential_paths
-cli_binding= cli_kept= app_bundle_id= state_hook= args_hook= check_hook= protect_hook= credential_fragment= protected_fragment= title=$harness
+cli_binding= cli_kept= app_bundle_id= state_hook= start_hook= args_hook= check_hook= protect_hook= credential_fragment= protected_fragment= title=$harness
 integer git_hooks=0
 source "$profile_dir/harness.zsh"
 for f in $libs; do source "$profile_dir/$f"; done
@@ -224,13 +225,16 @@ fi
 # An entry's meaning must not depend on filesystem state a session can write:
 # a quoted entry is taken literally, an unquoted one has its Finder escapes
 # removed, and neither choice consults the disk. Every symlink the resolution
-# passes through is reported in link_nodes so the caller can pin it.
+# passes through is reported in link_nodes so the caller can pin it. A second
+# argument takes the path as it is, for one that is not a list line.
 normalize() {
   local p=$1 component target resolved=/ quoted=0 hops=0
   local -a parts
-  if [[ $p == (\"*\"|\'*\') ]]; then p=${p[2,-2]}; quoted=1; fi
-  if (( ! quoted )) && [[ $p == *\\* ]]; then p=${(Q)p}; fi
-  [[ $p == '~' || $p == '~/'* ]] && p=$home${p#\~}
+  if [[ -z ${2:-} ]]; then
+    if [[ $p == (\"*\"|\'*\') ]]; then p=${p[2,-2]}; quoted=1; fi
+    if (( ! quoted )) && [[ $p == *\\* ]]; then p=${(Q)p}; fi
+    [[ $p == '~' || $p == '~/'* ]] && p=$home${p#\~}
+  fi
   [[ $p == /* ]] || return 1
   # Follow one link at a time, so every link on the way is recorded, and apply
   # .. to what is already resolved. Resolving a whole chain in one step would
@@ -262,6 +266,105 @@ normalize() {
   REPLY=$resolved
 }
 
+# @project (docs/DESIGN.md section 4): the folder the session was started for.
+# resolve_project sets REPLY to its canonical path, or returns 1 after logging
+# why the entry is skipped. A target the refusal list names refuses the launch;
+# it is never widened. The profile's start_hook reads the launch arguments and
+# gives the project argument OpenCode itself would open, if any.
+project=
+typeset -a project_names
+lexical() {
+  local component resolved=/
+  local -a parts
+  parts=("${(@s:/:)1}")
+  for component in $parts; do
+    case $component in
+      (''|.) ;;
+      (..) resolved=${resolved:h} ;;
+      (*) resolved="${resolved%/}/$component" ;;
+    esac
+  done
+  REPLY=$resolved
+}
+project_refusal() {
+  local p e
+  local -a agent_dirs
+  agent_dirs=($protected $protected_paths "$engine" "$list_dir")
+  for p in "$@"; do
+    case $p in
+      (/|/Users|/Volumes|/tmp|/private|/private/tmp|/var|/private/var|/var/tmp|/private/var/tmp|"$home"|"${home:A}")
+        REPLY="is too broad"; return 0 ;;
+    esac
+    for e in /etc /private/etc /usr /bin /sbin /opt /System /Library /Applications \
+             $home/.{ssh,aws,config,docker,gnupg,kube} $home/{Library,Desktop,Documents,Downloads}; do
+      within "$p" "$e" && { REPLY="is or is inside $e"; return 0 }
+      within "$p" "${e:A}" && { REPLY="is or is inside $e"; return 0 }
+    done
+    for e in $guard_engines "$list_dir"; do
+      within "${e:A}" "$p" && { REPLY="contains the guard"; return 0 }
+      within "$e" "$p" && { REPLY="contains the guard"; return 0 }
+    done
+    for e in $agent_dirs; do
+      within "$p" "$e" && { REPLY="is inside the protected folder $e"; return 0 }
+      within "$p" "${e:A}" && { REPLY="is inside the protected folder $e"; return 0 }
+    done
+    [[ /$p/ == */.cc-safety-net/* ]] && { REPLY="is inside a protected .cc-safety-net folder"; return 0 }
+    if (( ${installed[(Ie)pi]} )) && [[ /$p/ == */.pi/* || /$p/ == */.omp/* ]]; then
+      REPLY="is inside a protected agent config folder"; return 0
+    fi
+  done
+  return 1
+}
+resolve_project() {
+  local arg= given top why a b
+  if [[ $mode == gui ]]; then
+    note "skipped, @project has no project folder in the app: the app keeps the fixed ALLOW folders"
+    return 1
+  fi
+  if [[ -z $start_hook ]]; then
+    note "skipped, @project is not defined for $title"
+    return 1
+  fi
+  if [[ $mode == (cli|profile) ]]; then
+    $start_hook "${launch_args[@]}" || { record "refused @project: $REPLY"; fail "@project: $REPLY" }
+    arg=$REPLY
+  fi
+  if [[ -n $arg ]]; then
+    # OpenCode 1 joins a relative project to $PWD and then changes into it, so
+    # ".." is applied by name; OpenCode 2 changes into it from the working
+    # directory, so ".." follows links. A path on which they differ is refused.
+    if [[ $arg == /* ]]; then given=$arg; else lexical "$PWD/$arg"; given=$REPLY; fi
+    normalize "$given" literal && a=$REPLY || { note "skipped, not a full path: $arg"; return 1 }
+    b=$a
+    if [[ $arg != /* ]]; then normalize "$PWD/$arg" literal && b=$REPLY || { note "skipped, not a full path: $arg"; return 1 }; fi
+    if [[ $a != "$b" ]]; then
+      record "refused @project: $given resolves to $a or $b, depending on the OpenCode version"
+      fail "@project: $given resolves to $a or $b, depending on the OpenCode version; give the project as a full path"
+    fi
+    top=$a
+  else
+    given=$PWD
+    if /usr/bin/xcode-select -p >/dev/null 2>&1 &&
+       a=$(/usr/bin/env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_CEILING_DIRECTORIES -u GIT_DISCOVERY_ACROSS_FILESYSTEM \
+             -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM -u GIT_CONFIG_NOSYSTEM -u GIT_CONFIG_PARAMETERS -u GIT_CONFIG_COUNT \
+             /usr/bin/git -C "$PWD" rev-parse --show-toplevel 2>/dev/null) && [[ $a == /* && $a != *$'\n'* ]]; then
+      given=$a
+    fi
+    normalize "$given" literal || { note "skipped, not a full path: $given"; return 1 }
+    top=$REPLY
+  fi
+  if project_refusal "$given" "$top"; then
+    why=$REPLY
+    record "refused @project: $top $why"
+    fail "@project $why: $top. Start from a narrower folder, or comment out @project in $list"
+  fi
+  if [[ ! -d $top ]]; then
+    note "skipped, @project folder does not exist: $top"
+    return 1
+  fi
+  REPLY=$top
+}
+
 print -r -- "Agent Guard $mode ${release:t} $(/bin/date '+%Y-%m-%d %H:%M:%S')" > "$log"
 
 essential=(/ $home $home/Library $home/.config $home/.local $home/.cache
@@ -281,8 +384,17 @@ while IFS= read -r line || [[ -n $line ]]; do
   esac
   [[ -n $section ]] || continue
   [[ $line != *$'\t'* ]] || fail "Guard List path contains a tab; remove it: $line"
-  normalize "$line" || { note "skipped, not a full path: $line"; continue }
-  p=$REPLY
+  if [[ $line == @project ]]; then
+    [[ $section == allow ]] || { note "skipped, @project is valid only under ALLOW"; continue }
+    [[ -z $project ]] || { note "skipped, @project is already listed"; continue }
+    resolve_project || continue
+    project=$REPLY
+    record "@project resolves to: $project"
+    p=$project
+  else
+    normalize "$line" || { note "skipped, not a full path: $line"; continue }
+    p=$REPLY
+  fi
   if [[ $section != allow ]]; then
     for e in $essential; do
       within "$e" "$p" && { note "refused ${${section:u}/READONLY/READ ONLY}, $title needs $e: $p"; continue 2 }
@@ -370,23 +482,24 @@ if (( git_hooks )); then
     (regex #"\.git/(hooks|modules/.+/hooks)/")
     (require-not (regex #"/hooks/[^/]*\.sample$"))))')
   active_hooks=
+  hooks_base=${project:-$PWD}
   if /usr/bin/xcode-select -p >/dev/null 2>&1; then
-    if /usr/bin/git -C "$PWD" rev-parse --git-dir >/dev/null 2>&1; then
-      active_hooks=$(/usr/bin/git -C "$PWD" rev-parse --path-format=absolute --git-path hooks 2>/dev/null) ||
-        fail "cannot resolve the active Git hooks folder of $PWD"
+    if /usr/bin/git -C "$hooks_base" rev-parse --git-dir >/dev/null 2>&1; then
+      active_hooks=$(/usr/bin/git -C "$hooks_base" rev-parse --path-format=absolute --git-path hooks 2>/dev/null) ||
+        fail "cannot resolve the active Git hooks folder of $hooks_base"
     else
-      active_hooks=$(/usr/bin/git -C "$PWD" config --type=path --get core.hooksPath 2>/dev/null) || active_hooks=
+      active_hooks=$(/usr/bin/git -C "$hooks_base" config --type=path --get core.hooksPath 2>/dev/null) || active_hooks=
       [[ $active_hooks == /* ]] || active_hooks=
     fi
   fi
   if [[ -n $active_hooks ]]; then
-    [[ $active_hooks == /* && $active_hooks != *$'\n'* ]] || fail "cannot resolve the active Git hooks folder of $PWD"
+    [[ $active_hooks == /* && $active_hooks != *$'\n'* ]] || fail "cannot resolve the active Git hooks folder of $hooks_base"
     active_hooks=${active_hooks:A}
     case $active_hooks in
       (/|/Users|/Volumes|/tmp|/private|/private/tmp|/var|/private/var|/var/tmp|/private/var/tmp|/System|/Library|/Applications|/usr|/bin|/sbin|/opt|$home)
         fail "the active Git hooks folder $active_hooks is too broad to protect; set core.hooksPath to a narrower folder" ;;
     esac
-    within "${PWD:A}" "$active_hooks" && fail "the active Git hooks folder $active_hooks contains the launch folder; set core.hooksPath to a folder inside the project"
+    within "${hooks_base:A}" "$active_hooks" && fail "the active Git hooks folder $active_hooks contains the launch folder; set core.hooksPath to a folder inside the project"
     if [[ $active_hooks != */.git/hooks && $active_hooks != */.git/modules/*/hooks ]]; then
       if [[ $active_hooks == "$home"/* ]]; then sbpl "${active_hooks#$home}"; REPLY="(h $REPLY)"; else sbpl "$active_hooks"; fi
       hooks_rules+=("(deny file-write* (subpath $REPLY))")
@@ -404,9 +517,11 @@ fi
 # write-denied, as OpenCode's own names do.
 typeset -a pi_names
 (( ${installed[(Ie)pi]} )) && pi_names=(.pi .omp)
+# The project's names get the launch folder's link handling (section 4).
+[[ -z $project ]] || project_names=("${(@)protected_names/#/$project/}" "${(@)pi_names/#/$project/}")
 protected=("$engine" "$list_dir" $protected
            $home/Library/LaunchAgents $home/.{zshenv,zprofile,zshrc,zlogin,profile,bash_profile,bash_login,bashrc}
-           "${(@)protected_names/#/$PWD/}" "${(@)pi_names/#/$PWD/}")
+           "${(@)protected_names/#/$PWD/}" "${(@)pi_names/#/$PWD/}" $project_names)
 for p in $protected; do
   target=${p:A}
   [[ -e $p && $target != "$p" ]] || continue

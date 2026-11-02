@@ -39,7 +39,7 @@ jobs:
           opencode --version
       - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node test/golden.mjs
-      # Offline focused scopes also run in the seven-file local gate.
+      # Offline focused scopes also run in the nine-file local gate.
       - name: OpenCode permission configuration
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node test/opencode-config.mjs
@@ -52,6 +52,9 @@ jobs:
       - name: Effective permission evaluation
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node test/permissions.mjs
+      - name: "@project in the Guard List"
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node test/project.mjs
       - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node test/peers.mjs
       - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
