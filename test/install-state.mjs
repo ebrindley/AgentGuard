@@ -76,7 +76,8 @@ try {
   writeFileSync(served+'/latest.txt','v0.0.1\n');
   const bootstrap=readFileSync(served+'/v0.0.1/install.sh','utf8');
   check('install Pi over its npm entry',()=>{
-    assert.equal(command('/bin/zsh',['-fc',bootstrap,'install.sh','--projects',home+'/Projects'],'install-pi').status,0);
+    const r=command('/bin/zsh',['-fc',bootstrap,'install.sh','--projects',home+'/Projects'],'install-pi');
+    assert.equal(r.status,0,r.stdout+r.stderr);
     assert.deepEqual(JSON.parse(readFileSync(stamp)).harnesses,['opencode','pi']);
     assert.ok(present(engine+'/state/legacy/replaced/pi'));
   });
@@ -97,7 +98,8 @@ try {
     }
     restore();
     check('valid Pi uninstall restores the npm entry',()=>{
-      assert.equal(command(entry,['uninstall'],'uninstall-pi').status,0);
+      const r=command(entry,['uninstall'],'uninstall-pi');
+      assert.equal(r.status,0,r.stdout+r.stderr);
       assert.equal(lstatSync(home+'/.local/bin/pi').isSymbolicLink(),true);
       assert.equal(existsSync(engine),false);
     });
@@ -105,10 +107,12 @@ try {
     rmSync(home+'/.local/bin/pi');rmSync(home+'/.local/lib',{recursive:true});
     rmSync(home+'/.config/pi-sandbox-guard',{recursive:true,force:true});
     check('legacy 0.1.x stamp without a harness list uninstalls',()=>{
-      assert.equal(command('/bin/zsh',['-fc',bootstrap,'install.sh','--projects',home+'/Projects'],'install-opencode').status,0);
+      const installed=command('/bin/zsh',['-fc',bootstrap,'install.sh','--projects',home+'/Projects'],'install-opencode');
+      assert.equal(installed.status,0,installed.stdout+installed.stderr);
       const legacy=JSON.parse(readFileSync(stamp));assert.deepEqual(legacy.harnesses,['opencode']);
       delete legacy.harnesses;legacy.version='0.1.2';writeFileSync(stamp,JSON.stringify(legacy));
-      assert.equal(command(entry,['uninstall'],'uninstall-legacy').status,0);
+      const uninstalled=command(entry,['uninstall'],'uninstall-legacy');
+      assert.equal(uninstalled.status,0,uninstalled.stdout+uninstalled.stderr);
       assert.equal(existsSync(engine),false);
     });
   }
