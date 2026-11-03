@@ -722,7 +722,48 @@ ag_projects_check() {
 # The app runs a path that does not change between releases, so it is rebuilt only
 # when its inputs (script, bundle ID, privacy text, signing options, icon,
 # entitlements) differ from the stamp's, or it is missing.
-ag_app_script() { REPLY="do shell script quoted form of \"$engine/bin/opencode-gui\" & \" >/dev/null 2>&1 &\"" }
+# Opening the app runs the launcher; a folder dropped on it, or chosen at the first
+# open when @project is on and no folder is remembered, goes to the launcher as
+# --project, one literal argument each (docs/DESIGN.md section 4). The script text
+# is fixed: only the launcher path is substituted.
+ag_app_script() {
+  REPLY="property launcher : \"$engine/bin/opencode-gui\"
+
+on run
+	set answer to \"go\"
+	try
+		set answer to do shell script (quoted form of launcher) & \" --project-query\"
+	end try
+	if answer is \"ask\" then
+		activate
+		try
+			set chosen to choose folder with prompt \"Choose a project folder OpenCode may change. Drop more folders on Agent Guard.app to add them.\"
+		on error reason number code
+			if code is not -128 then display alert \"Agent Guard\" message reason as critical
+			return
+		end try
+		my startGuard({POSIX path of chosen})
+	else
+		my startGuard({})
+	end if
+end run
+
+on open dropped
+	set paths_ to {}
+	repeat with item_ in dropped
+		set end of paths_ to POSIX path of item_
+	end repeat
+	my startGuard(paths_)
+end open
+
+on startGuard(paths_)
+	set line_ to quoted form of launcher
+	repeat with path_ in paths_
+		set line_ to line_ & \" --project \" & (quoted form of (path_ as text))
+	end repeat
+	do shell script line_ & \" >/dev/null 2>&1 &\"
+end startGuard"
+}
 
 # With the hardened runtime, macOS checks the responsible app's entitlements before a
 # privacy prompt. AgentGuard.entitlements has every resource-access entitlement except

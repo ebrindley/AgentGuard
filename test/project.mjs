@@ -2,7 +2,7 @@
 // disposable home. The launches that apply a Seatbelt profile run the real
 // sandbox-exec, so this runs outside the coding agent sandbox.
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
@@ -236,13 +236,269 @@ exit 0
   assert.ok(!profile([P('Projects/hooked')], { text: ALLOW(P('Projects/hooked')), cwd: P('Projects/plain') }).stdout.includes(hooks), 'unchanged without @project');
   console.log('ok   with @project the project\'s active hooks folder is denied; without it the launch folder\'s is used');
 
-  // The app has no project folder: @project is skipped and the fixed ALLOW folders stay.
-  r = launch('gui', [], { text: ALLOW('@project', P('Projects/sibling')) });
-  assert.notEqual(r.status, 0, 'no OpenCode.app in the fixture home');
-  assert.match(logText(), /skipped, @project has no project folder in the app/);
-  assert.doesNotMatch(logText(), /@project resolves to/);
-  assert.equal(JSON.parse(readFileSync(join(engine, 'state/rules.json'), 'utf8')).allow.join(), realpathSync(P('Projects/sibling')));
-  console.log('ok   the app resolves @project to nothing and keeps the fixed ALLOW folders');
+  // @project in the app (docs/DESIGN.md section 4): the remembered app projects plus the folders
+  // dropped on the app. A fake OpenCode.app reports what a launch lets it write, then exits.
+  const appDir = join(home, 'Applications/OpenCode.app/Contents');
+  mkdirSync(join(appDir, 'MacOS'), { recursive: true });
+  writeFileSync(join(appDir, 'Info.plist'), '<?xml version="1.0" encoding="UTF-8"?><plist version="1.0"><dict><key>CFBundleExecutable</key><string>AgFakeApp</string></dict></plist>');
+  writeFileSync(join(appDir, 'MacOS/AgFakeApp'), `#!/bin/sh
+cp "$AGENT_GUARD_CONTEXT" "$FAKE_OUT.context"
+: > "$FAKE_OUT"
+OLDIFS=$IFS; IFS=:
+for d in $FAKE_PROBES; do
+  if : > "$d/probe" 2>/dev/null; then echo "write $d" >> "$FAKE_OUT"; rm -f "$d/probe"; else echo "denied $d" >> "$FAKE_OUT"; fi
+done
+IFS=$OLDIFS
+if : >> "$FAKE_STORE" 2>/dev/null || : > "$FAKE_STORE.tmp" 2>/dev/null; then echo "write store" >> "$FAKE_OUT"; else echo "denied store" >> "$FAKE_OUT"; fi
+exit 0
+`);
+  chmodSync(join(appDir, 'MacOS/AgFakeApp'), 0o755);
+  const store = join(engine, 'state/opencode/app-projects');
+  const stored = () => (existsSync(store) ? readFileSync(store, 'utf8') : null);
+  const setStore = (...lines) => { mkdirSync(dirname(store), { recursive: true }); writeFileSync(store, lines.map((l) => `${l}\n`).join('')); };
+  const gui = (name, args, options = {}) => {
+    const out = join(scratch, name);
+    const r = launch('gui', args, { ...options, env: { FAKE_OUT: out, FAKE_STORE: store, FAKE_PROBES: '', ...options.env } });
+    return { r, out, results: () => readFileSync(out, 'utf8').trim().split('\n').sort(), context: () => JSON.parse(readFileSync(`${out}.context`, 'utf8')) };
+  };
+  const dropped = (name, args, options) => {
+    const g = gui(name, args, options);
+    assert.equal(g.r.status, 0, `${name}: ${g.r.stderr}`);
+    return g;
+  };
+  const sibling = realpathSync(P('Projects/sibling')), withSpace = realpathSync(P('Projects/with space'));
+  const refused = (name, args, pattern, options = {}) => {
+    const before = stored();
+    const g = gui(name, args, { text: ALLOW('@project'), ...options });
+    assert.notEqual(g.r.status, 0, `${name}: launch not refused`);
+    assert.match(g.r.stderr, pattern, name);
+    assert.equal(stored(), before, `${name}: the store changed`);
+    assert.ok(!existsSync(join(engine, 'state/rules.json')), `${name}: rules published`);
+    assert.ok(!existsSync(g.out), `${name}: the app started`);
+    return g.r.stderr;
+  };
+
+  // No folder yet: the chooser is asked for, once a folder is remembered it is not.
+  rmSync(join(engine, 'state/opencode'), { recursive: true, force: true });
+  writeFileSync(log, 'previous launch\n');
+  const query = (text, env) => {
+    const r = launch('gui', ['--project-query'], { text, env });
+    assert.equal(r.status, 0, r.stderr);
+    return r.stdout;
+  };
+  assert.equal(query(ALLOW('@project')), 'ask\n');
+  assert.equal(query(ALLOW('  @project  ', P('Projects/sibling'))), 'ask\n');
+  assert.equal(query(ALLOW('# @project')), 'go\n');
+  assert.equal(query(ALLOW(P('Projects/sibling'))), 'go\n');
+  assert.equal(query('ALLOW\nREAD ONLY\n@project\nDENY\n'), 'go\n');
+  assert.equal(readFileSync(log, 'utf8'), 'previous launch\n', 'the query rewrote the launch log');
+  assert.equal(stored(), null);
+  assert.ok(!existsSync(join(engine, 'state/rules.json')) && !existsSync(join(engine, 'state/opencode')), 'the query wrote state');
+  setStore(other);
+  assert.equal(query(ALLOW('@project')), 'go\n');
+  rmSync(store);
+  // An open app gets the launch, which names it, not the chooser.
+  symlinkSync('/bin/sleep', join(scratch, 'AgFakeApp'));
+  const incumbent = spawn(join(scratch, 'AgFakeApp'), ['60'], { stdio: 'ignore' });
+  try {
+    for (let i = 0; i < 50 && spawnSync('/usr/bin/pgrep', ['-x', 'AgFakeApp']).status !== 0; i++) await new Promise((d) => setTimeout(d, 100));
+    assert.equal(spawnSync('/usr/bin/pgrep', ['-x', 'AgFakeApp']).status, 0, 'no running AgFakeApp to stand for OpenCode');
+    assert.equal(query(ALLOW('@project')), 'go\n');
+    // A drop on a running app neither prompts nor records, and keeps the log as it was.
+    refused('incumbent', ['--project', other], /OpenCode is already open/);
+    assert.match(readFileSync(log, 'utf8'), /^previous launch\nagent-guard-stage:host-launch\n$/);
+    refused('incumbent, plain', [], /OpenCode is already open/);
+  } finally { incumbent.kill(); }
+  console.log('ok   --project-query answers ask only for an empty store with @project on, and writes nothing; an open app is refused first');
+
+  // A dropped folder is granted, remembered, and the store is written once the launch is certain.
+  const probe = [other, app, sibling, withSpace, P('Projects/plain')].join(':');
+  let g = dropped('drop-one', ['--project', other], { text: ALLOW('@project'), env: { FAKE_PROBES: probe } });
+  assert.equal(stored(), `${other}\n`);
+  assert.deepEqual(g.context().allow, [other]);
+  assert.deepEqual(g.context().projects, [other]);
+  assert.deepEqual(g.results(), [`write ${other}`, `denied ${app}`, `denied ${sibling}`, `denied ${withSpace}`, `denied ${P('Projects/plain')}`, 'denied store'].sort());
+  assert.match(logText(), new RegExp(`@project resolves to: ${other.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\n`));
+  // A trailing slash, a repeat and several folders at once; the store keeps each once, in order.
+  g = dropped('drop-many', ['--project', `${other}/`, '--project', `${sibling}/`, '--project', app, '--project', sibling], { text: ALLOW('@project') });
+  assert.equal(stored(), `${other}\n${sibling}\n${app}\n`);
+  assert.deepEqual(g.context().allow.toSorted(), [app, other, sibling].toSorted());
+  assert.deepEqual(g.context().projects, [other, sibling, app]);
+  // A plain open uses the store; without @project the store is ignored and nothing prompts.
+  g = dropped('open', [], { text: ALLOW('@project', P('Projects/plain')) });
+  assert.deepEqual(g.context().allow.toSorted(), [app, other, sibling, plainDir].toSorted());
+  assert.equal(stored(), `${other}\n${sibling}\n${app}\n`);
+  g = dropped('off', [], { text: ALLOW('# @project', P('Projects/plain')) });
+  assert.deepEqual(g.context().allow, [plainDir]);
+  assert.deepEqual(g.context().projects, []);
+  console.log('ok   dropped folders are granted and remembered; a plain open grants the remembered ones; @project off ignores the store');
+
+  // The app's @project is the remembered set, and the command line's is unchanged by it.
+  profile([], { text: ALLOW('@project'), cwd: P('Projects/plain') });
+  assert.deepEqual(rules().allow, [plainDir]);
+  assert.deepEqual(rules().projects, [plainDir]);
+  console.log('ok   the command line\'s @project ignores the app store and reports its one project');
+
+  // Refused folders fail the launch and are not stored, even beside a good one.
+  const before = stored();
+  mkdirSync(P('Projects/new-good'), { recursive: true });
+  writeFileSync(P('Projects/file.txt'), '');
+  refused('home', ['--project', home], /@project is too broad/);
+  refused('home with a slash', ['--project', `${home}/`], /@project is too broad/);
+  refused('Documents', ['--project', P('Documents/proj')], /is or is inside .*Documents/);
+  refused('the list folder', ['--project', P('Agent Guard')], /contains the guard/);
+  refused('the guard engine', ['--project', engine], /is or is inside .*Library/);
+  refused('root', ['--project', '/'], /@project is too broad/);
+  refused('a refused folder beside a good one', ['--project', P('Projects/new-good'), '--project', P('Documents/proj')], /Documents/);
+  refused('a tab in the name', ['--project', P('Projects/tab\tdir')], /tab or newline/);
+  refused('a missing folder', ['--project', P('Projects/missing')], /not a folder: .*Projects\/missing/);
+  refused('a file', ['--project', P('Projects/file.txt')], /not a folder: /);
+  // Malformed values: empty, relative, missing, and a folder name that reads as an option.
+  refused('empty', ['--project', ''], /--project needs a full path/);
+  refused('relative', ['--project', 'Projects/other'], /--project needs a full path: Projects\/other/);
+  refused('dash', ['--project', '-x'], /--project needs a full path: -x/);
+  refused('no value', ['--project'], /--project needs a folder/);
+  refused('not active', ['--project', P('Projects/new-good')], /@project is off in/, { text: ALLOW('# @project') });
+  refused('not active, READ ONLY', ['--project', P('Projects/new-good')], /@project is off in/, { text: 'ALLOW\nREAD ONLY\n@project\n' });
+  assert.equal(stored(), before);
+  console.log('ok   a refused, missing, malformed or inactive drop fails the launch and the store keeps what it had');
+
+  // A name that holds shell syntax is data end to end.
+  const hostile = P('Projects/it\'s "$(touch pwned)" `id` ; $HOME \\ & x');
+  mkdirSync(hostile, { recursive: true });
+  g = dropped('hostile', ['--project', hostile], { text: ALLOW('@project'), cwd: scratch, env: { FAKE_PROBES: realpathSync(hostile) } });
+  assert.ok(stored().split('\n').includes(realpathSync(hostile)), 'hostile name stored as is');
+  assert.ok(g.results().includes(`write ${realpathSync(hostile)}`));
+  assert.ok(!existsSync(join(scratch, 'pwned')) && !existsSync('pwned'), 'a command in the name ran');
+  // The applet text hands each folder to the launcher as one literal argument.
+  const stub = join(scratch, 'applet');
+  mkdirSync(join(stub, 'bin'), { recursive: true });
+  writeFileSync(join(stub, 'bin/opencode-gui'), '#!/bin/sh\nfor a; do printf \'%s\\0\' "$a"; done > "$APPLET_OUT.part"\nmv "$APPLET_OUT.part" "$APPLET_OUT"\n');
+  chmodSync(join(stub, 'bin/opencode-gui'), 0o755);
+  const applet = spawnSync('/bin/zsh', ['-fc', 'engine=$1; source "$2"; ag_app_script; print -r -- "$REPLY"', 'x', stub, join(root, 'installer/lib.zsh')], { encoding: 'utf8' });
+  assert.equal(applet.status, 0, applet.stderr);
+  assert.ok(applet.stdout.includes(`property launcher : "${stub}/bin/opencode-gui"`));
+  writeFileSync(join(stub, 'main.applescript'), applet.stdout);
+  const compiled = spawnSync('/usr/bin/osacompile', ['-o', join(stub, 'main.scpt'), join(stub, 'main.applescript')], { encoding: 'utf8' });
+  assert.equal(compiled.status, 0, compiled.stderr);
+  const handler = (values) => {
+    const out = join(stub, `out-${values.length}`);
+    rmSync(out, { force: true });
+    const r = spawnSync('/usr/bin/osascript', ['-e', 'on run argv', '-e', 'set s to load script POSIX file (item 1 of argv)', '-e', 'tell s to startGuard(rest of argv)', '-e', 'end run',
+      join(stub, 'main.scpt'), ...values], { encoding: 'utf8', env: { ...process.env, APPLET_OUT: out } });
+    assert.equal(r.status, 0, r.stderr);
+    for (let i = 0; i < 100 && !existsSync(out); i++) spawnSync('/bin/sleep', ['0.1']);
+    return readFileSync(out, 'utf8').split('\0').slice(0, -1);
+  };
+  const names = ['/a b/c', hostile, '/x\'; touch /tmp/ag-pwned; \'', '/odd "name" $(x) `y` \\ *'];
+  assert.deepEqual(handler([]), []);
+  assert.deepEqual(handler(names), names.flatMap((n) => ['--project', n]));
+  assert.ok(!existsSync('/tmp/ag-pwned'));
+  console.log('ok   a folder name with quotes, $(), backticks and spaces is one literal argument and runs nothing');
+
+  // Links in the path are pinned; a folder spelled through a link is stored by its target.
+  rmSync(store);
+  g = dropped('link', ['--project', P('Projects/alias')], { text: ALLOW('@project') });
+  assert.equal(stored(), `${other}\n`);
+  assert.ok(g.context().pins.includes(P('Projects/alias')), 'link pinned');
+  console.log('ok   a link in a dropped path is pinned and the store keeps the canonical folder');
+
+  // Each remembered folder is re-resolved at every launch.
+  setStore(other, P('Projects/gone'));
+  g = dropped('gone', [], { text: ALLOW('@project') });
+  assert.deepEqual(g.context().allow, [other]);
+  assert.match(logText(), /skipped, app project folder does not exist: .*Projects\/gone/);
+  assert.equal(stored(), `${other}\n${P('Projects/gone')}\n`);
+  setStore(other, P('Documents/proj'));
+  refused('stored and now refused', ['--project', P('Projects/new-good')], /@project is or is inside .*Documents.*proj\. Remove it with: agent-guard app-projects remove .*Documents\/proj/);
+  console.log('ok   a remembered folder that is gone is skipped and kept; one now refused fails the launch');
+
+  // A stored line is canonical when written: a link now on its path refuses the launch, as a
+  // replaced folder or as a link planted where a deleted folder was, and grants nothing.
+  const swap = P('Projects/swap');
+  mkdirSync(swap);
+  const swapReal = realpathSync(swap);
+  setStore(other, swapReal);
+  rmSync(swap, { recursive: true });
+  symlinkSync(sibling, swap);
+  const swapRefusal = refused('stored folder replaced by a link', [], new RegExp(`remembered folder ${swapReal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} now resolves to ${sibling.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.* Remove it with: agent-guard app-projects remove '${swapReal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'\\n`));
+  // A link left at the name of a deleted folder refuses too, even one that points nowhere.
+  rmSync(swap);
+  symlinkSync(P('Projects/nowhere'), swap);
+  refused('stored folder gone, dangling link planted', [], /remembered folder .*Projects\/swap now resolves to/);
+  console.log('ok   a remembered folder now behind a link refuses the launch and names the removal command');
+
+  // A launch that fails after resolving, in the managed service checks, remembers nothing.
+  mkdirSync(join(appDir, 'Resources'), { recursive: true });
+  writeFileSync(join(appDir, 'Resources/opencode-cli'), `#!/bin/sh
+case "$1" in --version) echo 2.0.0 ;; service) echo http://127.0.0.1:1 ;; esac
+`);
+  chmodSync(join(appDir, 'Resources/opencode-cli'), 0o755);
+  setStore(other);
+  const storeBefore = stored();
+  const failed = gui('managed-fails', ['--project', sibling], { text: ALLOW('@project') });
+  assert.notEqual(failed.r.status, 0);
+  assert.match(failed.r.stderr, /background service/);
+  assert.ok(!existsSync(failed.out), 'the app started');
+  assert.equal(stored(), storeBefore, 'a failed launch changed the store');
+  rmSync(join(appDir, 'Resources'), { recursive: true });
+  console.log('ok   a launch that fails its managed service checks does not remember dropped folders');
+
+  // Per project: protected names behind links, and the active hooks folder.
+  rmSync(store);
+  mkdirSync(P('Projects/piproj/omp-target'), { recursive: true });
+  symlinkSync(P('Projects/piproj/omp-target'), P('Projects/piproj/.omp'));
+  writeFileSync(join(engine, 'state/stamp.json'), JSON.stringify({ harnesses: ['opencode', 'pi'] }));
+  const hooked = realpathSync(P('Projects/hooked')), piproj = realpathSync(P('Projects/piproj'));
+  const names2 = [hooked, piproj, join(hooked, 'custom-hooks'), join(piproj, 'omp-target')].join(':');
+  g = dropped('per-project', ['--project', hooked, '--project', piproj], { text: ALLOW('@project'), env: { FAKE_PROBES: names2 } });
+  assert.deepEqual(g.results().filter((x) => x !== 'denied store'), [`write ${hooked}`, `write ${piproj}`, `denied ${join(hooked, 'custom-hooks')}`, `denied ${join(piproj, 'omp-target')}`].sort());
+  assert.match(logText(), new RegExp(`active hooks folder .*${hooked.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/custom-hooks`));
+  rmSync(join(engine, 'state/stamp.json'));
+  console.log('ok   each remembered folder gets its protected names and its active hooks folder write-denied');
+
+  // Under Seatbelt the store cannot be written, so a session cannot add a project for a later launch.
+  rmSync(store);
+  g = dropped('store-denied', ['--project', other], { text: ALLOW('@project') });
+  assert.ok(g.results().includes('denied store'), 'store writable inside the sandbox');
+  assert.equal(stored(), `${other}\n`);
+  console.log('ok   the store is written by the launcher and write-denied inside the session');
+
+  // agent-guard app-projects lists and removes.
+  const ag = join(engine, 'releases/0.0.0-20260101T000000Z/bin/agent-guard');
+  mkdirSync(dirname(ag), { recursive: true });
+  copyFileSync(join(source, 'engine/agent-guard'), ag);
+  chmodSync(ag, 0o755);
+  const manage = (...args) => spawnSync('/bin/zsh', [ag, 'app-projects', ...args], { encoding: 'utf8', env: { PATH: '/usr/bin:/bin', HOME: home, TMPDIR: temp }, cwd: P('Projects') });
+  rmSync(store);
+  let m = manage();
+  assert.deepEqual([m.status, m.stdout], [0, '']);
+  assert.match(m.stderr, /no app projects are remembered/);
+  setStore(other, sibling, withSpace, P('Projects/gone'), '/x/[ab]*');
+  assert.equal(manage().stdout, `${other}\n${sibling}\n${withSpace}\n${P('Projects/gone')}\n/x/[ab]*\n`);
+  m = manage('remove', sibling);
+  assert.equal(m.status, 0, m.stderr);
+  assert.equal(stored(), `${other}\n${withSpace}\n${P('Projects/gone')}\n/x/[ab]*\n`);
+  m = manage('remove', 'alias/');
+  assert.equal(m.status, 0, m.stderr);
+  assert.equal(stored(), `${withSpace}\n${P('Projects/gone')}\n/x/[ab]*\n`);
+  assert.equal(manage('remove', '/x/[ab]*').status, 0);
+  assert.equal(manage('remove', '/x/a').status, 1);
+  assert.match(manage('remove', P('Projects/not-stored')).stderr, /not an app project/);
+  assert.equal(manage('remove', P('Projects/gone')).status, 0);
+  assert.equal(manage('remove', withSpace).status, 0);
+  assert.equal(stored(), '');
+  // The removal command in a refusal works as printed, with the link still in place.
+  setStore(other, swapReal);
+  const hint = swapRefusal.match(/Remove it with: agent-guard (app-projects remove .*)\n/)[1];
+  m = spawnSync('/bin/zsh', ['-c', `exec /bin/zsh ${JSON.stringify(ag)} ${hint}`], { encoding: 'utf8', env: { PATH: '/usr/bin:/bin', HOME: home, TMPDIR: temp }, cwd: P('Projects') });
+  assert.equal(m.status, 0, m.stderr);
+  assert.equal(stored(), `${other}\n`);
+  rmSync(swap);
+  setStore();
+  assert.equal(manage('remove').status, 2);
+  assert.equal(manage('add', other).status, 2);
+  console.log('ok   agent-guard app-projects lists the store and removes an entry as stored or as typed');
 
   // Real Seatbelt: writes inside @project, nowhere else; concurrent launches stay apart.
   const probes = [app, P('Projects/app/src'), other, P('Projects/sibling'), P('Projects/plain')];
