@@ -118,6 +118,7 @@ Run these commands from Terminal outside an agent session:
 | `agent-guard diagnose [--json]` | Collect sanitized installation and cached failure observations without launching an agent or writing files |
 | `agent-guard version` | Show the installed release and recorded file changes |
 | `agent-guard update` | Install the latest stable release |
+| `agent-guard app-projects [remove PATH]` | List or forget the folders `@project` grants OpenCode Desktop |
 | `agent-guard uninstall` | Remove the guard; retain `~/Agent Guard` |
 
 `update` follows stable releases and leaves a newer installed version unchanged.

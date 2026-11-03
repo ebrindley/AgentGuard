@@ -266,10 +266,49 @@ ALLOW
 - A project folder that does not exist, and `@project` under READ ONLY or DENY,
   are skipped and logged. `last-launch-opencode.log` records what `@project`
   resolved to and any refusal.
-- The desktop app has no single project folder: it opens projects from its own
-  window, and the launcher cannot see which. `@project` resolves to nothing
-  there, so the app keeps the fixed ALLOW folders you list. Pi, OMP and Grok do
-  not use `@project` yet; they skip it.
+- Pi, OMP and Grok do not use `@project` yet; they skip it.
+
+#### `@project` in the desktop app
+
+OpenCode Desktop is one process for all its projects and cannot be told which
+folder to open, so the launcher cannot derive `@project` from the folder you
+started in. In the app, `@project` is the set of folders you added to
+`Agent Guard.app`. They are stored in `state/opencode/app-projects` in the engine folder
+(one path per line), which sessions cannot write, so a session cannot add a
+folder for a later launch.
+
+- Add a folder by dropping it on `Agent Guard.app` in the Dock or Finder, or with
+  Open With. Several folders can be dropped at once. The launcher takes each as
+  given (no Git top-level lookup), applies the refusals above, and adds it to the
+  store only when the launch goes ahead.
+- The first time you open the app with `@project` on and no remembered folder, a
+  chooser asks for one. Cancel quits without launching. Later opens launch
+  without a prompt.
+- Every launch re-resolves each stored folder. One that no longer exists is
+  skipped and kept in the store. One that is now refused fails the launch with an
+  alert that names it and the removal command.
+- A dropped path must be an absolute path to an existing folder, and must not be
+  refused; otherwise the launch fails with an alert and nothing is added.
+- Dropping a folder while `@project` is not under ALLOW shows an alert and does
+  not launch. Remove the `#` from `@project` first. With `@project` off, the app
+  keeps the fixed ALLOW folders and ignores the store.
+- Dropping or opening while OpenCode is already running fails with the usual
+  already-open alert and changes nothing.
+
+```sh
+agent-guard app-projects                 # list the remembered folders
+agent-guard app-projects remove PATH     # forget one
+```
+
+`remove` matches the stored line first, then the path as typed, resolved to its
+canonical form. It fails inside a guarded session, where the store is not
+writable. `last-launch-opencode.log` records `@project resolves to:` followed by
+the folders, or `none` when `@project` is on and no folder is remembered.
+
+Limit: Desktop shows every project in one window under one grant, and restores
+its last project from its own app data, which sessions can write. It can
+therefore reopen a project you did not add. Writes there are refused unless
+another ALLOW entry covers the folder. Observed with Desktop 2.2.5.
 
 Imported OpenCode Guard lists keep their introductory text. You can update the
 text above the first heading without changing the policy entries; the current
