@@ -37,7 +37,7 @@ for (const dir of [directory, checker, logs, join(release, 'profiles/opencode'),
   fs.mkdirSync(dir, { recursive: true });
 fs.writeFileSync(join(release, 'package.json'), '{"type":"module"}');
 fs.writeFileSync(join(release, 'RELEASE'), '1.0.0-fixture\n');
-fs.writeFileSync(join(release, 'VERSION'), name === 'unsafe-version' ? marker + '\n' : '1.0.0\n');
+fs.writeFileSync(join(release, 'VERSION'), name === 'unsafe-version' ? marker + '\n' : name === 'updated' ? '1.0.0.1\n' : '1.0.0\n');
 fs.copyFileSync(source, join(release, 'profiles/opencode/plugin.js'));
 for (const file of ['permissions.js', 'permissions.jq', 'v2.js']) fs.copyFileSync(join(dirname(source), file), join(release, 'profiles/opencode', file));
 fs.mkdirSync(join(checker, 'rules'), { recursive: true });
@@ -56,9 +56,9 @@ fs.writeFileSync(join(release, 'vendor/cc-safety-net/dist/index.js'), net);
 fs.writeFileSync(join(release, 'vendor/cc-safety-net/dist/api.js'), name === 'api-import' ? 'throw new Error("' + marker + '");' : 'export const checkCommand = ({command}) => command.includes("API-DENY") ? ({kind:"deny",reason:"' + marker + '",ruleId:"' + marker + '"}) : command.startsWith("git config core.hooksPath ") ? ({kind:"deny",reason:"hooks",ruleId:"custom.agent-guard-git/hooks-path"}) : ({kind:"allow"});');
 let installed = release;
 if (name === 'updated') {
-  installed = join(engine, 'releases/2.0.0-fixture');
+  installed = join(engine, 'releases/2.0.0.1-fixture');
   fs.mkdirSync(installed, { recursive: true });
-  fs.writeFileSync(join(installed, 'RELEASE'), '2.0.0-fixture\n');
+  fs.writeFileSync(join(installed, 'RELEASE'), '2.0.0.1-fixture\n');
 }
 fs.symlinkSync(installed, join(engine, 'current'));
 process.env.AGENT_GUARD_RELEASE = '1.0.0-fixture';
@@ -145,7 +145,11 @@ if (name === 'outer-sandbox') {
 const ready = ['healthy', 'updated', 'unsafe-version'].includes(name);
 assert.equal(health.state, ready ? 'active' : 'degraded');
 assert.equal(status.description.includes(ready ? '[agent-guard:ready]' : '[agent-guard:degraded]'), true);
-if (name === 'updated') assert.equal(health.restartNeeded, true);
+if (name === 'updated') {
+  assert.equal(health.restartNeeded, true);
+  // Same-day releases add a fourth number.
+  assert.deepEqual([health.releases.installed, health.releases.version], ['2.0.0.1-fixture', '1.0.0.1']);
+}
 if (name === 'unsafe-version') assert.equal(health.releases.version, null);
 if (ready) {
   await before({ tool: 'bash' }, { args: { command: 'pwd' } });
