@@ -14,7 +14,7 @@ const READS = new Set(["read", "glob", "grep", "list", "lsp"])
 const CONFIG = /\/\.cc-safety-net(\/|$)/
 const UNSAFE_NET_ENV = ["CC_SAFETY_NET_HOME", "CC_SAFETY_NET_WORKTREE", "SAFETY_NET_WORKTREE", "CC_SAFETY_NET_AUDIT_HOME"]
 const releaseID = value => typeof value === "string" && value.length <= 100 && /^[0-9A-Za-z.+-]+$/.test(value) && value !== "." && value !== ".." ? value : null
-const publicReleaseID = value => typeof value === "string" && /^(?:dev|\d+\.\d+\.\d+(?:-(?:rc|beta|alpha|pre)[.-]?\d+)?)-(?:\d{8}T\d{6}Z|fixture)$/.test(value) ? value : null
+const publicReleaseID = value => typeof value === "string" && /^(?:dev|\d+\.\d+\.\d+(?:\.\d+)?(?:-(?:rc|beta|alpha|pre)[.-]?\d+)?)-(?:\d{8}T\d{6}Z|fixture)$/.test(value) ? value : null
 const ERRNOS = new Set(["EPERM", "EACCES", "ENOENT", "ENOTDIR", "ELOOP"])
 const RULE_IDS = new Set(["guard.path.deny", "guard.path.protected", "guard.path.readonly", "guard.path.unlisted", "guard.path.invalid", "unattributed", "custom", "secret.basename.env", "git.reset-hard", "rm.recursive-force-root-or-home", "rm.recursive-force-outside-cwd"])
 const EVENT_FIELDS = {
@@ -71,7 +71,7 @@ const RELEASE = (() => {
 const VERSION = (() => {
   try {
     const value = readFileSync(join(RELEASE, "VERSION"), "utf8").trim()
-    return value.length <= 80 && /^(?:dev|\d+\.\d+\.\d+(?:-(?:rc|beta|alpha|pre)[.-]?\d+)?)$/.test(value) ? value : null
+    return value.length <= 80 && /^(?:dev|\d+\.\d+\.\d+(?:\.\d+)?(?:-(?:rc|beta|alpha|pre)[.-]?\d+)?)$/.test(value) ? value : null
   } catch { return null }
 })()
 
