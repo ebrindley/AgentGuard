@@ -158,6 +158,7 @@ opencode_managed() {
   # The app may reconnect by spawning a detached replacement. End the client
   # when its original server exits, so a lost service ends this launch's lease.
   trap opencode_client_exited CHLD
+  record_app_projects
   $sandbox "$@" <&0 &
   opencode_client_pid=$!
   opencode_client_exited

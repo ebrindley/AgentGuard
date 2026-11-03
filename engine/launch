@@ -328,8 +328,9 @@ normalize() {
 }
 
 # @project (docs/DESIGN.md section 4): the folder the session was started for.
-# resolve_project sets REPLY to its canonical path, or returns 1 after logging
-# why the entry is skipped. A target the refusal list names refuses the launch;
+# resolve_project sets the array reply to the canonical paths (zero or one in a
+# terminal launch, every remembered and dropped folder in the app), or returns 1
+# after logging why the entry is skipped. A target the refusal list names refuses the launch;
 # it is never widened. The profile's start_hook reads the launch arguments and
 # gives the project argument OpenCode itself would open, if any.
 typeset -a projects project_names
@@ -396,15 +397,26 @@ check_project() {
 # In the app, @project is the remembered app projects plus the folders dropped on
 # the app for this launch: app_projects is every one that resolves, app_new the
 # dropped ones the store does not hold yet. A stored folder that is gone is
-# skipped; one now refused, or a dropped one that is refused or not a folder,
-# fails the launch.
+# skipped; one now refused, one that no longer resolves to its stored line (a
+# link now stands on its path), or a dropped one that is refused or not a folder,
+# fails the launch. Stored lines were canonical when written, so a session that
+# replaced one with a link cannot aim it at another folder.
 resolve_app_projects() {
-  local p given top
+  local p given top canon hint
+  local -a saved_links
   app_listed=1
   for p in $app_lines; do
-    normalize "$p" literal && top=$REPLY || { note "skipped, not a full path in $app_store: $p"; continue }
+    hint="Remove it with: agent-guard app-projects remove ${(q-)p}"
+    saved_links=($link_nodes); link_nodes=()
+    normalize "$p" literal && top=$REPLY || { link_nodes=($saved_links); note "skipped, not a full path in $app_store: $p"; continue }
+    canon=$top; [[ ! -e $top ]] || canon=${top:A}
+    if (( $#link_nodes )) || [[ $canon != $p ]]; then
+      record "refused @project: remembered folder $p now resolves to $canon"
+      fail "@project remembered folder $p now resolves to $canon, not the folder that was added. $hint"
+    fi
+    link_nodes=($saved_links)
     lexical "$p"; given=$REPLY
-    check_project "$given" "$top" "Remove it with: agent-guard app-projects remove $top"
+    check_project "$given" "$top" "$hint"
     top=$REPLY
     [[ -d $top ]] || { note "skipped, app project folder does not exist: $top"; continue }
     app_projects+=("$top")
@@ -871,11 +883,15 @@ export AGENT_GUARD_SANDBOXED=1 AGENT_GUARD_RELEASE=${release:t}
 unset AGENT_GUARD_OUTER_SANDBOX
 export AGENT_GUARD_PEER_PATH=${AGENT_GUARD_PEER_PATH:-$PATH}
 path=("$release/peers" $path)
-# The remembered app projects change only here, once the launch is certain, and
-# outside the sandbox: a temp file in the same folder, then a rename.
-if (( $#app_new )); then
+# The remembered app projects change only once the launch is certain (just before
+# the client starts) and outside the sandbox: a temp file in the same folder,
+# then a rename.
+record_app_projects() {
+  (( $#app_new )) || return 0
   print -rl -- $app_lines $app_new > "$app_store.$$" && /bin/mv -f -- "$app_store.$$" "$app_store" ||
     { /bin/rm -f -- "$app_store.$$"; fail "cannot record the app projects in $app_store" }
-fi
+  app_new=()
+}
 (( ! managed )) || opencode_managed "$managed_cli" "$@"
+record_app_projects
 exec $sandbox "$@"

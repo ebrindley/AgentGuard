@@ -285,8 +285,11 @@ folder for a later launch.
   chooser asks for one. Cancel quits without launching. Later opens launch
   without a prompt.
 - Every launch re-resolves each stored folder. One that no longer exists is
-  skipped and kept in the store. One that is now refused fails the launch with an
-  alert that names it and the removal command.
+  skipped and kept in the store. One that is now refused, or that now resolves
+  through a link to a different folder than the one stored, fails the launch with
+  an alert that names it and the removal command; nothing is granted or skipped
+  silently.
+- Dropping a folder grants it and remembers it; it does not open it in Desktop.
 - A dropped path must be an absolute path to an existing folder, and must not be
   refused; otherwise the launch fails with an alert and nothing is added.
 - Dropping a folder while `@project` is not under ALLOW shows an alert and does

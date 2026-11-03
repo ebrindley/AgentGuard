@@ -275,6 +275,7 @@ exit 0
     assert.equal(stored(), before, `${name}: the store changed`);
     assert.ok(!existsSync(join(engine, 'state/rules.json')), `${name}: rules published`);
     assert.ok(!existsSync(g.out), `${name}: the app started`);
+    return g.r.stderr;
   };
 
   // No folder yet: the chooser is asked for, once a folder is remembered it is not.
@@ -412,6 +413,37 @@ exit 0
   refused('stored and now refused', ['--project', P('Projects/new-good')], /@project is or is inside .*Documents.*proj\. Remove it with: agent-guard app-projects remove .*Documents\/proj/);
   console.log('ok   a remembered folder that is gone is skipped and kept; one now refused fails the launch');
 
+  // A stored line is canonical when written: a link now on its path refuses the launch, as a
+  // replaced folder or as a link planted where a deleted folder was, and grants nothing.
+  const swap = P('Projects/swap');
+  mkdirSync(swap);
+  const swapReal = realpathSync(swap);
+  setStore(other, swapReal);
+  rmSync(swap, { recursive: true });
+  symlinkSync(sibling, swap);
+  const swapRefusal = refused('stored folder replaced by a link', [], new RegExp(`remembered folder ${swapReal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} now resolves to ${sibling.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.* Remove it with: agent-guard app-projects remove '${swapReal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'\\n`));
+  // A link left at the name of a deleted folder refuses too, even one that points nowhere.
+  rmSync(swap);
+  symlinkSync(P('Projects/nowhere'), swap);
+  refused('stored folder gone, dangling link planted', [], /remembered folder .*Projects\/swap now resolves to/);
+  console.log('ok   a remembered folder now behind a link refuses the launch and names the removal command');
+
+  // A launch that fails after resolving, in the managed service checks, remembers nothing.
+  mkdirSync(join(appDir, 'Resources'), { recursive: true });
+  writeFileSync(join(appDir, 'Resources/opencode-cli'), `#!/bin/sh
+case "$1" in --version) echo 2.0.0 ;; service) echo http://127.0.0.1:1 ;; esac
+`);
+  chmodSync(join(appDir, 'Resources/opencode-cli'), 0o755);
+  setStore(other);
+  const storeBefore = stored();
+  const failed = gui('managed-fails', ['--project', sibling], { text: ALLOW('@project') });
+  assert.notEqual(failed.r.status, 0);
+  assert.match(failed.r.stderr, /background service/);
+  assert.ok(!existsSync(failed.out), 'the app started');
+  assert.equal(stored(), storeBefore, 'a failed launch changed the store');
+  rmSync(join(appDir, 'Resources'), { recursive: true });
+  console.log('ok   a launch that fails its managed service checks does not remember dropped folders');
+
   // Per project: protected names behind links, and the active hooks folder.
   rmSync(store);
   mkdirSync(P('Projects/piproj/omp-target'), { recursive: true });
@@ -456,6 +488,14 @@ exit 0
   assert.equal(manage('remove', P('Projects/gone')).status, 0);
   assert.equal(manage('remove', withSpace).status, 0);
   assert.equal(stored(), '');
+  // The removal command in a refusal works as printed, with the link still in place.
+  setStore(other, swapReal);
+  const hint = swapRefusal.match(/Remove it with: agent-guard (app-projects remove .*)\n/)[1];
+  m = spawnSync('/bin/zsh', ['-c', `exec /bin/zsh ${JSON.stringify(ag)} ${hint}`], { encoding: 'utf8', env: { PATH: '/usr/bin:/bin', HOME: home, TMPDIR: temp }, cwd: P('Projects') });
+  assert.equal(m.status, 0, m.stderr);
+  assert.equal(stored(), `${other}\n`);
+  rmSync(swap);
+  setStore();
   assert.equal(manage('remove').status, 2);
   assert.equal(manage('add', other).status, 2);
   console.log('ok   agent-guard app-projects lists the store and removes an entry as stored or as typed');
