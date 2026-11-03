@@ -121,6 +121,7 @@ function managed(responses, script) {
       responses=("$@")
       fail() { print -ru2 -- "$*"; exit 2; }
       note() { :; }
+      record_app_projects() { :; }
       sleep() { :; }
       fake() {
         [[ $1 == -D ]] && shift 2
