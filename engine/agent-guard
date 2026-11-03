@@ -1,10 +1,10 @@
 #!/bin/zsh
-# usage: agent-guard doctor|diagnose [--json]|version|update [--restore-edit-permissions] [--approval-preference auto|host]|uninstall|bind [OPTIONS]|wrapper add|remove|list
+# usage: agent-guard doctor|diagnose [--json]|version|update [--restore-edit-permissions] [--approval-preference auto|host]|uninstall|bind [OPTIONS]|wrapper add|remove|list|app-projects [remove PATH]
 emulate -L zsh
 setopt no_unset pipe_fail extended_glob
 
 die() { print -ru2 -- "agent-guard: $*"; exit 1 }
-usage() { print -ru2 -- 'usage: agent-guard doctor|diagnose [--json]|version|update [--restore-edit-permissions] [--approval-preference auto|host]|uninstall|bind [OPTIONS]|wrapper add|remove|list'; exit 2 }
+usage() { print -ru2 -- 'usage: agent-guard doctor|diagnose [--json]|version|update [--restore-edit-permissions] [--approval-preference auto|host]|uninstall|bind [OPTIONS]|wrapper add|remove|list|app-projects [remove PATH]'; exit 2 }
 
 # This file is bin/agent-guard inside a release folder. Only a folder shaped like
 # one is trusted to supply the account lookup; after it, the release must be a
@@ -227,6 +227,32 @@ if [[ ${1:-} == (bind|wrapper) ]]; then
   source "$release/profiles/pi/commands/$pi_command.zsh" || die "cannot load the $pi_command command"
   pi_$pi_command "$@"
   exit
+fi
+# The folders OpenCode Desktop may change under @project (docs/DESIGN.md section 4),
+# one canonical path per line. Only this command and the app launcher write the
+# file, outside any session.
+if [[ ${1:-} == app-projects ]]; then
+  shift
+  store="$engine/state/opencode/app-projects"
+  typeset -a lines keep
+  typeset p l
+  [[ ! -r $store ]] || lines=(${(f)"$(<"$store")"})
+  if (( ! $# )); then
+    (( $#lines )) && print -rl -- $lines || print -ru2 -- 'agent-guard: no app projects are remembered'
+    exit 0
+  fi
+  [[ $1 == remove && $# == 2 && -n $2 ]] || usage
+  # The entry as stored, else the path as typed resolved to its canonical form.
+  for p in $2 ${2:A}; do
+    keep=()
+    for l in $lines; do [[ $l == "$p" ]] || keep+=("$l"); done
+    (( $#keep < $#lines )) && break
+  done
+  (( $#keep < $#lines )) || die "not an app project: $2"
+  tmp="$store.$$"
+  { (( ! $#keep )) || print -rl -- $keep } > "$tmp" && /bin/mv -f -- "$tmp" "$store" ||
+    { /bin/rm -f -- "$tmp"; die "cannot write $store" }
+  exit 0
 fi
 if [[ ${1:-} == update ]]; then
   shift

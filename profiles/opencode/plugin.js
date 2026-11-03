@@ -351,6 +351,7 @@ async function guard(input) {
       sandbox: { ...sandbox, origin: "startup-probe", freshness: "cached" },
       rules: { loaded: !!rules, source: rulesSource, semanticHealth: "not-probed" },
       safetyNet: { moduleLoaded, apiLoaded: !!checkCommand, hooksReady: !!net, semanticHealth: "not-probed" },
+      projects: Array.isArray(rules?.projects) ? rules.projects.filter(p => typeof p === "string").slice(0, 100) : [],
       preparation: { status: ["ready", "warning"].includes(rules?.preparationStatus) ? rules.preparationStatus : "not-observed", origin: "snapshot" },
       releases: { loaded: publicReleaseID(loaded), launcher: publicReleaseID(launcher), installed: publicReleaseID(installed), version: VERSION },
       restartNeeded: DELEGATE === false || !!(installed && loaded && installed !== loaded) || !!(launcher && loaded && launcher !== loaded),
