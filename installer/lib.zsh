@@ -786,7 +786,8 @@ ag_app_decide() {
   [[ -f $ents ]] || { ag_err "the release has no $ents"; return 1 }
   ag_app_script
   s=$( { print -r -- "$REPLY"; print -r -- "$bundle_id"; ag_app_usage_text; print -r -- "$REPLY"
-         ag_app_sign_options; print -r -- "$reply"; /usr/bin/shasum -a 256 < "$icon"; /usr/bin/shasum -a 256 < "$ents" } | /usr/bin/shasum -a 256 ) ||
+         ag_app_sign_options; print -r -- "$reply"; print -r -- 'CFBundleIconFile=applet'
+         /usr/bin/shasum -a 256 < "$icon"; /usr/bin/shasum -a 256 < "$ents" } | /usr/bin/shasum -a 256 ) ||
     { ag_err "cannot hash $icon and $ents"; return 1 }
   ag_app_inputs=${s%% *}
   [[ -f $stamp ]] && old=$(/usr/bin/jq -r '.app_inputs // empty' "$stamp" 2>/dev/null)
@@ -867,6 +868,7 @@ ag_build() {
   /usr/bin/osacompile -o "$s" -e "$REPLY" || return 1
   /usr/bin/plutil -replace CFBundleIdentifier -string "$bundle_id" "$s/Contents/Info.plist" || return 1
   /bin/cp -- "$rel/profiles/opencode/assets/AgentGuard.icns" "$s/Contents/Resources/applet.icns" || return 1
+  /usr/bin/plutil -replace CFBundleIconFile -string applet "$s/Contents/Info.plist" || return 1
   /bin/rm -f -- "$s/Contents/Resources/Assets.car"
   /usr/bin/plutil -remove CFBundleIconName "$s/Contents/Info.plist" >/dev/null 2>&1
   ag_app_usage_text
