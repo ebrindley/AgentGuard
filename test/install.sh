@@ -164,6 +164,10 @@ label=S6
 /usr/bin/cmp -s "$cc/agent-guard/rulebook.json" "$source_root/profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json" &&
   pass "the stale rulebook is replaced by the release's" || fail "the stale rulebook is replaced by the release's"
 label=S7
+icon=$(/usr/bin/plutil -extract CFBundleIconFile raw "$app/Contents/Info.plist")
+[[ $icon == *.icns ]] || icon+=.icns
+/usr/bin/cmp -s "$app/Contents/Resources/$icon" "$source_root/profiles/opencode/assets/AgentGuard.icns" &&
+  pass 'the bundle-selected icon matches Agent Guard artwork' || fail 'the bundle-selected icon differs from Agent Guard artwork'
 usage='OpenCode asked for this while running inside Agent Guard. Agent Guard does not use it itself.'
 /usr/bin/plutil -convert json -o - "$app/Contents/Info.plist" |
   /usr/bin/jq -e --arg t "$usage" '[to_entries[] | select(.key | endswith("UsageDescription"))] | length == 11 and all(.value == $t)' >/dev/null &&
