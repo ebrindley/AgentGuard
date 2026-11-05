@@ -21,7 +21,7 @@
       "match": {
         "command_path": ["restore"],
         "any_args": [".", "./", ":/"],
-        "exclude_args": ["--staged", "-S"]
+        "git_restore_worktree": true
       },
       "reason": "Restoring the whole tree discards uncommitted work; restore named files, or run it outside Agent Guard.",
       "intent": "manual_only"
@@ -43,6 +43,13 @@
     { "command": "git restore .", "expect": "blocked", "rule": "restore-whole-tree" },
     { "command": "git restore src/a.ts", "expect": "allowed" },
     { "command": "git restore --staged .", "expect": "allowed" },
+    { "command": "git restore --staged --worktree .", "expect": "blocked", "rule": "restore-whole-tree" },
+    { "command": "git restore --staged --worktree ./", "expect": "blocked", "rule": "restore-whole-tree" },
+    { "command": "git restore --staged --worktree :/", "expect": "blocked", "rule": "restore-whole-tree" },
+    { "command": "git restore --staged --worktree src/a.ts", "expect": "allowed" },
+    { "command": "git restore --source HEAD --staged --worktree .", "expect": "blocked", "rule": "restore-whole-tree" },
+    { "command": "git restore -s HEAD -S -W .", "expect": "blocked", "rule": "restore-whole-tree" },
+    { "command": "git restore --staged --worktree src/a.ts .", "expect": "blocked", "rule": "restore-whole-tree" },
     { "command": "git checkout -- .", "expect": "blocked", "rule": "checkout-whole-tree" },
     { "command": "git checkout -- src/a.ts", "expect": "allowed" }
   ]
