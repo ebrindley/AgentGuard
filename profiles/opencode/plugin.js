@@ -1,4 +1,4 @@
-import { closeSync, constants, existsSync, lstatSync, openSync, readFileSync, realpathSync, statSync, unlinkSync, writeFileSync } from "node:fs"
+import { closeSync, constants, existsSync, fstatSync, ftruncateSync, lstatSync, openSync, readFileSync, realpathSync, statSync, unlinkSync, writeFileSync, writeSync } from "node:fs"
 import { basename, dirname, join, resolve } from "node:path"
 import { homedir, tmpdir } from "node:os"
 import { randomBytes } from "node:crypto"
@@ -41,19 +41,29 @@ function sanitizedEvent(event) {
 // Advisory support evidence, never an enforcement input. Existing writable log
 // permissions suffice; failing to retain an observation cannot change a verdict.
 function recordEvent(fields) {
+  let fd
   try {
     const file = join(HOME, ".cc-safety-net/logs/agent-guard-events.json")
+    fd = openSync(file, constants.O_CREAT | constants.O_RDWR | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o600)
+    const info = fstatSync(fd)
+    if (!info.isFile()) return
     let events = []
-    if (existsSync(file) && statSync(file).size <= 65536) {
+    if (info.size <= 65536) {
       try {
-        const previous = JSON.parse(readFileSync(file, "utf8"))
+        const previous = JSON.parse(readFileSync(fd, "utf8"))
         if (previous.schemaVersion === 1 && previous.advisory === true && Array.isArray(previous.events))
           events = previous.events.slice(-31).map(sanitizedEvent).filter(Boolean)
       } catch { /* Discard invalid advisory history and retain this observation. */ }
     }
     const event = sanitizedEvent({ timestamp: Date.now(), tool: "other", ruleId: "unattributed", errno: "unknown", release: RELEASE ? basename(RELEASE) : null, ...fields })
-    if (event) writeFileSync(file, JSON.stringify({ schemaVersion: 1, advisory: true, events: [...events, event] }) + "\n")
-  } catch {}
+    if (event) {
+      const text = JSON.stringify({ schemaVersion: 1, advisory: true, events: [...events, event] }) + "\n"
+      writeSync(fd, text, 0, "utf8")
+      ftruncateSync(fd, Buffer.byteLength(text))
+    }
+  } catch {} finally {
+    if (fd !== undefined) { try { closeSync(fd) } catch {} }
+  }
 }
 
 // The release folder this file really lives in, whatever link OpenCode loaded it
