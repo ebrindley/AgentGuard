@@ -125,6 +125,14 @@
       "id": 18,
       "change": "The launcher no longer reads the extension folder's .guard-node, which recorded the Node that ran the analyzer, and no longer refuses to launch when it is invalid, stale or inside a sandbox-writable root. The analyzer is retired (difference 17), so a leftover .guard-node, which Agent Guard's update and uninstall remove, has no effect; this also ends the defect that a Pi started inside a Pi session exited with HOME_CANON: parameter not set whenever .guard-node existed.",
       "files": ["launchers/pi"]
+    },
+    {
+      "id": 19,
+      "change": "Check for newer stable Agent Guard releases once before a top-level Pi or OMP session, after account and nesting resolution. Runtime administrative commands and help/version requests do not check. Accepted upgrades use the existing updater and exec the installed shim once with the original arguments; an internal handoff marker skips only the repeated update check.",
+      "files": [
+        "launchers/pi",
+        "sandbox/pi-sandbox-preamble.zsh"
+      ]
     }
   ],
   "test_notes": [

@@ -21,7 +21,7 @@ pass "release.sh passed the seam check: production seam forms present, no AG_TES
 # tracked file in the folders shipped whole.
 expected=(
   VERSION COMMIT install.sh LICENSE
-  engine/launch engine/account.zsh engine/agent-guard engine/profile.sb engine/vendor/THIRD-PARTY-NOTICES
+  engine/launch engine/account.zsh engine/agent-guard engine/updates.zsh engine/profile.sb engine/vendor/THIRD-PARTY-NOTICES
   engine/peers.zsh engine/peer-runtime.sb
   profiles/opencode/{harness.zsh,hooks.zsh,runtime.zsh,skills.zsh,protected.sb,credentials.sb,plugin.js,v2.js,permissions.js,permissions.jq,diagnostics.zsh,opencode,opencode-gui,install.sh,uninstall.sh}
   installer/{lib.zsh,actions.zsh,harness/{opencode,pi,grok}.zsh,migrate/{opencode-guard,pi-sandbox-guard}.zsh}

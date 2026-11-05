@@ -21,10 +21,65 @@ index 2f94258..d86d372 100755
  fi
  
 diff --git a/launchers/pi b/launchers/pi
-index f5e94c2..3ac0a8e 100755
+index f5e94c2..8052215 100755
 --- a/launchers/pi
 +++ b/launchers/pi
-@@ -153,29 +153,6 @@ if [ ! -f "$PI_SANDBOX_GUARD_EXTENSION" ]; then
+@@ -68,22 +68,6 @@ if [ "$PI_SANDBOX_RUNTIME" = "omp" ]; then
+   unset _pi_sandbox_args _pi_sandbox_i _pi_sandbox_profile_args _pi_sandbox_profile
+ fi
+ 
+-if [ ! -f "$PREAMBLE" ]; then
+-  print -u2 -- "[pi-sandbox-guard] sandbox preamble missing ($PREAMBLE); refusing to launch."
+-  exit 1
+-fi
+-
+-source "$PREAMBLE"
+-
+-# Nested own-shim re-entry marker (paired with profile/boundary markers from preamble).
+-export PI_SANDBOX_SHIM_ACTIVE=1
+-export PI_SANDBOX_RUNTIME_ACTIVE="$PI_SANDBOX_RUNTIME"
+-# The digest is a coincidence check, not a secret. Behavioral probes verify the
+-# recorded project and active-hooks boundaries before nested pass-through.
+-if [ -n "${PI_SANDBOX_PROFILE_DIGEST:-}" ]; then
+-  export PI_SANDBOX_PROFILE_DIGEST
+-fi
+-
+ # The extension is part of agent sessions, not the runtimes' administrative
+ # command parsers. Injecting it before a native subcommand changes Pi's command
+ # into a prompt and makes several OMP subcommands reject an unknown flag.
+@@ -131,10 +115,29 @@ is_runtime_command() {
+   return 1
+ }
+ 
+-if is_runtime_command "$PI_SANDBOX_RUNTIME" "$@"; then
++PI_SANDBOX_COMMAND_KIND=0
++is_runtime_command "$PI_SANDBOX_RUNTIME" "$@" || PI_SANDBOX_COMMAND_KIND=$?
++
++if [ ! -f "$PREAMBLE" ]; then
++  print -u2 -- "[pi-sandbox-guard] sandbox preamble missing ($PREAMBLE); refusing to launch."
++  exit 1
++fi
++
++source "$PREAMBLE"
++
++# Nested own-shim re-entry marker (paired with profile/boundary markers from preamble).
++export PI_SANDBOX_SHIM_ACTIVE=1
++export PI_SANDBOX_RUNTIME_ACTIVE="$PI_SANDBOX_RUNTIME"
++# The digest is a coincidence check, not a secret. Behavioral probes verify the
++# recorded project and active-hooks boundaries before nested pass-through.
++if [ -n "${PI_SANDBOX_PROFILE_DIGEST:-}" ]; then
++  export PI_SANDBOX_PROFILE_DIGEST
++fi
++
++
++if [ "$PI_SANDBOX_COMMAND_KIND" -eq 0 ]; then
+   exec "${PI_SANDBOX_CMD[@]}" "${PI_LAUNCH_VECTOR[@]}" "$@"
+ else
+-  PI_SANDBOX_COMMAND_KIND="$?"
+   if [ "$PI_SANDBOX_COMMAND_KIND" -eq 2 ]; then
+     print -u2 -- "[pi-sandbox-guard] this OMP agent command does not accept the required guard extension; refusing protected launch."
+     print -u2 -- "[pi-sandbox-guard] call the real OMP binary directly only when you intentionally accept guard-only/unsandboxed operation."
+@@ -153,29 +156,6 @@ if [ ! -f "$PI_SANDBOX_GUARD_EXTENSION" ]; then
    exit 1
  fi
  
@@ -55,7 +110,7 @@ index f5e94c2..3ac0a8e 100755
  # resolved target is a `node` shebang script and an interpreter was recorded. Execing
  # the vector instead of "$PI_EXECUTABLE" is what makes a recorded interpreter real:
 diff --git a/sandbox/pi-sandbox-preamble.zsh b/sandbox/pi-sandbox-preamble.zsh
-index 9b7c788..e9f2852 100644
+index 9b7c788..2e1c886 100644
 --- a/sandbox/pi-sandbox-preamble.zsh
 +++ b/sandbox/pi-sandbox-preamble.zsh
 @@ -48,6 +48,7 @@ unset _PI_GIT_ENV_NAME
@@ -111,7 +166,32 @@ index 9b7c788..e9f2852 100644
          exit 1
        }
      fi
-@@ -953,6 +954,22 @@ fi
+@@ -919,6 +920,24 @@ if [ "$PI_SANDBOX_TRANSPARENT" = "1" ] && { [ -n "${PI_SANDBOX_SHIM_ACTIVE:-}" ]
+   emit "PI_SANDBOX_SHIM_ACTIVE/PROFILE_DIGEST set but no active confinement detected; applying sandbox."
+ fi
+ 
++# The preamble has resolved the real account home and ruled out nesting.
++# Administrative runtime commands keep their existing startup path.
++if [ "${PI_SANDBOX_COMMAND_KIND:-0}" -eq 1 ]; then
++  AG_UPDATE_ENGINE="$HOME_CANON_EARLY/Library/Application Support/AgentGuard"
++  if [[ -f "$AG_UPDATE_ENGINE/current/updates.zsh" ]]; then
++    source "$AG_UPDATE_ENGINE/current/updates.zsh"
++    ag_pi_update_startup() {
++      local home="$HOME_CANON_EARLY" engine="$AG_UPDATE_ENGINE"
++      export AGENT_GUARD_PEER_PATH
++      ag_update_startup cli "$PI_SANDBOX_RUNTIME" "$PI_SANDBOX_SHIM_PATH" "$@"
++    }
++    if ! ag_pi_update_startup "$@"; then
++      emit "update failed; run agent-guard update from Terminal to finish recovery before reopening."
++      exit 1
++    fi
++  fi
++fi
++
+ # fail-closed prerequisites (absolute path; do not trust $PATH)
+ if [ ! -x "$SANDBOX_EXEC" ]; then
+   emit "$SANDBOX_EXEC not found; refusing to launch. Run the real Pi binary directly for guard-only."; exit 1
+@@ -953,6 +972,22 @@ fi
  PROJECT="$(cd -P "$PROJECT" 2>/dev/null && pwd -P)" || {
    emit "cannot resolve project dir '$PROJECT'; refusing."; exit 1; }
  
@@ -134,7 +214,7 @@ index 9b7c788..e9f2852 100644
  # Refuse dangerous boundaries (the actual safety check). A fresh empty project dir
  # is fine; broad roots, system prefixes, and credential/home subtrees are not.
  # This matters more now that a non-git cwd falls back to $PWD: ANY directory you
-@@ -1009,15 +1026,107 @@ esac
+@@ -1009,15 +1044,107 @@ esac
  # worktree under ~/.omp/wt) would be denied wholesale, so refuse it clearly
  # instead of launching into a read-only project.
  # Keep these patterns in step with the project agent config regexes in pi-sandbox.sb.
@@ -243,7 +323,7 @@ index 9b7c788..e9f2852 100644
  ACTIVE_HOOKS="$(resolve_active_hooks "$PROJECT")" || exit 1
  TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
  
-@@ -1028,16 +1137,40 @@ TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
+@@ -1028,16 +1155,40 @@ TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
  # PROJECT and the launch cwd (Pi resolves <cwd>/.pi). Links that stay inside the
  # config folder (npm .bin links) or point to non-writable locations are fine.
  # Prints the offending path and returns 1 on a refused layout.
@@ -287,7 +367,7 @@ index 9b7c788..e9f2852 100644
          target="${link:A}"
          case "$target" in "$dir_canon"|"$dir_canon"/*) continue ;; esac
          # Probe a child so a link to a write root itself (e.g. PROJECT) matches too.
-@@ -1054,9 +1187,9 @@ _pi_config_bases=("$PROJECT")
+@@ -1054,9 +1205,9 @@ _pi_config_bases=("$PROJECT")
  [ "${PWD:A}" = "$PROJECT" ] || _pi_config_bases+=("${PWD:A}")
  if ! _pi_config_offender="$(project_config_symlink_offender "${_pi_config_bases[@]}")"; then
    emit "refusing to launch: symlinked project agent config '$_pi_config_offender'."
@@ -300,7 +380,7 @@ index 9b7c788..e9f2852 100644
    exit 1
  fi
  unset _pi_config_bases _pi_config_offender
-@@ -1084,12 +1217,67 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
+@@ -1084,12 +1235,67 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
      # the recorded interpreter, and both --detect and a bare --pi re-derive node via
      # detect_node, which takes the first PATH hit with no write-root filter — so
      # either would re-record the same unsafe path and fail identically next launch.
@@ -369,7 +449,7 @@ index 9b7c788..e9f2852 100644
  emit "OS sandbox ON. Runtime [$PI_SANDBOX_RUNTIME]. Project [$PROJECT_VIA]: $PROJECT"
  emit "  active Git hooks denied: $ACTIVE_HOOKS"
  if [ "$PI_SANDBOX_RUNTIME" = "pi" ]; then
-@@ -1112,6 +1300,50 @@ fi
+@@ -1112,6 +1318,50 @@ fi
  export PI_SANDBOX_PROFILE_DIGEST PI_SANDBOX_PROJECT_BOUNDARY
  export PI_SANDBOX_ACTIVE_HOOKS_BOUNDARY PI_SANDBOX_AGENT_STATE_BOUNDARY
  
@@ -420,7 +500,7 @@ index 9b7c788..e9f2852 100644
  PI_SANDBOX_CMD=(
    "$SANDBOX_EXEC"
    -D "PROJECT=$PROJECT"
-@@ -1122,5 +1354,7 @@ PI_SANDBOX_CMD=(
+@@ -1122,5 +1372,7 @@ PI_SANDBOX_CMD=(
    -D "OMP_AGENT_STATE=$OMP_AGENT_STATE"
    -D "OMP_STATE_ROOT=$OMP_STATE_ROOT"
    -D "OMP_BASE_ROOT=$OMP_BASE_ROOT"

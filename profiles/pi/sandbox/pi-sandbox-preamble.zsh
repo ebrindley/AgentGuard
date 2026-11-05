@@ -920,6 +920,24 @@ if [ "$PI_SANDBOX_TRANSPARENT" = "1" ] && { [ -n "${PI_SANDBOX_SHIM_ACTIVE:-}" ]
   emit "PI_SANDBOX_SHIM_ACTIVE/PROFILE_DIGEST set but no active confinement detected; applying sandbox."
 fi
 
+# The preamble has resolved the real account home and ruled out nesting.
+# Administrative runtime commands keep their existing startup path.
+if [ "${PI_SANDBOX_COMMAND_KIND:-0}" -eq 1 ]; then
+  AG_UPDATE_ENGINE="$HOME_CANON_EARLY/Library/Application Support/AgentGuard"
+  if [[ -f "$AG_UPDATE_ENGINE/current/updates.zsh" ]]; then
+    source "$AG_UPDATE_ENGINE/current/updates.zsh"
+    ag_pi_update_startup() {
+      local home="$HOME_CANON_EARLY" engine="$AG_UPDATE_ENGINE"
+      export AGENT_GUARD_PEER_PATH
+      ag_update_startup cli "$PI_SANDBOX_RUNTIME" "$PI_SANDBOX_SHIM_PATH" "$@"
+    }
+    if ! ag_pi_update_startup "$@"; then
+      emit "update failed; run agent-guard update from Terminal to finish recovery before reopening."
+      exit 1
+    fi
+  fi
+fi
+
 # fail-closed prerequisites (absolute path; do not trust $PATH)
 if [ ! -x "$SANDBOX_EXEC" ]; then
   emit "$SANDBOX_EXEC not found; refusing to launch. Run the real Pi binary directly for guard-only."; exit 1

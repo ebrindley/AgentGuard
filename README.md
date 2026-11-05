@@ -118,11 +118,20 @@ Run these commands from Terminal outside an agent session:
 | `agent-guard diagnose [--json]` | Collect sanitized installation and cached failure observations without launching an agent or writing files |
 | `agent-guard version` | Show the installed release and recorded file changes |
 | `agent-guard update` | Install the latest stable release |
+| `agent-guard update --check` | Check for a newer stable release without installing |
+| `agent-guard update-check [on\|off]` | Show or change startup update checks |
 | `agent-guard app-projects [remove PATH]` | List or forget the folders `@project` grants OpenCode Desktop |
 | `agent-guard uninstall` | Remove the guard; retain `~/Agent Guard` |
 
 `update` follows stable releases and leaves a newer installed version unchanged.
 See [release channels](docs/OPERATIONS.md#release-channels) for tagged installs.
+
+Agent launches check GitHub once for a newer stable release by default. When one
+is available, interactive launches offer to upgrade before starting. Accepting
+runs the updater, then prints “AgentGuard updated. Restarting…” and restarts the
+launcher with the same project and arguments. Declining or an unavailable update
+check continues normally. Use `agent-guard update-check off` to disable startup
+checks; noninteractive launches never prompt or upgrade.
 
 The `--approval-preference auto|host` records your intended
 OpenCode approval mode; it does not enable it. For automatic approval, use

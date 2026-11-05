@@ -85,8 +85,8 @@ and merges at the reviewed head with an empty body. The `tests` check runs the
 same subject check on the pull request title. Local gate execution is useful for
 focused development, but is not required in addition to the hosted gate.
 
-The gate keeps the three baseline files and adds six offline OpenCode files:
-`test/opencode-config.mjs`, `test/plugin-health.mjs`, `test/diagnostics.mjs`,
+The gate keeps the three baseline files and runs seven update and OpenCode files:
+`test/updates.mjs`, `test/opencode-config.mjs`, `test/plugin-health.mjs`, `test/diagnostics.mjs`,
 `test/permissions.mjs`, `test/opencode-runtime.mjs` and `test/project.mjs` (`@project`, including the app's remembered projects,
 on a disposable home, under the real `sandbox-exec`). Run a failing file by
 itself during development. The

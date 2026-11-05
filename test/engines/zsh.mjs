@@ -31,13 +31,14 @@ export function isolateHarness(tree) {
 export function layout(tree, engine, rid = '0.0.0-20260101T000000Z') {
   const release = join(engine, 'releases', rid);
   mkdirSync(join(release, 'profiles'), { recursive: true });
-  for (const f of ['launch', 'profile.sb', 'account.zsh', 'peers.zsh', 'peer-runtime.sb', 'peers', 'checker']) cpSync(join(tree, 'engine', f), join(release, f), { recursive: true });
+  for (const f of ['launch', 'profile.sb', 'account.zsh', 'updates.zsh', 'peers.zsh', 'peer-runtime.sb', 'peers', 'checker']) cpSync(join(tree, 'engine', f), join(release, f), { recursive: true });
   cpSync(join(tree, 'profiles/opencode'), join(release, 'profiles/opencode'), { recursive: true });
   cpSync(join(tree, 'profiles/grok'), join(release, 'profiles/grok'), { recursive: true });
   mkdirSync(join(release, 'bin'), { recursive: true });
   cpSync(join(tree, 'profiles/grok/grok'), join(release, 'bin/grok'));
   writeFileSync(join(release, 'RELEASE'), `${rid}\n`);
   writeFileSync(join(release, 'VERSION'), `${rid.split('-')[0]}\n`);
+  replaceOnce(join(release, 'updates.zsh'), 'ag_update_latest() {', 'ag_update_latest() { return 1\n');
   symlinkSync(join('releases', rid), join(engine, 'current'));
   return release;
 }
@@ -153,6 +154,7 @@ export function release(source, out, { home, tag, version, url }) {
   fixtureHome(join(tree, 'engine/launch'), home);
   fixtureAccount(join(tree, 'engine/account.zsh'), home);
   replaceOnce(join(tree, 'engine/agent-guard'), seams.downloadBase, `local repo=${quote(url)}; local -a curl_proto=()`);
+  replaceOnce(join(tree, 'engine/updates.zsh'), seams.downloadBase, `local repo=${quote(url)}; local -a curl_proto=()`);
   isolateHarness(tree);
   piSeams(tree, home);
   rmSync(archive);

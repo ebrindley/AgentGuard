@@ -33,6 +33,7 @@ files=(
   engine/launch
   engine/account.zsh
   engine/agent-guard
+  engine/updates.zsh
   engine/profile.sb
   engine/peers.zsh
   engine/peer-runtime.sb

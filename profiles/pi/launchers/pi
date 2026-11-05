@@ -68,22 +68,6 @@ if [ "$PI_SANDBOX_RUNTIME" = "omp" ]; then
   unset _pi_sandbox_args _pi_sandbox_i _pi_sandbox_profile_args _pi_sandbox_profile
 fi
 
-if [ ! -f "$PREAMBLE" ]; then
-  print -u2 -- "[pi-sandbox-guard] sandbox preamble missing ($PREAMBLE); refusing to launch."
-  exit 1
-fi
-
-source "$PREAMBLE"
-
-# Nested own-shim re-entry marker (paired with profile/boundary markers from preamble).
-export PI_SANDBOX_SHIM_ACTIVE=1
-export PI_SANDBOX_RUNTIME_ACTIVE="$PI_SANDBOX_RUNTIME"
-# The digest is a coincidence check, not a secret. Behavioral probes verify the
-# recorded project and active-hooks boundaries before nested pass-through.
-if [ -n "${PI_SANDBOX_PROFILE_DIGEST:-}" ]; then
-  export PI_SANDBOX_PROFILE_DIGEST
-fi
-
 # The extension is part of agent sessions, not the runtimes' administrative
 # command parsers. Injecting it before a native subcommand changes Pi's command
 # into a prompt and makes several OMP subcommands reject an unknown flag.
@@ -131,10 +115,29 @@ is_runtime_command() {
   return 1
 }
 
-if is_runtime_command "$PI_SANDBOX_RUNTIME" "$@"; then
+PI_SANDBOX_COMMAND_KIND=0
+is_runtime_command "$PI_SANDBOX_RUNTIME" "$@" || PI_SANDBOX_COMMAND_KIND=$?
+
+if [ ! -f "$PREAMBLE" ]; then
+  print -u2 -- "[pi-sandbox-guard] sandbox preamble missing ($PREAMBLE); refusing to launch."
+  exit 1
+fi
+
+source "$PREAMBLE"
+
+# Nested own-shim re-entry marker (paired with profile/boundary markers from preamble).
+export PI_SANDBOX_SHIM_ACTIVE=1
+export PI_SANDBOX_RUNTIME_ACTIVE="$PI_SANDBOX_RUNTIME"
+# The digest is a coincidence check, not a secret. Behavioral probes verify the
+# recorded project and active-hooks boundaries before nested pass-through.
+if [ -n "${PI_SANDBOX_PROFILE_DIGEST:-}" ]; then
+  export PI_SANDBOX_PROFILE_DIGEST
+fi
+
+
+if [ "$PI_SANDBOX_COMMAND_KIND" -eq 0 ]; then
   exec "${PI_SANDBOX_CMD[@]}" "${PI_LAUNCH_VECTOR[@]}" "$@"
 else
-  PI_SANDBOX_COMMAND_KIND="$?"
   if [ "$PI_SANDBOX_COMMAND_KIND" -eq 2 ]; then
     print -u2 -- "[pi-sandbox-guard] this OMP agent command does not accept the required guard extension; refusing protected launch."
     print -u2 -- "[pi-sandbox-guard] call the real OMP binary directly only when you intentionally accept guard-only/unsandboxed operation."

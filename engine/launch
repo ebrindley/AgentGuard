@@ -250,6 +250,14 @@ if [[ $mode == gui && $harness == opencode ]]; then
   /usr/bin/pgrep -x "$main" >/dev/null && fail "OpenCode is already open. If you opened it from Agent Guard, click OpenCode in the Dock to show its window. Otherwise quit OpenCode, then open Agent Guard."
   failure_stage=configuration
 fi
+if [[ $mode == (cli|gui) ]]; then
+  source "$release/updates.zsh" || fail 'cannot load updates.zsh'
+  if ! ag_update_startup "$mode" "$title" "$engine/current/launch" --harness "$harness" "$mode" "${launch_args[@]}"; then
+    update_error='Update failed. Run agent-guard update from Terminal to finish recovery before reopening.'
+    [[ $mode != gui ]] || update_error+=" Desktop update output: $home/Agent Guard/last-update.log"
+    fail "$update_error"
+  fi
+fi
 # State roots: the profile's state_hook resolves and canonicalizes them, or refuses.
 typeset -aU cache_given cache_roots
 if [[ -n $state_hook ]]; then
