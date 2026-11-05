@@ -175,6 +175,15 @@ if (ready) {
     assert.equal(repaired.advisory, true);
     assert.equal(repaired.events.length, 1);
     assert.equal(repaired.events[0].ruleId, 'guard.path.deny');
+    const eventFile = join(logs, 'agent-guard-events.json');
+    const target = join(directory, 'valuable.txt');
+    fs.writeFileSync(target, 'preserve this file\n');
+    fs.unlinkSync(eventFile);
+    fs.symlinkSync(target, eventFile);
+    await assert.rejects(before({ tool: 'read' }, { args: { filePath: denied } }), /DENY list/);
+    assert.equal(fs.readFileSync(target, 'utf8'), 'preserve this file\n', 'advisory logging must not overwrite a symlink target');
+    assert.equal(fs.lstatSync(eventFile).isSymbolicLink(), true);
+    fs.unlinkSync(eventFile);
   }
   // Event retention must remain bounded after repeated refusals.
   for (let count = 0; count < 35; count++)

@@ -174,6 +174,23 @@ exit 0
     assert.equal(out.stdout, '', `${name}: a profile was written`);
     assert.ok(!existsSync(join(engine, 'state/rules.json')), `${name}: rules published`);
   };
+  for (const target of [P('Projects/sibling'), P('Projects')]) {
+    git(app, 'config', '--local', 'core.worktree', target);
+    refuse('persisted worktree redirect', [], /instead of the checkout/, { cwd: P('Projects/app/src/deep') });
+    same('an explicit project remains selectable with redirected Git config', [target], realpathSync(target));
+    git(app, 'config', '--local', '--unset', 'core.worktree');
+  }
+  git(app, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'Initialize fixture');
+  git(app, 'worktree', 'add', '-q', '--detach', P('Projects/linked'), 'HEAD');
+  mkdirSync(P('Projects/linked/sub'));
+  same('a linked worktree keeps its own boundary', [], realpathSync(P('Projects/linked')), { cwd: P('Projects/linked/sub') });
+  git(P('Projects'), 'init', '-q', '--separate-git-dir', P('Projects/separate.git'), P('Projects/separate'));
+  mkdirSync(P('Projects/separate/sub'));
+  same('a separate Git directory keeps its checkout boundary', [], realpathSync(P('Projects/separate')), { cwd: P('Projects/separate/sub') });
+  symlinkSync(app, P('Projects/checkout-link'));
+  same('a symlink to the checkout uses its physical boundary', [], app, { cwd: P('Projects/checkout-link/src/deep') });
+  console.log('ok   implicit Git discovery binds to the physical checkout; linked worktrees, separate Git directories and explicit paths remain supported');
+
   refuse('home', [home], /@project is too broad/);
   refuse('home by a launch from home', [], /@project is too broad/, { cwd: home });
   refuse('root', ['/'], /@project is too broad/);
