@@ -55,7 +55,7 @@ node "$adapter" isolate "$run/tree" || { fail 'cannot isolate harness discovery'
 # The release folder, as the installer lays it out, with profiles/pi's files, the
 # vendored cc-safety-net and the checker's templates.
 /bin/mkdir -p "$rel/bin" "$rel/profiles/opencode" "$rel/profiles/pi/scripts" "$engine/state" "$home/Agent Guard" "$home/.cc-safety-net"
-/bin/cp "$run/tree/engine/"{launch,profile.sb,account.zsh,peers.zsh,peer-runtime.sb} "$run/tree/profiles/opencode/"{install.sh,uninstall.sh} "$rel/"
+/bin/cp "$run/tree/engine/"{launch,profile.sb,account.zsh,updates.zsh,peers.zsh,peer-runtime.sb} "$run/tree/profiles/opencode/"{install.sh,uninstall.sh} "$rel/"
 /bin/cp -R "$run/tree/engine/peers" "$rel/peers"
 /bin/cp -R "$run/tree/engine/checker" "$rel/checker"
 /bin/cp -R "$run/tree/engine/vendor" "$rel/vendor"
