@@ -432,7 +432,7 @@ resolve_app_projects() {
   done
 }
 resolve_project() {
-  local arg= given top a b
+  local arg= given top a b checkout
   if [[ $mode == gui ]]; then
     resolve_app_projects
     reply=("${app_projects[@]}")
@@ -465,6 +465,16 @@ resolve_project() {
        a=$(/usr/bin/env -u GIT_DIR -u GIT_WORK_TREE -u GIT_COMMON_DIR -u GIT_CEILING_DIRECTORIES -u GIT_DISCOVERY_ACROSS_FILESYSTEM \
              -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM -u GIT_CONFIG_NOSYSTEM -u GIT_CONFIG_PARAMETERS -u GIT_CONFIG_COUNT \
              /usr/bin/git -C "$PWD" rev-parse --show-toplevel 2>/dev/null) && [[ $a == /* && $a != *$'\n'* ]]; then
+      # Git configuration is writable; bind discovery to the physical checkout,
+      # including .git files used by linked worktrees and separate Git directories.
+      checkout=${PWD:P}
+      while [[ $checkout != / && ! -d $checkout/.git && ! -f $checkout/.git ]]; do
+        checkout=${checkout:h}
+      done
+      if [[ ${a:A} != $checkout ]]; then
+        record "refused @project: Git selected $a instead of the checkout $checkout"
+        fail "@project: Git selected $a instead of the checkout $checkout; review core.worktree, or give an explicit project path"
+      fi
       given=$a
     fi
     normalize "$given" literal || { note "skipped, not a full path: $given"; return 1 }
