@@ -37,6 +37,7 @@ once "$tree/installer/lib.zsh" 'test_point() { : }'
 once "$tree/installer/lib.zsh" 'boot_time() {'
 once "$tree/installer/lib.zsh" 'local pgrep=/usr/bin/pgrep'
 once "$tree/engine/agent-guard" "$download_base"
+once "$tree/engine/updates.zsh" "$download_base"
 # Where the launcher looks for the CLI and the app.
 once "$tree/profiles/opencode/harness.zsh" 'cli_search=(/opt/homebrew/bin/opencode /usr/local/bin/opencode "$home/.opencode/bin/opencode")'
 once "$tree/profiles/opencode/harness.zsh" 'app_paths=(/Applications/OpenCode.app "$home/Applications/OpenCode.app")'

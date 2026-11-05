@@ -482,6 +482,26 @@ the switch and names what to do.
 
 ## Updates and sessions
 
+OpenCode terminal and desktop, Grok, Pi and OMP launches check GitHub's latest
+stable release once before starting the agent. The lookup has a two-second total
+timeout and no retries during that launch. A failed lookup leaves startup alone.
+Interactive launches offer “Upgrade” or “Later”; declining continues the launch
+and the next launch checks again. Noninteractive launches only report availability
+on stderr. Help, version requests, nested launches, desktop project queries and
+installer checks do not check for updates.
+
+Accepting installs the offered tag through the existing updater, then restarts
+the launcher once with the original working directory and arguments. The handoff
+skips the repeated check. Desktop upgrades record output in
+`~/Agent Guard/last-update.log`. An accepted upgrade that fails stops that launch;
+run `agent-guard update` from Terminal to finish recovery before reopening.
+
+`agent-guard update-check` shows `on` or `off`; adding `on` or `off` changes the
+preference in `state/update-check`, outside release folders. Missing preference
+means `on`. `agent-guard update --check` checks explicitly regardless of that
+preference and installs nothing. Automatic offers cover numeric stable versions;
+installations with prerelease tags remain on their chosen version.
+
 An installation that updates Pi, including a tagged prerelease install,
 replaces the Pi files by renames and does not wait for Pi or OMP sessions to
 end. A running session keeps the profile it started with and the extension it
@@ -539,6 +559,9 @@ loaded; `/reload` loads the extension now on disk.
   A migration-detection error returns failure with its diagnostic; it is not
   reported as current. It does not fetch prereleases. To install a prerelease, rerun the installer for that tag under
   [Release channels](#release-channels).
+  `--to vVERSION` selects a specific numeric stable tag and leaves an equal or
+  newer installed version alone. `--no-prompt` suppresses the install-complete
+  “Edit List?” dialog; startup upgrades use it before restarting the launcher.
 - `agent-guard uninstall` first checks that the stamp identifies the installed
   harnesses. An unreadable or invalid ownership record stops uninstall and keeps
   the guard and saved replacement entries; restore the stamp from a backup

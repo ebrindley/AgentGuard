@@ -1,10 +1,10 @@
 #!/bin/zsh
-# usage: agent-guard doctor|diagnose [--json]|version|update [--restore-edit-permissions] [--approval-preference auto|host]|uninstall|bind [OPTIONS]|wrapper add|remove|list|app-projects [remove PATH]
+# usage: agent-guard doctor|diagnose [--json]|version|update [--check|--to TAG] [--no-prompt] [--restore-edit-permissions] [--approval-preference auto|host]|update-check [on|off]|uninstall|bind [OPTIONS]|wrapper add|remove|list|app-projects [remove PATH]
 emulate -L zsh
 setopt no_unset pipe_fail extended_glob
 
 die() { print -ru2 -- "agent-guard: $*"; exit 1 }
-usage() { print -ru2 -- 'usage: agent-guard doctor|diagnose [--json]|version|update [--restore-edit-permissions] [--approval-preference auto|host]|uninstall|bind [OPTIONS]|wrapper add|remove|list|app-projects [remove PATH]'; exit 2 }
+usage() { print -ru2 -- 'usage: agent-guard doctor|diagnose [--json]|version|update [--check|--to TAG] [--no-prompt] [--restore-edit-permissions] [--approval-preference auto|host]|update-check [on|off]|uninstall|bind [OPTIONS]|wrapper add|remove|list|app-projects [remove PATH]'; exit 2 }
 
 # This file is bin/agent-guard inside a release folder. Only a folder shaped like
 # one is trusted to supply the account lookup; after it, the release must be a
@@ -107,29 +107,32 @@ version() {
   exit $drift
 }
 
-# Older: each dot-separated field of both tags is a number and $1 sorts before $2.
-older() {
-  local -a a b
-  integer i
-  a=("${(@s:.:)${1#v}}") b=("${(@s:.:)${2#v}}")
-  for i in {1..$(( $#a > $#b ? $#a : $#b ))}; do
-    [[ ${a[i]:-0} == <-> && ${b[i]:-0} == <-> ]] || return 1
-    (( ${a[i]:-0} < ${b[i]:-0} )) && return 0
-    (( ${a[i]:-0} > ${b[i]:-0} )) && return 1
-  done
-  return 1
-}
+source "$release/updates.zsh" || die "cannot load updates.zsh"
 
 # Runs the latest release's bootstrap, with the same verification, staging, gate
 # and rollback as a fresh install. Downloads use this compiled base, never the
 # environment.
 update() {
   local repo='https://github.com/ebrindley/AgentGuard'; local -a curl_proto=(--proto '=https' --proto-redir '=https')
-  local url="$repo/releases/latest/download/install.sh" text tag cur=
+  local url="$repo/releases/latest/download/install.sh" text tag cur= target=
   local -a lines tags bootstrap_args=(--update)
   integer rc restore_seen=0 preference_seen=0
   while (( $# )); do
     case $1 in
+      (--check)
+        (( $# == 1 )) || usage
+        integer check_rc=0
+        ag_update_available || check_rc=$?
+        case $check_rc in
+          (0) print -r -- "Agent Guard ${REPLY#v} is available." ;;
+          (1) print -r -- 'No newer comparable stable release is available.' ;;
+          (*) die 'could not check for updates; try again later' ;;
+        esac
+        return 0 ;;
+      (--to)
+        [[ -z $target && $# -ge 2 && $2 == v<->(.<->)# ]] || usage
+        target=$2; shift 2 ;;
+      (--no-prompt) bootstrap_args+=(--no-prompt); shift ;;
       (--restore-edit-permissions)
         (( restore_seen == 0 )) || usage
         restore_seen=1; bootstrap_args+=(--restore-edit-permissions); shift ;;
@@ -139,6 +142,7 @@ update() {
       (*) usage ;;
     esac
   done
+  [[ -z $target ]] || url="$repo/releases/download/$target/install.sh"
   load_installer
   ag_probe || exit 1
   ag_lock || exit 1
@@ -155,7 +159,14 @@ update() {
   tags=(${(M)lines:#[[:space:]]#local tag=\'v[0-9A-Za-z.+-]##\' version=\'[0-9A-Za-z.+-]##\'})
   (( $#tags == 1 )) || { ag_unlock; die "$url does not name one release tag" }
   tag=${${tags[1]#*local tag=\'}%%\'*}
+  [[ -z $target || $tag == "$target" ]] || { ag_unlock; die "bootstrap tag does not match $target"; }
   [[ -f $stamp ]] && cur=$(/usr/bin/jq -r '.tag // empty' "$stamp" 2>/dev/null)
+  # Recheck under the installation lock after the operator's decision window.
+  if [[ -n $target && -n $cur ]] && ! older "$cur" "$tag"; then
+    ag_unlock
+    print -r -- "Agent Guard $cur is already installed or is not older than $tag."
+    return 0
+  fi
   if [[ $tag == "$cur" ]]; then
     # Current, unless a registered source is still to migrate or retire, or a
     # harness on this Mac is missing from the stamp: then the install runs again.
@@ -252,6 +263,28 @@ if [[ ${1:-} == app-projects ]]; then
   tmp="$store.$$"
   { (( ! $#keep )) || print -rl -- $keep } > "$tmp" && /bin/mv -f -- "$tmp" "$store" ||
     { /bin/rm -f -- "$tmp"; die "cannot write $store" }
+  exit 0
+fi
+if [[ ${1:-} == update-check ]]; then
+  (( $# <= 2 )) || usage
+  store="$engine/state/update-check"
+  if (( $# == 1 )); then
+    [[ -f $store ]] && /bin/cat -- "$store" || print -r -- on
+    exit 0
+  fi
+  [[ $2 == (on|off) ]] || usage
+  load_installer
+  ag_probe || exit 1
+  ag_lock || exit 1
+  [[ ! -L $store && ( ! -e $store || -f $store ) ]] || { ag_unlock; die "$store is not a regular file"; }
+  tmp=$(/usr/bin/mktemp "$store.XXXXXX") || { ag_unlock; die "cannot create $store"; }
+  if ! { print -r -- "$2" > "$tmp" && /bin/mv -f -- "$tmp" "$store"; }; then
+    /bin/rm -f -- "$tmp"
+    ag_unlock
+    die "cannot write $store"
+  fi
+  ag_unlock
+  print -r -- "Startup update checks: $2"
   exit 0
 fi
 if [[ ${1:-} == update ]]; then

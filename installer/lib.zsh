@@ -811,11 +811,11 @@ ag_new_rid() {
 # P4: the release folder, in the runtime layout, then renamed into releases/<rid>.
 ag_assemble() {
   local r="$ag_stage/release" t=$ag_tree p="$ag_tree/profiles/opencode" f
-  local -a zsh_files=(launch account.zsh install.sh uninstall.sh bin/opencode bin/opencode-gui bin/agent-guard
+  local -a zsh_files=(launch account.zsh updates.zsh install.sh uninstall.sh bin/opencode bin/opencode-gui bin/agent-guard
                       profiles/opencode/harness.zsh profiles/opencode/hooks.zsh profiles/opencode/runtime.zsh)
   /bin/rm -rf -- "$r"
   /bin/mkdir -p -- "$r/bin" "$r/profiles/opencode/check-config/opencode/plugins" "$engine/releases" || return 1
-  /bin/cp -- "$t/engine/launch" "$t/engine/profile.sb" "$t/engine/account.zsh" "$p/install.sh" "$p/uninstall.sh" \
+  /bin/cp -- "$t/engine/launch" "$t/engine/profile.sb" "$t/engine/account.zsh" "$t/engine/updates.zsh" "$p/install.sh" "$p/uninstall.sh" \
     "$t/LICENSE" "$t/VERSION" "$r/" || return 1
   print -r -- "$ag_commit" > "$r/COMMIT" && print -r -- "$ag_rid_new" > "$r/RELEASE" || return 1
   /bin/cp -- "$p/opencode" "$p/opencode-gui" "$t/engine/agent-guard" "$r/bin/" || return 1
@@ -1483,11 +1483,12 @@ ag_install_main() {
   local w m
   ag_txn=$1
   shift
-  ag_gui=0 ag_projects= ag_update=0 ag_restore_edit_permissions=0 ag_approval_preference=
+  ag_gui=0 ag_projects= ag_update=0 ag_no_prompt=0 ag_restore_edit_permissions=0 ag_approval_preference=
   while (( $# )); do
     case $1 in
       (--gui) ag_gui=1 ;;
       (--update) ag_update=1 ;;
+      (--no-prompt) ag_no_prompt=1 ;;
       (--restore-edit-permissions) ag_restore_edit_permissions=1 ;;
       (--approval-preference)
         (( $# >= 2 )) && [[ $2 == (auto|host) ]] || { ag_err 'usage: --approval-preference auto|host'; exit 2 }
@@ -1555,7 +1556,7 @@ ag_install_main() {
   for w in $ag_harnesses; do ag_hook_opt h $w report; done
   for m in $ag_migrated; do ag_hook_opt m $m report; done
   for w in $ag_warnings; do ag_say "warning: $w"; done
-  if [[ $ag_gui == 1 || -t 1 ]]; then
+  if (( ! ag_no_prompt )) && [[ $ag_gui == 1 || -t 1 ]]; then
     local msg answer
     msg=$'Agent Guard is installed.\n\nOpen OpenCode with Agent Guard, or type opencode in a new terminal window.'
     (( $#ag_warnings )) && msg+=$'\n\n'"${(pj:\n:)ag_warnings}"

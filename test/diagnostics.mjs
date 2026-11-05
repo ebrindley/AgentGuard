@@ -37,6 +37,7 @@ function fixture(name) {
   const events = join(home, ".cc-safety-net/logs/agent-guard-events.json")
   mkdirSync(join(release, "bin"), { recursive: true })
   mkdirSync(join(release, "profiles/opencode"), { recursive: true })
+  copyFileSync(join(source, "engine/updates.zsh"), join(release, "updates.zsh"))
   copyFileSync(join(source, "engine/agent-guard"), join(release, "bin/agent-guard"))
   copyFileSync(join(source, "profiles/opencode/diagnostics.zsh"), join(release, "profiles/opencode/diagnostics.zsh"))
   put(join(release, "RELEASE"), rid)
