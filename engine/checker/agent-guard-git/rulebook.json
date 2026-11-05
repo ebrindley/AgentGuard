@@ -27,6 +27,36 @@
       "intent": "manual_only"
     },
     {
+      "name": "restore-worktree-dot",
+      "command": "git",
+      "match": {
+        "command_path": ["restore", "."],
+        "any_args": ["--worktree", "-W", "-SW", "-WS"]
+      },
+      "reason": "Restoring the whole tree discards uncommitted work; restore named files, or run it outside Agent Guard.",
+      "intent": "manual_only"
+    },
+    {
+      "name": "restore-worktree-dot-slash",
+      "command": "git",
+      "match": {
+        "command_path": ["restore", "./"],
+        "any_args": ["--worktree", "-W", "-SW", "-WS"]
+      },
+      "reason": "Restoring the whole tree discards uncommitted work; restore named files, or run it outside Agent Guard.",
+      "intent": "manual_only"
+    },
+    {
+      "name": "restore-worktree-root",
+      "command": "git",
+      "match": {
+        "command_path": ["restore", ":/"],
+        "any_args": ["--worktree", "-W", "-SW", "-WS"]
+      },
+      "reason": "Restoring the whole tree discards uncommitted work; restore named files, or run it outside Agent Guard.",
+      "intent": "manual_only"
+    },
+    {
       "name": "checkout-whole-tree",
       "command": "git",
       "match": {
@@ -43,6 +73,10 @@
     { "command": "git restore .", "expect": "blocked", "rule": "restore-whole-tree" },
     { "command": "git restore src/a.ts", "expect": "allowed" },
     { "command": "git restore --staged .", "expect": "allowed" },
+    {"command": "git restore --staged --worktree .", "expect": "blocked", "rule": "restore-worktree-dot"},
+    {"command": "git restore --staged --worktree ./", "expect": "blocked", "rule": "restore-worktree-dot-slash"},
+    {"command": "git restore --staged --worktree :/", "expect": "blocked", "rule": "restore-worktree-root"},
+    {"command": "git restore --staged --worktree src/a.ts", "expect": "allowed"},
     { "command": "git checkout -- .", "expect": "blocked", "rule": "checkout-whole-tree" },
     { "command": "git checkout -- src/a.ts", "expect": "allowed" }
   ]
