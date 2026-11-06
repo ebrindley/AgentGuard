@@ -110,7 +110,7 @@ OpenCode's code come from reading its bundle, not from running it.
   inherited environment in place and reports a note. Shell startup receives
   no terminal input.
 
-### Browser handoff (unreleased)
+### Browser handoff
 
 Guarded OpenCode launches can open supported sign-in URLs through a small
 launcher-owned helper. The desktop and backend still cannot call Launch

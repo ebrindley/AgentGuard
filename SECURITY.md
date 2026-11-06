@@ -115,7 +115,7 @@ and shared skills. Their execution in a guarded process tree remains confined.
 Editable child symlinks and config-selection environment variables never create
 new write grants. Root identity pinning preserves launch-time automatic grants.
 
-The unreleased browser handoff adds one launcher-owned process and one narrow
+The browser handoff adds one launcher-owned process and one narrow
 request interface. Both OpenCode profiles retain their `lsopen`, `job-creation`
 and executable denies. A guarded caller can ask the helper to open a supported
 HTTPS authentication page in the default HTTPS application selected before
