@@ -306,7 +306,7 @@ secret-name checks on file tools no longer run.
 ## 9. Browser handoff
 
 Browser handoff addresses the observed refusal of provider sign-in browser
-launches. The unreleased implementation keeps direct Launch Services denied
+launches. The implementation keeps direct Launch Services denied
 and adds a launcher-owned sibling that validates the initial authentication URL
 and uses a fixed browser target. Requests from the confined process are
 untrusted, including requests from GUI plugins. The helper does not accept code,
