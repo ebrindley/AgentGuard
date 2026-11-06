@@ -74,8 +74,13 @@ opencode_browser_cli() {
   trap 'exit 130' INT
   trap 'exit 143' TERM HUP
   opencode_browser_start
-  $sandbox "$@" <&0 &
+  # zsh redirects descriptor 0 for an asynchronous command before applying its
+  # redirections. Preserve the caller's terminal on a separate descriptor.
+  local input_fd
+  exec {input_fd}<&0
+  $sandbox "$@" <&$input_fd &
   opencode_client_pid=$!
+  exec {input_fd}<&-
   local rc=0
   wait "$opencode_client_pid" || rc=$?
   opencode_client_pid=
