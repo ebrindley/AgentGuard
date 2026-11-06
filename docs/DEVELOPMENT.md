@@ -7,6 +7,17 @@ and homes described below. For installed checks, see
 
 ## Tests
 
+`node test/aws-auth.mjs` checks AWS opt-in reads, atomic token-cache writes,
+configuration protection, Guard List precedence and redirected-cache refusal
+under the rendered macOS profile. It uses dummy credentials only. For a normal
+unlinked `~/.aws`, the opt-in changes one recursive read/write deny into one
+recursive write deny with three cache exclusions, adds three write grants and
+seven unique directory-entry write denials. Without the opt-in, these totals
+are unchanged. With key agents denied, the AWS socket-path outbound deny also
+changes from one to zero; other credential socket denies are unchanged.
+The existing hosted gate gains this one sequential test file;
+no new hosted check is added.
+
 ### Offline checker comparison
 
 See [Pi checker comparison](CHECKER-COMPARISON.md) for the baseline argument,
@@ -48,7 +59,8 @@ The ordinary V1 and Pi fixtures exclude the account's installed desktop applicat
 
 `node test/authentication.mjs` checks the rendered profile's callback access,
 atomic credential replacement and reload, named credential denials, and the
-Desktop service's login-shell environment. Select `storage` or `environment`
+Desktop service's login-shell environment and timeout, with and without a
+controlling terminal. Select `storage` or `environment`
 to run one scope. Its temporary grant excludes the disposable home, preserving
 the write-denial behavior of a real account home outside temporary directories.
 `AG_TEST_OPENCODE` pointing to OpenCode 2.2.5 enables
@@ -60,7 +72,8 @@ Desktop environment loading adds one confined login-shell execution per GUI
 launch. Provider values are passed only to sandboxed host processes; the trusted
 launcher retains its original environment. Filesystem grants, credential denies
 and process/Launch Services restrictions are unchanged. The required hosted
-check count remains one; its sequential file scope grows from ten to eleven.
+check count remains one; with AWS authentication, its sequential file scope
+grows from ten to twelve.
 
 Each host still registers one Guard tool-before hook and uses the same command
 checker and filesystem rules. V2 adds one adapter registration and one read-only
@@ -101,9 +114,10 @@ and merges at the reviewed head with an empty body. The `tests` check runs the
 same subject check on the pull request title. Local gate execution is useful for
 focused development, but is not required in addition to the hosted gate.
 
-The gate keeps the three baseline files and runs eight update and OpenCode files:
+The gate keeps the three baseline files and runs nine update and OpenCode files:
 `test/updates.mjs`, `test/opencode-config.mjs`, `test/plugin-health.mjs`, `test/diagnostics.mjs`,
-`test/permissions.mjs`, `test/opencode-runtime.mjs`, `test/authentication.mjs` and `test/project.mjs` (`@project`, including the app's remembered projects,
+`test/permissions.mjs`, `test/opencode-runtime.mjs`, `test/authentication.mjs`,
+`test/aws-auth.mjs` and `test/project.mjs` (`@project`, including the app's remembered projects,
 on a disposable home, under the real `sandbox-exec`). Run a failing file by
 itself during development. The
 health fixture injects failures only into disposable modules and mocked probes;

@@ -216,6 +216,24 @@ others SECURITY.md lists) or `.env` files other than `.env.example`, `.env.sampl
 and `.env.template`, and run without `SSH_AUTH_SOCK` and without access to
 ssh-agent or gpg-agent, so Git over SSH fails inside them; use HTTPS remotes, or
 set `AGENT_GUARD_SSH_AGENT=allow` outside the guard before starting OpenCode.
+
+AWS profiles and SSO are opt-in. Start a terminal session with
+`AGENT_GUARD_AWS_AUTH=allow opencode`. For Desktop, run
+`AGENT_GUARD_AWS_AUTH=allow "$HOME/Library/Application Support/AgentGuard/bin/opencode-gui"`
+from Terminal. Set the choice before launch; a setting inside OpenCode or its
+shell does not change the active profile.
+
+This permits reads under `~/.aws` and writes only under `sso/cache`,
+`login/cache` and `cli/cache`. Configuration and credential files remain
+write-protected, including their resolved symlink targets. Cache directory
+entries cannot be replaced; symlinks within a cache's root path are refused.
+The AWS root must resolve inside your account home. Guard List READ ONLY and
+DENY entries still take precedence. Relocated AWS cache folders receive no
+automatic grant. Complete initial AWS CLI/SSO setup outside the guard.
+The session can use the selected AWS credentials with their full account
+permissions, so use an appropriately scoped inference profile. API keys and
+credentials already supplied through the environment do not need this opt-in.
+
 OpenCode sessions cannot write Git hooks, other than Git's `*.sample` files, in
 any repository or in the active hooks folder of the launch folder, so hook
 managers such as husky, lefthook and pre-commit cannot install hooks inside them;

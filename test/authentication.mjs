@@ -23,7 +23,7 @@ writeFileSync(profilePath, readFileSync(profilePath, "utf8").replace('(subpath "
 writeFileSync(join(home, "Agent Guard/Guard List.txt"), `ALLOW\n${project}\nREAD ONLY\nDENY\n`)
 const quote = value => "'" + value.replaceAll("'", "'\\''") + "'"
 const env = { HOME: home, SHELL: "/bin/zsh", PATH: "/usr/bin:/bin:/usr/sbin:/sbin", LANG: "en_US.UTF-8", TMPDIR: process.env.TMPDIR }
-const launch = (mode, args = []) => spawnSync("/bin/zsh", [join(release, "launch"), mode, ...args], { cwd: project, env, encoding: "utf8", timeout: 20000 })
+const launch = (mode, args = [], terminal = false) => spawnSync(terminal ? "/usr/bin/script" : "/bin/zsh", [...(terminal ? ["-q", "/dev/null", "/bin/zsh"] : []), join(release, "launch"), mode, ...args], { cwd: project, env, stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", timeout: 20000 })
 const selected = process.argv[2] ?? "all"
 
 if (selected === "all" || selected === "storage") {
@@ -101,27 +101,30 @@ if (selected === "all" || selected === "environment") {
     export AGENT_GUARD_CONTEXT=must-not-survive
     touch "$HOME/outside-grant" 2>/dev/null || true
   `)
-  writeFileSync(join(home, ".zshrc"), 'export INTERACTIVE_AUTH_FIXTURE=present\n')
-  const result = launch("gui")
-  assert.equal(result.status, 0, result.stderr)
-  const actual = JSON.parse(readFileSync(resultFile, "utf8"))
-  assert.equal(actual.marker, "dummy value with spaces")
-  assert.equal(actual.shell, "present")
-  assert.ok(actual.path.includes(join(home, ".local/bin")))
-  assert.ok(actual.path.startsWith(join(release, "peers") + ":"))
-  assert.equal(actual.proxy, "http://127.0.0.1:1234")
-  assert.equal(actual.socket, undefined)
-  assert.equal(actual.npm, "/dev/null")
-  assert.equal(actual.config, undefined)
-  assert.ok(actual.context.startsWith(engine))
-  assert.throws(() => readFileSync(join(home, "outside-grant")), { code: "ENOENT" })
-  console.log("ok Desktop service: login-shell provider environment, confined startup and preserved Guard environment")
-  unlinkSync(ready)
-  writeFileSync(join(home, ".zshrc"), 'exec /bin/sleep 30\n')
-  const started = performance.now()
-  const timed = launch("gui")
-  assert.equal(timed.status, 0, timed.stderr)
-  assert.ok(performance.now() - started < 12000, "shell startup must not stall Desktop")
-  assert.equal(JSON.parse(readFileSync(resultFile, "utf8")).marker, undefined)
-  console.log("ok Desktop service: timed-out shell falls back to inherited environment")
+  for (const terminal of [false, true]) {
+    writeFileSync(join(home, ".zshrc"), 'export INTERACTIVE_AUTH_FIXTURE=present\n')
+    const result = launch("gui", [], terminal)
+    assert.equal(result.status, 0, result.stderr + result.stdout)
+    const actual = JSON.parse(readFileSync(resultFile, "utf8"))
+    assert.equal(actual.marker, "dummy value with spaces")
+    assert.equal(actual.shell, "present")
+    assert.ok(actual.path.includes(join(home, ".local/bin")))
+    assert.ok(actual.path.startsWith(join(release, "peers") + ":"))
+    assert.equal(actual.proxy, "http://127.0.0.1:1234")
+    assert.equal(actual.socket, undefined)
+    assert.equal(actual.npm, "/dev/null")
+    assert.equal(actual.config, undefined)
+    assert.ok(actual.context.startsWith(engine))
+    assert.throws(() => readFileSync(join(home, "outside-grant")), { code: "ENOENT" })
+    console.log("ok Desktop service: login-shell provider environment, confined startup and preserved Guard environment")
+    unlinkSync(ready)
+    writeFileSync(join(home, ".zshrc"), 'exec /bin/sleep 30\n')
+    const started = performance.now()
+    const timed = launch("gui", [], terminal)
+    assert.equal(timed.status, 0, timed.stderr + timed.stdout)
+    assert.ok(performance.now() - started < 12000, "shell startup must not stall Desktop")
+    assert.equal(JSON.parse(readFileSync(resultFile, "utf8")).marker, undefined)
+    console.log("ok Desktop service: timed-out shell falls back to inherited environment")
+    unlinkSync(ready)
+  }
 }

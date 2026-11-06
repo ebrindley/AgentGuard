@@ -4,11 +4,14 @@ typeset -a opencode_host_env=()
 
 opencode_gui_environment() {
   local shell=${SHELL:-/bin/zsh} entry key fd pid
-  local -a entries
+  local -a entries shell_args=(-lic)
+  # An interactive zsh/bash probe must not take ownership of the launcher's
+  # terminal: killing it would hang up that terminal's foreground process group.
+  [[ ${shell:t} != (zsh|bash) ]] || shell_args=(+m -lic)
   integer deadline=$(( SECONDS + 5 )) started=0 complete=0
   # A separate pipe lets the launcher stop reading at the deadline even if a
   # startup helper inherits stdout. Values never go to a log or file.
-  coproc exec $sandbox -D GUI=0 "$shell" -lic '/usr/bin/printf "\\0"; /usr/bin/env -0 && /usr/bin/printf "\\0"' </dev/null 2>/dev/null
+  coproc exec $sandbox -D GUI=0 "$shell" "${shell_args[@]}" '/usr/bin/printf "\\0"; /usr/bin/env -0 && /usr/bin/printf "\\0"' </dev/null 2>/dev/null
   pid=$!
   exec {fd}<&p
   while (( SECONDS < deadline )); do
