@@ -7,6 +7,20 @@ and homes described below. For installed checks, see
 
 ## Tests
 
+`node test/browser.mjs` checks the browser helper's provider URL policy, framing,
+fixed application target, a real Seatbelt caller with direct `open` denied, GUI
+IPC, a dummy Claude CLI with a terminal, configuration preservation and helper
+cleanup. All browser invocations are captured by a fixture executable; no
+credentials or real provider login are used. It requires Node 24 and an
+unguarded parent for the Seatbelt probe.
+
+`node test/browser-native.mjs` additionally checks that OpenCode 2.2.5 loads the
+local GUI plugin package and serves its commands through the native plugin API.
+`AG_TEST_OPENCODE` selects the CLI. It uses an isolated home and project and does
+not open the renderer or authenticate an account. The required hosted gate
+remains one check, adding the focused browser file to its existing sequential
+scope; the version-specific native fixture remains an explicit development test.
+
 `node test/aws-auth.mjs` checks AWS opt-in reads, atomic token-cache writes,
 configuration protection, Guard List precedence and redirected-cache refusal
 under the rendered macOS profile. It uses dummy credentials only. For a normal
@@ -114,10 +128,10 @@ and merges at the reviewed head with an empty body. The `tests` check runs the
 same subject check on the pull request title. Local gate execution is useful for
 focused development, but is not required in addition to the hosted gate.
 
-The gate keeps the three baseline files and runs nine update and OpenCode files:
+The gate keeps the three baseline files and runs ten update and OpenCode files:
 `test/updates.mjs`, `test/opencode-config.mjs`, `test/plugin-health.mjs`, `test/diagnostics.mjs`,
 `test/permissions.mjs`, `test/opencode-runtime.mjs`, `test/authentication.mjs`,
-`test/aws-auth.mjs` and `test/project.mjs` (`@project`, including the app's remembered projects,
+`test/browser.mjs`, `test/aws-auth.mjs` and `test/project.mjs` (`@project`, including the app's remembered projects,
 on a disposable home, under the real `sandbox-exec`). Run a failing file by
 itself during development. The
 health fixture injects failures only into disposable modules and mocked probes;

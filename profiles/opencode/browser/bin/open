@@ -1,0 +1,16 @@
+#!/bin/zsh -f
+emulate -L zsh
+setopt no_unset
+export LC_ALL=C
+[[ ${1:-} != -- ]] || shift
+(( $# == 1 )) && [[ -n ${AGENT_GUARD_BROWSER_SOCKET:-} && ${#1} -gt 0 && ${#1} -le 8192 ]] || {
+  print -ru2 'Agent Guard browser: expected one authentication URL in an active guarded session'
+  exit 2
+}
+zmodload zsh/net/socket || exit 1
+zsocket "$AGENT_GUARD_BROWSER_SOCKET" 2>/dev/null || { print -ru2 'Agent Guard browser: helper unavailable'; exit 1; }
+fd=$REPLY
+printf '%05d%s' ${#1} "$1" >&$fd
+IFS= read -r -u "$fd" -t 10 reply || reply='error: browser helper timed out'
+exec {fd}>&-
+[[ $reply == ok ]] || { print -ru2 -- "Agent Guard browser: $reply"; exit 1; }

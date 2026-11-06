@@ -116,6 +116,8 @@ function managed(responses, script) {
     const result = spawnSync("/bin/zsh", ["-fc", `
       setopt err_exit no_unset pipe_fail extended_glob
       source "$1"
+      source "\${1:h}/browser.zsh"
+      mode=cli
       session=$2
       shift 2
       responses=("$@")
