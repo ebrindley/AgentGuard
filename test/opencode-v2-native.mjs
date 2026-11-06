@@ -13,8 +13,8 @@ import { groupExists, signalGroup } from "./process-group.mjs"
 assert.equal(process.versions.node.split(".")[0], "24")
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const cli = realpathSync(process.env.AG_TEST_OPENCODE)
-const modes = ["cli", "gui", "gui-disabled", "doctor", "managed-cli", "gui-signal", "gui-server-stop", "routing", "plugins", "mixed-plugins"]
-const selected = process.argv[2] ? [process.argv[2]] : modes
+const modes = ["cli", "gui", "gui-disabled", "doctor", "managed-cli", "gui-signal", "gui-server-stop", "routing", "plugins", "mixed-plugins", "auth"]
+const selected = process.argv[2] ? [process.argv[2]] : modes.filter(mode => mode !== "auth")
 assert.ok(selected.every(mode => modes.includes(mode)))
 const accountHome = realpathSync(homedir())
 const run = realpathSync(mkdtempSync(join(tmpdir(), "agentguard-v2-")))
@@ -79,6 +79,89 @@ for (const mode of selected) {
     TMPDIR: process.env.TMPDIR, LANG: "en_US.UTF-8", XDG_CONFIG_HOME: join(home, ".config"),
     XDG_DATA_HOME: join(home, ".local/share"), XDG_STATE_HOME: join(home, ".local/state"),
     OPENCODE_MODELS_URL: url + "/models", OPENCODE_DISABLE_MODELS_FETCH: "1" }
+  if (mode === "auth") {
+    env.OPENCODE_PASSWORD = "fixture-auth-password"
+    const count = join(project, "refresh-count")
+    writeFileSync(join(config, "plugins/fixture-auth.js"), `
+      import {createServer} from 'node:http';
+      import {writeFileSync,existsSync,readFileSync} from 'node:fs';
+      export default {id:'fixture-auth', async setup(ctx) {
+        await ctx.integration.transform(editor => editor.method.update({
+          integrationID:'guardfixture', method:{id:'fixture',type:'oauth',label:'Fixture OAuth'},
+          async authorize() {
+            let complete;
+            const callback = new Promise(resolve => { complete = resolve });
+            const server = createServer((req,res) => {
+              res.end('connected'); server.close();
+              complete({type:'oauth',methodID:'fixture',access:'dummy-initial',refresh:'dummy-refresh',expires:1});
+            });
+            await new Promise(resolve => server.listen(0,'127.0.0.1',resolve));
+            return {mode:'auto',url:'http://127.0.0.1:'+server.address().port+'/fixture-callback',instructions:'Local fixture',callback};
+          },
+          async refresh(value) {
+            const file = ${JSON.stringify(count)};
+            writeFileSync(file, String(existsSync(file) ? Number(readFileSync(file,'utf8')) + 1 : 1));
+            return {...value,access:'dummy-refreshed',expires:Date.now()+3600000};
+          }
+        }));
+        await ctx.rpc.register({id:'fixture-auth',methods:{status:{input:{type:'object'},output:{type:'object'}}},events:{}}, {
+          status:async()=> {
+            const connection = await ctx.integration.connection.active('guardfixture');
+            const value = connection && await ctx.integration.connection.resolve(connection);
+            return {access:value?.access ?? null};
+          }
+        });
+      }};
+    `)
+    const children = []
+    const start = (command, args) => {
+      const child = spawn(command, args, { cwd: project, env, detached: true, stdio: ["inherit", "pipe", "pipe"] })
+      const state = { child, output: "", closed: null }
+      state.closed = new Promise(resolve => child.once("exit", resolve))
+      child.stdout.on("data", data => { state.output += data })
+      child.stderr.on("data", data => { state.output += data })
+      children.push(state)
+      return state
+    }
+    const waitFor = async (state, pattern) => {
+      for (let i = 0; i < 160; i++) {
+        const match = state.output.match(pattern)
+        if (match) return match[0]
+        if (state.child.exitCode !== null) break
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+      assert.fail(state.output)
+    }
+    const stop = async state => {
+      if (groupExists(state.child.pid)) signalGroup(state.child.pid, "SIGTERM")
+      await state.closed
+    }
+    try {
+      // script supplies a real terminal, exercising the CLI's browser-open attempt.
+      const login = start("/usr/bin/script", ["-q", "/dev/null", "/bin/zsh", launch, "cli", "auth", "login", "guardfixture", "--method", "fixture"])
+      const callback = await waitFor(login, /http:\/\/127\.0\.0\.1:\d+\/fixture-callback/)
+      assert.equal(await (await fetch(callback)).text(), "connected")
+      await waitFor(login, /Connected to Fixture/)
+      await stop(login)
+      for (let n = 0; n < 2; n++) {
+        const server = start("/bin/zsh", [launch, "cli", "serve", "--hostname", "127.0.0.1", "--port", "0"])
+        const address = await waitFor(server, /http:\/\/127\.0\.0\.1:\d+/)
+        const response = await fetch(`${address}/api/rpc/fixture-auth/status?location%5Bdirectory%5D=${encodeURIComponent(project)}`, {
+          method: "POST", headers: { "Content-Type": "application/json", Authorization: "Basic " + Buffer.from("opencode:fixture-auth-password").toString("base64") }, body: JSON.stringify({ input: {} }),
+        })
+        assert.equal(response.status, 200, await response.clone().text())
+        assert.equal((await response.json()).output.access, "dummy-refreshed")
+        await stop(server)
+      }
+      assert.equal(readFileSync(count, "utf8"), "1", "restart must reuse the persisted refreshed token")
+    } finally {
+      for (const state of children) if (groupExists(state.child.pid)) signalGroup(state.child.pid, "SIGKILL")
+      model.closeAllConnections(); model.close()
+      for (const [i, state] of children.entries()) writeFileSync(join(run, mode, `auth-${i}.log`), state.output)
+    }
+    console.log("ok native OpenCode OAuth: terminal browser refusal, loopback completion, token refresh and backend restart")
+    continue
+  }
   if (mode === "plugins" || mode === "mixed-plugins") {
     const harness = join(release, "profiles/opencode/harness.zsh")
     writeFileSync(harness, readFileSync(harness, "utf8").replace('app_paths=(/Applications/OpenCode.app "$home/Applications/OpenCode.app")', 'app_paths=("$home/Applications/OpenCode.app")').replace('app_bundle_id=ai.opencode.desktop', 'app_bundle_id=invalid.test'))

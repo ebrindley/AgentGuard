@@ -46,6 +46,22 @@ The plugin cases cover successful loading, failed V2 setup and installer warning
 it pairs that terminal CLI with a disposable desktop bundle containing the V2 CLI.
 The ordinary V1 and Pi fixtures exclude the account's installed desktop application.
 
+`node test/authentication.mjs` checks the rendered profile's callback access,
+atomic credential replacement and reload, named credential denials, and the
+Desktop service's login-shell environment. Select `storage` or `environment`
+to run one scope. Its temporary grant excludes the disposable home, preserving
+the write-denial behavior of a real account home outside temporary directories.
+`AG_TEST_OPENCODE` pointing to OpenCode 2.2.5 enables
+`node test/opencode-v2-native.mjs auth`: a local OAuth plugin exercises terminal
+login, browser refusal, refresh persistence and backend restart. This explicit
+case is separate from the default 2.0.32 matrix and never contacts a provider.
+
+Desktop environment loading adds one confined login-shell execution per GUI
+launch. Provider values are passed only to sandboxed host processes; the trusted
+launcher retains its original environment. Filesystem grants, credential denies
+and process/Launch Services restrictions are unchanged. The required hosted
+check count remains one; its sequential file scope grows from ten to eleven.
+
 Each host still registers one Guard tool-before hook and uses the same command
 checker and filesystem rules. V2 adds one adapter registration and one read-only
 RPC registration with status and permission methods. No path grants or policy
@@ -85,9 +101,9 @@ and merges at the reviewed head with an empty body. The `tests` check runs the
 same subject check on the pull request title. Local gate execution is useful for
 focused development, but is not required in addition to the hosted gate.
 
-The gate keeps the three baseline files and runs seven update and OpenCode files:
+The gate keeps the three baseline files and runs eight update and OpenCode files:
 `test/updates.mjs`, `test/opencode-config.mjs`, `test/plugin-health.mjs`, `test/diagnostics.mjs`,
-`test/permissions.mjs`, `test/opencode-runtime.mjs` and `test/project.mjs` (`@project`, including the app's remembered projects,
+`test/permissions.mjs`, `test/opencode-runtime.mjs`, `test/authentication.mjs` and `test/project.mjs` (`@project`, including the app's remembered projects,
 on a disposable home, under the real `sandbox-exec`). Run a failing file by
 itself during development. The
 health fixture injects failures only into disposable modules and mocked probes;
