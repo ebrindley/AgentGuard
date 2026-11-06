@@ -161,6 +161,14 @@ version gates do not defend the cache and `.npmrc` limitation.
 **Secrets the harness itself holds.** Provider tokens the harness needs are
 outside the guard's reach by design.
 
+**Opt-in AWS inference credentials.** With `AGENT_GUARD_AWS_AUTH=allow` set
+outside OpenCode before launch, the named `~/.aws` read deny is relaxed so
+Bedrock's profile and SSO credential chain can run. The default stays denied.
+This is an operator-selected relaxation of named-credential confidentiality:
+the session can read and use those credentials with their full permissions.
+Configuration writes remain denied and only the three token-cache subtrees
+are writable; their directory entries are pinned against redirection.
+
 **OpenCode inside a sandbox Agent Guard did not create.** The terminal launcher
 steps aside there (DESIGN.md section 15, D10): it runs OpenCode under the existing
 sandbox without its own profile and without reading the Guard List. This turns a

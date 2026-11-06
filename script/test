@@ -11,12 +11,12 @@ node -e 'if (process.versions.node.split(".")[0] !== "24") { console.error("Node
 root=${0:A:h:h}
 cd "$root" || exit 1
 started=$SECONDS
-print -r -- 'Gate scope: 3 fixed baseline files and 7 update, OpenCode configuration, health, diagnostics, permission, runtime and project files (sequential)'
+print -r -- 'Gate scope: 3 fixed baseline files and 8 update, OpenCode configuration, health, diagnostics, permission, runtime, AWS authentication and project files (sequential)'
 for file in test/golden.mjs test/skills-policy.mjs test/pi-launch.mjs; do
   print -r -- "Gate fixed baseline: $file"
   node "$file" || exit $?
 done
-for file in test/updates.mjs test/opencode-config.mjs test/plugin-health.mjs test/diagnostics.mjs test/permissions.mjs test/opencode-runtime.mjs test/project.mjs; do
+for file in test/updates.mjs test/opencode-config.mjs test/plugin-health.mjs test/diagnostics.mjs test/permissions.mjs test/opencode-runtime.mjs test/aws-auth.mjs test/project.mjs; do
   print -r -- "Gate updates and OpenCode: $file"
   node "$file" || exit $?
 done
