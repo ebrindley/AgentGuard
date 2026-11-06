@@ -1,8 +1,59 @@
 # Host version and server ownership. Every executable probe runs inside the
 # launcher's sandbox, including the CLI bundled with the desktop application.
+typeset -a opencode_host_env=()
+
+opencode_gui_environment() {
+  local shell=${SHELL:-/bin/zsh} entry key fd pid
+  local -a entries shell_args=(-lic)
+  # An interactive zsh/bash probe must not take ownership of the launcher's
+  # terminal: killing it would hang up that terminal's foreground process group.
+  [[ ${shell:t} != (zsh|bash) ]] || shell_args=(+m -lic)
+  integer deadline=$(( SECONDS + 5 )) started=0 complete=0
+  # A separate pipe lets the launcher stop reading at the deadline even if a
+  # startup helper inherits stdout. Values never go to a log or file.
+  coproc exec $sandbox -D GUI=0 "$shell" "${shell_args[@]}" '/usr/bin/printf "\\0"; /usr/bin/env -0 && /usr/bin/printf "\\0"' </dev/null 2>/dev/null
+  pid=$!
+  exec {fd}<&p
+  while (( SECONDS < deadline )); do
+    IFS= read -r -u $fd -d '' -t $(( deadline - SECONDS )) entry || break
+    if (( ! started )); then started=1; continue; fi
+    if [[ -z $entry ]]; then complete=1; break; fi
+    entries+=("$entry")
+  done
+  exec {fd}<&-
+  # Logout hooks can also wait after the environment has been emitted.
+  if (( pid > 0 )); then
+    kill -KILL $pid 2>/dev/null || true
+    wait $pid 2>/dev/null || true
+  fi
+  if (( ! complete )); then
+    note 'could not load the Desktop login-shell environment within five seconds; inherited credentials remain available'
+    return 0
+  fi
+  opencode_host_env=(/usr/bin/env)
+  for entry in "${entries[@]}"; do
+    key=${entry%%=*}
+    [[ $entry == *=* && $key == [A-Za-z_][A-Za-z0-9_]# ]] || continue
+    # These selectors and controls were consumed when the profile was built.
+    # Importing new values now would split the client, server and sandbox roots.
+    case $key in
+      OPENCODE_API_KEY|OPENCODE_GO_API_KEY) ;;
+      HOME|USER|LOGNAME|SHELL|PWD|OLDPWD|SHLVL|TMPDIR|ZDOTDIR|XDG_*|OPENCODE_*|AGENT_GUARD_*|CC_SAFETY_NET_*|SAFETY_NET_*|PI_*|OMP_*|CODEX_HOME|CLAUDE_CONFIG_DIR|GROK_HOME|GROK_SANDBOX) continue ;;
+    esac
+    (( ${env_unset[(Ie)$key]} )) && continue
+    if [[ $key == PATH ]]; then
+      opencode_host_env+=("PATH=$release/peers:${entry#*=}" "AGENT_GUARD_PEER_PATH=${entry#*=}")
+    else
+      opencode_host_env+=("$entry")
+    fi
+  done
+  opencode_host_env+=("${env_set[@]}")
+  return 0
+}
+
 opencode_major() {
   local version
-  version=$($sandbox -D GUI=0 "$1" --version 2>/dev/null) || fail "cannot read OpenCode version: $1"
+  version=$($sandbox -D GUI=0 "${opencode_host_env[@]}" "$1" --version 2>/dev/null) || fail "cannot read OpenCode version: $1"
   if [[ $version =~ '(^|[[:space:]])v?([0-9]+)\.' ]]; then
     REPLY=$match[2]
   else
@@ -123,7 +174,7 @@ opencode_cli_args() {
 opencode_service_state() {
   local output
   REPLY=unknown
-  output=$($sandbox -D GUI=0 "$1" service status 2>/dev/null) || return 0
+  output=$($sandbox -D GUI=0 "${opencode_host_env[@]}" "$1" service status 2>/dev/null) || return 0
   if [[ $output =~ '^[[:space:]]*https?://[^[:space:]]+[[:space:]]*$' ]]; then
     REPLY=running
   elif [[ $output =~ '^[[:space:]]*(stopped|disabled)[[:space:]]*$' ]]; then
@@ -141,7 +192,7 @@ opencode_managed() {
     (running) fail 'OpenCode V2 has a background service. Close its clients, run opencode service stop outside Agent Guard, then reopen Agent Guard.' ;;
     (unknown) fail 'OpenCode V2 reported an unrecognized service status. Run opencode service status outside Agent Guard to inspect it.' ;;
   esac
-  $sandbox -D GUI=0 "$cli" serve --service --hostname 127.0.0.1 > "$session/server.log" 2>&1 &
+  $sandbox -D GUI=0 "${opencode_host_env[@]}" "$cli" serve --service --hostname 127.0.0.1 > "$session/server.log" 2>&1 &
   typeset -g opencode_server_pid=$! opencode_client_pid= opencode_client_done=0
   # The server writes its own log under its normal writable state root. This
   # launcher's capture is opened before confinement, like the diagnostic probe.

@@ -868,12 +868,13 @@ case $mode in
   (gui)
     [[ $harness == opencode ]] || fail "$title has no app to open"
     failure_stage=host-launch
+    opencode_gui_environment
     if [[ -x $app/Contents/Resources/opencode-cli ]]; then
       cli="$app/Contents/Resources/opencode-cli"
       opencode_major "$cli"
       if [[ $REPLY == 2 ]]; then managed=1 managed_cli=$cli; fi
     fi
-    set -- -D GUI=1 "$app/Contents/MacOS/$main" $gui_args "$@"
+    set -- -D GUI=1 "${opencode_host_env[@]}" "$app/Contents/MacOS/$main" $gui_args "$@"
     ;;
   (profile)
     print -r -- "$profile"

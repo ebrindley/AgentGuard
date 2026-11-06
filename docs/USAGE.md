@@ -89,18 +89,26 @@ OpenCode's code come from reading its bundle, not from running it.
   app is older than the tap's version (`Cask#outdated_version`), unless
   `HOMEBREW_NO_UPGRADE_AUTO_UPDATES_CASKS` is set. The other route is the
   download from opencode.ai.
-- Links do not open. The guard denies `lsopen`, OpenCode drops the failure, and
-  the click does nothing. Right-clicking an ordinary link should offer Copy Link:
-  the 2.1.4 bundle enables `electron-context-menu` without turning off
-  `showCopyLink`. This is read from the bundle and was not tried in the app. For
-  OpenCode Console sign-in, use "Copy sign-in link" and paste it into a browser.
-  Sign-in for other providers shows a device code or an "open in browser"
-  button, with no link to copy. Instead, choose the provider's API key method
-  where it offers one, or run `opencode auth login` in a guarded terminal. The
-  launcher runs `auth` subcommands with `--standalone`, and the 2.1.4 CLI prints
-  the sign-in URL and instructions before it tries to open the page. The CLI
-  behavior is read from its code and was not run. That the desktop then uses the
-  saved credential is an inference.
+- Browser links cannot open from the sandbox. In OpenCode 2.2.5, Console
+  sign-in offers **Copy sign-in link**. Paste that link into your browser.
+  Other browser sign-ins, including ChatGPT and legacy Codex browser login,
+  do not expose the URL in Desktop. Use `opencode auth login` or `/connect`
+  in a guarded terminal to obtain it, then complete authorization in your
+  browser. Device-code methods show a copyable code; the terminal also shows
+  the verification URL. API-key methods need no browser handoff.
+  Quit and reopen OpenCode through Agent Guard after connecting in another
+  process if Desktop still shows the provider as disconnected. A local fixture
+  checks callback, refresh and backend-restart behavior; live provider login
+  and the desktop renderer are not attested by that fixture.
+- Desktop loads provider variables and PATH from your interactive login shell
+  under its sandbox before starting the managed backend. Shell startup cannot
+  write outside the granted folders. Guard controls and filesystem selectors
+  such as `HOME`, `XDG_*` and OpenCode configuration paths retain their launch
+  values; changing them in shell startup does not change the generated profile.
+  These imported variables are passed only to confined OpenCode processes.
+  A failing shell, or one that takes longer than five seconds, leaves the
+  inherited environment in place and reports a note. Shell startup receives
+  no terminal input.
 - A prompt "'Agent Guard' would like to access the Microphone" appeared 155 ms
   after an agent reply finished, which is when OpenCode plays its "agent
   finished" sound. The sound is on by default (Settings, General, Sound
@@ -472,6 +480,21 @@ was saved with a sandbox profile, which Grok keeps for the life of the session.
 Start a new session instead.
 
 ## Peer CLIs
+
+Peer subscription logins and OpenCode's own provider connections use different
+credential stores. OpenCode 2.2.5 can save and refresh its own credentials in its
+data directory. Codex's file-backed login and Claude's credential-file fallback
+receive no automatic write grants. A peer may therefore read an existing login
+but fail to save a refreshed token. If the provider rotates that token, a later
+run may require signing in again outside the guard. Keychain refresh support is
+not qualified. Use an API key for guarded peers when persistent subscription
+refresh is required but unavailable; changing the whole credential directory's
+permissions is not a supported remedy.
+
+Azure CLI token-cache writes are also not automatically granted. Azure API-key
+connections avoid that dependency. Google application-default credentials can
+be read at their ordinary path, but initial `gcloud auth` setup belongs outside
+the guard. A credential under a named denied path remains inaccessible.
 
 Inside guarded OpenCode, Pi, OMP and Grok sessions, `codex`, `claude`,
 `cursor-agent`, `grok` and `opencode` use session-only launch wrappers. They
