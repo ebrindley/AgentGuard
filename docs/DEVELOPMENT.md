@@ -7,6 +7,17 @@ and homes described below. For installed checks, see
 
 ## Tests
 
+`node test/aws-auth.mjs` checks AWS opt-in reads, atomic token-cache writes,
+configuration protection, Guard List precedence and redirected-cache refusal
+under the rendered macOS profile. It uses dummy credentials only. For a normal
+unlinked `~/.aws`, the opt-in changes one recursive read/write deny into one
+recursive write deny with three cache exclusions, adds three write grants and
+seven unique directory-entry write denials. Without the opt-in, these totals
+are unchanged. With key agents denied, the AWS socket-path outbound deny also
+changes from one to zero; other credential socket denies are unchanged.
+The existing hosted gate gains this one sequential test file;
+no new hosted check is added.
+
 ### Offline checker comparison
 
 See [Pi checker comparison](CHECKER-COMPARISON.md) for the baseline argument,

@@ -591,6 +591,39 @@ integer agents=1
 if [[ ${AGENT_GUARD_SSH_AGENT:-} == allow ]]; then agents=0; fi
 typeset -aU credential_targets
 typeset -a credential_rules
+if [[ $harness == opencode && ${AGENT_GUARD_AWS_AUTH:-} == allow ]]; then
+  # Only token caches are writable. Keep their directory entries fixed so a
+  # session cannot redirect a later launch's grants through a planted link.
+  aws_root=${${:-$home/.aws}:A}
+  [[ $aws_root == "$home"/* ]] || fail 'AWS authentication requires ~/.aws to resolve inside the account home'
+  typeset -aU aws_roots=("$home/.aws" "$aws_root") aws_pins
+  for suffix in sso/cache login/cache cli/cache; do
+    cache="$aws_root/$suffix"
+    [[ ${cache:A} == "$cache" ]] || fail "AWS authentication cache must not contain symlinks: $cache"
+    writable+=("$cache")
+  done
+  for root in $aws_roots; do
+    sbpl "$root"
+    aws_rule="(deny file-write* (require-all (subpath $REPLY) (require-not (require-any"
+    for suffix in sso/cache login/cache cli/cache; do
+      sbpl "$root/$suffix"
+      aws_rule+=" (subpath $REPLY)"
+    done
+    credential_rules+=("$aws_rule))))")
+    for suffix in sso/cache login/cache cli/cache; do
+      p="$root/$suffix"
+      while [[ $p != "$home" && $p != / ]]; do
+        aws_pins+=("$p")
+        p=${p:h}
+      done
+    done
+  done
+  for p in $aws_pins; do
+    sbpl "$p"
+    credential_rules+=("(deny file-write* (literal $REPLY))")
+  done
+  note 'AWS profile authentication enabled: credentials readable, token caches writable, configuration locked'
+fi
 for p in $credential_paths; do credential_targets+=("$p" "${p:A}"); done
 for q in $credential_targets; do
   if [[ $q == "$home"/* ]]; then sbpl "${q#$home}"; REPLY="(h $REPLY)"; else sbpl "$q"; fi

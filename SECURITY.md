@@ -328,7 +328,9 @@ behind linked ancestors. These changes follow the 0.2.0 prerelease.
   neither read nor write: `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.git-credentials`,
   `~/.config/git/credentials`, `~/.netrc`, `~/.npmrc`, `~/.secrets`,
   `~/.docker/config.json`, `~/.kube/config`, and `.env` files other than
-  `.env.example`, `.env.sample` and `.env.template`. Add DENY entries to the Guard
+  `.env.example`, `.env.sample` and `.env.template`. The explicit
+  `AGENT_GUARD_AWS_AUTH=allow` exception is described under
+  [AWS profile authentication](#aws-profile-authentication). Add DENY entries to the Guard
   List for anything else it must not read. A DENY or READ ONLY entry that is or contains a
   folder OpenCode needs (`/`, home, `~/Library`, `~/.config`, `~/.local`,
   `~/.cache`, `/usr`, `/bin`, `/sbin`, `/System`, `/Library`, `/private`, `/dev`,
@@ -354,7 +356,8 @@ cc-safety-net (difference 17), so:
   does.
 - **Only shell commands are checked in-process.** The checker sees `bash`
   commands, not file tools such as `read`, `edit` and `write`, or other tools.
-  Seatbelt denies reads of `.env` files, `~/.ssh`, `~/.aws` and the other
+  Seatbelt denies reads of `.env` files, `~/.ssh`, `~/.aws` (unless AWS profile
+  authentication is enabled) and the other
   credential paths listed above, and applies to every write. A file tool can
   still read a secret kept in another name, such as `secrets.json` or a `.pem`
   file in the project.
@@ -486,6 +489,17 @@ Everything else is a bug and goes to a public issue (see
 Pi's checker that should not happen, a destructive command cc-safety-net
 misses while Seatbelt still holds, an install, update, migration or
 uninstall failure, and the limitations above. When unsure, use the advisory form.
+
+## AWS profile authentication
+
+OpenCode's optional `AGENT_GUARD_AWS_AUTH=allow` replaces the `~/.aws`
+read/write deny with readable credentials and write-protected configuration.
+The default socket-connection denial under `~/.aws` is also removed by the
+opt-in. Only `sso/cache`, `login/cache` and `cli/cache` become writable. Their directory
+entries and ancestors remain fixed; redirected caches refuse launch. Explicit
+Guard List restrictions still win. This lets a session use AWS credentials
+with all their permissions, not only inference permissions. The default is
+unchanged. See [AWS profile sign-in](docs/USAGE.md#configure-opencode).
 
 ## Peer CLI execution
 
