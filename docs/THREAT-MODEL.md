@@ -302,3 +302,16 @@ secret-name checks on file tools no longer run.
   mistake is recovered from a clone or the hosting service, a path-scoped discard
   can lose uncommitted changes to the named paths, and an abort loses the
   conflict resolution in progress.
+
+## 9. Browser handoff
+
+Browser handoff addresses the observed refusal of provider sign-in browser
+launches. The unreleased implementation keeps direct Launch Services denied
+and adds a launcher-owned sibling that validates the initial authentication URL
+and uses a fixed browser target. Requests from the confined process are
+untrusted, including requests from GUI plugins. The helper does not accept code,
+application paths or command arguments. It adds one mediated browser capability
+and one trusted process; the two OpenCode launch profiles' direct operation
+denials and filesystem grants are unchanged. Browser redirects and consent
+decisions are outside this boundary. The operator may still be shown an allowed
+provider consent page requested by agent-controlled code.

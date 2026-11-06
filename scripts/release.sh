@@ -41,6 +41,13 @@ files=(
   profiles/opencode/harness.zsh
   profiles/opencode/hooks.zsh
   profiles/opencode/runtime.zsh
+  profiles/opencode/browser.zsh
+  profiles/opencode/browser/helper.zsh
+  profiles/opencode/browser/default-browser.js
+  profiles/opencode/browser/bin/open
+  profiles/opencode/browser/package.json
+  profiles/opencode/browser/index.js
+  profiles/opencode/browser/gui.cjs
   profiles/opencode/skills.zsh
   profiles/opencode/protected.sb
   profiles/opencode/credentials.sb

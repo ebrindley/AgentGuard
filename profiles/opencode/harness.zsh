@@ -1,7 +1,7 @@
 # Trusted profile data, loaded only from the account-derived engine folder.
 name=opencode
 title=OpenCode
-libs=(hooks.zsh skills.zsh runtime.zsh)
+libs=(hooks.zsh skills.zsh runtime.zsh browser.zsh)
 cli_names=(opencode)
 cli_search=(/opt/homebrew/bin/opencode /usr/local/bin/opencode "$home/.opencode/bin/opencode")
 app_paths=(/Applications/OpenCode.app "$home/Applications/OpenCode.app")

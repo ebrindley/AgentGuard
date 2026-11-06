@@ -109,6 +109,39 @@ OpenCode's code come from reading its bundle, not from running it.
   A failing shell, or one that takes longer than five seconds, leaves the
   inherited environment in place and reports a note. Shell startup receives
   no terminal input.
+
+### Browser handoff (unreleased)
+
+Guarded OpenCode launches can open supported sign-in URLs through a small
+launcher-owned helper. The desktop and backend still cannot call Launch
+Services directly. The helper selects the default HTTPS application at launch;
+requests cannot select another application, pass launch arguments, or open files.
+
+In OpenCode 2.2.5, use the command palette and choose **Connect ChatGPT through
+Agent Guard**, **Connect OpenCode through Agent Guard**, or **Sign in Claude Code
+through Agent Guard**. These are new commands; the vendor's existing browser
+buttons still use the denied native opener. ChatGPT and OpenCode Console use
+their existing backend authentication APIs. The command shows completion or an
+error and offers cancellation while waiting. OpenCode Go's API-key methods need
+no browser handoff.
+
+Claude's command starts `claude auth login --claudeai` in a terminal supplied by
+the plugin, inside the existing desktop sandbox. It uses the shared Claude Code
+account, not an Anthropic API key. The helper forwards its browser request;
+credential saving and refresh retain their existing restrictions. This change
+does not attest complete Claude sign-in or credential persistence. If credential
+saving fails, use Claude Code's normal sign-in outside the guard. After signing
+in, connect Claude Agent in OpenCode's Providers settings.
+
+The helper also supplies the `open` command and `BROWSER` for guarded OpenCode
+terminal sessions and `opencode auth login`. It accepts the OpenAI authorization
+and device pages, OpenCode's `/console/` pages, and the Claude authorization pages
+on `claude.ai`, `console.anthropic.com` and `platform.claude.com`. Other links,
+custom URL schemes and local files are refused. The helper checks the initial
+URL; it does not control subsequent browser navigation or consent decisions.
+The helper ends with its launch. If a default browser cannot be resolved, or the
+account path is too long for a Unix socket, the launch reports that handoff is
+unavailable and leaves the existing browser restrictions in place.
 - A prompt "'Agent Guard' would like to access the Microphone" appeared 155 ms
   after an agent reply finished, which is when OpenCode plays its "agent
   finished" sound. The sound is on by default (Settings, General, Sound

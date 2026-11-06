@@ -946,4 +946,7 @@ record_app_projects() {
 }
 (( ! managed )) || opencode_managed "$managed_cli" "$@"
 record_app_projects
+if [[ $harness == opencode && $mode == cli ]] && opencode_browser_cli_requested "${launch_args[@]}"; then
+  opencode_browser_cli "$@"
+fi
 exec $sandbox "$@"

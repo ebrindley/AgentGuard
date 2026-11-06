@@ -72,6 +72,7 @@ opencode_project_arg() {
   local arg name next unknown= command dir= letters letter
   integer i=1 end=0 attached=0
   local -a args=("$@") positional
+  typeset -g opencode_browser_needed=0
   local -a commands=(completion acp mcp attach run debug providers auth agent upgrade update uninstall serve web
                      models stats export import github pr session plugin plug db service api mini reload pair)
   local -a valued=(--log-level --port --hostname --mdns-domain --model --session --prompt --agent --replay-limit
@@ -119,6 +120,7 @@ opencode_project_arg() {
   done
   command=${positional[1]:-}
   if (( ${commands[(Ie)$command]} )); then
+    [[ $command != auth || ${positional[2]:-} != login ]] || opencode_browser_needed=1
     REPLY=
     [[ $command == run && $attached == 0 ]] && REPLY=$dir
     return 0
@@ -128,6 +130,7 @@ opencode_project_arg() {
     return 1
   fi
   REPLY=${positional[1]:-}
+  opencode_browser_needed=1
 }
 
 opencode_cli_args() {
@@ -192,6 +195,11 @@ opencode_managed() {
     (running) fail 'OpenCode V2 has a background service. Close its clients, run opencode service stop outside Agent Guard, then reopen Agent Guard.' ;;
     (unknown) fail 'OpenCode V2 reported an unrecognized service status. Run opencode service status outside Agent Guard to inspect it.' ;;
   esac
+  typeset -g opencode_server_pid= opencode_client_pid= opencode_client_done=0
+  trap opencode_stop_children EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM HUP
+  [[ $mode != gui ]] || opencode_browser_start
   $sandbox -D GUI=0 "${opencode_host_env[@]}" "$cli" serve --service --hostname 127.0.0.1 > "$session/server.log" 2>&1 &
   typeset -g opencode_server_pid=$! opencode_client_pid= opencode_client_done=0
   # The server writes its own log under its normal writable state root. This
@@ -210,7 +218,11 @@ opencode_managed() {
   # when its original server exits, so a lost service ends this launch's lease.
   trap opencode_client_exited CHLD
   record_app_projects
-  $sandbox "$@" <&0 &
+  if [[ $mode == gui ]]; then
+    $sandbox -D GUI=1 "${opencode_host_env[@]}" "$app/Contents/MacOS/$main" $gui_args "${gui_rest[@]}" <&0 &
+  else
+    $sandbox "$@" <&0 &
+  fi
   opencode_client_pid=$!
   opencode_client_exited
   wait $opencode_server_pid || true
@@ -242,4 +254,5 @@ opencode_stop_children() {
     wait $pid 2>/dev/null || true
   done
   opencode_client_pid= opencode_server_pid=
+  opencode_browser_stop
 }

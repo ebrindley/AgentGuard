@@ -114,6 +114,18 @@ later unguarded sessions. This risk is accepted, as for editable project scripts
 and shared skills. Their execution in a guarded process tree remains confined.
 Editable child symlinks and config-selection environment variables never create
 new write grants. Root identity pinning preserves launch-time automatic grants.
+
+The unreleased browser handoff adds one launcher-owned process and one narrow
+request interface. Both OpenCode profiles retain their `lsopen`, `job-creation`
+and executable denies. A guarded caller can ask the helper to open a supported
+HTTPS authentication page in the default HTTPS application selected before
+confinement. It cannot supply a program, arguments, a file URL or a custom
+scheme. Helper code and its socket directory are inside the write-protected
+engine. The protocol is bounded and authorization URLs are not logged.
+This is an initial-navigation boundary, not a browser sandbox: redirects and
+consent remain with the browser and operator. Every confined caller can request
+an allowed URL; the request is not proof of a human click. Claude's login process
+is a confined child of Desktop and gains no credential write grants.
 Automatic root links configured outside the guard grant their resolved roots at
 launch, subject to Guard List and guard-owned restrictions. This includes linked
 global skill roots; the credential denies under Reads, below, still apply

@@ -828,7 +828,8 @@ ag_assemble() {
   # The release's install.sh, which agent-guard and uninstall.sh source, loads these.
   /bin/cp -R -- "$t/installer" "$r/installer" || return 1
   /bin/cp -- "$p/harness.zsh" "$p/hooks.zsh" "$p/runtime.zsh" "$p/protected.sb" "$p/credentials.sb" "$p/skills.zsh" "$p/plugin.js" "$p/v2.js" "$p/permissions.js" "$p/permissions.jq" "$p/diagnostics.zsh" "$r/profiles/opencode/" || return 1
-  /bin/cp -R -- "$p/templates" "$p/assets" "$r/profiles/opencode/" || return 1
+  /bin/cp -- "$p/browser.zsh" "$r/profiles/opencode/" || return 1
+  /bin/cp -R -- "$p/templates" "$p/assets" "$p/browser" "$r/profiles/opencode/" || return 1
   # check staged points OpenCode's config folder here; its only plugin is this
   # release's. OpenCode 1.18.33 loads no config, and so no plugin, when it cannot
   # create .gitignore in the config folder, and the guard denies writes here.
