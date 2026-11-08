@@ -162,8 +162,10 @@ update() {
   [[ -z $target || $tag == "$target" ]] || { ag_unlock; die "bootstrap tag does not match $target"; }
   [[ -f $stamp ]] && cur=$(/usr/bin/jq -r '.tag // empty' "$stamp" 2>/dev/null)
   # Recheck under the installation lock after the operator's decision window.
-  if [[ -n $target && -n $cur ]] && ! older "$cur" "$tag"; then
+  if [[ -n $target && -n $cur ]] && ! older "$cur" "$tag" &&
+      { [[ $cur != "$tag" ]] || (( ! restore_seen && ! preference_seen )); }; then
     ag_unlock
+    (( restore_seen || preference_seen )) && die "The installed release ($cur) is not older than $tag; requested setup options require the installer for $cur. Requested setup options were not applied."
     print -r -- "Agent Guard $cur is already installed or is not older than $tag."
     return 0
   fi
