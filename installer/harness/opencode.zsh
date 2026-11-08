@@ -152,20 +152,40 @@ ag_launch_check() {  # COMMAND LABEL
 
 ag_h_opencode_links() { reply=("$plugin" "$(/usr/bin/readlink -- "$plugin")") }
 
+ag_opencode_path_warning() {
+  REPLY=
+  [[ -n ${ZDOTDIR:-} && ${ZDOTDIR:A} != "$home" ]] || return 0
+  REPLY="ZDOTDIR uses ${ZDOTDIR:A}; add this line to its .zprofile and .zshrc for terminal activation: "
+  REPLY+='export PATH="$HOME/Library/Application Support/AgentGuard/bin:$PATH"'
+}
+
 # The launcher's check (design section 8). With --json: reply = its lines.
 ag_h_opencode_doctor() {
-  local out
+  local out warning
   integer rc
-  [[ ${2:-} == --json ]] || { "$1/launch" check; return }
+  ag_opencode_path_warning
+  warning=$REPLY
+  if [[ ${2:-} != --json ]]; then
+    [[ -z $warning ]] || print -r -- "warn $warning"
+    "$1/launch" check
+    return
+  fi
   out=$("$1/launch" check 2>&1)
   rc=$?
   reply=("${(@f)out}") REPLY='{}'
+  [[ -z $warning ]] || reply+=("warn $warning")
   return $rc
 }
 
 ag_h_opencode_report() {
   local preference="$state/opencode-preferences.json"
-  ag_say 'PATH: new terminal windows run opencode inside the guard'
+  ag_opencode_path_warning
+  if [[ -n $REPLY ]]; then
+    ag_warnings+=("$REPLY")
+    ag_say 'PATH: terminal activation needs manual setup for ZDOTDIR'
+  else
+    ag_say 'PATH: new terminal windows run opencode inside the guard'
+  fi
   ag_say "GUI: $app (drag it to the Dock)"
   "$engine/current/launch" find-app >/dev/null 2>&1 || ag_warnings+=('OpenCode.app not found: install it, then open Agent Guard')
   if [[ -f $preference ]] && /usr/bin/jq -e '.approvalPreference == "auto"' "$preference" >/dev/null 2>&1; then

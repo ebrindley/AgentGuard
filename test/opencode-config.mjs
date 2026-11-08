@@ -329,6 +329,29 @@ assert.deepEqual(JSON.parse(readFileSync(serviceChanged.service)), { password, d
 assert.equal(serviceRecord(serviceChanged), undefined)
 
 const assembled = fixture("assembled-runtime")
+const activation = fixture("activation-report")
+mkdirSync(join(activation.engine, 'current'))
+writeFileSync(join(activation.engine, 'current/launch'), '#!/bin/sh\nprintf "ok fixture check\\n"\n', { mode: 0o755 })
+for (const setting of ['unset ZDOTDIR', 'ZDOTDIR=$home', 'ZDOTDIR="$home/.config/zsh"']) {
+  const output = shell(activation, `
+    ${setting}
+    app="$home/Applications/Agent Guard.app"
+    ag_h_opencode_report
+    print -rl -- "\${ag_warnings[@]}"
+    ag_h_opencode_doctor "$engine/current"
+    ag_h_opencode_doctor "$engine/current" --json
+    print -rl -- "\${reply[@]}"
+  `).stdout
+  if (setting.includes('.config/zsh')) {
+    assert.match(output, /terminal activation needs manual setup for ZDOTDIR/)
+    assert.equal(output.match(/ZDOTDIR uses /g).length, 3)
+    assert.match(output, /export PATH="\$HOME\/Library\/Application Support\/AgentGuard\/bin:\$PATH"/)
+    assert.doesNotMatch(output, /new terminal windows run opencode inside the guard/)
+  } else {
+    assert.match(output, /new terminal windows run opencode inside the guard/)
+    assert.doesNotMatch(output, /warn ZDOTDIR/)
+  }
+}
 const tree = join(assembled.home, "tree")
 mkdirSync(tree)
 for (const name of ["engine", "profiles", "installer", "LICENSE", "install.sh"]) cpSync(join(root, name), join(tree, name), { recursive: true })
