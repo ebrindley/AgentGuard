@@ -325,6 +325,15 @@ ALLOW
   inside the project that is a symlink is handled as in the launch folder.
 - Each launch uses its own rules, so two sessions in different projects each
   write only their own project.
+- Linked worktrees and checkouts with a separate Git directory grant the
+  checkout only. When their Git metadata lies outside every ALLOW entry,
+  `git add` and commits fail on metadata writes such as `index.lock`. Run
+  `git rev-parse --path-format=absolute --git-common-dir` in the checkout to
+  locate the shared metadata directory, then review and add that directory
+  explicitly under ALLOW outside the guard. For a linked worktree, this is
+  normally the original repository's `.git` directory. This permits shared
+  repository metadata changes; Git hook protection still applies. Restart
+  OpenCode after changing the list.
 - The launch is refused, not widened, when `@project` is `/`, your home, `/Users`,
   `/Volumes`, `/tmp`, `/private`, `/var` or their private spellings, is or is
   inside a system folder, `~/.ssh`, `~/.aws`, `~/.config`, `~/.docker`,
