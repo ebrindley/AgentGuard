@@ -13,6 +13,18 @@ cd ~/Projects/your-project
 opencode
 ```
 
+The installer adds terminal activation to `~/.zprofile` and `~/.zshrc`.
+With an exported `ZDOTDIR` pointing elsewhere, add this line to that folder's
+`.zprofile` and `.zshrc` yourself, then open a new terminal:
+
+```sh
+export PATH="$HOME/Library/Application Support/AgentGuard/bin:$PATH"
+```
+
+Installation and `agent-guard doctor` warn when their environment contains a
+nondefault `ZDOTDIR`; they do not edit those startup files. An unexported shell
+variable is not visible to them. Uninstall does not remove manually added lines.
+
 For the desktop app, open `~/Applications/Agent Guard.app` instead of
 `OpenCode.app`. Inside guarded OpenCode, the `agent_guard_status` tool reports
 the loaded advisory plugin and its observed guard release. Run `agent-guard doctor` from Terminal outside
