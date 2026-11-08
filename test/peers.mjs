@@ -4,6 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { stage, layout } from './engines/zsh.mjs';
+import './peer-discovery.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const run = mkdtempSync(join(root, 'test/.run-peers-'));
