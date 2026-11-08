@@ -165,7 +165,13 @@ opencode_cli_args() {
     (debug)
       [[ $subcommand != paths ]] || return 0
       managed=1 ;;
-    (plugin|mcp|pair) managed=1 ;;
+    (mcp)
+      [[ $subcommand != add ]] || return 0
+      managed=1 ;;
+    (plugin)
+      [[ $subcommand != (add|remove) ]] || return 0
+      managed=1 ;;
+    (pair) managed=1 ;;
     (*) reply=("${prefix[@]}" --standalone "${rest[@]}") ;;
   esac
 }

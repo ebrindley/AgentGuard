@@ -94,9 +94,12 @@ for (const args of [["plugin", "list"], ["mcp", "list"], ["debug", "agents"], ["
   assert.equal(result.managed, true)
   assert.deepEqual(result.args, args)
 }
-for (const args of [["serve"], ["--version"], ["debug", "paths"], ["acp"], ["run", "--server", "http://localhost:4096", "hello"]]) {
+for (const args of [["serve"], ["--version"], ["debug", "paths"], ["acp"], ["run", "--server", "http://localhost:4096", "hello"],
+  ["mcp", "add", "fixture", "--url", "https://example.test/mcp", "--global"],
+  ["plugin", "add", "fixture"], ["plugin", "remove", "fixture"], ["--print-logs", "mcp", "add", "fixture"]]) {
   const result = prepare(args)
   assert.equal(result.status, 0, result.stderr)
+  assert.equal(result.managed, false)
   assert.deepEqual(result.args, args)
 }
 for (const args of [["service", "start"], ["service", "restart"], ["acp", "--login"]]) assert.equal(prepare(args).status, 2)

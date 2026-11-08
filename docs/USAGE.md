@@ -52,9 +52,11 @@ start a fresh service. Restart to apply a changed Guard List.
 
 OpenCode's service opt-out, `"disabled": true` in
 `~/.config/opencode/service.json`, does not change the desktop: the app ignores
-it and still uses the service Guard starts. With the opt-out on, `mcp`, `plugin`
-and `debug` start their own private server, so Guard's service goes unused for
-them, and `pair` is unavailable. Guard treats a `service status` of `disabled`,
+it and still uses the service Guard starts. With the opt-out on, server-backed
+`mcp`, `plugin` and `debug` commands start their own private server, so Guard's
+service goes unused for them, and `pair` is unavailable. `mcp add`, `plugin add`
+and `plugin remove` edit local configuration without a server. Guard treats a
+`service status` of `disabled`,
 proposed upstream in anomalyco/opencode#53374, the same as `stopped`.
 
 The terminal launcher uses the first native `opencode` on PATH, then its usual
@@ -573,8 +575,8 @@ Agent Guard's: the Guard List is not read, nothing is written to
 `~/Agent Guard` or the engine folder, and the plugin treats the session as
 unguarded, refusing tools as it does for a bare `opencode` unless
 `AGENT_GUARD_BYPASS=1` is set.
-Commands that need a launcher-owned service (V2 `mcp`, `plugin`, `debug` and
-`pair`) are refused, and so are the desktop app and the launcher's self-check. The
+Commands that need a launcher-owned service (V2 server-backed `mcp`, `plugin`,
+`debug` and `pair`) are refused, and so are the desktop app and the launcher's self-check. The
 launcher recognizes another sandbox only by macOS refusing to apply a second
 profile; any other failure of that probe stops the launch as before.
 
