@@ -148,7 +148,10 @@ const lifecycle = join(run, 'browser.zsh')
 writeFileSync(lifecycle, readFileSync(join(source, '../browser.zsh'), 'utf8')
   .replace('/usr/bin/osascript -l JavaScript "$profile_dir/browser/default-browser.js"', `/usr/bin/printf %s ${quote(app)}`))
 mkdirSync(join(run, 'engine/state'), { recursive: true })
-const result = spawnSync('/bin/zsh', ['-fc', `
+for (const inlineConfig of [undefined, '', '{"plugins":["existing"],"theme":"preserved"}']) {
+  const env = { PATH: '/usr/bin:/bin' }
+  if (inlineConfig !== undefined) env.OPENCODE_CONFIG_CONTENT = inlineConfig
+  const result = spawnSync('/bin/zsh', ['-fc', `
   setopt err_exit no_unset pipe_fail
   source "$1"
   engine=$2 profile_dir=$3 mode=gui
@@ -165,14 +168,18 @@ const result = spawnSync('/bin/zsh', ['-fc', `
   opencode_browser_stop
   [[ ! -e $saved ]]
 `, 'browser', lifecycle, join(run, 'engine'), join(source, '..')], {
-  env: { PATH: '/usr/bin:/bin', OPENCODE_CONFIG_CONTENT: '{"plugins":["existing"],"theme":"preserved"}' },
+  env,
   encoding: 'utf8', timeout: 10000,
 })
-assert.equal(result.status, 0, result.stderr)
-const config = JSON.parse(result.stdout)
-assert.equal(config.theme, 'preserved')
-assert.equal(config.plugins[0], 'existing')
-assert.equal(config.plugins[1], join(source, '..', 'browser'))
+  assert.equal(result.status, 0, result.stderr)
+  const config = JSON.parse(result.stdout)
+  if (inlineConfig) {
+    assert.equal(config.theme, 'preserved')
+    assert.deepEqual(config.plugins, ['existing', join(source, '..', 'browser')])
+  } else {
+    assert.deepEqual(config, { plugins: [join(source, '..', 'browser')] })
+  }
+}
 console.log('ok launcher: helper readiness, protected shim path, config preservation and cleanup')
 
 for (const [args, wanted] of [

@@ -46,12 +46,13 @@ opencode_browser_start() {
   (( $#opencode_host_env )) || opencode_host_env=(/usr/bin/env)
   opencode_host_env+=("AGENT_GUARD_BROWSER_SOCKET=$socket" "PATH=$PATH" "BROWSER=$BROWSER")
   if [[ $mode == gui ]]; then
+    config=${OPENCODE_CONFIG_CONTENT:-'{}'}
     config=$(/usr/bin/jq -ce --arg plugin "$profile_dir/browser" '
       if type != "object" then error("expected configuration object") else . end |
       .plugins = (.plugins // []) |
       if (.plugins | type) != "array" then error("expected plugin array") else . end |
       if (.plugins | index($plugin)) == null then .plugins += [$plugin] else . end
-    ' <<< "${OPENCODE_CONFIG_CONTENT:-\{\}}") || { opencode_browser_stop; fail 'cannot add browser commands to inline OpenCode configuration'; }
+    ' <<< "$config") || { opencode_browser_stop; fail 'cannot add browser commands to inline OpenCode configuration'; }
     opencode_host_env+=("OPENCODE_CONFIG_CONTENT=$config")
   fi
 }
