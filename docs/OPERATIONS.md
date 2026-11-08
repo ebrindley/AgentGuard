@@ -560,7 +560,11 @@ loaded; `/reload` loads the extension now on disk.
   reported as current. It does not fetch prereleases. To install a prerelease, rerun the installer for that tag under
   [Release channels](#release-channels).
   `--to vVERSION` selects a specific numeric stable tag and leaves an equal or
-  newer installed version alone. `--no-prompt` suppresses the install-complete
+  newer installed version alone unless setup options are supplied. With an equal
+  tag, `--restore-edit-permissions` or `--approval-preference auto|host` runs the
+  setup transaction. With a newer or incomparable installed tag, those options fail with an
+  explanation instead of downgrading or leaving them unapplied without a reason.
+  `--no-prompt` suppresses the install-complete
   “Edit List?” dialog; startup upgrades use it before restarting the launcher.
 - `agent-guard uninstall` first checks that the stamp identifies the installed
   harnesses. An unreadable or invalid ownership record stops uninstall and keeps

@@ -138,7 +138,7 @@ try {
   let cli = readFileSync(join(root, 'engine/agent-guard'), 'utf8');
   cli = replaceOnce(cli, downloadBase, `local repo=${quote(base)}; local -a curl_proto=()`);
   const start = cli.indexOf('load_installer() {'), end = cli.indexOf('\n}\n', start) + 3;
-  cli = cli.slice(0, start) + `load_installer() {\n stamp="$engine/state/stamp.json"\n ag_probe() { :; }; ag_lock() { :; }; ag_unlock() { :; }; ag_recover() { :; }; ag_maintenance() { :; }\n}\n` + cli.slice(end);
+  cli = cli.slice(0, start) + `load_installer() {\n stamp="$engine/state/stamp.json"\n ag_probe() { :; }; ag_lock() { :; }; ag_unlock() { :; }; ag_recover() { :; }; ag_maintenance() { :; }; ag_pending() { REPLY=; return 1; }\n}\n` + cli.slice(end);
   const command = join(temp, 'command');
   writeFileSync(join(release, 'bin/agent-guard'), cli);
   executable(command, `exec /bin/zsh -f ${quote(join(release, 'bin/agent-guard'))} "$@"\n`);
@@ -155,6 +155,26 @@ try {
   });
   await check('pinned update does not replace a concurrent newer installation', async () => {
     stamp('v2026.12.01'); const r = await invoke(`update --to ${tag}`); assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /not older/); stamp('v2026.11.01');
+  });
+  await check('pinned current updates apply explicit setup options', async () => {
+    stamp(tag);
+    for (const flags of [['--restore-edit-permissions'], ['--approval-preference', 'auto'], ['--restore-edit-permissions', '--approval-preference', 'auto']]) {
+      const r = await invoke(`update --to ${tag} ${flags.join(' ')}`);
+      assert.equal(r.status, 0, r.stderr);
+      assert.deepEqual(JSON.parse(readFileSync(join(temp, 'bootstrap.json'), 'utf8')), ['--update', ...flags]);
+    }
+    stamp('v2026.11.01');
+  });
+  await check('pinned older or incomparable updates refuse unapplied setup options', async () => {
+    const before = readFileSync(join(temp, 'bootstrap.json'), 'utf8');
+    for (const installed of ['v2026.12.01', 'v2026.11.09-rc.1', 'dev']) {
+      stamp(installed);
+      const r = await invoke(`update --to ${tag} --approval-preference auto`);
+      assert.equal(r.status, 1, installed);
+      assert.match(r.stderr, /Requested setup options were not applied/);
+      assert.equal(readFileSync(join(temp, 'bootstrap.json'), 'utf8'), before);
+    }
+    stamp('v2026.11.01');
   });
   console.log(`${checks} update checks passed; fixtures: ${temp}`);
 } finally {
