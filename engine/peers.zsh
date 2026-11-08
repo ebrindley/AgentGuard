@@ -21,6 +21,19 @@ agent_guard_peer() {
        ${target:A} == "$HOME/Library/Application Support/OpenCodeGuard"/* ]] && { target=; continue; }
     break
   done
+  if [[ -z $target && $name == opencode ]]; then
+    target=$(
+      local home=$HOME a
+      source "$root/profiles/opencode/harness.zsh" || exit 1
+      for a in $app_paths ${(f)"$(/usr/bin/mdfind "kMDItemCFBundleIdentifier == '$app_bundle_id'" 2>/dev/null)"}; do
+        if [[ -d $a/Contents/MacOS && -x $a/Contents/Resources/opencode-cli && ! -d $a/Contents/Resources/opencode-cli ]]; then
+          print -r -- "$a/Contents/Resources/opencode-cli"
+          exit 0
+        fi
+      done
+      exit 1
+    )
+  fi
   [[ -n $target ]] || { print -ru2 -- "agent-guard: $name not found"; return 127; }
   if [[ ${AGENT_GUARD_SANDBOXED:-} == 1 || ${PI_SANDBOX_SHIM_ACTIVE:-} == 1 ]] &&
      ! /usr/bin/sandbox-exec -p '(version 1)(allow default)' /usr/bin/true 2>/dev/null; then
