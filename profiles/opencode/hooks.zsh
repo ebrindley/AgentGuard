@@ -64,6 +64,8 @@ opencode_check() {
       # It reports a plugin that fails to install, resolve or import as an event,
       # and one whose init fails only in its log, so the check listens to both.
       /bin/mkdir -p "$session/check-project"
+      local query
+      query=$(/usr/bin/jq -rn --arg p "$session/check-project" '$p|@uri')
       out="$engine/state/.serve.$$" events="$engine/state/.events.$$"
       AGENT_GUARD_SANDBOXED=1 AGENT_GUARD_RELEASE=${release:t} $scope $sandbox -D GUI=0 "$cli" serve --print-logs --log-level ERROR --hostname 127.0.0.1 --port $(( 20000 + RANDOM % 30000 )) > "$out" 2>&1 &
       pid=$!
@@ -79,20 +81,20 @@ opencode_check() {
           for j in {1..20}; do /usr/bin/grep -q '"server.connected"' "$events" 2>/dev/null && { listening=1; break }; sleep 0.1; done
           sleep 0.2
         fi
-        [[ -n $url ]] && ids=$(/usr/bin/curl -sf --max-time 5 "$url/experimental/tool/ids?directory=${session// /%20}/check-project" 2>/dev/null) &&
+        [[ -n $url ]] && ids=$(/usr/bin/curl -sf --max-time 5 "$url/experimental/tool/ids?directory=$query" 2>/dev/null) &&
           [[ $ids == *'"agent_guard_status"'* ]] && break
         sleep 0.5
       done
       # Plugin errors are published in the background; give them a moment.
       [[ $ids == *'"agent_guard_status"'* ]] && sleep 1
       if [[ $ids == *'"agent_guard_status"'* ]] &&
-        definitions=$(/usr/bin/curl -sf --max-time 5 "$url/experimental/tool?directory=${session// /%20}/check-project&provider=agent-guard&model=agent-guard" 2>/dev/null); then
+        definitions=$(/usr/bin/curl -sf --max-time 5 "$url/experimental/tool?directory=$query&provider=agent-guard&model=agent-guard" 2>/dev/null); then
         readiness=$(print -r -- "$definitions" | /usr/bin/jq -r '[.[] | select(.id == "agent_guard_status") | .description] | first // ""' 2>/dev/null) || readiness=
         [[ $readiness == *'[agent-guard:ready]'* ]] && ready=1
       fi
       if (( ready && ! staged )); then
         permission_at=$(/bin/date +%s)
-        permission_report=$(/usr/bin/curl -sf --max-time 5 "$url/agent?directory=${session// /%20}/check-project" 2>/dev/null |
+        permission_report=$(/usr/bin/curl -sf --max-time 5 "$url/agent?directory=$query" 2>/dev/null |
           /usr/bin/jq -c '{agents:.,sessions:[]}' |
           /usr/bin/jq -c --arg scope global --arg outside '/agent-guard-external-probe/*' --argjson observed "$(( permission_at * 1000 ))" -f "$profile_dir/permissions.jq" 2>/dev/null) || permission_report=
       fi
@@ -116,7 +118,11 @@ opencode_check() {
         (( listening )) || { print "$sev cannot read OpenCode's events to check its plugins$label"; [[ $sev == warn ]] || ok=0 }
       fi
       for f in $failed; do
-        [[ $f == 'Failed to install plugin '* ]] && f+="; check the package source and the cache's Guard List permissions"
+        if [[ $f == 'Failed to install plugin '* ]]; then
+          f+="; check the package source"
+          # Only a relocated cache lacks the default write grant.
+          [[ -z ${XDG_CACHE_HOME:-} ]] || f+=" and that the Guard List allows XDG_CACHE_HOME"
+        fi
         print -r -- "$sev plugin not loaded in OpenCode$label: $f"
         [[ $sev == warn ]] || ok=0
       done
@@ -180,7 +186,7 @@ opencode_check() {
 
 opencode_plugins_v2() { # RESPONSE SEVERITY LABEL
   local plugins=$1 sev=$2 label=$3 report
-  if print -r -- "$plugins" | /usr/bin/jq -e '.data | type=="array" and all(.[]; .state.status=="active")' >/dev/null 2>&1; then
+  if print -r -- "$plugins" | /usr/bin/jq -e '.data | type=="array" and all(.[]; .state.status=="active" or (.state.status=="disabled" and (.id? // "") != "agent-guard"))' >/dev/null 2>&1; then
     print "ok   plugins loaded in OpenCode V2$label"
     return 0
   fi
@@ -193,7 +199,7 @@ opencode_plugins_v2() { # RESPONSE SEVERITY LABEL
           and (test("^(sk-|gh[pousr]_|github_pat_)") | not) then . else empty end
       else empty end;
     if (.data | type) != "array" then error("unavailable") else
-      .data | to_entries | map(select(.value.state?.status? != "active")) | .[:8][] |
+      .data | to_entries | map(select(.value.state?.status? as $status | $status != "active" and ($status != "disabled" or (.value.id? // "") == "agent-guard"))) | .[:8][] |
       .key as $index | .value as $plugin |
       ([$plugin.id?, $plugin.source?.target?] | map(name) | first // "name withheld") as $name |
       ($plugin.state?.status? | if . == "failed" or . == "loading" or . == "disabled" then . else "unknown" end) as $status |

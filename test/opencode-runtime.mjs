@@ -65,6 +65,16 @@ for (const severity of ["FAIL", "warn"]) {
   assert.doesNotMatch(result.stdout + result.stderr, /PRIVATE|sk-private|https:|user:/)
 }
 assert.equal(pluginReport({ data: Array.from({ length: 12 }, () => ({ state: { status: "failed" } })) }).stdout.trim().split("\n").length, 8)
+// A plugin the user disabled is not a failure, but Agent Guard's own must be active.
+assert.equal(pluginReport({ data: [{ id: "healthy", state: { status: "active" } }, { id: "other", state: { status: "disabled" } }] }).status, 0)
+{
+  const own = pluginReport({ data: [{ id: "agent-guard", state: { status: "disabled" } }] })
+  assert.equal(own.status, 1)
+  assert.match(own.stdout, /#1 agent-guard: disabled/)
+  const mixed = pluginReport({ data: [{ id: "other", state: { status: "disabled" } }, { id: "broken", state: { status: "failed" } }] })
+  assert.equal(mixed.status, 1)
+  assert.deepEqual(mixed.stdout.trim().split("\n").map(line => line.replace(/^.*V2 \(fixture\): /, "")), ["#2 broken: failed"])
+}
 console.log("ok OpenCode V2 plugin diagnostics: healthy, unavailable, failed and sanitized status")
 
 function prepare(args) {
