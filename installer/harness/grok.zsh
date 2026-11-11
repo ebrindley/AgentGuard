@@ -169,8 +169,18 @@ ag_h_grok_keep() {
   /bin/mv -- "$b" "$grok_replaced/grok"
 }
 
+# Names the executable the install recorded, which is the kept copy when Grok was
+# a regular file at the link's place, and is quoted for the shell.
 ag_h_grok_report() {
-  ag_say "Grok: grok in ${grok_shim:h} and in Agent Guard's bin starts Grok inside the guard with --sandbox off; sign in, switch accounts and update Grok with ${grok_default/#$home/~}, outside the guard"
+  local real=$grok_default shown
+  [[ -r $grok_record ]] && real=$(<"$grok_record")
+  [[ $real == /* ]] || real=$grok_default
+  if [[ $real == "$home"/* ]]; then
+    shown="~/${(q)real#"$home"/}"
+  else
+    shown=${(q)real}
+  fi
+  ag_say "Grok: grok in ${grok_shim:h} and in Agent Guard's bin starts Grok inside the guard with --sandbox off; sign in, switch accounts and update Grok with $shown, outside the guard"
   return 0
 }
 

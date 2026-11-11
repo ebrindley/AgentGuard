@@ -301,7 +301,10 @@ async function guard(input) {
     const kind = scope(p)
     if (kind === "deny") refuse(tool, `Agent Guard: ${p} is in the DENY list (${LIST}).`, "path-write", "path-denied", "review-guard-list", "guard.path.deny")
     if (kind === "allow" || (kind === "none" && [...temps, ...rules.skills, ...(rules.writable ?? [])].some(r => under(p, r)))) return
-    refuse(tool, `Agent Guard: ${p} is not writable. Add it under ALLOW in ${LIST}, then relaunch.`, "path-write", "path-not-writable", "review-guard-list", kind === "readonly" ? "guard.path.readonly" : "guard.path.unlisted")
+    const advice = kind === "readonly"
+      ? `is under READ ONLY in ${LIST}. Remove or narrow that entry to make it writable, then relaunch.`
+      : `is not writable. Add it under ALLOW in ${LIST}, then relaunch.`
+    refuse(tool, `Agent Guard: ${p} ${advice}`, "path-write", "path-not-writable", "review-guard-list", kind === "readonly" ? "guard.path.readonly" : "guard.path.unlisted")
   }
   const before = async (info, output) => {
     const { tool } = info
