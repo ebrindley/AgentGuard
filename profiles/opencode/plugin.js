@@ -409,7 +409,7 @@ async function guard(input) {
       sandbox: { ...sandbox, origin: "startup-probe", freshness: "cached" },
       rules: { loaded: !!rules, source: rulesSource, semanticHealth: "not-probed" },
       // gitRuleCheck is the one Git-rule sentinel probe, not overall checker health.
-      safetyNet: { moduleLoaded, apiLoaded: !!checkCommand, hooksReady: !!net, gitRuleCheck },
+      safetyNet: { moduleLoaded, apiLoaded: !!checkCommand, hooksReady: !!net, semanticHealth: "not-probed", gitRuleCheck },
       roots: roots(),
       projects: Array.isArray(rules?.projects) ? rules.projects.filter(p => typeof p === "string").slice(0, 100) : [],
       preparation: { status: ["ready", "warning"].includes(rules?.preparationStatus) ? rules.preparationStatus : "not-observed", origin: "snapshot" },
