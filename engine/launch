@@ -19,6 +19,9 @@ launch_args=("$@")
 # it is not read as part of the launch whose log it follows. The stage line stays
 # last for agent-guard diagnose.
 integer header_written=0
+show_alert() {
+  /usr/bin/osascript -e 'on run argv' -e 'display alert "Agent Guard" message (item 1 of argv) as critical' -e 'end run' "$1" >/dev/null 2>&1 || true
+}
 fail() {
   if [[ -n ${log:-} && -d ${log:h} ]]; then
     {
@@ -29,7 +32,7 @@ fail() {
   fi
   print -ru2 -- "agent-guard: $*"
   if [[ $mode == gui ]]; then
-    /usr/bin/osascript -e 'on run argv' -e 'display alert "Agent Guard" message (item 1 of argv) as critical' -e 'end run' "$*" >/dev/null 2>&1 || true
+    show_alert "$*"
   fi
   exit 1
 }
@@ -89,6 +92,15 @@ note() {
 # The per-launch summary is recorded for the operator. Refusals and warnings
 # stay on the terminal through note; failures use fail.
 record() { print -r -- "$*" >> "$log" }
+# A message that cannot stop the launch: logged, and in gui mode shown as an
+# alert without waiting for it to be dismissed. Use fail when the launch must end.
+alert() {
+  note "$*"
+  if [[ $mode == gui ]]; then
+    { show_alert "$*" &! } 2>/dev/null
+  fi
+  return 0
+}
 
 within() { [[ $2 == / || $1 == "$2" || $1 == "$2"/* ]] }
 
