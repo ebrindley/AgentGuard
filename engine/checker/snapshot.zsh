@@ -63,7 +63,7 @@ ag_checker_snapshot() {
   local legacy=${CC_SAFETY_NET_PARANOID_RM-${SAFETY_NET_PARANOID_RM:-}}
   local paranoid=${CC_SAFETY_NET_PARANOID-${SAFETY_NET_PARANOID:-}}
   if ! /usr/bin/jq -e 'type == "object" and ((.destructive_command_protection // {}) | type == "object") and ((.destructive_command_protection.allow_paths // []) | type == "array") and ((.destructive_command_protection.overrides // {}) | type == "object") and ((.safety // {}) | type == "object") and ((.safety.overrides // {}) | type == "object")' "$dest/policy.json" >/dev/null 2>&1; then
-    ag_checker_warning="checker policy is malformed; the session keeps the dynamic-delete rule and adds no automatic deletion allowances: $source/policy.json"
+    ag_checker_warning="checker policy is malformed; the session adds no automatic deletion allowances and turns the dynamic-delete rule on unless a readable policy sets rm.recursive-force-dynamic-target to off: $source/policy.json"
     # Without the rule the standard level allows rm -rf "$DIR". The checker ignores a
     # non-object policy and a wrong-typed container, so only the rule is added.
     /usr/bin/jq -s '

@@ -26,13 +26,20 @@ opencode_browser_start() {
   fi
   /bin/zsh -f "$profile_dir/browser/helper.zsh" "$socket" "$browser_path" </dev/null >/dev/null 2>&1 &
   opencode_browser_pid=$!
-  local i
+  # The socket file appears at bind, before the helper listens: connect to it.
+  local i fd ready=0
+  zmodload zsh/net/socket 2>/dev/null
   for i in {1..40}; do
-    [[ ! -S $socket ]] || break
+    if [[ -S $socket ]] && zsocket "$socket" 2>/dev/null; then
+      fd=$REPLY
+      exec {fd}>&-
+      ready=1
+      break
+    fi
     kill -0 "$opencode_browser_pid" 2>/dev/null || break
     /bin/sleep 0.05
   done
-  if [[ ! -S $socket ]]; then
+  if (( ! ready )); then
     opencode_browser_stop
     note 'browser handoff unavailable: helper failed to start'
     return 0

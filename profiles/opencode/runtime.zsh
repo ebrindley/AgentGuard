@@ -133,14 +133,34 @@ opencode_project_arg() {
   opencode_browser_needed=1
 }
 
+# REPLY is the count of leading words that are OpenCode global options. Of
+# those, only --log-level and --completions take a separate value.
+opencode_global_skip() {
+  integer n=0
+  while (( n < $# )); do
+    case ${@[n+1]} in
+      (--print-logs|--print-logs=*|--no-print-logs|--pure|--wizard|--log-level=*|--completions=*) (( ++n )) ;;
+      (--log-level|--completions) (( n += 2 )) ;;
+      (*) break ;;
+    esac
+  done
+  (( n <= $# )) || n=$#
+  REPLY=$n
+}
+
 opencode_cli_args() {
-  local arg command subcommand standalone=0 at=1
+  local arg command subcommand standalone=0
+  integer sub=1
   local -a prefix rest
   reply=("$@")
-  while [[ ${reply[$at]:-} == (--print-logs|--print-logs=*) ]]; do (( at++ )); done
-  prefix=("${@:1:$(( at - 1 ))}")
-  rest=("${@:$at}")
-  command=${rest[1]:-} subcommand=${rest[2]:-}
+  opencode_global_skip "$@"
+  prefix=("${@:1:$REPLY}")
+  rest=("${@:$(( REPLY + 1 ))}")
+  command=${rest[1]:-}
+  # Global options may also sit between a command and its subcommand.
+  opencode_global_skip "${rest[@]:1}"
+  sub=$(( REPLY + 2 ))
+  subcommand=${rest[sub]:-}
   for arg in "$@"; do
     [[ $arg == -- ]] && break
     [[ $arg != --standalone ]] || standalone=1
@@ -161,17 +181,19 @@ opencode_cli_args() {
     (run|mini|models|stats|api|reload) reply=("${prefix[@]}" "$command" --standalone "${rest[@]:1}") ;;
     (auth|session)
       [[ -n $subcommand && $subcommand != (--help|-h) ]] || return 0
-      reply=("${prefix[@]}" "$command" "$subcommand" --standalone "${rest[@]:2}") ;;
+      reply=("${prefix[@]}" "${(@)rest[1,sub]}" --standalone "${(@)rest[sub+1,-1]}") ;;
     (debug)
-      [[ $subcommand != paths ]] || return 0
+      [[ -n $subcommand && $subcommand != (paths|--help|-h) ]] || return 0
       managed=1 ;;
     (mcp)
-      [[ $subcommand != add ]] || return 0
+      [[ -n $subcommand && $subcommand != (add|--help|-h) ]] || return 0
       managed=1 ;;
     (plugin)
-      [[ $subcommand != (add|remove) ]] || return 0
+      [[ -n $subcommand && $subcommand != (add|remove|--help|-h) ]] || return 0
       managed=1 ;;
-    (pair) managed=1 ;;
+    (pair)
+      [[ $subcommand != (--help|-h) ]] || return 0
+      managed=1 ;;
     (*) reply=("${prefix[@]}" --standalone "${rest[@]}") ;;
   esac
 }
@@ -224,17 +246,27 @@ opencode_managed() {
   # when its original server exits, so a lost service ends this launch's lease.
   trap opencode_client_exited CHLD
   record_app_projects
+  # zsh redirects descriptor 0 for an asynchronous command before applying its
+  # redirections. Preserve the caller's terminal on a separate descriptor.
+  local input_fd
+  exec {input_fd}<&0
   if [[ $mode == gui ]]; then
-    $sandbox -D GUI=1 "${opencode_host_env[@]}" "$app/Contents/MacOS/$main" $gui_args "${gui_rest[@]}" <&0 &
+    $sandbox -D GUI=1 "${opencode_host_env[@]}" "$app/Contents/MacOS/$main" $gui_args "${gui_rest[@]}" <&$input_fd &
   else
-    $sandbox "$@" <&0 &
+    $sandbox "$@" <&$input_fd &
   fi
   opencode_client_pid=$!
+  exec {input_fd}<&-
   opencode_client_exited
   wait $opencode_server_pid || true
   trap - CHLD
   if (( ! opencode_client_done )); then
-    note 'OpenCode V2 server stopped; closing its client. Reopen Agent Guard to start a new service.'
+    # In the Desktop app note only logs; an alert tells the user why it closed.
+    if (( $+functions[alert] )); then
+      alert 'OpenCode V2 server stopped; closing its client. Reopen Agent Guard to start a new service.'
+    else
+      note 'OpenCode V2 server stopped; closing its client. Reopen Agent Guard to start a new service.'
+    fi
     rc=1
   else
     wait $opencode_client_pid || rc=$?

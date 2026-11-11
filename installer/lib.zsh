@@ -1265,7 +1265,8 @@ ag_stamp_write() {
     --arg release "$ag_rid_new" --argjson at "$EPOCHSECONDS" --arg app_inputs "$ag_app_inputs" --argjson links "$links" \
     --argjson harnesses "$harnesses" \
     '{version: $version, tag: $tag, commit: $commit, release: $release, installed_at: $at, app_inputs: $app_inputs,
-      harnesses: $harnesses, files: ([inputs | select(length > 66) | {key: .[66:], value: .[0:64]}] | from_entries), links: $links}' > "$out" || return 1
+      harnesses: $harnesses, files: ([inputs | select(length > 66) | (startswith("\\")) as $e | (if $e then .[1:] else . end) as $l
+        | {key: ($l[66:] | if $e then gsub("\\\\(?<c>[\\\\n])"; if .c == "n" then "\n" else "\\" end) else . end), value: $l[0:64]}] | from_entries), links: $links}' > "$out" || return 1
   replace_file "$stamp" "$out" || return 1
   /bin/sync
 }
@@ -1557,7 +1558,7 @@ ag_install_main() {
   for w in $ag_harnesses; do ag_hook_opt h $w report; done
   for m in $ag_migrated; do ag_hook_opt m $m report; done
   for w in $ag_warnings; do ag_say "warning: $w"; done
-  if (( ! ag_no_prompt )) && [[ $ag_gui == 1 || -t 1 ]]; then
+  if (( ! ag_no_prompt && ! ag_update )) && [[ $ag_gui == 1 || -t 1 ]]; then
     local msg answer
     msg=$'Agent Guard is installed.\n\nOpen OpenCode with Agent Guard, or type opencode in a new terminal window.'
     (( $#ag_warnings )) && msg+=$'\n\n'"${(pj:\n:)ag_warnings}"

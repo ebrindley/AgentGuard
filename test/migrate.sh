@@ -262,7 +262,7 @@ for v in $versions; do
   /usr/bin/jq -e '.from == "opencode-guard" and (.switched_at | type) == "number" and .retired == true' "$state/migration.json" >/dev/null &&
     pass 'switch time recorded; retirement finished' || fail 'migration.json'
   /usr/bin/cmp -s "$list" "$old_list" && pass 'A9 the imported list equals the old list byte for byte' || fail 'A9 imported list'
-  /usr/bin/grep -q 'Import this list? \[y/N\]' "$out" && /usr/bin/grep -q 'is no longer read' "$out" &&
+  /usr/bin/grep -q 'Import this list? .*\[y/N\]' "$out" && /usr/bin/grep -q 'is no longer read' "$out" &&
     pass 'the list import was shown and confirmed' || fail 'list import prompt'
   [[ $(listing "$ocg") == $'bin\nbin/opencode -> '"$engine/bin/opencode"$'\nbin/opencode-gui -> '"$engine/bin/opencode-gui" ]] &&
     pass "retired: OpenCode Guard's engine folder holds only the forwarders" || { fail 'retired engine folder'; listing "$ocg" | /usr/bin/sed 's/^/    /' }
@@ -577,6 +577,16 @@ for p in rulebook rulejson current fwd-cli fwd-gui plugin-take plugin-name rc ap
   label="M3 fail:$p"
   rolled_back 1.0.4 $p
 done
+# A rollback puts back OpenCode Guard's plugin as the link it was.
+label='M3 fail:plugin-take link'
+restore ocg-1.0.4
+/bin/mkdir -p "$home/dotfiles" && /bin/mv "$old_plugin" "$home/dotfiles/opencode-guard-plugin.js" && /bin/ln -s "$home/dotfiles/opencode-guard-plugin.js" "$old_plugin"
+/bin/rm -f -- "$out"
+point=fail:plugin-take boot y
+rc=$?
+(( rc != 0 )) && [[ -L $old_plugin && $(/usr/bin/readlink "$old_plugin") == "$home/dotfiles/opencode-guard-plugin.js" && ! -e $engine ]] &&
+  pass 'opencode-guard.js is the same link again' || { fail "exit $rc, opencode-guard.js not restored as a link"; show }
+
 # A late rollback, at the live doctor after every switch action, from v1.0.1's and
 # v1.0.0's installs.
 for v in 1.0.1 1.0.0; do
