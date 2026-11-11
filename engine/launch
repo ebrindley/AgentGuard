@@ -833,8 +833,11 @@ fi
 darwin_temp=${$(/usr/bin/getconf DARWIN_USER_TEMP_DIR):A}
 darwin_cache=${$(/usr/bin/getconf DARWIN_USER_CACHE_DIR):A}
 
-/bin/mkdir -p $writable
-[[ $mode == gui ]] && /bin/mkdir -p "$writable_gui[1]"
+make_folder() {
+  /bin/mkdir -p "$1" 2>/dev/null || fail "cannot create the folder $1; remove or rename whatever is at that path, such as a file or a broken link, then launch again"
+}
+for p in $writable; do make_folder "$p"; done
+if [[ $mode == gui ]]; then make_folder "$writable_gui[1]"; fi
 
 if [[ $harness == opencode ]]; then
   jarr() { /usr/bin/jq -cn '$ARGS.positional' --args "$@" }

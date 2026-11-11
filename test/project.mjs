@@ -183,6 +183,15 @@ exit 0
   assert.match(logText(), /skipped 2 Guard List line\(s\) before the first ALLOW, READ ONLY or DENY heading/);
   console.log('ok   @project outside ALLOW, a second @project and a missing folder are skipped and logged; lines before a heading are counted');
 
+  // A writable path that is a file refuses the launch with its name, not a bare mkdir error.
+  rmSync(P('.npm'), { recursive: true, force: true });
+  writeFileSync(P('.npm'), 'in the way');
+  const blocked = launch('profile', [], { text: ALLOW(P('Projects/sibling')) });
+  rmSync(P('.npm'));
+  assert.notEqual(blocked.status, 0);
+  assert.match(blocked.stderr, /agent-guard: cannot create the folder .*\/\.npm; remove or rename whatever is at that path/);
+  console.log('ok   a writable path that is a file refuses the launch and names the path');
+
   const refuse = (name, args, pattern, options = {}) => {
     const out = launch('profile', args, { ...options, text: ALLOW('@project', P('Projects/sibling')) });
     assert.notEqual(out.status, 0, `${name}: launch not refused`);
