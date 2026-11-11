@@ -21,7 +21,7 @@ best-effort basis. There is no bug bounty.
 ## Supported versions
 
 Fixes go into the latest release only; older releases do not receive backports.
-The latest stable release is 2026.11.05 (OpenCode, Pi, OMP and Grok).
+The latest stable release is 2026.11.08 (OpenCode, Pi, OMP and Grok).
 `agent-guard update` follows stable releases and leaves a newer installed version
 unchanged. See [release channels](docs/OPERATIONS.md#release-channels) for tagged
 installers; they do not include later commits. The policy below includes current
@@ -35,7 +35,7 @@ retain their existing policy.
 ## What Agent Guard is
 
 Agent Guard is a macOS Seatbelt write-containment boundary for terminal coding
-agents. Release 2026.11.05 guards OpenCode, Pi, Oh My Pi (OMP) and Grok. Each harness, and
+agents. Release 2026.11.08 guards OpenCode, Pi, Oh My Pi (OMP) and Grok. Each harness, and
 every process it starts, runs under `/usr/bin/sandbox-exec`. OpenCode, Pi and OMP
 check commands with the same checker, cc-safety-net, under one policy; Pi and OMP
 still run pi-sandbox-guard's profile and launcher until they move onto Agent
@@ -48,7 +48,7 @@ they address and the layer that covers each are in
 
 ### OpenCode
 
-Stable 2026.11.05 supports OpenCode 1.18.33 and newer V1 releases, plus
+Stable 2026.11.08 supports OpenCode 1.18.33 and newer V1 releases, plus
 OpenCode 2.0.32 and 2.1.1. The 2.1.1 qualification covers macOS 26.7.1 arm64
 with isolated application and service data. First-launch onboarding and
 production-account upgrades remain unqualified. The native V2 fixtures also pass
@@ -86,7 +86,7 @@ the target of a link inside the extension folder can be written where an ALLOW
 entry covers it, and a protected path that is a link to a missing target is
 protected at its name only, so the missing target can be created where an ALLOW
 entry covers it. The other exceptions are under
-[Known limitations](#known-limitations-in-022): npm configuration in the cache
+[Known limitations](#known-limitations): npm configuration in the cache
 that steers installs made outside the guard, remote-configuration entries in
 OpenCode's `auth.json`, and Pi's
 and OMP's other configuration under ALLOW.
@@ -260,7 +260,7 @@ behind linked ancestors. These changes follow the 0.2.0 prerelease.
   sandbox's rules confine it, not the Guard List
   ([Inside another sandbox](docs/USAGE.md#inside-another-sandbox)).
 
-## Known limitations in 0.2.2
+## Known limitations
 
 ### OpenCode
 
