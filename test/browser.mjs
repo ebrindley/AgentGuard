@@ -34,7 +34,17 @@ const child = spawn('/bin/zsh', ['-f', helper, socket, app], { stdio: ['ignore',
 let errors = ''
 child.stderr.on('data', chunk => { errors += chunk })
 const closed = new Promise(resolve => child.once('close', resolve))
+// The helper's listener queues one pending connection, so a connection made
+// before it accepts the previous one is refused; retry while it is running.
 async function request(url) {
+  for (let i = 0; ; i++) {
+    try { return await send(url) } catch (error) {
+      if (error.code !== 'ECONNREFUSED' || i >= 40 || child.exitCode !== null) throw error
+      await new Promise(resolve => setTimeout(resolve, 25))
+    }
+  }
+}
+async function send(url) {
   return await new Promise((resolve, reject) => {
     const client = createConnection(socket)
     const data = Buffer.from(url)
