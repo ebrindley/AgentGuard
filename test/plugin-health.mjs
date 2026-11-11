@@ -42,11 +42,12 @@ fs.copyFileSync(source, join(release, 'profiles/opencode/plugin.js'));
 for (const file of ['permissions.js', 'permissions.jq', 'v2.js']) fs.copyFileSync(join(dirname(source), file), join(release, 'profiles/opencode', file));
 fs.mkdirSync(join(checker, 'rules'), { recursive: true });
 fs.writeFileSync(join(checker, 'rules/rule.json'), '{}');
-const denied = join(directory, marker);
+const deniedRoot = join(directory, 'private');
+const denied = join(deniedRoot, marker);
 const unrelated = join(home, marker + '-unclassified');
 const protectedFile = join(home, '.cc-safety-net', marker);
 if (name !== 'rules-missing') fs.writeFileSync(join(state, 'rules.json'), JSON.stringify({
-  allow: [directory], readonly: [], deny: [denied], skills: [], configs: [], protected: [], checker, preparationStatus: 'ready',
+  allow: [directory], readonly: [], deny: [deniedRoot], skills: [], configs: [], protected: [], checker, preparationStatus: 'ready',
 }));
 let net = 'export default { server: async () => ({ "tool.execute.before": async (_info, output) => { if(output.args?.command?.includes("FAIL-NET")) throw new Error("' + marker + '"); } }) };';
 if (name === 'engine-import') net = 'throw new Error("' + marker + '");';
@@ -154,8 +155,12 @@ if (name === 'unsafe-version') assert.equal(health.releases.version, null);
 if (ready) {
   await before({ tool: 'bash' }, { args: { command: 'pwd' } });
   await assert.rejects(before({ tool: 'read' }, { args: { filePath: denied } }), /DENY list/);
+  fs.mkdirSync(deniedRoot, { recursive: true });
+  fs.writeFileSync(join(deniedRoot, 'plain.txt'), 'x');
+  fs.symlinkSync(join(deniedRoot, 'plain.txt'), join(directory, 'link.txt'));
+  await assert.rejects(before({ tool: 'read' }, { args: { filePath: 'link.txt' } }), new RegExp(`link\\.txt \\(resolves to ${join(deniedRoot, 'plain.txt').replaceAll('.', '\\.')}\\) is in the DENY list`));
   await assert.rejects(before({ tool: 'read' }, { args: { filePath: unrelated } }), { code: 'EPERM' });
-  await assert.rejects(before({ tool: 'write' }, { args: { filePath: protectedFile } }), /protected/);
+  await assert.rejects(before({ tool: 'write' }, { args: { filePath: protectedFile } }), /protected \(~\/\.cc-safety-net\).*cannot be unlocked from the Guard List/);
   await assert.rejects(before({ tool: 'bash' }, { args: { command: 'API-DENY', workdir: home } }), new RegExp(marker));
   await assert.rejects(before({ tool: 'bash' }, { args: { command: 'FAIL-NET' } }), new RegExp(marker));
   const observedText = fs.readFileSync(join(logs, 'agent-guard-events.json'), 'utf8');
