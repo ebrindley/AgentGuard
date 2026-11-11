@@ -26,6 +26,8 @@ umask 077
 zsocket -l "$socket" || exit 1
 listener=$REPLY
 trap 'exit 0' TERM INT HUP
+# A client that disconnects before its reply must not end the helper.
+trap '' PIPE
 read_part() {
   local count=$1 byte remaining i
   REPLY=

@@ -71,6 +71,15 @@ try {
   assert.match(await request('x'.repeat(8193)).catch(error => `error: ${error.code}`), /^error:/)
   assert.equal(readFileSync(captured, 'utf8'), before)
   assert.equal(await request(allowed[0]), 'ok', 'listener survives invalid requests')
+  // A client that leaves before the reply is written must not end the helper.
+  for (let i = 0; i < 5; i++) {
+    const gone = createConnection(socket)
+    await new Promise(resolve => { gone.once('connect', resolve); gone.once('error', resolve) })
+    gone.destroy()
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
+  assert.equal(child.exitCode, null, 'helper exited after clients disconnected early')
+  assert.equal(await request(allowed[0]), 'ok', 'listener survives early disconnects')
   for (const partial of ['0', '00100h']) {
     const stalled = createConnection(socket)
     stalled.on('error', () => {})
