@@ -40,6 +40,7 @@ every process it starts, runs under `/usr/bin/sandbox-exec`. OpenCode, Pi and OM
 check commands with the same checker, cc-safety-net, under one policy; Pi and OMP
 still run pi-sandbox-guard's profile and launcher until they move onto Agent
 Guard's engine (step 10d of the plan in [docs/DESIGN.md](docs/DESIGN.md#12-plan)).
+Grok sessions run no command checker; Seatbelt is their only layer.
 Statements about Pi below apply to OMP too unless they name one runtime.
 
 The trust assumptions behind the boundaries described here, the damage classes

@@ -511,7 +511,8 @@ When the installer finds Grok, `grok` in a new terminal window, `~/.local/bin/gr
 and Agent Guard's `bin/grok` start Grok inside the guard with `--sandbox off`:
 Grok's own sandbox profiles block the keychain, so `gh` and `git` over https fail
 under them, and Agent Guard's profile takes their place. The Guard List applies as
-for OpenCode, and so does nothing else of OpenCode's: there is no plugin.
+for OpenCode, and so does nothing else of OpenCode's: there is no plugin, and no
+command checker runs, so Seatbelt is the only layer.
 
 Grok can write the folders the Guard List allows, `~/.grok` apart from the files
 below, and its caches. It authors skills, agents, workflows, rules, `AGENTS.md`,
