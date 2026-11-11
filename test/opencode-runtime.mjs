@@ -113,10 +113,10 @@ console.log("ok OpenCode V2 command routing: private servers, managed clients, e
 
 // Each `service status` probe consumes the next response, "<exit status>:<output>";
 // the last one repeats. The server is a sleeping process and the client exits at once.
-function managed(responses, script) {
+function managed(responses, script, tty = "") {
   const dir = mkdtempSync(join(tmpdir(), "agentguard-runtime-"))
   try {
-    const result = spawnSync("/bin/zsh", ["-fc", `
+    const body = `
       setopt err_exit no_unset pipe_fail extended_glob
       source "$1"
       source "\${1:h}/browser.zsh"
@@ -138,12 +138,19 @@ function managed(responses, script) {
           return \${response%%:*}
         fi
         [[ \${2:-} == serve ]] && exec /bin/sleep 30
+        [[ \${1:-} == read ]] && exec /usr/bin/head -n 1
         print -r -- client "$@"
       }
       sandbox=(fake)
       print 0 > $session/probes
       ${script}
-    `, "runtime", join(root, "profiles/opencode/runtime.zsh"), dir, ...responses], { encoding: "utf8", timeout: 20000 })
+    `
+    const args = ["runtime", join(root, "profiles/opencode/runtime.zsh"), dir, ...responses]
+    // With tty, a typed line waits in a terminal, as when launched from Terminal.
+    const result = tty
+      ? (spawnSync("/usr/bin/expect", ["-f", join(root, "test/tty.exp"), join(dir, "out"), tty, "/bin/zsh", "-fc", body, ...args], { encoding: "utf8", timeout: 20000 }),
+         { status: 0, stderr: "", stdout: readFileSync(join(dir, "out"), "utf8") })
+      : spawnSync("/bin/zsh", ["-fc", body, ...args], { encoding: "utf8", timeout: 20000 })
     return { ...result, probes: Number(readFileSync(join(dir, "probes"), "utf8")) }
   } finally { rmSync(dir, { recursive: true, force: true }) }
 }
@@ -158,13 +165,17 @@ for (const [response, state] of [
 ]) assert.equal(classify(response), state, JSON.stringify(response))
 
 const launch = 'opencode_managed cli app'
+let result
 for (const response of ["0:stopped", "0:disabled\n"]) {
   const result = managed([response, "0:http://127.0.0.1:4096"], launch)
   assert.equal(result.status, 0, result.stderr)
   assert.equal(result.stdout.trim(), "client app")
   assert.equal(result.probes, 2)
 }
-let result = managed(["0:http://127.0.0.1:4096"], launch)
+result = managed(["0:stopped", "0:http://127.0.0.1:4096"], "opencode_managed cli read", "typed input")
+assert.equal(result.status, 0, result.stderr)
+assert.equal(result.stdout.trim(), "typed input")
+result = managed(["0:http://127.0.0.1:4096"], launch)
 assert.equal(result.status, 2)
 assert.match(result.stderr, /has a background service/)
 assert.equal(result.probes, 1)

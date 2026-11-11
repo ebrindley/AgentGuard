@@ -224,12 +224,17 @@ opencode_managed() {
   # when its original server exits, so a lost service ends this launch's lease.
   trap opencode_client_exited CHLD
   record_app_projects
+  # zsh redirects descriptor 0 for an asynchronous command before applying its
+  # redirections. Preserve the caller's terminal on a separate descriptor.
+  local input_fd
+  exec {input_fd}<&0
   if [[ $mode == gui ]]; then
-    $sandbox -D GUI=1 "${opencode_host_env[@]}" "$app/Contents/MacOS/$main" $gui_args "${gui_rest[@]}" <&0 &
+    $sandbox -D GUI=1 "${opencode_host_env[@]}" "$app/Contents/MacOS/$main" $gui_args "${gui_rest[@]}" <&$input_fd &
   else
-    $sandbox "$@" <&0 &
+    $sandbox "$@" <&$input_fd &
   fi
   opencode_client_pid=$!
+  exec {input_fd}<&-
   opencode_client_exited
   wait $opencode_server_pid || true
   trap - CHLD
