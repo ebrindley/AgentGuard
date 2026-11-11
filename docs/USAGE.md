@@ -200,6 +200,9 @@ or left as you set it when the file already had `disabled`.
   does `opencode service start`. Guarded launches do not depend on it.
 - `agent-guard uninstall` removes the key while it is still `true`; a value you
   changed stays.
+- A guarded session can write `service.json`, including its `env` and `remote`
+  settings, which later guarded service launches apply; see
+  [the shared service limitation](../SECURITY.md#opencode-1).
 
 ## Configure OpenCode
 

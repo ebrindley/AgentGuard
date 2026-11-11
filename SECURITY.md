@@ -306,6 +306,25 @@ behind linked ancestors. These changes follow the 0.2.0 prerelease.
   `opencode` command still runs its private server outside the sandbox while the
   command lasts; the opt-out only stops that server from staying behind. Not
   planned.
+- **A guarded session can change a later service launch's environment and
+  expose the service.** For the desktop app and managed CLI commands, Agent Guard
+  starts `opencode serve --service --hostname 127.0.0.1`
+  (`profiles/opencode/runtime.zsh`), and a guarded session can write
+  `~/.config/opencode/service.json`. In OpenCode 2.1.0 to 2.1.4 that command reads
+  the file and applies its `env` map to its own process after the launcher
+  prepared the environment (`Object.assign(process.env, config.env)` in
+  `packages/cli/src/server-process.ts`). A session can therefore change the
+  environment of later guarded service launches, including variables the plugin
+  and cc-safety-net read. In the plugin, `AGENT_GUARD_BYPASS=1` alone changes
+  nothing under Seatbelt, because the plugin still detects confinement.
+  `AGENT_GUARD_OUTER_SANDBOX=1` makes it treat the session as unguarded, and an
+  unguarded session refuses every tool except a short safe list. With both set,
+  the path rules stop and the command checker still runs for bash, without the
+  Guard's checker settings. When `remote` is set, the same command starts
+  OpenCode's remote-access tunnel despite `--hostname 127.0.0.1`; that needs a
+  usable tunnel identity on the Mac. The Seatbelt profile still applies to the
+  service and everything it runs; the plugin and cc-safety-net are advisory, as
+  above. Not planned.
 - **Anything in an ALLOW folder can be changed or deleted,** apart from Git
   hooks. That includes build scripts, `.git/config` and other files that run
   later outside the guard, for example when you run a build in an unguarded
