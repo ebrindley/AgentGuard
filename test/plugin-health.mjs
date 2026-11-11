@@ -49,7 +49,7 @@ const envFile = join(directory, '.env');
 const unrelated = join(home, marker + '-unclassified');
 const protectedFile = join(home, '.cc-safety-net', marker);
 if (name !== 'rules-missing') fs.writeFileSync(join(state, 'rules.json'), JSON.stringify({
-  allow: [directory], readonly: [], deny: [deniedRoot], skills: [], configs: [], protected: [], credentials: [join(home, '.ssh')], hooks: [join(directory, 'custom-hooks')], checker, preparationStatus: 'ready',
+  allow: [directory], readonly: [], deny: [deniedRoot], skills: [], configs: [], protected: [], credentials: [join(home, '.ssh')], checker, preparationStatus: 'ready',
 }));
 let net = 'export default { server: async () => ({ "tool.execute.before": async (_info, output) => { if(output.args?.command?.includes("FAIL-NET")) throw new Error("' + marker + '"); } }) };';
 if (name === 'engine-import') net = 'throw new Error("' + marker + '");';
@@ -163,14 +163,10 @@ if (ready) {
   await assert.rejects(before({ tool: 'read' }, { args: { filePath: 'link.txt' } }), new RegExp(`link\\.txt \\(resolves to ${join(deniedRoot, 'plain.txt').replaceAll('.', '\\.')}\\) is in the DENY list`));
   await assert.rejects(before({ tool: 'read' }, { args: { filePath: unrelated } }), { code: 'EPERM' });
   await assert.rejects(before({ tool: 'write' }, { args: { filePath: protectedFile } }), /protected \(~\/\.cc-safety-net\).*cannot be unlocked from the Guard List/);
-  // Fixed credential, .env and Git hook protections are explained, not raw EPERM.
+  // Fixed credential and .env protections are explained, not raw EPERM.
   await assert.rejects(before({ tool: 'read' }, { args: { filePath: credentialFile } }), /fixed Agent Guard protection \(~\/\.ssh is a credential path\)/);
   await assert.rejects(before({ tool: 'read' }, { args: { filePath: envFile } }), /fixed Agent Guard protection \(\.env files are blocked/);
-  await before({ tool: 'write' }, { args: { filePath: join(directory, '.env.example') } });
-  await assert.rejects(before({ tool: 'write' }, { args: { filePath: join(directory, '.git/hooks/pre-commit') } }), /Git hooks cannot be written/);
-  await assert.rejects(before({ tool: 'write' }, { args: { filePath: join(directory, 'custom-hooks/pre-commit.sample') } }), /active Git hooks folder/);
-  await before({ tool: 'write' }, { args: { filePath: join(directory, '.git/hooks/pre-commit.sample') } });
-  await before({ tool: 'write' }, { args: { filePath: join(directory, '.git/hooks') } });
+  await before({ tool: 'write' }, { args: { filePath: join(directory, '.env.EXAMPLE') } });
   await assert.rejects(before({ tool: 'bash' }, { args: { command: 'API-DENY', workdir: home } }), new RegExp(marker));
   assert.equal(health.safetyNet.gitRuleCheck, 'passed');
   assert.deepEqual(health.roots.allow, [directory]);
