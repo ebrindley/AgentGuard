@@ -74,4 +74,39 @@ process.env.CC_SAFETY_NET_HOME = source
 const old = await import(pathToFileURL(oldPath))
 assert.equal(old.checkCommand({ command: "rm -r ordinary", cwd: project }).kind, "deny")
 console.log("ok policy snapshot: custom rules, materialized links, project tightening and legacy consumer")
+// A malformed policy.json launches with the dynamic-delete rule on and no allowances.
+const malformed = (name, policy) => {
+  const account = join(run, `malformed-${name}`), dest = join(account, "session")
+  mkdirSync(join(account, ".cc-safety-net"), { recursive: true })
+  writeFileSync(join(account, ".cc-safety-net/policy.json"), policy)
+  const built = spawnSync("/bin/zsh", ["-fc", 'source "$1/checker/snapshot.zsh"; ag_checker_snapshot "$2" "$3" "$1" standard "$4"; rc=$?; print -r -- "$ag_checker_warning"; exit $rc',
+    "snapshot", release, account, dest, join(account, "granted")], { encoding: "utf8" })
+  assert.equal(built.status, 0, built.stderr)
+  assert.match(built.stdout.trim(), /^checker policy is malformed; the session keeps the dynamic-delete rule and adds no automatic deletion allowances: .*\/policy\.json$/, name)
+  assert.equal(readFileSync(join(account, ".cc-safety-net/policy.json"), "utf8"), policy, `${name}: the user's policy is only read`)
+  process.env.CC_SAFETY_NET_HOME = dest
+  return { session: JSON.parse(readFileSync(join(dest, "policy.json"), "utf8")), cwd: account }
+}
+{
+  const rule = "rm.recursive-force-dynamic-target"
+  const wrong = malformed("allow-paths", JSON.stringify({ version: 1, destructive_command_protection: { allow_paths: "/tmp" } }))
+  assert.deepEqual(wrong.session, { version: 1, destructive_command_protection: { allow_paths: "/tmp", overrides: { [rule]: "on" } } })
+  for (const command of ['rm -rf "$TARGET"', "rm -rf *"]) {
+    const verdict = checkCommand({ command, cwd: wrong.cwd })
+    assert.equal(verdict.kind, "deny", command)
+    assert.equal(verdict.ruleId, rule, command)
+  }
+  const minimal = { version: 1, destructive_command_protection: { overrides: { [rule]: "on" } } }
+  for (const [name, policy] of [["not-json", "not json"], ["array", "[1]"], ["empty", ""]]) {
+    const copy = malformed(name, policy)
+    assert.deepEqual(copy.session, minimal, name)
+    assert.equal(checkCommand({ command: 'rm -rf "$TARGET"', cwd: copy.cwd }).kind, "deny", name)
+  }
+  const container = malformed("container", JSON.stringify({ version: 1, safety: { level: "strict" }, destructive_command_protection: { overrides: "x" } }))
+  assert.deepEqual(container.session, { version: 1, safety: { level: "strict" }, destructive_command_protection: { overrides: { [rule]: "on" } } })
+  const off = malformed("user-off", JSON.stringify({ version: 1, destructive_command_protection: { allow_paths: "/tmp", overrides: { [rule]: "off" } } }))
+  assert.equal(off.session.destructive_command_protection.overrides[rule], "off")
+  assert.equal(checkCommand({ command: 'rm -rf "$TARGET"', cwd: off.cwd }).kind, "allow")
+}
+console.log("ok malformed policy: the session copy keeps the dynamic-delete rule unless the user's overrides name it")
 console.log(`fixture: ${run}`)

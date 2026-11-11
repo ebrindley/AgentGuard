@@ -1,6 +1,6 @@
 # Using Agent Guard
 
-This guide describes release 2026.11.05, which supports OpenCode, Pi, OMP and Grok.
+This guide describes release 2026.11.08, which supports OpenCode, Pi, OMP and Grok.
 See [release channels](OPERATIONS.md#release-channels) for installation.
 
 ## Start OpenCode
@@ -37,7 +37,7 @@ Review changes before executing them outside the guard.
 
 ## OpenCode versions
 
-Stable 2026.11.05 targets OpenCode 1.18.33 and newer V1 releases,
+Stable 2026.11.08 targets OpenCode 1.18.33 and newer V1 releases,
 plus OpenCode 2.0.32 and 2.1.1 CLI and desktop backends. The native V2
 fixtures also pass with the OpenCode 2.1.4 CLI. Keep shared configuration in the V1 format
 when both versions use it; V2 normalizes supported V1 settings in memory.
@@ -138,6 +138,10 @@ buttons still use the denied native opener. ChatGPT and OpenCode Console use
 their existing backend authentication APIs. The command shows completion or an
 error and offers cancellation while waiting. OpenCode Go's API-key methods need
 no browser handoff.
+
+If these commands are missing, the launch continued without the handoff.
+`~/Agent Guard/last-launch-opencode.log` then has a line starting
+`browser handoff unavailable:` that gives the reason.
 
 Claude's command starts `claude auth login --claudeai` in a terminal supplied by
 the plugin, inside the existing desktop sandbox. It uses the shared Claude Code
@@ -529,7 +533,9 @@ such as husky, lefthook and pre-commit cannot install hooks inside them; run the
 install commands outside the guard. A `core.hooksPath` that is home, a system
 folder or contains the launch folder refuses the launch.
 
-Run these outside the guard, with Grok's own executable (`~/.grok/bin/grok`);
+Run these outside the guard, with Grok's own executable (`~/.grok/bin/grok`, or
+the path the installer and the refusal message name when Grok was a regular file
+at `~/.local/bin/grok`);
 `grok` refuses them in a guarded session and says so: `grok login`, `grok logout`,
 `grok update` and `grok workspace start|restart|resume`. Grok's updater is off in a
 guarded session. The launcher also refuses an explicit `--sandbox` profile other

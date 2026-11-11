@@ -899,9 +899,9 @@ ag_list_step() {
       { print > ENVIRON["O"]; t = $0; sub(/\r$/, "", t); gsub(/^[[:space:]]+|[[:space:]]+$/, "", t); u = toupper(t)
         if (t ~ /^~(\/|$)/) t = ENVIRON["H"] substr(t, 2); if (t ~ /.\/+$/) sub(/\/+$/, "", t) }
       u ~ /^#/ { next }
-      u ~ /^ALLOW([[:space:]]*[-:].*)?$/ { s = "ALLOW"; if (!done) print ENVIRON["P"] > ENVIRON["O"]; done = 1; next }
-      u ~ /^READ([[:space:]]+|-)ONLY([[:space:]]*[-:].*)?$/ { s = "READ ONLY"; next }
-      u ~ /^DENY([[:space:]]*[-:].*)?$/ { s = "DENY"; next }
+      u ~ /^ALLOW([[:space:]]*[-:#].*)?$/ { s = "ALLOW"; if (!done) print ENVIRON["P"] > ENVIRON["O"]; done = 1; next }
+      u ~ /^READ([[:space:]]+|-)ONLY([[:space:]]*[-:#].*)?$/ { s = "READ ONLY"; next }
+      u ~ /^DENY([[:space:]]*[-:#].*)?$/ { s = "DENY"; next }
       s != "" && t == ENVIRON["P"] { f[s] = 1 }
       END { print f["DENY"] ? "DENY" : f["READ ONLY"] ? "READ ONLY" : f["ALLOW"] ? "ALLOW" : done ? "added" : "" }' "$list") ||
       { /bin/rm -f -- "$list.tmp"; return 1 }

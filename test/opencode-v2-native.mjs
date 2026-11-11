@@ -384,8 +384,8 @@ for (const mode of selected) {
     assert.equal(existsSync(join(readonly, "patch.txt")), false)
     const messages = requests.at(-1)?.messages
     const responses = JSON.stringify(messages)
-    assert.match(messages.find(message => message.tool_call_id === "fixture-4")?.content ?? "", /Agent Guard:.*not writable/)
-    assert.match(responses, /not writable/)
+    assert.match(messages.find(message => message.tool_call_id === "fixture-4")?.content ?? "", /Agent Guard:.*is under READ ONLY/)
+    assert.match(responses, /Remove or narrow that entry/)
     assert.match(responses, /DENY list/)
     assert.match(responses, /git reset --hard/)
     assert.doesNotMatch(responses, /DENIED-FIXTURE-CONTENT/)
