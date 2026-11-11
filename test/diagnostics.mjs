@@ -11,7 +11,8 @@ import { fileURLToPath } from "node:url"
 const source = resolve(process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), ".."))
 const run = realpathSync(mkdtempSync(join(tmpdir(), "agentguard-diagnostics-")))
 const marker = "PRIVATE_PAYLOAD_TOKEN_123"
-const rid = "0.3.0-20261012T120000Z"
+const defaultRid = "0.3.0-20261012T120000Z"
+const rid = defaultRid
 let failures = 0
 const put = (path, data) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, data) }
 const json = (path, value) => put(path, JSON.stringify(value))
@@ -27,7 +28,7 @@ function tree(path) {
   visit(path)
   return result
 }
-function fixture(name) {
+function fixture(name, rid = defaultRid, version = "0.3.0") {
   const home = join(run, name, marker)
   const engine = join(home, "Library/Application Support/AgentGuard")
   const release = join(engine, "releases", rid)
@@ -41,7 +42,7 @@ function fixture(name) {
   copyFileSync(join(source, "engine/agent-guard"), join(release, "bin/agent-guard"))
   copyFileSync(join(source, "profiles/opencode/diagnostics.zsh"), join(release, "profiles/opencode/diagnostics.zsh"))
   put(join(release, "RELEASE"), rid)
-  put(join(release, "VERSION"), "0.3.0")
+  put(join(release, "VERSION"), version)
   // Isolated fixture account resolution, never account database or HOME changes.
   put(join(release, "account.zsh"), `account_home() { REPLY='${home}'; }\n`)
   symlinkSync(`releases/${rid}`, join(engine, "current"))
@@ -58,7 +59,7 @@ function fixture(name) {
     { timestamp: marker, layer: marker, stage: marker, code: marker, tool: marker, ruleId: marker, errno: marker, remediation: marker, release: marker }
   ] })
   const files = Object.fromEntries(Object.entries(tree(release)).map(([p, hash]) => [p, hash]))
-  json(stamp, { version: "0.3.0", tag: "v0.3.0", commit: marker, release: rid, installed_at: 123, files, links: { [join(engine, "current")]: `releases/${rid}`, [join(engine, "bin")]: "current/bin" } })
+  json(stamp, { version, tag: `v${version}`, commit: marker, release: rid, installed_at: 123, files, links: { [join(engine, "current")]: `releases/${rid}`, [join(engine, "bin")]: "current/bin" } })
   return { home, engine, release, stamp, record, config, events, command: join(release, "bin/agent-guard") }
 }
 function collect(f, name, args = ["diagnose", "--json"]) {
@@ -169,6 +170,16 @@ test("unsupported CLI arguments refuse before doing work", () => {
     assert.ok(!invalid.stderr.includes(marker))
     assert.deepEqual(tree(f.home), before)
   }
+})
+test("four-part release identifiers are consistent", () => {
+  const four = "2026.11.05.1-20261105T120000Z"
+  const f = fixture("four-part", four, "2026.11.05.1")
+  const { status, report } = collect(f, "four-part")
+  assert.equal(status, 0)
+  assert.equal(report.installation.consistent, true)
+  assert.equal(report.installation.installedRelease, four)
+  assert.equal(report.installation.loadedRelease, four)
+  assert.equal(report.installation.currentRelease, four)
 })
 console.log(`diagnostics fixtures: ${run}`)
 process.exitCode = failures ? 1 : 0

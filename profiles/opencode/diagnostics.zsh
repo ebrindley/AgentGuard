@@ -76,7 +76,7 @@ ag_diagnose() {
   done
   # Restrict identifiers to the installer's release naming scheme. A custom
   # release name is not an export-safe label just because it contains no slash.
-  rid=$(/usr/bin/jq -nr --arg v "${release:t}" '$v | if test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$") then . else "unknown" end')
+  rid=$(/usr/bin/jq -nr --arg v "${release:t}" '$v | if test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$") then . else "unknown" end')
   if [[ -L $engine/current ]]; then
     rel=${engine}/current
     [[ ${rel:A:h} == "$engine/releases" ]] && active=${rel:A:t}
@@ -88,7 +88,7 @@ ag_diagnose() {
       preference_state=valid
     fi
   fi
-  active=$(/usr/bin/jq -nr --arg v "$active" '$v | if test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$") then . else "unknown" end')
+  active=$(/usr/bin/jq -nr --arg v "$active" '$v | if test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$") then . else "unknown" end')
   if [[ -e $stamp || -L $stamp ]]; then
     stamp_state=error
     if ag_diag_size "$stamp" 2097152 && /usr/bin/jq -e --arg current "$engine/current" --arg bin "$engine/bin" '
@@ -96,8 +96,8 @@ ag_diagnose() {
         and (.files|length)<=10000 and (.links|length)<=1000
         and all(.files|to_entries[]; (.key|explode|all(.>=32 and .!=127)) and (.value|type)=="string" and (.value|test("^[a-f0-9]{64}$")))
         and all(.links|to_entries[]; (.key|explode|all(.>=32 and .!=127)) and (.value|type)=="string" and (.value|explode|all(.>=32 and .!=127)))
-        and (.release|type)=="string" and (.release|test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$"))
-        and (.version|type)=="string" and (.version|test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)$"))
+        and (.release|type)=="string" and (.release|test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$"))
+        and (.version|type)=="string" and (.version|test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)$"))
         and (.version as $v | .release|startswith($v+"-"))
         and (.links|has($current) and has($bin))
       ' "$stamp" >/dev/null 2>&1; then
@@ -198,7 +198,7 @@ ag_diagnose() {
           ruleId:(.ruleId|enum(["guard.path.deny","guard.path.protected","guard.path.readonly","guard.path.unlisted","guard.path.invalid","unattributed","custom","secret.basename.env","git.reset-hard","rm.recursive-force-root-or-home","rm.recursive-force-outside-cwd"])),
           errno:(.errno|enum(["EPERM","EACCES","ENOENT","ENOTDIR","ELOOP"])),
           remediation:(.remediation|enum(["relaunch","reinstall","review-guard-list","review-policy","review-path","launch-guarded","none"])),
-          release:(.release|if type=="string" and test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$") then . else "unknown" end)
+          release:(.release|if type=="string" and test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$") then . else "unknown" end)
         } | . + {ageSeconds:(if .timestamp==null then null else (($now-.timestamp/1000)|floor|if .<0 then 0 else . end) end)}]
       ' "$events_file" 2>/dev/null) || { events='[]'; event_state=error; }
       latest=$(/usr/bin/jq -cn --argjson e "$events" '[$e[].timestamp|select(.!=null)]|if length==0 then null else max end')
