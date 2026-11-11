@@ -243,11 +243,13 @@ async function guard(input) {
   // session copy must prove Agent Guard's Git rules are in force (docs/DESIGN.md
   // section 5, Command checker).
   let checkerRules = !guarded || !rules || !checkCommand
+  let gitRuleCheck = "not-run"
   if (!checkerRules) {
     try {
       const probe = checkCommand({ command: "git config core.hooksPath agent-guard-probe", cwd: directory })
       checkerRules = probe.kind === "deny" && probe.ruleId === "custom.agent-guard-git/hooks-path"
     } catch {}
+    gitRuleCheck = checkerRules ? "passed" : "failed"
     if (!checkerRules) failure("rules-load", "rules-unavailable", "review-policy")
   }
   const temps = [...new Set([canonical(tmpdir()), "/private/tmp"])]
@@ -391,6 +393,11 @@ async function guard(input) {
 
   const state = !guarded ? outer || sandbox.result === "unconfined" ? "inactive" : "unknown" :
     RELEASE && DELEGATE !== false && rules && checkerRules && net && checkCommand ? "active" : "degraded"
+  const list = values => Array.isArray(values) ? values.filter(p => typeof p === "string").slice(0, 100) : []
+  const roots = () => ({
+    allow: list(rules?.allow), readonly: list(rules?.readonly), deny: list(rules?.deny),
+    protected: [...new Set([...protectedRoots, ...list(rules?.protected)])],
+  })
   const health = () => {
     const loaded = RELEASE ? basename(RELEASE) : null
     const launcher = releaseID(WANTED)
@@ -401,7 +408,9 @@ async function guard(input) {
       state,
       sandbox: { ...sandbox, origin: "startup-probe", freshness: "cached" },
       rules: { loaded: !!rules, source: rulesSource, semanticHealth: "not-probed" },
-      safetyNet: { moduleLoaded, apiLoaded: !!checkCommand, hooksReady: !!net, semanticHealth: "not-probed" },
+      // gitRuleCheck is the one Git-rule sentinel probe, not overall checker health.
+      safetyNet: { moduleLoaded, apiLoaded: !!checkCommand, hooksReady: !!net, gitRuleCheck },
+      roots: roots(),
       projects: Array.isArray(rules?.projects) ? rules.projects.filter(p => typeof p === "string").slice(0, 100) : [],
       preparation: { status: ["ready", "warning"].includes(rules?.preparationStatus) ? rules.preparationStatus : "not-observed", origin: "snapshot" },
       releases: { loaded: publicReleaseID(loaded), launcher: publicReleaseID(launcher), installed: publicReleaseID(installed), version: VERSION },

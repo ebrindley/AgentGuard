@@ -172,6 +172,10 @@ if (ready) {
   await before({ tool: 'write' }, { args: { filePath: join(directory, '.git/hooks/pre-commit.sample') } });
   await before({ tool: 'write' }, { args: { filePath: join(directory, '.git/hooks') } });
   await assert.rejects(before({ tool: 'bash' }, { args: { command: 'API-DENY', workdir: home } }), new RegExp(marker));
+  assert.equal(health.safetyNet.gitRuleCheck, 'passed');
+  assert.deepEqual(health.roots.allow, [directory]);
+  assert.deepEqual(health.roots.deny, [deniedRoot]);
+  assert.ok(health.roots.protected.includes(join(home, '.cc-safety-net')));
   await assert.rejects(before({ tool: 'bash' }, { args: { command: 'FAIL-NET' } }), new RegExp(marker));
   const observedText = fs.readFileSync(join(logs, 'agent-guard-events.json'), 'utf8');
   assert.equal(observedText.includes(marker), false);
