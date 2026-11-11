@@ -118,7 +118,7 @@ ag_diagnose() {
         if [[ $klass == unknown || $p != ${p:a} ]]; then (( excluded++ )); continue; fi
         if [[ ! -f $p ]]; then (( missing[$klass]++ )); continue; fi
         got=$(/usr/bin/shasum -a 256 -- "$p" 2>/dev/null)
-        [[ ${got[1,64]} == "$want" ]] || (( changed[$klass]++ ))
+        [[ ${${got#\\}[1,64]} == "$want" ]] || (( changed[$klass]++ ))
       done
       for p in "$engine/releases/$installed"/**/*(.DN); do
         (( ${+files[$p]} )) || (( extra[release]++ ))
