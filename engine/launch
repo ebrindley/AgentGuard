@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/zsh -f
 # usage: launch [--harness NAME] cli|gui|profile|check [staged] [args...]
 # NAME is the profile to launch (profiles/NAME); the default is opencode.
 emulate -L zsh
