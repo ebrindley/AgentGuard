@@ -1557,7 +1557,7 @@ ag_install_main() {
   for w in $ag_harnesses; do ag_hook_opt h $w report; done
   for m in $ag_migrated; do ag_hook_opt m $m report; done
   for w in $ag_warnings; do ag_say "warning: $w"; done
-  if (( ! ag_no_prompt )) && [[ $ag_gui == 1 || -t 1 ]]; then
+  if (( ! ag_no_prompt && ! ag_update )) && [[ $ag_gui == 1 || -t 1 ]]; then
     local msg answer
     msg=$'Agent Guard is installed.\n\nOpen OpenCode with Agent Guard, or type opencode in a new terminal window.'
     (( $#ag_warnings )) && msg+=$'\n\n'"${(pj:\n:)ag_warnings}"
