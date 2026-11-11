@@ -77,7 +77,8 @@ for (const parent of ['opencode', 'pi', 'omp']) {
   assert.deepEqual(literal.stdout.trim().split('\n').slice(-2), ['--', '--settings']);
   for (const command of ['codex --remote exec', 'opencode run --attach=http://localhost:4096', 'opencode attach http://localhost:4096', 'opencode run --server=http://localhost:4096',
                          'opencode --print-logs attach http://localhost:4096', 'opencode --log-level ERROR attach http://localhost:4096',
-                         'opencode --print-logs --pure attach http://localhost:4096']) {
+                         'opencode --print-logs --pure attach http://localhost:4096',
+                         'opencode --dir /tmp attach http://localhost:4096', 'opencode -m fixture --port 1 attach http://localhost:4096']) {
     const r = launch(parent, command);
     assert.equal(r.status, 2, r.stderr);
     assert.match(r.stderr, /must execute locally/);
