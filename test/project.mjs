@@ -323,9 +323,9 @@ exit 0
     for (let i = 0; i < 50 && spawnSync('/usr/bin/pgrep', ['-x', 'AgFakeApp']).status !== 0; i++) await new Promise((d) => setTimeout(d, 100));
     assert.equal(spawnSync('/usr/bin/pgrep', ['-x', 'AgFakeApp']).status, 0, 'no running AgFakeApp to stand for OpenCode');
     assert.equal(query(ALLOW('@project')), 'go\n');
-    // A drop on a running app neither prompts nor records, and keeps the log as it was.
+    // A drop on a running app neither prompts nor records; the log keeps its content and gains the refusal as its own entry.
     refused('incumbent', ['--project', other], /OpenCode is already open/);
-    assert.match(readFileSync(log, 'utf8'), /^previous launch\nagent-guard-stage:host-launch\n$/);
+    assert.match(readFileSync(log, 'utf8'), /^previous launch\nAgent Guard gui \S+ \S+ \S+ refused before launch\nfailed: OpenCode is already open\. [^\n]*\nagent-guard-stage:host-launch\n$/);
     refused('incumbent, plain', [], /OpenCode is already open/);
   } finally { incumbent.kill(); }
   console.log('ok   --project-query answers ask only for an empty store with @project on, and writes nothing; an open app is refused first');
@@ -376,8 +376,20 @@ exit 0
   refused('empty', ['--project', ''], /--project needs a full path/);
   refused('relative', ['--project', 'Projects/other'], /--project needs a full path: Projects\/other/);
   refused('dash', ['--project', '-x'], /--project needs a full path: -x/);
+  // A refusal before the launch's header keeps the log as it was and is appended as its own entry.
+  writeFileSync(log, 'previous launch\n');
   refused('no value', ['--project'], /--project needs a folder/);
+  const early = logText().split('\n');
+  assert.equal(early[0], 'previous launch');
+  assert.match(early[1], /^Agent Guard gui \S+ \d{4}-\d\d-\d\d \d\d:\d\d:\d\d refused before launch$/);
+  assert.deepEqual(early.slice(2), ['failed: --project needs a folder', 'agent-guard-stage:configuration', '']);
   refused('not active', ['--project', P('Projects/new-good')], /@project is off in/, { text: ALLOW('# @project') });
+  // After the header the reason goes between the launch's own lines and the stage.
+  const late = logText().trimEnd().split('\n');
+  assert.match(late[0], /^Agent Guard gui \S+ \d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/);
+  assert.match(late.at(-2), /^failed: @project is off in /);
+  assert.match(late.at(-1), /^agent-guard-stage:[a-z-]+$/);
+  assert.ok(!late.some((l) => l.endsWith('refused before launch')));
   refused('not active, READ ONLY', ['--project', P('Projects/new-good')], /@project is off in/, { text: 'ALLOW\nREAD ONLY\n@project\n' });
   assert.equal(stored(), before);
   console.log('ok   a refused, missing, malformed or inactive drop fails the launch and the store keeps what it had');

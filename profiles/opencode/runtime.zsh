@@ -214,12 +214,12 @@ opencode_managed() {
   trap 'exit 130' INT
   trap 'exit 143' TERM HUP
   for i in {1..60}; do
-    kill -0 $opencode_server_pid 2>/dev/null || fail 'OpenCode V2 server exited before readiness; check its launch log'
+    kill -0 $opencode_server_pid 2>/dev/null || fail "OpenCode V2 server exited before readiness; its output is in $session/server.log"
     opencode_service_state "$cli"
     [[ $REPLY == running ]] && break
     sleep 0.25
   done
-  [[ $REPLY == running ]] || fail 'OpenCode V2 server did not become ready'
+  [[ $REPLY == running ]] || fail "OpenCode V2 server did not become ready; its output is in $session/server.log"
   # The app may reconnect by spawning a detached replacement. End the client
   # when its original server exits, so a lost service ends this launch's lease.
   trap opencode_client_exited CHLD

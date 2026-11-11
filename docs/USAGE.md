@@ -249,7 +249,10 @@ the applied paths and any skipped or refused entries. A terminal launch prints
 refusals, warnings, failures, skipped entries, overrides and environment notices.
 The desktop app and `check` keep refusals and warnings in that log. A desktop
 failure shows an alert. A `check` failure prints. The allow, read-only, deny and
-protection summary is written only to that log. The full list of
+protection summary is written only to that log. A refused or failed launch appends
+a `failed:` line with the reason and an `agent-guard-stage:` line; when the
+launch had not yet rewritten the log, a header ending `refused before launch`
+comes first, and the earlier content stays above it. The full list of
 essential folders is in [the security policy](../SECURITY.md#opencode-1).
 
 OpenCode's required data, cache and temporary folders remain writable without
