@@ -181,5 +181,19 @@ test("four-part release identifiers are consistent", () => {
   assert.equal(report.installation.loadedRelease, four)
   assert.equal(report.installation.currentRelease, four)
 })
+test("migrated forwarders and the Grok link are known classes", () => {
+  const f = fixture("links")
+  const stamp = JSON.parse(readFileSync(f.stamp))
+  for (const [dir, name] of [[join(f.home, "Library/Application Support/OpenCodeGuard/bin"), "opencode"], [join(f.home, "Library/Application Support/OpenCodeGuard/bin"), "opencode-gui"], [join(f.home, ".local/bin"), "grok"]]) {
+    mkdirSync(dir, { recursive: true })
+    symlinkSync(join(f.engine, "bin", name), join(dir, name))
+    stamp.links[join(dir, name)] = join(f.engine, "bin", name)
+  }
+  json(f.stamp, stamp)
+  const { status, report } = collect(f, "links")
+  assert.equal(status, 0)
+  assert.equal(report.installation.excludedEntries, 0)
+  assert.equal(report.installation.drift.find(x => x.class === "grok").linksMissing, 0)
+})
 console.log(`diagnostics fixtures: ${run}`)
 process.exitCode = failures ? 1 : 0

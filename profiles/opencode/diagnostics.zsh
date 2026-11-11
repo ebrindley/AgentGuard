@@ -14,7 +14,8 @@ ag_diag_class() { # PATH: export a logical class, never the path
     ("$engine"/releases/*) REPLY=release ;;
     ("$engine"/*) REPLY=engine ;;
     ("$home"/.cc-safety-net/*) REPLY=rules ;;
-    ("$home"/.config/opencode/*) REPLY=opencode ;;
+    ("$home"/.config/opencode/*|"$home"/Library/'Application Support'/OpenCodeGuard/bin/*) REPLY=opencode ;;
+    ("$home"/.local/bin/grok) REPLY=grok ;;
     ("$home"/.pi/*|"$home"/.local/bin/*) REPLY=pi ;;
     ("$home"/Applications/'Agent Guard.app'/*) REPLY=app ;;
     (*) REPLY=unknown ;;
@@ -70,7 +71,7 @@ ag_diagnose() {
   local -A files totals missing changed extra link_missing link_changed
   integer bad=0 excluded=0 now=${EPOCHSECONDS:-0}
   now=$(/bin/date +%s)
-  for klass in release engine rules opencode pi app unknown; do
+  for klass in release engine rules opencode pi grok app unknown; do
     totals[$klass]=0 missing[$klass]=0 changed[$klass]=0 extra[$klass]=0
     link_missing[$klass]=0 link_changed[$klass]=0
   done
@@ -132,7 +133,7 @@ ag_diagnose() {
   fi
   [[ $stamp_state == valid && $active == "$installed" && $rid == "$installed" ]] || bad=1
   rows=()
-  for klass in release engine rules opencode pi app unknown; do
+  for klass in release engine rules opencode pi grok app unknown; do
     (( missing[$klass] + changed[$klass] + extra[$klass] + link_missing[$klass] + link_changed[$klass] )) && bad=1
     rows+=("$klass:$totals[$klass]:$missing[$klass]:$changed[$klass]:$extra[$klass]:$link_missing[$klass]:$link_changed[$klass]")
   done
