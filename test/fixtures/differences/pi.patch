@@ -882,7 +882,7 @@ index 4dcdf9c..7bcfc7c 100755
      target="$state_root/$relative"
      mkdir -p "$(dirname "$target")"
 diff --git a/src/index.mjs b/src/index.mjs
-index d997be1..2e1a8f6 100644
+index d997be1..27395a3 100644
 --- a/src/index.mjs
 +++ b/src/index.mjs
 @@ -1,15 +1,23 @@
@@ -1037,7 +1037,7 @@ index d997be1..2e1a8f6 100644
 +    // fall through to the failure below
 +  }
 +  if (!release) {
-+    return { failure: 'Agent Guard\'s release folder is missing; reinstall Agent Guard (`agent-guard update`), then relaunch' };
++    return { failure: 'Agent Guard\'s release folder is missing; reinstall Agent Guard by rerunning its installer from Terminal outside any agent session, then relaunch' };
 +  }
 +  const named = process.env.CC_SAFETY_NET_HOME;
 +  let copy = null;
@@ -1088,7 +1088,7 @@ index d997be1..2e1a8f6 100644
 +    handler = null;
 +  }
 +  if (!handler) {
-+    return { failure: 'cc-safety-net failed to load; reinstall Agent Guard (`agent-guard update`), then relaunch' };
++    return { failure: 'cc-safety-net failed to load; reinstall Agent Guard by rerunning its installer from Terminal outside any agent session, then relaunch' };
 +  }
 +  const probeCwd = isDirectory(process.cwd()) ? process.cwd() : tmpdir();
 +  let probe;
@@ -1158,7 +1158,7 @@ index d997be1..2e1a8f6 100644
      })
      .catch(() => {
 -      health = { ok: false, missing: [], scriptPresent: false, platform: process.platform };
-+      checker = { failure: 'cc-safety-net failed to load; reinstall Agent Guard (`agent-guard update`), then relaunch' };
++      checker = { failure: 'cc-safety-net failed to load; reinstall Agent Guard by rerunning its installer from Terminal outside any agent session, then relaunch' };
      });
  
    const handleToolCall = async (event, ctx) => {
