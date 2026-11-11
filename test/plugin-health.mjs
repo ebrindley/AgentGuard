@@ -44,10 +44,12 @@ fs.mkdirSync(join(checker, 'rules'), { recursive: true });
 fs.writeFileSync(join(checker, 'rules/rule.json'), '{}');
 const deniedRoot = join(directory, 'private');
 const denied = join(deniedRoot, marker);
+const credentialFile = join(home, '.ssh', 'id_fixture');
+const envFile = join(directory, '.env');
 const unrelated = join(home, marker + '-unclassified');
 const protectedFile = join(home, '.cc-safety-net', marker);
 if (name !== 'rules-missing') fs.writeFileSync(join(state, 'rules.json'), JSON.stringify({
-  allow: [directory], readonly: [], deny: [deniedRoot], skills: [], configs: [], protected: [], checker, preparationStatus: 'ready',
+  allow: [directory], readonly: [], deny: [deniedRoot], skills: [], configs: [], protected: [], credentials: [join(home, '.ssh')], hooks: [join(directory, 'custom-hooks')], checker, preparationStatus: 'ready',
 }));
 let net = 'export default { server: async () => ({ "tool.execute.before": async (_info, output) => { if(output.args?.command?.includes("FAIL-NET")) throw new Error("' + marker + '"); } }) };';
 if (name === 'engine-import') net = 'throw new Error("' + marker + '");';
@@ -81,7 +83,7 @@ fs.openSync = (path, ...args) => {
 };
 const realpath = fs.realpathSync;
 fs.realpathSync = (path, ...args) => {
-  if (typeof path === 'string' && [denied, unrelated, protectedFile].some(prefix => path.startsWith(prefix))) {
+  if (typeof path === 'string' && ([denied, unrelated, protectedFile, credentialFile].some(prefix => path.startsWith(prefix)) || path === envFile)) {
     const error = new Error(marker);
     error.code = 'EPERM';
     throw error;
@@ -161,12 +163,21 @@ if (ready) {
   await assert.rejects(before({ tool: 'read' }, { args: { filePath: 'link.txt' } }), new RegExp(`link\\.txt \\(resolves to ${join(deniedRoot, 'plain.txt').replaceAll('.', '\\.')}\\) is in the DENY list`));
   await assert.rejects(before({ tool: 'read' }, { args: { filePath: unrelated } }), { code: 'EPERM' });
   await assert.rejects(before({ tool: 'write' }, { args: { filePath: protectedFile } }), /protected \(~\/\.cc-safety-net\).*cannot be unlocked from the Guard List/);
+  // Fixed credential, .env and Git hook protections are explained, not raw EPERM.
+  await assert.rejects(before({ tool: 'read' }, { args: { filePath: credentialFile } }), /fixed Agent Guard protection \(~\/\.ssh is a credential path\)/);
+  await assert.rejects(before({ tool: 'read' }, { args: { filePath: envFile } }), /fixed Agent Guard protection \(\.env files are blocked/);
+  await before({ tool: 'write' }, { args: { filePath: join(directory, '.env.example') } });
+  await assert.rejects(before({ tool: 'write' }, { args: { filePath: join(directory, '.git/hooks/pre-commit') } }), /Git hooks cannot be written/);
+  await assert.rejects(before({ tool: 'write' }, { args: { filePath: join(directory, 'custom-hooks/pre-commit.sample') } }), /active Git hooks folder/);
+  await before({ tool: 'write' }, { args: { filePath: join(directory, '.git/hooks/pre-commit.sample') } });
+  await before({ tool: 'write' }, { args: { filePath: join(directory, '.git/hooks') } });
   await assert.rejects(before({ tool: 'bash' }, { args: { command: 'API-DENY', workdir: home } }), new RegExp(marker));
   await assert.rejects(before({ tool: 'bash' }, { args: { command: 'FAIL-NET' } }), new RegExp(marker));
   const observedText = fs.readFileSync(join(logs, 'agent-guard-events.json'), 'utf8');
   assert.equal(observedText.includes(marker), false);
   const observed = JSON.parse(observedText).events;
   assert.ok(observed.some(event => event.layer === 'filesystem' && event.code === 'filesystem-error' && event.errno === 'EPERM'));
+  assert.ok(observed.some(event => event.layer === 'guard' && event.code === 'path-protected' && event.remediation === 'none' && event.errno === 'EPERM'));
   assert.ok(observed.some(event => event.layer === 'guard' && event.ruleId === 'guard.path.protected' && event.errno === 'EPERM'));
   assert.ok(observed.some(event => event.layer === 'guard' && event.code === 'command-denied' && event.ruleId === 'custom'));
   assert.equal(observed.some(event => event.layer === 'sandbox'), false, 'uncorrelated EPERM must not imply Seatbelt');

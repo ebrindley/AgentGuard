@@ -838,8 +838,9 @@ if [[ $harness == opencode ]]; then
     --argjson skills "$(jarr $skill_roots)" --argjson configs "$(jarr $skill_configs)" \
     --argjson writable "$(jarr $writable $darwin_cache $config_roots)" \
     --argjson pins "$(jarr $pinned $state_pins $skill_pins)" --argjson projects "$(jarr $projects)" \
+    --argjson credentials "$(jarr $credential_targets)" --argjson hooks "$(jarr $hooks_dirs)" \
     --arg checker "$session/checker" --arg preparation "$channel" --arg preparationReplies "$replies" --arg preparationStatus "$preparation_status" \
-    '{allow:$allow,readonly:$readonly,deny:$deny,protected:$protected,skills:$skills,configs:$configs,writable:$writable,pins:$pins,projects:$projects,checker:$checker,preparation:$preparation,preparationReplies:$preparationReplies,preparationStatus:$preparationStatus}' > "$context"
+    '{allow:$allow,readonly:$readonly,deny:$deny,protected:$protected,skills:$skills,configs:$configs,writable:$writable,pins:$pins,projects:$projects,credentials:$credentials,hooks:$hooks,checker:$checker,preparation:$preparation,preparationReplies:$preparationReplies,preparationStatus:$preparationStatus}' > "$context"
   export AGENT_GUARD_CONTEXT="$context"
   if (( ! staged )); then
     /bin/cp "$context" "$engine/state/rules.json.$$"
