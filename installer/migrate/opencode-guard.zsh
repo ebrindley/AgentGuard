@@ -148,11 +148,11 @@ ag_m_opencode_guard_list_import() {
           for (i = 1; i <= n; i++) printf "  %s\n%s", k[i], (k[i] in e ? e[k[i]] : "    (none)\n") }' "$old_list" || return 1
   ag_say "After the switch the old list is no longer read; Agent Guard reads only $list."
   if [[ -t 0 ]]; then
-    print -n 'Import this list? [y/N] '
+    print -n 'Import this list? Answering n stops the install and changes nothing. [y/N] '
     read -r answer
   fi
   if [[ $answer != [yY]([eE][sS]|) ]]; then
-    ag_err 'the list was not imported. Nothing changed.'
+    ag_err "the list was not imported, so the install stopped. Nothing changed. Run the installer again from a terminal and answer y, or copy $old_list to $list first and the install keeps that list."
     return 1
   fi
   /bin/mkdir -p -- "$list_dir" && /bin/rm -f -- "$partial" && /bin/cp -p -- "$old_list" "$partial" &&
