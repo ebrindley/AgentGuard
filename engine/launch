@@ -15,9 +15,17 @@ log=
 (( $# )) && shift
 launch_args=("$@")
 
+# A refusal before the launch writes its header is appended as its own entry, so
+# it is not read as part of the launch whose log it follows. The stage line stays
+# last for agent-guard diagnose.
+integer header_written=0
 fail() {
   if [[ -n ${log:-} && -d ${log:h} ]]; then
-    print -r -- "agent-guard-stage:${failure_stage:-initialization}" >> "$log" 2>/dev/null || true
+    {
+      (( header_written )) || print -r -- "Agent Guard ${mode:-} ${${release:-}:t} $(/bin/date '+%Y-%m-%d %H:%M:%S') refused before launch"
+      print -r -- "failed: ${*//$'\n'/ }"
+      print -r -- "agent-guard-stage:${failure_stage:-initialization}"
+    } 2>/dev/null >> "$log" || true
   fi
   print -ru2 -- "agent-guard: $*"
   if [[ $mode == gui ]]; then
@@ -241,7 +249,8 @@ if (( app_query )); then
   exit 0
 fi
 # The incumbent check comes first, so a launch onto an open app prompts and
-# records nothing.
+# writes no header or snapshot; the refusal is appended to the log as its own
+# entry, after the open session's content.
 if [[ $mode == gui && $harness == opencode ]]; then
   failure_stage=host-launch
   find_app || fail "OpenCode.app not found"
@@ -498,6 +507,7 @@ resolve_project() {
 }
 
 print -r -- "Agent Guard $mode ${release:t} $(/bin/date '+%Y-%m-%d %H:%M:%S')" > "$log"
+header_written=1
 
 essential=(/ $home $home/Library $home/.config $home/.local $home/.cache
            /usr /bin /sbin /System /Library /private /dev /opt /Applications)
