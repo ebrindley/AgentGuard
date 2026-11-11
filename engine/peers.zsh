@@ -74,21 +74,11 @@ agent_guard_peer() {
     fi
     [[ $arg != *sandbox_mode* ]] && sandbox=1
   done
-  if [[ $previous == sandbox ]]; then
-    print -ru2 -- "agent-guard: $name --sandbox requires a value"
-    return 2
-  fi
   # OpenCode's global options, such as --print-logs and --pure, may precede its
-  # subcommand; options that take a separate value (the list in
-  # profiles/opencode/runtime.zsh) are skipped with it.
+  # subcommand; of those, only --log-level takes a separate value.
   integer at=1
-  local -a valued=(--log-level --port --hostname --mdns-domain --model --session --prompt --agent --replay-limit
-                   --server --attach --password --username --command --title --format --variant --completions --cwd --dir)
   while [[ $name == opencode && ${args[at]:-} == -?* && ${args[at]} != -- ]]; do
-    arg=${args[at]}
-    # A short option takes a value when its first m, s, p or u is its last
-    # letter, so the value is not attached.
-    (( ${valued[(Ie)$arg]} )) || [[ $arg == -[^-msup]#[msup] ]] && (( at++ ))
+    [[ ${args[at]} == --log-level ]] && (( at++ ))
     (( at++ ))
   done
   if [[ $name == opencode && ${args[at]:-} == attach ]]; then

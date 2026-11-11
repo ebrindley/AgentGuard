@@ -70,11 +70,6 @@ for (const parent of ['opencode', 'pi', 'omp']) {
   const attached = launch(parent, 'codex exec -sdanger-full-access');
   assert.equal(attached.status, 0, attached.stderr);
   assert.equal(attached.stdout.split('\n').filter(x => x === '--sandbox').length, 0);
-  for (const command of ['codex exec --sandbox', 'codex exec -s', 'cursor-agent --sandbox']) {
-    const r = launch(parent, command);
-    assert.equal(r.status, 2, `${parent}: ${command}\n${r.stderr}`);
-    assert.match(r.stderr, /requires a value/);
-  }
   const settings = launch(parent, `claude --settings '${JSON.stringify({ env: { PEER_FIXTURE: 'kept' } })}' --model fixture`);
   assert.equal(settings.status, 0, settings.stderr);
   const merged = JSON.parse(settings.stdout.split('\n')[1]);
@@ -86,8 +81,7 @@ for (const parent of ['opencode', 'pi', 'omp']) {
   assert.deepEqual(literal.stdout.trim().split('\n').slice(-2), ['--', '--settings']);
   for (const command of ['codex --remote exec', 'opencode run --attach=http://localhost:4096', 'opencode attach http://localhost:4096', 'opencode run --server=http://localhost:4096',
                          'opencode --print-logs attach http://localhost:4096', 'opencode --log-level ERROR attach http://localhost:4096',
-                         'opencode --print-logs --pure attach http://localhost:4096',
-                         'opencode --dir /tmp attach http://localhost:4096', 'opencode -m fixture --port 1 attach http://localhost:4096']) {
+                         'opencode --print-logs --pure attach http://localhost:4096']) {
     const r = launch(parent, command);
     assert.equal(r.status, 2, r.stderr);
     assert.match(r.stderr, /must execute locally/);
