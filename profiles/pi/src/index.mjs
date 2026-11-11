@@ -103,9 +103,8 @@ function warnIfUnverifiedSandbox() {
     '[pi-sandbox-guard] FILTER-ONLY: could not verify launch through the protected ' +
       'Pi/OMP Seatbelt shim. The command checker is active; this guard is not applying an OS ' +
       'sandbox, so assume out-of-project writes are uncontained unless you know one ' +
-      'is in place by other means. For the full guard, install Agent Guard (`agent-guard update`, ' +
-      'or the one-line installer) and run `agent-guard bind`, then launch via the ' +
-      '`pi` or `omp` shim on PATH (startup prints "OS sandbox ON").',
+      'is in place by other means. For the full guard, launch via the `pi` or `omp` shim on PATH ' +
+      '(startup prints "OS sandbox ON"); `agent-guard bind` records which Pi or OMP the shim starts.',
   );
 }
 
@@ -135,7 +134,7 @@ function locate() {
     // fall through to the failure below
   }
   if (!release) {
-    return { failure: 'Agent Guard\'s release folder is missing; reinstall Agent Guard (`agent-guard update`), then relaunch' };
+    return { failure: 'Agent Guard\'s release folder is missing; reinstall Agent Guard by rerunning its installer from Terminal outside any agent session, then relaunch' };
   }
   const named = process.env.CC_SAFETY_NET_HOME;
   let copy = null;
@@ -186,9 +185,16 @@ async function loadChecker() {
     handler = null;
   }
   if (!handler) {
-    return { failure: 'cc-safety-net failed to load; reinstall Agent Guard (`agent-guard update`), then relaunch' };
+    return { failure: 'cc-safety-net failed to load; reinstall Agent Guard by rerunning its installer from Terminal outside any agent session, then relaunch' };
   }
-  const probeCwd = isDirectory(process.cwd()) ? process.cwd() : tmpdir();
+  // The working folder can be deleted under a running session; process.cwd() then throws.
+  let sessionCwd;
+  try {
+    sessionCwd = process.cwd();
+  } catch {
+    return { failure: 'the working folder no longer exists; relaunch Pi or OMP from an existing folder' };
+  }
+  const probeCwd = isDirectory(sessionCwd) ? sessionCwd : tmpdir();
   let probe;
   try {
     probe = await handler(
@@ -238,7 +244,7 @@ export default function (pi) {
       }
     })
     .catch(() => {
-      checker = { failure: 'cc-safety-net failed to load; reinstall Agent Guard (`agent-guard update`), then relaunch' };
+      checker = { failure: 'cc-safety-net failed to load; reinstall Agent Guard by rerunning its installer from Terminal outside any agent session, then relaunch' };
     });
 
   const handleToolCall = async (event, ctx) => {

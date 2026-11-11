@@ -321,6 +321,13 @@ try {
       for (const p of ['notes.txt', '.cc-safety-net/logs/audit.log', 'Library/Application Support/other.txt', 'Applications/Other.app', '.config/other.json'])
         assert.equal(sbWrite(params, join(home, p)).status, 0, `denied: ${p}`);
     });
+    check('difference 1: cc-safety-net\'s logs are writable with the home outside the project', () => {
+      const outside = join(run, 'profile/home-outside');
+      mkdirSync(join(outside, '.cc-safety-net/logs'), { recursive: true });
+      const outsideParams = { PROJECT: project, HOME: outside };
+      assert.equal(sbWrite(outsideParams, join(outside, '.cc-safety-net/logs/audit.log')).status, 0, 'logs denied');
+      assert.notEqual(sbWrite(outsideParams, join(outside, '.cc-safety-net/rules.json')).status, 0, 'rules writable');
+    });
     check('difference 1: each AG_LINK_* parameter write-denies the link target it names', () => {
       for (const name of [...Object.keys(protectedFolders), ...Object.keys(protectedFiles)]) {
         const target = join(project, 'targets', name);
@@ -394,6 +401,10 @@ try {
       for (const p of ['Agent Guard', 'Agent Guard/sub', 'Applications', 'Applications/Agent Guard.app', '.opencode',
         '.opencode/sub', '.cc-safety-net', '.cc-safety-net/logs'])
         refused(session(a, ['/bin/echo', 'started'], { env: { PI_PROJECT: join(a.home, p) } }), p, refusal);
+    });
+    check('difference 2: a refusal that offers to run without the guard names the real executable and -ne', () => {
+      const r = session(a, ['/bin/echo', 'started'], { env: { PI_PROJECT: join(a.home, 'Agent Guard') } });
+      refused(r, 'Agent Guard folder', new RegExp(`start the real Pi executable \\(${standIn.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\) with -ne`));
     });
     check('difference 2: a project that is or is inside the target of a linked Agent Guard folder is refused', () => {
       mkdirSync(join(dotfiles, 'opencode/sub'));
@@ -553,13 +564,14 @@ try {
       refused(r, 'binding inside the project', /agent-guard bind --pi <abs-path> --node <abs-path>/);
       assert.doesNotMatch(r.stderr, /npm run/);
     });
-    check('difference 5: the extension\'s FILTER-ONLY warning names agent-guard update and agent-guard bind', () => {
+    check('difference 5: the extension\'s FILTER-ONLY warning names the shim and agent-guard bind', () => {
       const index = JSON.stringify(join(pi, 'src/index.mjs'));
       const r = spawnSync(process.execPath, ['--input-type=module', '-e', `(await import(${index})).default({ on() {} })`],
         { encoding: 'utf8', env: { PATH: '/usr/bin:/bin', HOME: a.home, TMPDIR: temp } });
       assert.equal(r.status, 0, r.stderr);
       const warning = r.stderr.split('\n').find((l) => l.includes('FILTER-ONLY')) ?? '';
-      assert.match(warning, /install Agent Guard \(`agent-guard update`, or the one-line installer\) and run `agent-guard bind`/);
+      assert.match(warning, /launch via the `pi` or `omp` shim on PATH.*`agent-guard bind`/);
+      assert.doesNotMatch(warning, /install Agent Guard|agent-guard update/);
       assert.doesNotMatch(warning, /npm run/);
     });
   }
@@ -625,6 +637,21 @@ try {
         assert.equal(r.stdout.trim(), 'allow block block', r.stderr);
       });
     }
+    check('difference 17: a deleted working folder blocks every call with a message that names it', () => {
+      const deleted = `
+        import { mkdtempSync, rmdirSync } from 'node:fs';
+        const dir = mkdtempSync(process.env.TMPDIR + '/gone-');
+        process.chdir(dir);
+        rmdirSync(dir);
+        const { default: extension } = await import(${index});
+        let handler;
+        extension({ on: (type, h) => { if (type === 'tool_call') handler = h; } });
+        const r = await handler({ type: 'tool_call', toolName: 'bash', input: { command: 'git status' } }, { cwd: '/' });
+        console.log(r && r.block ? r.reason : 'allow');`;
+      const r = session(a, [process.execPath, '--input-type=module', '-e', deleted]);
+      allowed(r, 'session');
+      assert.match(r.stdout, /Guard unavailable: the working folder no longer exists; relaunch Pi or OMP/);
+    });
     check('difference 17: each launch gets its own copy', () => {
       const first = env('CC_SAFETY_NET_HOME').stdout.trim(), second = env('CC_SAFETY_NET_HOME').stdout.trim();
       assert.notEqual(first, second);
@@ -801,6 +828,17 @@ try {
       assert.equal(r.status, 0, r.stderr);
       assert.match(r.stderr, /existing pi-sandbox-guard confinement detected; skipping nested wrap/);
       assert.equal(r.stdout, 'inner-started\n');
+    });
+    check('nesting: Pi inside Pi keeps the peer wrappers on PATH', () => {
+      const b = account('nested-peers');
+      const release = join(b.home, 'Library/Application Support/AgentGuard/current');
+      mkdirSync(join(release, 'peers'), { recursive: true });
+      writeFileSync(join(release, 'peer-runtime.sb'), '');
+      const peers = `${realpathSync(release)}/peers`;
+      const outer = session(b, ['/bin/sh', '-c', '"$1" /usr/bin/env', 'sh', join(b.bin, 'pi')]);
+      assert.equal(outer.status, 0, outer.stderr);
+      assert.match(outer.stderr, /skipping nested wrap/);
+      assert.ok(outer.stdout.split('\n').some((l) => l.startsWith(`PATH=${peers}:`)), outer.stdout);
     });
     check('nesting: OMP inside Pi is refused', () => {
       const r = inner('omp');

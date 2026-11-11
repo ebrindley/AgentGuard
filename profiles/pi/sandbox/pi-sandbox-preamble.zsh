@@ -15,6 +15,19 @@
 
 emit() { print -u2 -- "[pi-sandbox-guard] $*"; }
 
+# How to run without the guard. The shim on PATH adds the guard extension, so the
+# advice names the real executable; a direct Pi start without -ne loads the
+# extension and blocks every tool call. OMP's option to skip extensions is not
+# confirmed, so it is not named.
+direct_run_hint() {
+  local exe="${1:-}"
+  if [ "$PI_SANDBOX_RUNTIME" = "pi" ]; then
+    print -r -- "to run without Agent Guard, start the real Pi executable${exe:+ ($exe)} with -ne, not the shim on PATH."
+  else
+    print -r -- "to run without Agent Guard, start the real OMP executable${exe:+ ($exe)}, not the shim on PATH; it may still load Agent Guard's extension and block tool calls, so check \`omp --help\` for the option that skips extensions."
+  fi
+}
+
 # Trusted absolute paths — do NOT resolve security-critical tools via $PATH.
 # Pin before any ambient PATH work; keep readonly where zsh permits.
 typeset -r SANDBOX_EXEC="/usr/bin/sandbox-exec"
@@ -242,7 +255,7 @@ resolve_runtime_state() {
         "$HOME"/.pi/*) PI_AGENT_STATE="$candidate" ;;
         *)
           emit "protected Pi requires PI_CODING_AGENT_DIR to stay under ~/.pi."
-          emit "  Use the default state root, an alternate under ~/.pi, or call the real Pi binary directly."
+          emit "  Use the default state root or an alternate under ~/.pi; $(direct_run_hint)"
           return 1
           ;;
       esac
@@ -304,7 +317,7 @@ resolve_runtime_state() {
     candidate="$(canonical_path "$PI_CODING_AGENT_DIR")"
     if [ "$candidate" != "$OMP_AGENT_STATE" ]; then
       emit "protected OMP does not support relocating PI_CODING_AGENT_DIR."
-      emit "  Use an OMP named profile or call the real OMP binary directly."
+      emit "  Use an OMP named profile; $(direct_run_hint)"
       return 1
     fi
   fi
@@ -887,6 +900,13 @@ fi
 if [ "$ACTUAL_CONFINEMENT" = "1" ]; then
   if own_policy_reentry "$EXPECTED_PROFILE_DIGEST"; then
     emit "existing pi-sandbox-guard confinement detected; skipping nested wrap."
+    # PATH was reset above; keep the peer wrappers the outer session put first.
+    AG_PEER_RELEASE="$HOME_CANON_EARLY/Library/Application Support/AgentGuard/current"
+    if [[ -f "$AG_PEER_RELEASE/peer-runtime.sb" && -d "$AG_PEER_RELEASE/peers" ]]; then
+      export AGENT_GUARD_PEER_PATH
+      PATH="$AG_PEER_RELEASE/peers:$PATH"
+      export PATH
+    fi
     PI_SANDBOX_CMD=()
     return 0 2>/dev/null || true
   fi
@@ -940,10 +960,10 @@ fi
 
 # fail-closed prerequisites (absolute path; do not trust $PATH)
 if [ ! -x "$SANDBOX_EXEC" ]; then
-  emit "$SANDBOX_EXEC not found; refusing to launch. Run the real Pi binary directly for guard-only."; exit 1
+  emit "$SANDBOX_EXEC not found; refusing to launch; $(direct_run_hint "$PI_EXECUTABLE")"; exit 1
 fi
 if [ ! -f "$PROFILE" ]; then
-  emit "sandbox profile missing ($PROFILE); refusing to launch. Run the real Pi binary directly to bypass."; exit 1
+  emit "sandbox profile missing ($PROFILE); refusing to launch; $(direct_run_hint "$PI_EXECUTABLE")"; exit 1
 fi
 if [ -z "$EXPECTED_PROFILE_DIGEST" ]; then
   emit "cannot compute sandbox profile digest for $PROFILE; refusing to launch."; exit 1
@@ -1004,7 +1024,7 @@ INSTALL_DIR_CANON="$(cd -P "$PI_SANDBOX_INSTALL_DIR" 2>/dev/null && pwd -P || ec
 case "$INSTALL_DIR_CANON" in
   "$PROJECT"|"$PROJECT"/*)
     emit "refusing unsafe boundary '$PROJECT' because it contains the sandbox guard install dir '$INSTALL_DIR_CANON'."
-    emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."; exit 1 ;;
+    emit "cd into a project directory or set PI_PROJECT=<dir>; $(direct_run_hint "$PI_EXECUTABLE")"; exit 1 ;;
 esac
 #
 # NOTE on what is and isn't listed:
@@ -1037,7 +1057,7 @@ case "$PROJECT" in
   |"$HOME_CANON/Documents"|"$HOME_CANON/Documents/"* \
   |"$HOME_CANON/Downloads"|"$HOME_CANON/Downloads/"*)
     emit "refusing unsafe boundary '$PROJECT' (broad/system/credential path)."
-    emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."; exit 1 ;;
+    emit "cd into a project directory or set PI_PROJECT=<dir>; $(direct_run_hint "$PI_EXECUTABLE")"; exit 1 ;;
 esac
 # The profile write-denies project agent config components under PROJECT. A
 # PROJECT that itself sits inside such a folder (for example an OMP-managed
@@ -1051,7 +1071,7 @@ case "$PROJECT" in
   |*/.gemini/extensions|*/.gemini/extensions/* \
   |*/.opencode|*/.opencode/*|*/.cc-safety-net|*/.cc-safety-net/*)
     emit "refusing boundary '$PROJECT': it is inside a protected agent config folder, which the sandbox write-protects."
-    emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."; exit 1 ;;
+    emit "cd into a project directory or set PI_PROJECT=<dir>; $(direct_run_hint "$PI_EXECUTABLE")"; exit 1 ;;
 esac
 
 # Agent Guard differences 1 and 2 (Agent Guard's test/fixtures/differences/pi.json).
@@ -1113,13 +1133,13 @@ agent_guard_protected() {
     for folder in "$p" "$HOME_CANON${p#"$HOME"}"; do
       if [[ $PROJECT == "$folder" || $PROJECT == "$folder"/* || $folder == "$PROJECT"/* ]]; then
         emit "refusing boundary '$PROJECT': it is, contains or is inside Agent Guard's protected folder '$folder', which the sandbox write-protects."
-        emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."
+        emit "cd into a project directory or set PI_PROJECT=<dir>; $(direct_run_hint "$PI_EXECUTABLE")"
         return 1
       fi
     done
     if [[ $target != "$AG_INERT" && ( $PROJECT == "$target" || $PROJECT == "$target"/* ) ]]; then
       emit "refusing boundary '$PROJECT': it is or is inside '$target', the link target of Agent Guard's protected folder '$p', which the sandbox write-protects."
-      emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."
+      emit "cd into a project directory or set PI_PROJECT=<dir>; $(direct_run_hint "$PI_EXECUTABLE")"
       return 1
     fi
   done
@@ -1207,7 +1227,7 @@ if ! _pi_config_offender="$(project_config_symlink_offender "${_pi_config_bases[
   emit "refusing to launch: symlinked project agent config '$_pi_config_offender'."
   emit "  The sandbox write-protects .pi/.omp and OpenCode's config names by path, so a symlinked"
   emit "  name or a link to a writable location outside it would stay agent-writable. Replace the"
-  emit "  link with a real folder or file; call the real Pi binary directly to bypass."
+  emit "  link with a real folder or file; $(direct_run_hint "$PI_EXECUTABLE")"
   exit 1
 fi
 unset _pi_config_bases _pi_config_offender

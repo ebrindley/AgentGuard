@@ -21,7 +21,7 @@ index 2f94258..d86d372 100755
  fi
  
 diff --git a/launchers/pi b/launchers/pi
-index f5e94c2..8052215 100755
+index f5e94c2..171544a 100755
 --- a/launchers/pi
 +++ b/launchers/pi
 @@ -68,22 +68,6 @@ if [ "$PI_SANDBOX_RUNTIME" = "omp" ]; then
@@ -47,7 +47,7 @@ index f5e94c2..8052215 100755
  # The extension is part of agent sessions, not the runtimes' administrative
  # command parsers. Injecting it before a native subcommand changes Pi's command
  # into a prompt and makes several OMP subcommands reject an unknown flag.
-@@ -131,10 +115,29 @@ is_runtime_command() {
+@@ -131,13 +115,32 @@ is_runtime_command() {
    return 1
  }
  
@@ -78,7 +78,11 @@ index f5e94c2..8052215 100755
 -  PI_SANDBOX_COMMAND_KIND="$?"
    if [ "$PI_SANDBOX_COMMAND_KIND" -eq 2 ]; then
      print -u2 -- "[pi-sandbox-guard] this OMP agent command does not accept the required guard extension; refusing protected launch."
-     print -u2 -- "[pi-sandbox-guard] call the real OMP binary directly only when you intentionally accept guard-only/unsandboxed operation."
+-    print -u2 -- "[pi-sandbox-guard] call the real OMP binary directly only when you intentionally accept guard-only/unsandboxed operation."
++    print -u2 -- "[pi-sandbox-guard] $(direct_run_hint "$PI_EXECUTABLE")"
+     exit 1
+   fi
+   unset PI_SANDBOX_COMMAND_KIND
 @@ -153,29 +156,6 @@ if [ ! -f "$PI_SANDBOX_GUARD_EXTENSION" ]; then
    exit 1
  fi
@@ -110,10 +114,30 @@ index f5e94c2..8052215 100755
  # resolved target is a `node` shebang script and an interpreter was recorded. Execing
  # the vector instead of "$PI_EXECUTABLE" is what makes a recorded interpreter real:
 diff --git a/sandbox/pi-sandbox-preamble.zsh b/sandbox/pi-sandbox-preamble.zsh
-index 9b7c788..2e1c886 100644
+index 9b7c788..52ed215 100644
 --- a/sandbox/pi-sandbox-preamble.zsh
 +++ b/sandbox/pi-sandbox-preamble.zsh
-@@ -48,6 +48,7 @@ unset _PI_GIT_ENV_NAME
+@@ -15,6 +15,19 @@
+ 
+ emit() { print -u2 -- "[pi-sandbox-guard] $*"; }
+ 
++# How to run without the guard. The shim on PATH adds the guard extension, so the
++# advice names the real executable; a direct Pi start without -ne loads the
++# extension and blocks every tool call. OMP's option to skip extensions is not
++# confirmed, so it is not named.
++direct_run_hint() {
++  local exe="${1:-}"
++  if [ "$PI_SANDBOX_RUNTIME" = "pi" ]; then
++    print -r -- "to run without Agent Guard, start the real Pi executable${exe:+ ($exe)} with -ne, not the shim on PATH."
++  else
++    print -r -- "to run without Agent Guard, start the real OMP executable${exe:+ ($exe)}, not the shim on PATH; it may still load Agent Guard's extension and block tool calls, so check \`omp --help\` for the option that skips extensions."
++  fi
++}
++
+ # Trusted absolute paths — do NOT resolve security-critical tools via $PATH.
+ # Pin before any ambient PATH work; keep readonly where zsh permits.
+ typeset -r SANDBOX_EXEC="/usr/bin/sandbox-exec"
+@@ -48,6 +61,7 @@ unset _PI_GIT_ENV_NAME
  
  # Sanitize PATH before any remaining external lookups. Keep Homebrew + system
  # bins so trusted Pi resolution still works; drop ambient hostile entries.
@@ -121,7 +145,25 @@ index 9b7c788..2e1c886 100644
  PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
  
  # Homebrew versioned Node formulae do not link `node` into /opt/homebrew/bin.
-@@ -547,7 +548,7 @@ resolve_configured_executable() {
+@@ -241,7 +255,7 @@ resolve_runtime_state() {
+         "$HOME"/.pi/*) PI_AGENT_STATE="$candidate" ;;
+         *)
+           emit "protected Pi requires PI_CODING_AGENT_DIR to stay under ~/.pi."
+-          emit "  Use the default state root, an alternate under ~/.pi, or call the real Pi binary directly."
++          emit "  Use the default state root or an alternate under ~/.pi; $(direct_run_hint)"
+           return 1
+           ;;
+       esac
+@@ -303,7 +317,7 @@ resolve_runtime_state() {
+     candidate="$(canonical_path "$PI_CODING_AGENT_DIR")"
+     if [ "$candidate" != "$OMP_AGENT_STATE" ]; then
+       emit "protected OMP does not support relocating PI_CODING_AGENT_DIR."
+-      emit "  Use an OMP named profile or call the real OMP binary directly."
++      emit "  Use an OMP named profile; $(direct_run_hint)"
+       return 1
+     fi
+   fi
+@@ -547,7 +561,7 @@ resolve_configured_executable() {
  }
  
  # Operator-recorded binding: an absolute path written to the pinned config by a
@@ -130,7 +172,7 @@ index 9b7c788..2e1c886 100644
  # no fixed path shape can describe the real install surface — Homebrew's Cellar,
  # npm user prefixes, nvm/fnm/volta/asdf/mise version dirs, pnpm/bun/yarn global
  # roots, and Nix store paths are all legitimate and all differently shaped.
-@@ -664,7 +665,7 @@ resolve_agent_executable() {
+@@ -664,7 +678,7 @@ resolve_agent_executable() {
        resolved="$(resolve_configured_executable "$configured" || true)"
        if [ -z "$resolved" ]; then
          emit "$ambient_name='$configured' is not an accepted ambient override."
@@ -139,7 +181,7 @@ index 9b7c788..2e1c886 100644
          exit 1
        fi
        ;;
-@@ -672,7 +673,7 @@ resolve_agent_executable() {
+@@ -672,7 +686,7 @@ resolve_agent_executable() {
        resolved="$(resolve_bound_executable "$bound" || true)"
        if [ -z "$resolved" ]; then
          emit "recorded $runtime_label binding is no longer usable: '$bound'"
@@ -148,7 +190,7 @@ index 9b7c788..2e1c886 100644
          exit 1
        fi
        ;;
-@@ -680,7 +681,7 @@ resolve_agent_executable() {
+@@ -680,7 +694,7 @@ resolve_agent_executable() {
        resolved="$(resolve_command_outside_shim_dir "$PI_SANDBOX_RUNTIME" || true)"
        if [ -z "$resolved" ]; then
          emit "cannot auto-resolve the real $runtime_label executable outside the shim path."
@@ -157,7 +199,7 @@ index 9b7c788..2e1c886 100644
          exit 1
        fi
        ;;
-@@ -705,7 +706,7 @@ resolve_agent_executable() {
+@@ -705,7 +719,7 @@ resolve_agent_executable() {
        interpreter="$(resolve_bound_interpreter "$bound_interpreter" || true)"
        [ -n "$interpreter" ] || {
          emit "recorded Node interpreter is no longer usable: '$bound_interpreter'"
@@ -166,7 +208,21 @@ index 9b7c788..2e1c886 100644
          exit 1
        }
      fi
-@@ -919,6 +920,24 @@ if [ "$PI_SANDBOX_TRANSPARENT" = "1" ] && { [ -n "${PI_SANDBOX_SHIM_ACTIVE:-}" ]
+@@ -886,6 +900,13 @@ fi
+ if [ "$ACTUAL_CONFINEMENT" = "1" ]; then
+   if own_policy_reentry "$EXPECTED_PROFILE_DIGEST"; then
+     emit "existing pi-sandbox-guard confinement detected; skipping nested wrap."
++    # PATH was reset above; keep the peer wrappers the outer session put first.
++    AG_PEER_RELEASE="$HOME_CANON_EARLY/Library/Application Support/AgentGuard/current"
++    if [[ -f "$AG_PEER_RELEASE/peer-runtime.sb" && -d "$AG_PEER_RELEASE/peers" ]]; then
++      export AGENT_GUARD_PEER_PATH
++      PATH="$AG_PEER_RELEASE/peers:$PATH"
++      export PATH
++    fi
+     PI_SANDBOX_CMD=()
+     return 0 2>/dev/null || true
+   fi
+@@ -919,12 +940,30 @@ if [ "$PI_SANDBOX_TRANSPARENT" = "1" ] && { [ -n "${PI_SANDBOX_SHIM_ACTIVE:-}" ]
    emit "PI_SANDBOX_SHIM_ACTIVE/PROFILE_DIGEST set but no active confinement detected; applying sandbox."
  fi
  
@@ -190,8 +246,16 @@ index 9b7c788..2e1c886 100644
 +
  # fail-closed prerequisites (absolute path; do not trust $PATH)
  if [ ! -x "$SANDBOX_EXEC" ]; then
-   emit "$SANDBOX_EXEC not found; refusing to launch. Run the real Pi binary directly for guard-only."; exit 1
-@@ -953,6 +972,22 @@ fi
+-  emit "$SANDBOX_EXEC not found; refusing to launch. Run the real Pi binary directly for guard-only."; exit 1
++  emit "$SANDBOX_EXEC not found; refusing to launch; $(direct_run_hint "$PI_EXECUTABLE")"; exit 1
+ fi
+ if [ ! -f "$PROFILE" ]; then
+-  emit "sandbox profile missing ($PROFILE); refusing to launch. Run the real Pi binary directly to bypass."; exit 1
++  emit "sandbox profile missing ($PROFILE); refusing to launch; $(direct_run_hint "$PI_EXECUTABLE")"; exit 1
+ fi
+ if [ -z "$EXPECTED_PROFILE_DIGEST" ]; then
+   emit "cannot compute sandbox profile digest for $PROFILE; refusing to launch."; exit 1
+@@ -953,6 +992,22 @@ fi
  PROJECT="$(cd -P "$PROJECT" 2>/dev/null && pwd -P)" || {
    emit "cannot resolve project dir '$PROJECT'; refusing."; exit 1; }
  
@@ -214,7 +278,24 @@ index 9b7c788..2e1c886 100644
  # Refuse dangerous boundaries (the actual safety check). A fresh empty project dir
  # is fine; broad roots, system prefixes, and credential/home subtrees are not.
  # This matters more now that a non-git cwd falls back to $PWD: ANY directory you
-@@ -1009,15 +1044,107 @@ esac
+@@ -969,7 +1024,7 @@ INSTALL_DIR_CANON="$(cd -P "$PI_SANDBOX_INSTALL_DIR" 2>/dev/null && pwd -P || ec
+ case "$INSTALL_DIR_CANON" in
+   "$PROJECT"|"$PROJECT"/*)
+     emit "refusing unsafe boundary '$PROJECT' because it contains the sandbox guard install dir '$INSTALL_DIR_CANON'."
+-    emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."; exit 1 ;;
++    emit "cd into a project directory or set PI_PROJECT=<dir>; $(direct_run_hint "$PI_EXECUTABLE")"; exit 1 ;;
+ esac
+ #
+ # NOTE on what is and isn't listed:
+@@ -1002,22 +1057,114 @@ case "$PROJECT" in
+   |"$HOME_CANON/Documents"|"$HOME_CANON/Documents/"* \
+   |"$HOME_CANON/Downloads"|"$HOME_CANON/Downloads/"*)
+     emit "refusing unsafe boundary '$PROJECT' (broad/system/credential path)."
+-    emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."; exit 1 ;;
++    emit "cd into a project directory or set PI_PROJECT=<dir>; $(direct_run_hint "$PI_EXECUTABLE")"; exit 1 ;;
+ esac
+ # The profile write-denies project agent config components under PROJECT. A
+ # PROJECT that itself sits inside such a folder (for example an OMP-managed
  # worktree under ~/.omp/wt) would be denied wholesale, so refuse it clearly
  # instead of launching into a read-only project.
  # Keep these patterns in step with the project agent config regexes in pi-sandbox.sb.
@@ -226,7 +307,8 @@ index 9b7c788..2e1c886 100644
 -  |*/.opencode/plugins|*/.opencode/plugins/*)
 +  |*/.opencode|*/.opencode/*|*/.cc-safety-net|*/.cc-safety-net/*)
      emit "refusing boundary '$PROJECT': it is inside a protected agent config folder, which the sandbox write-protects."
-     emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."; exit 1 ;;
+-    emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."; exit 1 ;;
++    emit "cd into a project directory or set PI_PROJECT=<dir>; $(direct_run_hint "$PI_EXECUTABLE")"; exit 1 ;;
  esac
  
 +# Agent Guard differences 1 and 2 (Agent Guard's test/fixtures/differences/pi.json).
@@ -288,13 +370,13 @@ index 9b7c788..2e1c886 100644
 +    for folder in "$p" "$HOME_CANON${p#"$HOME"}"; do
 +      if [[ $PROJECT == "$folder" || $PROJECT == "$folder"/* || $folder == "$PROJECT"/* ]]; then
 +        emit "refusing boundary '$PROJECT': it is, contains or is inside Agent Guard's protected folder '$folder', which the sandbox write-protects."
-+        emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."
++        emit "cd into a project directory or set PI_PROJECT=<dir>; $(direct_run_hint "$PI_EXECUTABLE")"
 +        return 1
 +      fi
 +    done
 +    if [[ $target != "$AG_INERT" && ( $PROJECT == "$target" || $PROJECT == "$target"/* ) ]]; then
 +      emit "refusing boundary '$PROJECT': it is or is inside '$target', the link target of Agent Guard's protected folder '$p', which the sandbox write-protects."
-+      emit "cd into a project directory or set PI_PROJECT=<dir>; call the real Pi binary directly to bypass."
++      emit "cd into a project directory or set PI_PROJECT=<dir>; $(direct_run_hint "$PI_EXECUTABLE")"
 +      return 1
 +    fi
 +  done
@@ -323,7 +405,7 @@ index 9b7c788..2e1c886 100644
  ACTIVE_HOOKS="$(resolve_active_hooks "$PROJECT")" || exit 1
  TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
  
-@@ -1028,16 +1155,40 @@ TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
+@@ -1028,16 +1175,40 @@ TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
  # PROJECT and the launch cwd (Pi resolves <cwd>/.pi). Links that stay inside the
  # config folder (npm .bin links) or point to non-writable locations are fine.
  # Prints the offending path and returns 1 on a refused layout.
@@ -367,7 +449,7 @@ index 9b7c788..2e1c886 100644
          target="${link:A}"
          case "$target" in "$dir_canon"|"$dir_canon"/*) continue ;; esac
          # Probe a child so a link to a write root itself (e.g. PROJECT) matches too.
-@@ -1054,9 +1205,9 @@ _pi_config_bases=("$PROJECT")
+@@ -1054,9 +1225,9 @@ _pi_config_bases=("$PROJECT")
  [ "${PWD:A}" = "$PROJECT" ] || _pi_config_bases+=("${PWD:A}")
  if ! _pi_config_offender="$(project_config_symlink_offender "${_pi_config_bases[@]}")"; then
    emit "refusing to launch: symlinked project agent config '$_pi_config_offender'."
@@ -376,11 +458,11 @@ index 9b7c788..2e1c886 100644
 -  emit "  folder or file; call the real Pi binary directly to bypass."
 +  emit "  The sandbox write-protects .pi/.omp and OpenCode's config names by path, so a symlinked"
 +  emit "  name or a link to a writable location outside it would stay agent-writable. Replace the"
-+  emit "  link with a real folder or file; call the real Pi binary directly to bypass."
++  emit "  link with a real folder or file; $(direct_run_hint "$PI_EXECUTABLE")"
    exit 1
  fi
  unset _pi_config_bases _pi_config_offender
-@@ -1084,12 +1235,67 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
+@@ -1084,12 +1255,67 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
      # the recorded interpreter, and both --detect and a bare --pi re-derive node via
      # detect_node, which takes the first PATH hit with no write-root filter — so
      # either would re-record the same unsafe path and fail identically next launch.
@@ -449,7 +531,7 @@ index 9b7c788..2e1c886 100644
  emit "OS sandbox ON. Runtime [$PI_SANDBOX_RUNTIME]. Project [$PROJECT_VIA]: $PROJECT"
  emit "  active Git hooks denied: $ACTIVE_HOOKS"
  if [ "$PI_SANDBOX_RUNTIME" = "pi" ]; then
-@@ -1112,6 +1318,50 @@ fi
+@@ -1112,6 +1338,50 @@ fi
  export PI_SANDBOX_PROFILE_DIGEST PI_SANDBOX_PROJECT_BOUNDARY
  export PI_SANDBOX_ACTIVE_HOOKS_BOUNDARY PI_SANDBOX_AGENT_STATE_BOUNDARY
  
@@ -500,7 +582,7 @@ index 9b7c788..2e1c886 100644
  PI_SANDBOX_CMD=(
    "$SANDBOX_EXEC"
    -D "PROJECT=$PROJECT"
-@@ -1122,5 +1372,7 @@ PI_SANDBOX_CMD=(
+@@ -1122,5 +1392,7 @@ PI_SANDBOX_CMD=(
    -D "OMP_AGENT_STATE=$OMP_AGENT_STATE"
    -D "OMP_STATE_ROOT=$OMP_STATE_ROOT"
    -D "OMP_BASE_ROOT=$OMP_BASE_ROOT"
@@ -510,10 +592,18 @@ index 9b7c788..2e1c886 100644
 +  -p "$AG_PEER_PROFILE"
  )
 diff --git a/sandbox/pi-sandbox.sb b/sandbox/pi-sandbox.sb
-index f560a31..213a568 100644
+index f560a31..19131f9 100644
 --- a/sandbox/pi-sandbox.sb
 +++ b/sandbox/pi-sandbox.sb
-@@ -113,6 +113,8 @@
+@@ -104,6 +104,7 @@
+   (literal (string-append (param "HOME") "/.pi/agent/security-events.log"))
+   (subpath (string-append (param "HOME") "/.npm"))              ; npm cache
+   (subpath (string-append (param "HOME") "/.cache"))            ; generic tool cache (pip/uv/etc.)
++  (subpath (string-append (param "HOME") "/.cc-safety-net/logs")) ; the command checker's audit log
+   (subpath (string-append (param "HOME") "/Library/Caches"))    ; macOS tool caches (pip/uv/playwright)
+   (literal "/dev/null")
+   (literal "/dev/tty")
+@@ -113,6 +114,8 @@
    (literal "/dev/fd/2")
    (regex #"^/dev/ttys[0-9]+$"))                                 ; pty slaves for the TUI
  
@@ -522,7 +612,7 @@ index f560a31..213a568 100644
  ;; Re-protect the sensitive parts of ~/.pi/agent: the sandboxed process may write
  ;; its operational state (sessions/locks/history) but must NOT tamper with config,
  ;; auth, or the deployed extensions (which would let it DISABLE the guard).
-@@ -160,6 +162,12 @@
+@@ -160,6 +163,12 @@
    ;; refuses a PROJECT whose own path has any of these components, which these
    ;; regexes would otherwise match wholesale, and symlinked .pi/.omp layouts.
    ;; Keep these regexes in step with the PROJECT refusal patterns in pi-sandbox-preamble.zsh.
@@ -535,7 +625,7 @@ index f560a31..213a568 100644
    (require-all
      (subpath (param "PROJECT"))
      (require-any
-@@ -167,7 +175,11 @@
+@@ -167,7 +176,11 @@
        (regex #"/\.omp(/|$)")
        (regex #"/\.(claude|codex)/(extensions|hooks|tools)(/|$)")
        (regex #"/\.gemini/extensions(/|$)")
@@ -548,7 +638,7 @@ index f560a31..213a568 100644
    (subpath (string-append (param "PI_AGENT_STATE") "/extensions"))
    (literal (string-append (param "PI_AGENT_STATE") "/settings.json"))
    (literal (string-append (param "PI_AGENT_STATE") "/auth.json"))
-@@ -180,6 +192,10 @@
+@@ -180,6 +193,10 @@
    (literal (string-append (param "PI_AGENT_STATE") "/SYSTEM.md"))
    (literal (string-append (param "PI_AGENT_STATE") "/APPEND_SYSTEM.md"))
    (literal (string-append (param "PI_AGENT_STATE") "/models.json"))
@@ -559,7 +649,7 @@ index f560a31..213a568 100644
    ;; The shared extension remains at the canonical Pi path even when Pi runtime
    ;; state is relocated. Keep these denies pinned as well as state-relative.
    (subpath (string-append (param "HOME") "/.pi/agent/extensions"))
-@@ -254,6 +270,14 @@
+@@ -254,6 +271,14 @@
    (literal (string-append (param "HOME") "/.npmrc"))
    (subpath (string-append (param "HOME") "/.secrets")))
  
@@ -574,7 +664,7 @@ index f560a31..213a568 100644
  ;; Re-allow the minimum `git init` / submodule-init needs inside the now-denied
  ;; hooks subtrees (last-match-wins, so this overrides the subtree denies above
  ;; but not for the active hook files it does NOT re-allow):
-@@ -298,6 +322,17 @@
+@@ -298,6 +323,17 @@
      (subpath (string-append (param "OMP_STATE_ROOT") "/wt"))
      (regex #"/hooks/[^/]*\.[^/]+$")))
  
@@ -592,7 +682,7 @@ index f560a31..213a568 100644
  ;; ---------------------------------------------------------------------------
  ;; SECRET READS: deny reading host credential material. Scoped to specific HOME
  ;; locations so project files are unaffected. (No blanket *.key/*.pem regexes —
-@@ -323,3 +358,142 @@
+@@ -323,3 +359,142 @@
    (literal (string-append (param "HOME") "/.pi/agent/security-events.log"))
    ;; .env files anywhere (incl. project) — the one project-wide secret deny.
    (regex #"/\.env($|\.)"))
@@ -814,7 +904,7 @@ index 4dcdf9c..7bcfc7c 100755
      target="$state_root/$relative"
      mkdir -p "$(dirname "$target")"
 diff --git a/src/index.mjs b/src/index.mjs
-index d997be1..fd83726 100644
+index d997be1..70f7ff2 100644
 --- a/src/index.mjs
 +++ b/src/index.mjs
 @@ -1,15 +1,23 @@
@@ -916,7 +1006,7 @@ index d997be1..fd83726 100644
  /**
   * Announce filter-only operation when the protected shim's launch marker is
   * absent. This is a MISINSTALL DIAGNOSTIC, not a security control:
-@@ -94,24 +93,132 @@ function trustedPolicyEnv() {
+@@ -94,24 +93,138 @@ function trustedPolicyEnv() {
   *   - Wording says "could not verify" rather than "not detected" because an
   *     unrelated but valid Seatbelt profile would also lack this marker.
   *
@@ -937,9 +1027,9 @@ index d997be1..fd83726 100644
        'sandbox, so assume out-of-project writes are uncontained unless you know one ' +
 -      'is in place by other means. For the full guard, run `npm run deploy:launchers` ' +
 -      'and `npm run bind` from a pi-sandbox-guard checkout, then launch via the ' +
-+      'is in place by other means. For the full guard, install Agent Guard (`agent-guard update`, ' +
-+      'or the one-line installer) and run `agent-guard bind`, then launch via the ' +
-       '`pi` or `omp` shim on PATH (startup prints "OS sandbox ON").',
+-      '`pi` or `omp` shim on PATH (startup prints "OS sandbox ON").',
++      'is in place by other means. For the full guard, launch via the `pi` or `omp` shim on PATH ' +
++      '(startup prints "OS sandbox ON"); `agent-guard bind` records which Pi or OMP the shim starts.',
    );
  }
  
@@ -969,7 +1059,7 @@ index d997be1..fd83726 100644
 +    // fall through to the failure below
 +  }
 +  if (!release) {
-+    return { failure: 'Agent Guard\'s release folder is missing; reinstall Agent Guard (`agent-guard update`), then relaunch' };
++    return { failure: 'Agent Guard\'s release folder is missing; reinstall Agent Guard by rerunning its installer from Terminal outside any agent session, then relaunch' };
 +  }
 +  const named = process.env.CC_SAFETY_NET_HOME;
 +  let copy = null;
@@ -1020,9 +1110,16 @@ index d997be1..fd83726 100644
 +    handler = null;
 +  }
 +  if (!handler) {
-+    return { failure: 'cc-safety-net failed to load; reinstall Agent Guard (`agent-guard update`), then relaunch' };
++    return { failure: 'cc-safety-net failed to load; reinstall Agent Guard by rerunning its installer from Terminal outside any agent session, then relaunch' };
 +  }
-+  const probeCwd = isDirectory(process.cwd()) ? process.cwd() : tmpdir();
++  // The working folder can be deleted under a running session; process.cwd() then throws.
++  let sessionCwd;
++  try {
++    sessionCwd = process.cwd();
++  } catch {
++    return { failure: 'the working folder no longer exists; relaunch Pi or OMP from an existing folder' };
++  }
++  const probeCwd = isDirectory(sessionCwd) ? sessionCwd : tmpdir();
 +  let probe;
 +  try {
 +    probe = await handler(
@@ -1056,7 +1153,7 @@ index d997be1..fd83726 100644
  /**
   * Pi extension default export.
   * @param {import('./pi-types').ExtensionAPI} pi
-@@ -119,148 +226,67 @@ function warnIfUnverifiedSandbox() {
+@@ -119,148 +232,67 @@ function warnIfUnverifiedSandbox() {
  export default function (pi) {
    warnIfUnverifiedSandbox();
  
@@ -1090,7 +1187,7 @@ index d997be1..fd83726 100644
      })
      .catch(() => {
 -      health = { ok: false, missing: [], scriptPresent: false, platform: process.platform };
-+      checker = { failure: 'cc-safety-net failed to load; reinstall Agent Guard (`agent-guard update`), then relaunch' };
++      checker = { failure: 'cc-safety-net failed to load; reinstall Agent Guard by rerunning its installer from Terminal outside any agent session, then relaunch' };
      });
  
    const handleToolCall = async (event, ctx) => {
