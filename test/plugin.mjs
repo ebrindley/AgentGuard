@@ -32,7 +32,7 @@ if (mode === "unguarded" || mode === "old-bypass" || mode === "symlinked") {
   await expect("allowed", "bash allowed", "bash", { command: "ls" })
 } else if (mode === "outside" || mode === "updated") {
   // A missing trusted release retains diagnostics, while ordinary tools refuse.
-  const text = mode === "updated" ? "Agent Guard was updated; quit and reopen OpenCode" : undefined
+  const text = mode === "updated" ? "Agent Guard was updated. Quit, then open Agent Guard again" : undefined
   const registered = typeof hooks.tool?.agent_guard_status?.execute === "function"
   console.log(`${registered ? "ok  " : "FAIL"} plugin ${mode}: degraded agent_guard_status registered`)
   if (!registered) failures++

@@ -11,7 +11,8 @@ import { fileURLToPath } from "node:url"
 const source = resolve(process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), ".."))
 const run = realpathSync(mkdtempSync(join(tmpdir(), "agentguard-diagnostics-")))
 const marker = "PRIVATE_PAYLOAD_TOKEN_123"
-const rid = "0.3.0-20261012T120000Z"
+const defaultRid = "0.3.0-20261012T120000Z"
+const rid = defaultRid
 let failures = 0
 const put = (path, data) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, data) }
 const json = (path, value) => put(path, JSON.stringify(value))
@@ -27,7 +28,7 @@ function tree(path) {
   visit(path)
   return result
 }
-function fixture(name) {
+function fixture(name, rid = defaultRid, version = "0.3.0") {
   const home = join(run, name, marker)
   const engine = join(home, "Library/Application Support/AgentGuard")
   const release = join(engine, "releases", rid)
@@ -41,7 +42,7 @@ function fixture(name) {
   copyFileSync(join(source, "engine/agent-guard"), join(release, "bin/agent-guard"))
   copyFileSync(join(source, "profiles/opencode/diagnostics.zsh"), join(release, "profiles/opencode/diagnostics.zsh"))
   put(join(release, "RELEASE"), rid)
-  put(join(release, "VERSION"), "0.3.0")
+  put(join(release, "VERSION"), version)
   // Isolated fixture account resolution, never account database or HOME changes.
   put(join(release, "account.zsh"), `account_home() { REPLY='${home}'; }\n`)
   symlinkSync(`releases/${rid}`, join(engine, "current"))
@@ -58,7 +59,7 @@ function fixture(name) {
     { timestamp: marker, layer: marker, stage: marker, code: marker, tool: marker, ruleId: marker, errno: marker, remediation: marker, release: marker }
   ] })
   const files = Object.fromEntries(Object.entries(tree(release)).map(([p, hash]) => [p, hash]))
-  json(stamp, { version: "0.3.0", tag: "v0.3.0", commit: marker, release: rid, installed_at: 123, files, links: { [join(engine, "current")]: `releases/${rid}`, [join(engine, "bin")]: "current/bin" } })
+  json(stamp, { version, tag: `v${version}`, commit: marker, release: rid, installed_at: 123, files, links: { [join(engine, "current")]: `releases/${rid}`, [join(engine, "bin")]: "current/bin" } })
   return { home, engine, release, stamp, record, config, events, command: join(release, "bin/agent-guard") }
 }
 function collect(f, name, args = ["diagnose", "--json"]) {
@@ -169,6 +170,64 @@ test("unsupported CLI arguments refuse before doing work", () => {
     assert.ok(!invalid.stderr.includes(marker))
     assert.deepEqual(tree(f.home), before)
   }
+})
+test("four-part release identifiers are consistent", () => {
+  const four = "2026.11.05.1-20261105T120000Z"
+  const f = fixture("four-part", four, "2026.11.05.1")
+  const { status, report } = collect(f, "four-part")
+  assert.equal(status, 0)
+  assert.equal(report.installation.consistent, true)
+  assert.equal(report.installation.installedRelease, four)
+  assert.equal(report.installation.loadedRelease, four)
+  assert.equal(report.installation.currentRelease, four)
+})
+test("migrated forwarders and the Grok link are known classes", () => {
+  const f = fixture("links")
+  const stamp = JSON.parse(readFileSync(f.stamp))
+  for (const [dir, name] of [[join(f.home, "Library/Application Support/OpenCodeGuard/bin"), "opencode"], [join(f.home, "Library/Application Support/OpenCodeGuard/bin"), "opencode-gui"], [join(f.home, ".local/bin"), "grok"]]) {
+    mkdirSync(dir, { recursive: true })
+    symlinkSync(join(f.engine, "bin", name), join(dir, name))
+    stamp.links[join(dir, name)] = join(f.engine, "bin", name)
+  }
+  json(f.stamp, stamp)
+  const { status, report } = collect(f, "links")
+  assert.equal(status, 0)
+  assert.equal(report.installation.excludedEntries, 0)
+  assert.equal(report.installation.drift.find(x => x.class === "grok").linksMissing, 0)
+})
+test("multi-document state files are availability gaps, not a crash", () => {
+  const f = fixture("multi")
+  put(f.events, `${readFileSync(f.events, "utf8")}\n${readFileSync(f.events, "utf8")}`)
+  put(f.record, `${readFileSync(f.record, "utf8")}\n${readFileSync(f.record, "utf8")}`)
+  put(join(f.engine, "state/rules.json"), `${readFileSync(join(f.engine, "state/rules.json"), "utf8")}\n{}`)
+  put(join(f.engine, "state/opencode-preferences.json"), `${readFileSync(join(f.engine, "state/opencode-preferences.json"), "utf8")}\n{}`)
+  const { status, report } = collect(f, "multi")
+  assert.equal(status, 0)
+  assert.equal(report.recentFailures.state, "error")
+  assert.equal(report.permissions.ownershipState, "error")
+  assert.equal(report.components.lastLaunchSnapshot.state, "error")
+  assert.equal(report.permissions.approvalPreference.state, "error")
+  const stamp = readFileSync(f.stamp, "utf8")
+  put(f.stamp, `${stamp}\n${stamp}`)
+  const bad = collect(f, "multi-stamp")
+  assert.equal(bad.status, 1)
+  assert.equal(bad.report.installation.stamp, "error")
+})
+test("a stamp with no files is reported, not a crash", () => {
+  const f = fixture("empty-files")
+  const stamp = JSON.parse(readFileSync(f.stamp))
+  stamp.files = {}
+  json(f.stamp, stamp)
+  const { status, report } = collect(f, "empty-files")
+  assert.equal(status, 1, "unrecorded release files are extra")
+  assert.equal(report.installation.stamp, "valid")
+})
+test("text report labels the rulebook and points to doctor", () => {
+  const f = fixture("label")
+  const { stdout } = collect(f, "label", ["diagnose"])
+  assert.ok(!stdout.includes("Rules snapshot"))
+  assert.ok(stdout.includes("Rulebook file:"))
+  assert.ok(stdout.includes("agent-guard doctor"))
 })
 console.log(`diagnostics fixtures: ${run}`)
 process.exitCode = failures ? 1 : 0

@@ -12,6 +12,14 @@ const LIST = "~/Agent Guard/Guard List.txt"
 const SAFE_UNGUARDED = new Set(["invalid", "question", "todowrite", "webfetch", "websearch", "plan_exit", "agent_guard_status"])
 const READS = new Set(["read", "glob", "grep", "list", "lsp"])
 const CONFIG = /\/\.cc-safety-net(\/|$)/
+// Fixed Seatbelt rules, mirrored from profiles/opencode/credentials.sb and the Git
+// hooks rule in engine/launch. They only explain a denial the sandbox makes.
+const ENV_FILE = /\/\.env($|\.)/
+const ENV_TEMPLATE = /\/\.env\.(example|sample|template)$/
+const GIT_HOOKS = /\.git\/(hooks|modules\/.+\/hooks)\//
+const GIT_HOOKS_FOLDER = /\.git\/(hooks|modules\/.+\/hooks)$/
+const GIT_HOOK_SAMPLE = /\/hooks\/[^/]*\.sample$/
+const tilde = p => p === HOME || p.startsWith(HOME + "/") ? "~" + p.slice(HOME.length) : p
 const UNSAFE_NET_ENV = ["CC_SAFETY_NET_HOME", "CC_SAFETY_NET_WORKTREE", "SAFETY_NET_WORKTREE", "CC_SAFETY_NET_AUDIT_HOME"]
 const releaseID = value => typeof value === "string" && value.length <= 100 && /^[0-9A-Za-z.+-]+$/.test(value) && value !== "." && value !== ".." ? value : null
 const publicReleaseID = value => typeof value === "string" && /^(?:dev|\d+\.\d+\.\d+(?:\.\d+)?(?:-(?:rc|beta|alpha|pre)[.-]?\d+)?)-(?:\d{8}T\d{6}Z|fixture)$/.test(value) ? value : null
@@ -143,7 +151,7 @@ function loadRules(onError) {
     const rules = JSON.parse(readFileSync(file, "utf8"))
     for (const key of ["allow", "readonly", "deny", "skills", "configs", "protected"])
       if (!Array.isArray(rules[key]) || rules[key].some(p => typeof p !== "string" || !p.startsWith("/"))) return null
-    for (const key of ["writable", "pins"])
+    for (const key of ["writable", "pins", "credentials", "hooks"])
       if (rules[key] !== undefined && (!Array.isArray(rules[key]) || rules[key].some(p => typeof p !== "string" || !p.startsWith("/")))) return null
     if (!rules.checker?.startsWith(join(STATE, "opencode") + "/") || !existsSync(join(rules.checker, "rules/rule.json"))) return null
     return rules
@@ -235,11 +243,13 @@ async function guard(input) {
   // session copy must prove Agent Guard's Git rules are in force (docs/DESIGN.md
   // section 5, Command checker).
   let checkerRules = !guarded || !rules || !checkCommand
+  let gitRuleCheck = "not-run"
   if (!checkerRules) {
     try {
       const probe = checkCommand({ command: "git config core.hooksPath agent-guard-probe", cwd: directory })
       checkerRules = probe.kind === "deny" && probe.ruleId === "custom.agent-guard-git/hooks-path"
     } catch {}
+    gitRuleCheck = checkerRules ? "passed" : "failed"
     if (!checkerRules) failure("rules-load", "rules-unavailable", "review-policy")
   }
   const temps = [...new Set([canonical(tmpdir()), "/private/tmp"])]
@@ -258,8 +268,27 @@ async function guard(input) {
     recordEvent({ layer: "guard", stage, code, remediation, ruleId, errno, tool: toolClass(tool) })
     throw new Error(message)
   }
-  const protectedPath = p => protectedRoots.some(r => under(p, r)) || rules?.protected.some(r => under(p, r)) ||
-    CONFIG.test(p) && !skillContent(p) || (rules?.pins ?? rules?.skills ?? []).includes(p)
+  const configRoot = p => p.match(/^.*?\/\.cc-safety-net(?=\/|$)/)?.[0] ?? null
+  // The protected root that covers p, for the refusal text.
+  const protectedRoot = p => protectedRoots.find(r => under(p, r)) ?? rules?.protected.find(r => under(p, r)) ??
+    (CONFIG.test(p) && !skillContent(p) ? configRoot(p) : null) ?? (rules?.pins ?? rules?.skills ?? []).find(r => r === p) ?? null
+  const protectedMessage = (shown, root) =>
+    `Agent Guard: ${shown} is protected (${tilde(root)}). That is a fixed Agent Guard root and cannot be unlocked from the Guard List (${LIST}).`
+  // A denial Seatbelt makes under the fixed credential, .env and Git hooks rules.
+  // Only a launch that wrote these into the rules file can attribute them.
+  const fixedProtection = (p, writing) => {
+    if (!Array.isArray(rules?.credentials)) return null
+    const root = rules.credentials.find(r => under(p, r))
+    if (root) return `${tilde(root)} is a credential path`
+    if (ENV_FILE.test(p) && !ENV_TEMPLATE.test(p)) return ".env files are blocked, except .env.example, .env.sample and .env.template"
+    if (!writing) return null
+    const folder = (rules.hooks ?? []).find(r => !GIT_HOOKS_FOLDER.test(r) && under(p, r))
+    if (folder) return `${tilde(folder)} is the active Git hooks folder`
+    if (GIT_HOOKS.test(p) && !GIT_HOOK_SAMPLE.test(p)) return "Git hooks cannot be written, except *.sample files"
+    return null
+  }
+  const fixedMessage = (shown, reason) =>
+    `Agent Guard: ${shown} is blocked by a fixed Agent Guard protection (${reason}). It cannot be changed from the Guard List; see "Configure OpenCode" in USAGE.md and SECURITY.md in the Agent Guard documentation.`
   const target = (raw, tool) => {
     if (typeof raw !== "string" || !raw || raw.includes("\0"))
       refuse(tool, "Agent Guard: invalid path", "path-resolve", "path-invalid", "review-path", "guard.path.invalid")
@@ -271,8 +300,12 @@ async function guard(input) {
       if (["EPERM", "EACCES"].includes(errno)) {
         if (rules?.deny.some(r => under(lexical, r)))
           refuse(tool, `Agent Guard: ${raw} is in the DENY list (${LIST}).`, "path-resolve", "path-denied", "review-guard-list", "guard.path.deny", errno)
-        if (toolClass(tool) === "write" && protectedPath(lexical))
-          refuse(tool, `Agent Guard: ${raw} is protected.`, "path-resolve", "path-protected", "review-policy", "guard.path.protected", errno)
+        const root = toolClass(tool) === "write" ? protectedRoot(lexical) : null
+        if (root)
+          refuse(tool, protectedMessage(raw, root), "path-resolve", "path-protected", "review-policy", "guard.path.protected", errno)
+        const fixed = fixedProtection(lexical, toolClass(tool) === "write")
+        if (fixed)
+          refuse(tool, fixedMessage(raw, fixed), "path-resolve", "path-protected", "none", "guard.path.protected", errno)
       }
       recordEvent({ layer: "filesystem", stage: "path-resolve", code: "filesystem-error", remediation: "review-path", tool: toolClass(tool), errno })
       throw error
@@ -288,15 +321,22 @@ async function guard(input) {
   }
 
   const checkRead = (raw, tool) => {
-    if (rules && scope(target(raw, tool)) === "deny")
-      refuse(tool, `Agent Guard: ${raw} is in the DENY list (${LIST}).`, "path-read", "path-denied", "review-guard-list", "guard.path.deny")
+    if (!rules) return
+    const p = target(raw, tool)
+    if (scope(p) !== "deny") return
+    const shown = resolve(directory, raw.replace(/^~(?=\/|$)/, HOME)) === p ? raw : `${raw} (resolves to ${p})`
+    refuse(tool, `Agent Guard: ${shown} is in the DENY list (${LIST}).`, "path-read", "path-denied", "review-guard-list", "guard.path.deny")
   }
 
   const checkWrite = (raw, tool) => {
     const p = target(raw, tool)
     const lexical = resolve(directory, raw.replace(/^~(?=\/|$)/, HOME))
-    if (protectedPath(p) || CONFIG.test(lexical) && !namedSkill(lexical))
-      refuse(tool, `Agent Guard: ${p} is protected.`, "path-write", "path-protected", "review-policy", "guard.path.protected")
+    const root = protectedRoot(p) ?? (CONFIG.test(lexical) && !namedSkill(lexical) ? configRoot(lexical) : null)
+    if (root)
+      refuse(tool, protectedMessage(p, root), "path-write", "path-protected", "review-policy", "guard.path.protected")
+    const fixed = fixedProtection(p, true)
+    if (fixed)
+      refuse(tool, fixedMessage(p, fixed), "path-write", "path-protected", "none", "guard.path.protected")
     if (!rules) refuse(tool, "Agent Guard: rules unavailable; relaunch OpenCode.", "tool-hook", "rules-unavailable", "relaunch")
     const kind = scope(p)
     if (kind === "deny") refuse(tool, `Agent Guard: ${p} is in the DENY list (${LIST}).`, "path-write", "path-denied", "review-guard-list", "guard.path.deny")
@@ -312,10 +352,10 @@ async function guard(input) {
     if (tool === "agent_guard_status") return
     if (!guarded) {
       if (!bypass && !SAFE_UNGUARDED.has(tool))
-        refuse(tool, "Agent Guard: OpenCode was started without the guard. Quit it and open Agent Guard, or run opencode from a new terminal.", "tool-hook", "unguarded", "launch-guarded")
+        refuse(tool, "Agent Guard: OpenCode was started without the guard. Quit it and open Agent Guard, or run opencode from a new terminal. To run without the guard on purpose, set AGENT_GUARD_BYPASS=1 in OpenCode's environment.", "tool-hook", "unguarded", "launch-guarded")
       return tool === "bash" ? net?.["tool.execute.before"]?.(info, output) : undefined
     }
-    if (DELEGATE === false) refuse(tool, "Agent Guard was updated; quit and reopen OpenCode.", "tool-hook", "launcher-release-unavailable", "relaunch")
+    if (DELEGATE === false) refuse(tool, "Agent Guard was updated. Quit, then open Agent Guard again for the app, or run opencode again in a terminal.", "tool-hook", "launcher-release-unavailable", "relaunch")
     if (!rules) refuse(tool, "Agent Guard: rules unavailable; relaunch OpenCode.", "tool-hook", "rules-unavailable", "relaunch")
     if (!checkerRules) refuse(tool, `Agent Guard: cc-safety-net did not load Agent Guard's rules. Fix ${join(HOME, ".cc-safety-net/rules/rule.json")} (npx cc-safety-net doctor lists the problem), then relaunch OpenCode.`, "tool-hook", "rules-unavailable", "review-policy")
     if (!net || !checkCommand) refuse(tool, "Agent Guard: cc-safety-net failed to load; reinstall Agent Guard.", "tool-hook", !net ? "engine-unavailable" : "api-unavailable", "reinstall")
@@ -353,6 +393,11 @@ async function guard(input) {
 
   const state = !guarded ? outer || sandbox.result === "unconfined" ? "inactive" : "unknown" :
     RELEASE && DELEGATE !== false && rules && checkerRules && net && checkCommand ? "active" : "degraded"
+  const list = values => Array.isArray(values) ? values.filter(p => typeof p === "string").slice(0, 100) : []
+  const roots = () => ({
+    allow: list(rules?.allow), readonly: list(rules?.readonly), deny: list(rules?.deny),
+    protected: [...new Set([...protectedRoots, ...list(rules?.protected)])],
+  })
   const health = () => {
     const loaded = RELEASE ? basename(RELEASE) : null
     const launcher = releaseID(WANTED)
@@ -363,7 +408,9 @@ async function guard(input) {
       state,
       sandbox: { ...sandbox, origin: "startup-probe", freshness: "cached" },
       rules: { loaded: !!rules, source: rulesSource, semanticHealth: "not-probed" },
-      safetyNet: { moduleLoaded, apiLoaded: !!checkCommand, hooksReady: !!net, semanticHealth: "not-probed" },
+      // gitRuleCheck is the one Git-rule sentinel probe, not overall checker health.
+      safetyNet: { moduleLoaded, apiLoaded: !!checkCommand, hooksReady: !!net, semanticHealth: "not-probed", gitRuleCheck },
+      roots: roots(),
       projects: Array.isArray(rules?.projects) ? rules.projects.filter(p => typeof p === "string").slice(0, 100) : [],
       preparation: { status: ["ready", "warning"].includes(rules?.preparationStatus) ? rules.preparationStatus : "not-observed", origin: "snapshot" },
       releases: { loaded: publicReleaseID(loaded), launcher: publicReleaseID(launcher), installed: publicReleaseID(installed), version: VERSION },

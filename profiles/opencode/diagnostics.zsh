@@ -9,12 +9,17 @@ ag_diag_size() { # FILE LIMIT: reject unbounded, nonregular or unreadable input
   [[ $bytes == <-> ]] && (( bytes <= $2 ))
 }
 
+ag_diag_single() { # FILE: exactly one JSON document; several would break the report
+  /usr/bin/jq -e -s 'length == 1' "$1" >/dev/null 2>&1
+}
+
 ag_diag_class() { # PATH: export a logical class, never the path
   case $1 in
     ("$engine"/releases/*) REPLY=release ;;
     ("$engine"/*) REPLY=engine ;;
     ("$home"/.cc-safety-net/*) REPLY=rules ;;
-    ("$home"/.config/opencode/*) REPLY=opencode ;;
+    ("$home"/.config/opencode/*|"$home"/Library/'Application Support'/OpenCodeGuard/bin/*) REPLY=opencode ;;
+    ("$home"/.local/bin/grok) REPLY=grok ;;
     ("$home"/.pi/*|"$home"/.local/bin/*) REPLY=pi ;;
     ("$home"/Applications/'Agent Guard.app'/*) REPLY=app ;;
     (*) REPLY=unknown ;;
@@ -70,41 +75,42 @@ ag_diagnose() {
   local -A files totals missing changed extra link_missing link_changed
   integer bad=0 excluded=0 now=${EPOCHSECONDS:-0}
   now=$(/bin/date +%s)
-  for klass in release engine rules opencode pi app unknown; do
+  for klass in release engine rules opencode pi grok app unknown; do
     totals[$klass]=0 missing[$klass]=0 changed[$klass]=0 extra[$klass]=0
     link_missing[$klass]=0 link_changed[$klass]=0
   done
   # Restrict identifiers to the installer's release naming scheme. A custom
   # release name is not an export-safe label just because it contains no slash.
-  rid=$(/usr/bin/jq -nr --arg v "${release:t}" '$v | if test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$") then . else "unknown" end')
+  rid=$(/usr/bin/jq -nr --arg v "${release:t}" '$v | if test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$") then . else "unknown" end')
   if [[ -L $engine/current ]]; then
     rel=${engine}/current
     [[ ${rel:A:h} == "$engine/releases" ]] && active=${rel:A:t}
   fi
   if [[ -e $engine/state/opencode-preferences.json || -L $engine/state/opencode-preferences.json ]]; then
     preference_state=error
-    if ag_diag_size "$engine/state/opencode-preferences.json" 65536 && /usr/bin/jq -e 'type=="object" and .schemaVersion==1 and (.approvalPreference=="auto" or .approvalPreference=="host")' "$engine/state/opencode-preferences.json" >/dev/null 2>&1; then
+    if ag_diag_size "$engine/state/opencode-preferences.json" 65536 && ag_diag_single "$engine/state/opencode-preferences.json" && /usr/bin/jq -e 'type=="object" and .schemaVersion==1 and (.approvalPreference=="auto" or .approvalPreference=="host")' "$engine/state/opencode-preferences.json" >/dev/null 2>&1; then
       preference=$(/usr/bin/jq -r .approvalPreference "$engine/state/opencode-preferences.json")
       preference_state=valid
     fi
   fi
-  active=$(/usr/bin/jq -nr --arg v "$active" '$v | if test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$") then . else "unknown" end')
+  active=$(/usr/bin/jq -nr --arg v "$active" '$v | if test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$") then . else "unknown" end')
   if [[ -e $stamp || -L $stamp ]]; then
     stamp_state=error
-    if ag_diag_size "$stamp" 2097152 && /usr/bin/jq -e --arg current "$engine/current" --arg bin "$engine/bin" '
+    if ag_diag_size "$stamp" 2097152 && ag_diag_single "$stamp" && /usr/bin/jq -e --arg current "$engine/current" --arg bin "$engine/bin" '
         type == "object" and (.files|type)=="object" and (.links|type)=="object"
         and (.files|length)<=10000 and (.links|length)<=1000
         and all(.files|to_entries[]; (.key|explode|all(.>=32 and .!=127)) and (.value|type)=="string" and (.value|test("^[a-f0-9]{64}$")))
         and all(.links|to_entries[]; (.key|explode|all(.>=32 and .!=127)) and (.value|type)=="string" and (.value|explode|all(.>=32 and .!=127)))
-        and (.release|type)=="string" and (.release|test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$"))
-        and (.version|type)=="string" and (.version|test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)$"))
+        and (.release|type)=="string" and (.release|test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$"))
+        and (.version|type)=="string" and (.version|test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)$"))
         and (.version as $v | .release|startswith($v+"-"))
         and (.links|has($current) and has($bin))
       ' "$stamp" >/dev/null 2>&1; then
       stamp_state=valid
       installed=$(/usr/bin/jq -r .release "$stamp") version=$(/usr/bin/jq -r .version "$stamp")
       out=$(/usr/bin/jq -r '.files|to_entries[]|.key,.value' "$stamp")
-      v=("${(@f)out}") files=("${(@)v}")
+      v=(); [[ -n $out ]] && v=("${(@f)out}")
+      files=("${(@)v}")
       for p want in "${(@)v}"; do
         ag_diag_class "$p"; klass=$REPLY
         (( totals[$klass]++ ))
@@ -112,7 +118,7 @@ ag_diagnose() {
         if [[ $klass == unknown || $p != ${p:a} ]]; then (( excluded++ )); continue; fi
         if [[ ! -f $p ]]; then (( missing[$klass]++ )); continue; fi
         got=$(/usr/bin/shasum -a 256 -- "$p" 2>/dev/null)
-        [[ ${got[1,64]} == "$want" ]] || (( changed[$klass]++ ))
+        [[ ${${got#\\}[1,64]} == "$want" ]] || (( changed[$klass]++ ))
       done
       for p in "$engine/releases/$installed"/**/*(.DN); do
         (( ${+files[$p]} )) || (( extra[release]++ ))
@@ -132,7 +138,7 @@ ag_diagnose() {
   fi
   [[ $stamp_state == valid && $active == "$installed" && $rid == "$installed" ]] || bad=1
   rows=()
-  for klass in release engine rules opencode pi app unknown; do
+  for klass in release engine rules opencode pi grok app unknown; do
     (( missing[$klass] + changed[$klass] + extra[$klass] + link_missing[$klass] + link_changed[$klass] )) && bad=1
     rows+=("$klass:$totals[$klass]:$missing[$klass]:$changed[$klass]:$extra[$klass]:$link_missing[$klass]:$link_changed[$klass]")
   done
@@ -148,7 +154,7 @@ ag_diagnose() {
   done
   if [[ -e $record || -L $record ]]; then
     ownership_state=error
-    if ag_diag_size "$record" 1048576 && /usr/bin/jq -e 'type=="object"' "$record" >/dev/null 2>&1; then
+    if ag_diag_size "$record" 1048576 && ag_diag_single "$record" && /usr/bin/jq -e 'type=="object"' "$record" >/dev/null 2>&1; then
       ownership_state=valid
       # Recognize only managed files/keys. No patterns or original values leave
       # the collector, including operator-supplied identifiers and agent names.
@@ -172,7 +178,7 @@ ag_diagnose() {
   # The launcher publishes a last-launch snapshot, not live process health.
   if [[ -e $engine/state/rules.json || -L $engine/state/rules.json ]]; then
     snapshot='{"state":"error","observation":"cached"}'
-    if ag_diag_size "$engine/state/rules.json" 1048576 && /usr/bin/jq -e 'type=="object" and (.allow|type)=="array" and (.readonly|type)=="array" and (.deny|type)=="array"' "$engine/state/rules.json" >/dev/null 2>&1; then
+    if ag_diag_size "$engine/state/rules.json" 1048576 && ag_diag_single "$engine/state/rules.json" && /usr/bin/jq -e 'type=="object" and (.allow|type)=="array" and (.readonly|type)=="array" and (.deny|type)=="array"' "$engine/state/rules.json" >/dev/null 2>&1; then
       snapshot_at=$(/usr/bin/stat -f %m -- "$engine/state/rules.json" 2>/dev/null)
       [[ $snapshot_at == <-> ]] || snapshot_at=0
       snapshot=$(/usr/bin/jq -c --argjson at "$snapshot_at" --argjson now "$now" '{state:"available", observation:"cached", preparationStatus:(.preparationStatus|if .=="ready" or .=="warning" then . else "unknown" end), timestamp:($at*1000), ageSeconds:([$now-$at,0]|max), readiness:"not_probed"}' "$engine/state/rules.json")
@@ -181,11 +187,12 @@ ag_diagnose() {
   if [[ -e $home/.cc-safety-net/rules/agent-guard/rulebook.json ]]; then
     rulebook=error
     ag_diag_size "$home/.cc-safety-net/rules/agent-guard/rulebook.json" 1048576 &&
+      ag_diag_single "$home/.cc-safety-net/rules/agent-guard/rulebook.json" &&
       /usr/bin/jq -e 'type=="object"' "$home/.cc-safety-net/rules/agent-guard/rulebook.json" >/dev/null 2>&1 && rulebook=json
   fi
   if [[ -e $events_file || -L $events_file ]]; then
     event_state=error
-    if ag_diag_size "$events_file" 65536 && /usr/bin/jq -e 'type=="object" and .schemaVersion==1 and .advisory==true and (.events|type)=="array" and (.events|length)<=64' "$events_file" >/dev/null 2>&1; then
+    if ag_diag_size "$events_file" 65536 && ag_diag_single "$events_file" && /usr/bin/jq -e 'type=="object" and .schemaVersion==1 and .advisory==true and (.events|type)=="array" and (.events|length)<=64' "$events_file" >/dev/null 2>&1; then
       event_state=cached
       events=$(/usr/bin/jq -c --argjson now "$now" '
         def enum($xs): . as $v | if ($xs|index($v))!=null then $v else "unknown" end;
@@ -198,7 +205,7 @@ ag_diagnose() {
           ruleId:(.ruleId|enum(["guard.path.deny","guard.path.protected","guard.path.readonly","guard.path.unlisted","guard.path.invalid","unattributed","custom","secret.basename.env","git.reset-hard","rm.recursive-force-root-or-home","rm.recursive-force-outside-cwd"])),
           errno:(.errno|enum(["EPERM","EACCES","ENOENT","ENOTDIR","ELOOP"])),
           remediation:(.remediation|enum(["relaunch","reinstall","review-guard-list","review-policy","review-path","launch-guarded","none"])),
-          release:(.release|if type=="string" and test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$") then . else "unknown" end)
+          release:(.release|if type=="string" and test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$") then . else "unknown" end)
         } | . + {ageSeconds:(if .timestamp==null then null else (($now-.timestamp/1000)|floor|if .<0 then 0 else . end) end)}]
       ' "$events_file" 2>/dev/null) || { events='[]'; event_state=error; }
       latest=$(/usr/bin/jq -cn --argjson e "$events" '[$e[].timestamp|select(.!=null)]|if length==0 then null else max end')
@@ -231,7 +238,8 @@ ag_diagnose() {
       "Global configurations:", (.permissions.globalConfigs[]|"  \(.source): \(.classification)"),
       "Permission ownership: \(.permissions.ownershipState)", (.permissions.ownership[]|"  \(.source) \(.key): \(.action)"),
       "Approval preference: \(.permissions.approvalPreference.value) (configured intent)",
-      "Rules snapshot: \(.components.rulebook.classification) (static; readiness not probed)",
+      "Rulebook file: \(.components.rulebook.classification) (static; readiness not probed)",
+      "For a live check, run: agent-guard doctor",
       "Runtime health, effective permissions, desktop auto mode: not observable",
       "Recent failures: \(.recentFailures.state); advisory cached observations", (.recentFailures.events[]|"  \(.layer)/\(.stage): \(.code); rule \(.ruleId); errno \(.errno); remediation \(.remediation)")'
   fi

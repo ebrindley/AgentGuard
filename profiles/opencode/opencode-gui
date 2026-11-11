@@ -1,2 +1,2 @@
-#!/bin/zsh
+#!/bin/zsh -f
 exec "${0:A:h:h}/launch" gui "$@"

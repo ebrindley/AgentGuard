@@ -65,6 +65,16 @@ for (const severity of ["FAIL", "warn"]) {
   assert.doesNotMatch(result.stdout + result.stderr, /PRIVATE|sk-private|https:|user:/)
 }
 assert.equal(pluginReport({ data: Array.from({ length: 12 }, () => ({ state: { status: "failed" } })) }).stdout.trim().split("\n").length, 8)
+// A plugin the user disabled is not a failure, but Agent Guard's own must be active.
+assert.equal(pluginReport({ data: [{ id: "healthy", state: { status: "active" } }, { id: "other", state: { status: "disabled" } }] }).status, 0)
+{
+  const own = pluginReport({ data: [{ id: "agent-guard", state: { status: "disabled" } }] })
+  assert.equal(own.status, 1)
+  assert.match(own.stdout, /#1 agent-guard: disabled/)
+  const mixed = pluginReport({ data: [{ id: "other", state: { status: "disabled" } }, { id: "broken", state: { status: "failed" } }] })
+  assert.equal(mixed.status, 1)
+  assert.deepEqual(mixed.stdout.trim().split("\n").map(line => line.replace(/^.*V2 \(fixture\): /, "")), ["#2 broken: failed"])
+}
 console.log("ok OpenCode V2 plugin diagnostics: healthy, unavailable, failed and sanitized status")
 
 function prepare(args) {
@@ -109,14 +119,33 @@ assert.deepEqual(prepare(["run", "--", "--standalone"]).args, ["run", "--standal
 assert.deepEqual(prepare(["--print-logs", "run", "hello"]).args, ["--print-logs", "run", "--standalone", "hello"])
 assert.equal(prepare(["--print-logs", "mcp", "list"]).managed, true)
 for (const args of [["auth"], ["session"], ["--print-logs", "auth"]]) assert.deepEqual(prepare(args).args, args)
+for (const args of [["--log-level", "DEBUG", "service", "start"], ["--log-level=debug", "service", "restart"], ["--pure", "--print-logs", "service", "start"],
+  ["service", "--print-logs", "start"], ["--log-level", "info", "acp", "--log-level", "info", "--login"]]) assert.equal(prepare(args).status, 2, args.join(" "))
+for (const args of [["--log-level", "error", "serve"], ["--log-level=error", "mcp", "add", "fixture"], ["--log-level", "error", "debug", "paths"],
+  ["--log-level", "error", "acp"], ["--completions", "zsh", "--version"]]) {
+  const result = prepare(args)
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(result.managed, false)
+  assert.deepEqual(result.args, args)
+}
+assert.deepEqual(prepare(["--log-level", "error", "run", "hello"]).args, ["--log-level", "error", "run", "--standalone", "hello"])
+assert.deepEqual(prepare(["--log-level", "error", "--model", "fixture/test"]).args, ["--log-level", "error", "--standalone", "--model", "fixture/test"])
+assert.deepEqual(prepare(["auth", "--log-level", "error", "login"]).args, ["auth", "--log-level", "error", "login", "--standalone"])
+assert.equal(prepare(["--log-level", "error", "mcp", "list"]).managed, true)
+for (const args of [["mcp"], ["mcp", "--help"], ["plugin", "-h"], ["debug"], ["pair", "--help"]]) {
+  const result = prepare(args)
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(result.managed, false, args.join(" "))
+  assert.deepEqual(result.args, args)
+}
 console.log("ok OpenCode V2 command routing: private servers, managed clients, explicit attachments and maintenance")
 
 // Each `service status` probe consumes the next response, "<exit status>:<output>";
 // the last one repeats. The server is a sleeping process and the client exits at once.
-function managed(responses, script) {
+function managed(responses, script, tty = "") {
   const dir = mkdtempSync(join(tmpdir(), "agentguard-runtime-"))
   try {
-    const result = spawnSync("/bin/zsh", ["-fc", `
+    const body = `
       setopt err_exit no_unset pipe_fail extended_glob
       source "$1"
       source "\${1:h}/browser.zsh"
@@ -138,12 +167,19 @@ function managed(responses, script) {
           return \${response%%:*}
         fi
         [[ \${2:-} == serve ]] && exec /bin/sleep 30
+        [[ \${1:-} == read ]] && exec /usr/bin/head -n 1
         print -r -- client "$@"
       }
       sandbox=(fake)
       print 0 > $session/probes
       ${script}
-    `, "runtime", join(root, "profiles/opencode/runtime.zsh"), dir, ...responses], { encoding: "utf8", timeout: 20000 })
+    `
+    const args = ["runtime", join(root, "profiles/opencode/runtime.zsh"), dir, ...responses]
+    // With tty, a typed line waits in a terminal, as when launched from Terminal.
+    const result = tty
+      ? (spawnSync("/usr/bin/expect", ["-f", join(root, "test/tty.exp"), join(dir, "out"), tty, "/bin/zsh", "-fc", body, ...args], { encoding: "utf8", timeout: 20000 }),
+         { status: 0, stderr: "", stdout: readFileSync(join(dir, "out"), "utf8") })
+      : spawnSync("/bin/zsh", ["-fc", body, ...args], { encoding: "utf8", timeout: 20000 })
     return { ...result, probes: Number(readFileSync(join(dir, "probes"), "utf8")) }
   } finally { rmSync(dir, { recursive: true, force: true }) }
 }
@@ -158,13 +194,17 @@ for (const [response, state] of [
 ]) assert.equal(classify(response), state, JSON.stringify(response))
 
 const launch = 'opencode_managed cli app'
+let result
 for (const response of ["0:stopped", "0:disabled\n"]) {
   const result = managed([response, "0:http://127.0.0.1:4096"], launch)
   assert.equal(result.status, 0, result.stderr)
   assert.equal(result.stdout.trim(), "client app")
   assert.equal(result.probes, 2)
 }
-let result = managed(["0:http://127.0.0.1:4096"], launch)
+result = managed(["0:stopped", "0:http://127.0.0.1:4096"], "opencode_managed cli read", "typed input")
+assert.equal(result.status, 0, result.stderr)
+assert.equal(result.stdout.trim(), "typed input")
+result = managed(["0:http://127.0.0.1:4096"], launch)
 assert.equal(result.status, 2)
 assert.match(result.stderr, /has a background service/)
 assert.equal(result.probes, 1)

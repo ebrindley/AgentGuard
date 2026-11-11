@@ -719,7 +719,7 @@ out=$(<"$home/gate.log")
   pass "an update with broken plugins configured passes the installer's checks with warnings" ||
   { fail "an update with broken plugins configured passes the installer's checks with warnings (rc $rc)"; print -r -- "$out" }
 out=$("$engine/bin/agent-guard" doctor 2>&1) && rc=0 || rc=$?
-(( rc )) && [[ $out == *"FAIL plugin not loaded in OpenCode: Failed to install plugin guard-probe-plugin@latest: "*"check the package source and the cache's Guard List permissions"* ]] &&
+(( rc )) && [[ $out == *"FAIL plugin not loaded in OpenCode: Failed to install plugin guard-probe-plugin@latest: "*"check the package source"* ]] &&
   pass "doctor fails and names a plugin missing from the store" || { fail "doctor fails and names a plugin missing from the store"; print -r -- "$out" }
 [[ $out == *"FAIL plugin not loaded in OpenCode: path=file://$home/Projects/throws-plugin.js"*"probe init failure"* ]] &&
   pass "doctor names a plugin whose init fails" || { fail "doctor names a plugin whose init fails"; print -r -- "$out" }

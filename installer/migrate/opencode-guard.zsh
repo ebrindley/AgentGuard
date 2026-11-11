@@ -148,11 +148,11 @@ ag_m_opencode_guard_list_import() {
           for (i = 1; i <= n; i++) printf "  %s\n%s", k[i], (k[i] in e ? e[k[i]] : "    (none)\n") }' "$old_list" || return 1
   ag_say "After the switch the old list is no longer read; Agent Guard reads only $list."
   if [[ -t 0 ]]; then
-    print -n 'Import this list? [y/N] '
+    print -n 'Import this list? Answering n stops the install and changes nothing. [y/N] '
     read -r answer
   fi
   if [[ $answer != [yY]([eE][sS]|) ]]; then
-    ag_err 'the list was not imported. Nothing changed.'
+    ag_err "the list was not imported, so the install stopped. Nothing changed. Run the installer again from a terminal and answer y, or copy $old_list to $list first and the install keeps that list."
     return 1
   fi
   /bin/mkdir -p -- "$list_dir" && /bin/rm -f -- "$partial" && /bin/cp -p -- "$old_list" "$partial" &&
@@ -290,10 +290,14 @@ do_ocg_plugin_name() {
 }
 
 do_plugin_take() {
-  local tmp="$plugins/.agent-guard.js.partial"
+  local tmp="$plugins/.agent-guard.js.partial" b="$txn_dir/backup/plugin-take"
   ag_jlast plugin-take
   [[ $REPLY == done ]] && return 0
-  if [[ -z $REPLY ]]; then ag_backup plugin-take "$old_plugin" && ag_jnl plugin-take begun || return 1; fi
+  if [[ -z $REPLY ]]; then
+    ag_backup plugin-take "$old_plugin" || return 1
+    if [[ -L $old_plugin ]]; then /usr/bin/readlink -- "$old_plugin" > "$b/link" || return 1; fi
+    ag_jnl plugin-take begun || return 1
+  fi
   if ! ag_ours "$old_plugin" && ! { [[ ! -e $old_plugin && ! -L $old_plugin ]] && ag_ours "$plugin" }; then
     /bin/rm -f -- "$tmp" && /bin/ln -s "$plugin_target" "$tmp" || return 1
     test_point plugin-take || return 1
@@ -303,11 +307,13 @@ do_plugin_take() {
 }
 
 undo_plugin_take() {
-  local b="$txn_dir/backup/plugin-take/file"
+  local d="$txn_dir/backup/plugin-take" b="$txn_dir/backup/plugin-take/file"
   ag_jlast plugin-take
   [[ $REPLY == (begun|done) ]] || return 0
   /bin/rm -f -- "$plugins/.agent-guard.js.partial"
-  if [[ -f $b ]] && ! { [[ -f $old_plugin && ! -L $old_plugin ]] && /usr/bin/cmp -s -- "$old_plugin" "$b" }; then
+  if [[ -f $d/link ]]; then
+    [[ -L $old_plugin && $(/usr/bin/readlink -- "$old_plugin") == "$(<"$d/link")" ]] || replace_link "$old_plugin" "$(<"$d/link")" || return 1
+  elif [[ -f $b ]] && ! { [[ -f $old_plugin && ! -L $old_plugin ]] && /usr/bin/cmp -s -- "$old_plugin" "$b" }; then
     restore_over_link "$old_plugin" "$b" || return 1
   fi
   ag_jnl plugin-take undone

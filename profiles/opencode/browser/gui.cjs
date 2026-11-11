@@ -89,10 +89,15 @@ module.exports.default = Plugin.define({
   main(ctx) {
     const net = require('node:net')
     const { spawn } = require('node:child_process')
-    let claude
-    const cancelClaude = () => {
-      if (claude?.pid) { try { process.kill(-claude.pid, 'SIGTERM') } catch {} }
+    const fs = require('node:fs')
+    const path = require('node:path')
+    let claude, stopReason
+    const cancelClaude = (reason = 'cancelled') => {
+      if (claude?.pid) { stopReason = reason; try { process.kill(-claude.pid, 'SIGTERM') } catch {} }
     }
+    const claudeInstalled = () => (process.env.PATH || '').split(':').some(dir => {
+      try { fs.accessSync(path.join(dir || '.', 'claude'), fs.constants.X_OK); return fs.statSync(path.join(dir || '.', 'claude')).isFile() } catch { return false }
+    })
     ctx.provide(browser, {
       open(url) {
         return new Promise((resolve, reject) => {
@@ -109,7 +114,9 @@ module.exports.default = Plugin.define({
             reply += chunk.toString()
             if (reply.includes('\n')) {
               socket.destroy()
-              reply.trim() === 'ok' ? resolve() : reject(new Error('This authentication URL could not be opened'))
+              // The helper's refusals are fixed one-line texts, safe to show.
+              const refusal = /^error: ([ -~]{1,120})$/.exec(reply.trim())
+              reply.trim() === 'ok' ? resolve() : reject(new Error(refusal ? `Could not open the sign-in page: ${refusal[1]}` : 'This authentication URL could not be opened'))
             }
           })
           socket.once('end', () => { if (!reply.includes('\n')) fail() })
@@ -119,19 +126,24 @@ module.exports.default = Plugin.define({
         if (claude) return Promise.reject(new Error('Claude Code sign-in is already running'))
         // This child stays in the Desktop sandbox. A PTY lets the native CLI
         // invoke its browser opener; the protected PATH shim forwards the URL.
+        if (!claudeInstalled()) return Promise.reject(new Error('The claude command was not found. Install Claude Code, then try again.'))
         return new Promise((resolve, reject) => {
+          stopReason = undefined
           claude = spawn('/usr/bin/script', ['-q', '/dev/null', 'claude', 'auth', 'login', '--claudeai'], { detached: true, stdio: 'ignore' })
           const child = claude
-          const timeout = setTimeout(cancelClaude, 10 * 60 * 1000)
+          const timeout = setTimeout(() => cancelClaude('timeout'), 10 * 60 * 1000)
           child.once('error', () => { clearTimeout(timeout); claude = undefined; reject(new Error('Could not start Claude Code')) })
           child.once('close', code => {
             clearTimeout(timeout); claude = undefined
-            code === 0 ? resolve() : reject(new Error('Claude Code exited before completing sign-in; its credential permissions may require sign-in outside Agent Guard'))
+            if (code === 0) return resolve()
+            if (stopReason === 'timeout') return reject(new Error('Claude Code sign-in timed out after 10 minutes. Start it again.'))
+            if (stopReason) return reject(new Error('Claude Code sign-in was cancelled.'))
+            reject(new Error('Claude Code exited before completing sign-in; its credential permissions may require sign-in outside Agent Guard'))
           })
         })
       },
-      cancelClaude,
+      cancelClaude: () => cancelClaude(),
     })
-    ctx.onCleanup(cancelClaude)
+    ctx.onCleanup(() => cancelClaude())
   },
 })
