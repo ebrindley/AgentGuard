@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
 import { createConnection } from 'node:net'
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
@@ -49,8 +49,18 @@ async function request(url) {
   })
 }
 try {
-  for (let i = 0; i < 60 && !existsSync(socket) && child.exitCode === null; i++) await new Promise(resolve => setTimeout(resolve, 25))
-  assert.ok(existsSync(socket), errors || 'helper did not start')
+  // The socket file exists from bind(), before listen(); only a connection shows readiness.
+  const listening = () => new Promise(resolve => {
+    const probe = createConnection(socket)
+    probe.once('connect', () => { probe.destroy(); resolve(true) })
+    probe.once('error', () => resolve(false))
+  })
+  let ready = false
+  for (let i = 0; i < 80 && !ready && child.exitCode === null; i++) {
+    ready = await listening()
+    if (!ready) await new Promise(resolve => setTimeout(resolve, 25))
+  }
+  assert.ok(ready, errors || 'helper did not start')
   const allowed = [
     'https://auth.openai.com/api/accounts/authorize?client_id=dynamic_agent_client&redirect_uri=http%3A%2F%2F127.0.0.1%3A45678%2Fauth%2Fcallback',
     'https://opencode.ai/console/device?user_code=dummy',
@@ -71,6 +81,15 @@ try {
   assert.match(await request('x'.repeat(8193)).catch(error => `error: ${error.code}`), /^error:/)
   assert.equal(readFileSync(captured, 'utf8'), before)
   assert.equal(await request(allowed[0]), 'ok', 'listener survives invalid requests')
+  // A client that leaves before the reply is written must not end the helper.
+  for (let i = 0; i < 5; i++) {
+    const gone = createConnection(socket)
+    await new Promise(resolve => { gone.once('connect', resolve); gone.once('error', resolve) })
+    gone.destroy()
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
+  assert.equal(child.exitCode, null, 'helper exited after clients disconnected early')
+  assert.equal(await request(allowed[0]), 'ok', 'listener survives early disconnects')
   for (const partial of ['0', '00100h']) {
     const stalled = createConnection(socket)
     stalled.on('error', () => {})
@@ -109,6 +128,17 @@ try {
     await ipc.open(allowed[1])
     await ipc.claude()
     assert.ok(readFileSync(captured, 'utf8').includes('code_challenge=fixture'))
+    await assert.rejects(ipc.open('https://example.com/'), /Could not open the sign-in page: unsupported authentication URL/)
+    const slowbin = join(run, 'slow')
+    mkdirSync(slowbin)
+    writeFileSync(join(slowbin, 'claude'), '#!/bin/zsh -f\nexec /bin/sleep 30\n', { mode: 0o755 })
+    process.env.PATH = `${slowbin}:/usr/bin:/bin`
+    const waiting = ipc.claude()
+    await new Promise(resolve => setTimeout(resolve, 500))
+    await ipc.cancelClaude()
+    await assert.rejects(waiting, /was cancelled/)
+    process.env.PATH = '/usr/bin:/bin'
+    await assert.rejects(ipc.claude(), /claude command was not found/)
   } finally {
     dispose?.()
     process.env.PATH = priorPath
