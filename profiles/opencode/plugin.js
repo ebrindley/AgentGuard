@@ -12,13 +12,10 @@ const LIST = "~/Agent Guard/Guard List.txt"
 const SAFE_UNGUARDED = new Set(["invalid", "question", "todowrite", "webfetch", "websearch", "plan_exit", "agent_guard_status"])
 const READS = new Set(["read", "glob", "grep", "list", "lsp"])
 const CONFIG = /\/\.cc-safety-net(\/|$)/
-// Fixed Seatbelt rules, mirrored from profiles/opencode/credentials.sb and the Git
-// hooks rule in engine/launch. They only explain a denial the sandbox makes.
-const ENV_FILE = /\/\.env($|\.)/
-const ENV_TEMPLATE = /\/\.env\.(example|sample|template)$/
-const GIT_HOOKS = /\.git\/(hooks|modules\/.+\/hooks)\//
-const GIT_HOOKS_FOLDER = /\.git\/(hooks|modules\/.+\/hooks)$/
-const GIT_HOOK_SAMPLE = /\/hooks\/[^/]*\.sample$/
+// The fixed .env rule, mirrored from profiles/opencode/credentials.sb. Seatbelt
+// matches it without regard to case on a case-insensitive volume.
+const ENV_FILE = /\/\.env($|\.)/i
+const ENV_TEMPLATE = /\/\.env\.(example|sample|template)$/i
 const tilde = p => p === HOME || p.startsWith(HOME + "/") ? "~" + p.slice(HOME.length) : p
 const UNSAFE_NET_ENV = ["CC_SAFETY_NET_HOME", "CC_SAFETY_NET_WORKTREE", "SAFETY_NET_WORKTREE", "CC_SAFETY_NET_AUDIT_HOME"]
 const releaseID = value => typeof value === "string" && value.length <= 100 && /^[0-9A-Za-z.+-]+$/.test(value) && value !== "." && value !== ".." ? value : null
@@ -151,7 +148,7 @@ function loadRules(onError) {
     const rules = JSON.parse(readFileSync(file, "utf8"))
     for (const key of ["allow", "readonly", "deny", "skills", "configs", "protected"])
       if (!Array.isArray(rules[key]) || rules[key].some(p => typeof p !== "string" || !p.startsWith("/"))) return null
-    for (const key of ["writable", "pins", "credentials", "hooks"])
+    for (const key of ["writable", "pins", "credentials"])
       if (rules[key] !== undefined && (!Array.isArray(rules[key]) || rules[key].some(p => typeof p !== "string" || !p.startsWith("/")))) return null
     if (!rules.checker?.startsWith(join(STATE, "opencode") + "/") || !existsSync(join(rules.checker, "rules/rule.json"))) return null
     return rules
@@ -274,17 +271,13 @@ async function guard(input) {
     (CONFIG.test(p) && !skillContent(p) ? configRoot(p) : null) ?? (rules?.pins ?? rules?.skills ?? []).find(r => r === p) ?? null
   const protectedMessage = (shown, root) =>
     `Agent Guard: ${shown} is protected (${tilde(root)}). That is a fixed Agent Guard root and cannot be unlocked from the Guard List (${LIST}).`
-  // A denial Seatbelt makes under the fixed credential, .env and Git hooks rules.
-  // Only a launch that wrote these into the rules file can attribute them.
-  const fixedProtection = (p, writing) => {
+  // A denial Seatbelt makes under the fixed credential and .env rules. Only a
+  // launch that wrote the credential paths into the rules file can attribute them.
+  const fixedProtection = p => {
     if (!Array.isArray(rules?.credentials)) return null
     const root = rules.credentials.find(r => under(p, r))
     if (root) return `${tilde(root)} is a credential path`
     if (ENV_FILE.test(p) && !ENV_TEMPLATE.test(p)) return ".env files are blocked, except .env.example, .env.sample and .env.template"
-    if (!writing) return null
-    const folder = (rules.hooks ?? []).find(r => !GIT_HOOKS_FOLDER.test(r) && under(p, r))
-    if (folder) return `${tilde(folder)} is the active Git hooks folder`
-    if (GIT_HOOKS.test(p) && !GIT_HOOK_SAMPLE.test(p)) return "Git hooks cannot be written, except *.sample files"
     return null
   }
   const fixedMessage = (shown, reason) =>
@@ -308,7 +301,7 @@ async function guard(input) {
         const root = toolClass(tool) === "write" ? protectedRoot(lexical) : null
         if (root)
           refuse(tool, protectedMessage(raw, root), "path-resolve", "path-protected", "review-policy", "guard.path.protected", errno)
-        const fixed = fixedProtection(lexical, toolClass(tool) === "write")
+        const fixed = fixedProtection(lexical)
         if (fixed)
           refuse(tool, fixedMessage(raw, fixed), "path-resolve", "path-protected", "none", "guard.path.protected", errno)
       }
@@ -339,7 +332,7 @@ async function guard(input) {
     const root = protectedRoot(p) ?? (CONFIG.test(lexical) && !namedSkill(lexical) ? configRoot(lexical) : null)
     if (root)
       refuse(tool, protectedMessage(p, root), "path-write", "path-protected", "review-policy", "guard.path.protected")
-    const fixed = fixedProtection(p, true)
+    const fixed = fixedProtection(p)
     if (fixed)
       refuse(tool, fixedMessage(p, fixed), "path-write", "path-protected", "none", "guard.path.protected")
     if (!rules) refuse(tool, "Agent Guard: rules unavailable; relaunch OpenCode.", "tool-hook", "rules-unavailable", "relaunch")
