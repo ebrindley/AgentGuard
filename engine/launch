@@ -93,11 +93,12 @@ note() {
 # stay on the terminal through note; failures use fail.
 record() { print -r -- "$*" >> "$log" }
 # A message that cannot stop the launch: logged, and in gui mode shown as an
-# alert without waiting for it to be dismissed. Use fail when the launch must end.
+# alert without waiting for it to be dismissed or keeping the launcher's output
+# open. Use fail when the launch must end.
 alert() {
   note "$*"
   if [[ $mode == gui ]]; then
-    { show_alert "$*" &! } 2>/dev/null
+    { show_alert "$*" &! } >/dev/null 2>&1
   fi
   return 0
 }
