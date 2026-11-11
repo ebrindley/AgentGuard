@@ -140,7 +140,7 @@ if [ "$PI_SANDBOX_COMMAND_KIND" -eq 0 ]; then
 else
   if [ "$PI_SANDBOX_COMMAND_KIND" -eq 2 ]; then
     print -u2 -- "[pi-sandbox-guard] this OMP agent command does not accept the required guard extension; refusing protected launch."
-    print -u2 -- "[pi-sandbox-guard] call the real OMP binary directly only when you intentionally accept guard-only/unsandboxed operation."
+    print -u2 -- "[pi-sandbox-guard] $(direct_run_hint "$PI_EXECUTABLE")"
     exit 1
   fi
   unset PI_SANDBOX_COMMAND_KIND

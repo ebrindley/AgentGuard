@@ -103,9 +103,8 @@ function warnIfUnverifiedSandbox() {
     '[pi-sandbox-guard] FILTER-ONLY: could not verify launch through the protected ' +
       'Pi/OMP Seatbelt shim. The command checker is active; this guard is not applying an OS ' +
       'sandbox, so assume out-of-project writes are uncontained unless you know one ' +
-      'is in place by other means. For the full guard, install Agent Guard (`agent-guard update`, ' +
-      'or the one-line installer) and run `agent-guard bind`, then launch via the ' +
-      '`pi` or `omp` shim on PATH (startup prints "OS sandbox ON").',
+      'is in place by other means. For the full guard, launch via the `pi` or `omp` shim on PATH ' +
+      '(startup prints "OS sandbox ON"); `agent-guard bind` records which Pi or OMP the shim starts.',
   );
 }
 

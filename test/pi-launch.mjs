@@ -395,6 +395,10 @@ try {
         '.opencode/sub', '.cc-safety-net', '.cc-safety-net/logs'])
         refused(session(a, ['/bin/echo', 'started'], { env: { PI_PROJECT: join(a.home, p) } }), p, refusal);
     });
+    check('difference 2: a refusal that offers to run without the guard names the real executable and -ne', () => {
+      const r = session(a, ['/bin/echo', 'started'], { env: { PI_PROJECT: join(a.home, 'Agent Guard') } });
+      refused(r, 'Agent Guard folder', new RegExp(`start the real Pi executable \\(${standIn.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\) with -ne`));
+    });
     check('difference 2: a project that is or is inside the target of a linked Agent Guard folder is refused', () => {
       mkdirSync(join(dotfiles, 'opencode/sub'));
       for (const p of [join(dotfiles, 'opencode'), join(dotfiles, 'opencode/sub')])
@@ -553,13 +557,14 @@ try {
       refused(r, 'binding inside the project', /agent-guard bind --pi <abs-path> --node <abs-path>/);
       assert.doesNotMatch(r.stderr, /npm run/);
     });
-    check('difference 5: the extension\'s FILTER-ONLY warning names agent-guard update and agent-guard bind', () => {
+    check('difference 5: the extension\'s FILTER-ONLY warning names the shim and agent-guard bind', () => {
       const index = JSON.stringify(join(pi, 'src/index.mjs'));
       const r = spawnSync(process.execPath, ['--input-type=module', '-e', `(await import(${index})).default({ on() {} })`],
         { encoding: 'utf8', env: { PATH: '/usr/bin:/bin', HOME: a.home, TMPDIR: temp } });
       assert.equal(r.status, 0, r.stderr);
       const warning = r.stderr.split('\n').find((l) => l.includes('FILTER-ONLY')) ?? '';
-      assert.match(warning, /install Agent Guard \(`agent-guard update`, or the one-line installer\) and run `agent-guard bind`/);
+      assert.match(warning, /launch via the `pi` or `omp` shim on PATH.*`agent-guard bind`/);
+      assert.doesNotMatch(warning, /install Agent Guard|agent-guard update/);
       assert.doesNotMatch(warning, /npm run/);
     });
   }
