@@ -516,6 +516,12 @@ point= ag uninstall
 rc=$?
 (( rc == 0 )) && pass 'rerun exits 0' || { fail "rerun (exit $rc)"; show }
 same_snapshot 'final state equals one full run' "$run/uninstalled.snapshot"
+# X8: uninstall.sh takes no arguments, so --help does not uninstall.
+label=X8
+restore A
+run_timeout 60 /usr/bin/env -i HOME="$home" PATH="$tpath" /bin/zsh -f "$engine/current/uninstall.sh" --help < /dev/null > "$out" 2>&1
+rc=$?
+(( rc == 2 )) && [[ -d $engine && -L $plugin ]] && pass 'an argument is refused; nothing removed' || { fail "uninstall.sh --help (exit $rc)"; show }
 
 # --- X4: a kill at each uninstall point, then a rerun. Before the plugin goes every
 # entry point is guarded or refuses (design A2).

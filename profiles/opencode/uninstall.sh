@@ -13,6 +13,7 @@
 # its release folder is deleted.
 main() {
   emulate -L zsh
+  (( $# == 0 )) || { print -ru2 -- 'usage: uninstall.sh (takes no arguments; it removes Agent Guard)'; exit 2 }
   setopt no_unset pipe_fail extended_glob
   local here=${${(%):-%x}:A:h} rc f h m scratch removing backup partial
   local -a unfinished kept harnesses saved
