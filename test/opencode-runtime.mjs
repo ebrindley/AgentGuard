@@ -109,6 +109,25 @@ assert.deepEqual(prepare(["run", "--", "--standalone"]).args, ["run", "--standal
 assert.deepEqual(prepare(["--print-logs", "run", "hello"]).args, ["--print-logs", "run", "--standalone", "hello"])
 assert.equal(prepare(["--print-logs", "mcp", "list"]).managed, true)
 for (const args of [["auth"], ["session"], ["--print-logs", "auth"]]) assert.deepEqual(prepare(args).args, args)
+for (const args of [["--log-level", "DEBUG", "service", "start"], ["--log-level=debug", "service", "restart"], ["--pure", "--print-logs", "service", "start"],
+  ["service", "--print-logs", "start"], ["--log-level", "info", "acp", "--log-level", "info", "--login"]]) assert.equal(prepare(args).status, 2, args.join(" "))
+for (const args of [["--log-level", "error", "serve"], ["--log-level=error", "mcp", "add", "fixture"], ["--log-level", "error", "debug", "paths"],
+  ["--log-level", "error", "acp"], ["--completions", "zsh", "--version"]]) {
+  const result = prepare(args)
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(result.managed, false)
+  assert.deepEqual(result.args, args)
+}
+assert.deepEqual(prepare(["--log-level", "error", "run", "hello"]).args, ["--log-level", "error", "run", "--standalone", "hello"])
+assert.deepEqual(prepare(["--log-level", "error", "--model", "fixture/test"]).args, ["--log-level", "error", "--standalone", "--model", "fixture/test"])
+assert.deepEqual(prepare(["auth", "--log-level", "error", "login"]).args, ["auth", "--log-level", "error", "login", "--standalone"])
+assert.equal(prepare(["--log-level", "error", "mcp", "list"]).managed, true)
+for (const args of [["mcp"], ["mcp", "--help"], ["plugin", "-h"], ["debug"], ["pair", "--help"]]) {
+  const result = prepare(args)
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(result.managed, false, args.join(" "))
+  assert.deepEqual(result.args, args)
+}
 console.log("ok OpenCode V2 command routing: private servers, managed clients, explicit attachments and maintenance")
 
 // Each `service status` probe consumes the next response, "<exit status>:<output>";
