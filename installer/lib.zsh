@@ -1265,7 +1265,8 @@ ag_stamp_write() {
     --arg release "$ag_rid_new" --argjson at "$EPOCHSECONDS" --arg app_inputs "$ag_app_inputs" --argjson links "$links" \
     --argjson harnesses "$harnesses" \
     '{version: $version, tag: $tag, commit: $commit, release: $release, installed_at: $at, app_inputs: $app_inputs,
-      harnesses: $harnesses, files: ([inputs | select(length > 66) | {key: .[66:], value: .[0:64]}] | from_entries), links: $links}' > "$out" || return 1
+      harnesses: $harnesses, files: ([inputs | select(length > 66) | (startswith("\\")) as $e | (if $e then .[1:] else . end) as $l
+        | {key: ($l[66:] | if $e then gsub("\\\\(?<c>[\\\\n])"; if .c == "n" then "\n" else "\\" end) else . end), value: $l[0:64]}] | from_entries), links: $links}' > "$out" || return 1
   replace_file "$stamp" "$out" || return 1
   /bin/sync
 }

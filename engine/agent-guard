@@ -89,7 +89,8 @@ version() {
   if (( $#present )); then
     out=$(/usr/bin/shasum -a 256 -- $present) || die 'cannot hash the installed files'
     for p in "${(@f)out}"; do
-      got=${p[1,64]} p=${p[67,-1]}
+      # shasum starts a line with a backslash and doubles each backslash in a name that has one.
+      if [[ $p == \\* ]]; then p=${p[2,-1]}; got=${p[1,64]} p=${p[67,-1]//\\\\/\\}; else got=${p[1,64]} p=${p[67,-1]}; fi
       [[ ${files[$p]:-} == "$got" ]] || { print -r -- "changed: $p"; drift=1 }
     done
   fi
