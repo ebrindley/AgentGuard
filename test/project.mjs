@@ -177,7 +177,20 @@ exit 0
   profile([], { text: ALLOW('@project', '@project') });
   assert.deepEqual(rules().allow, [app]);
   assert.match(logText(), /skipped, @project is already listed/);
-  console.log('ok   @project outside ALLOW, a second @project and a missing folder are skipped and logged');
+  // Lines before the first heading are skipped with a count, and the rest still applies.
+  profile([], { text: `${P('Projects/other')}\n# comment\n\nstray\n${ALLOW(P('Projects/sibling'))}` });
+  assert.deepEqual(rules().allow, [realpathSync(P('Projects/sibling'))]);
+  assert.match(logText(), /skipped 2 Guard List line\(s\) before the first ALLOW, READ ONLY or DENY heading/);
+  console.log('ok   @project outside ALLOW, a second @project and a missing folder are skipped and logged; lines before a heading are counted');
+
+  // A writable path that is a file refuses the launch with its name, not a bare mkdir error.
+  rmSync(P('.npm'), { recursive: true, force: true });
+  writeFileSync(P('.npm'), 'in the way');
+  const blocked = launch('profile', [], { text: ALLOW(P('Projects/sibling')) });
+  rmSync(P('.npm'));
+  assert.notEqual(blocked.status, 0);
+  assert.match(blocked.stderr, /agent-guard: cannot create the folder .*\/\.npm; remove or rename whatever is at that path/);
+  console.log('ok   a writable path that is a file refuses the launch and names the path');
 
   const refuse = (name, args, pattern, options = {}) => {
     const out = launch('profile', args, { ...options, text: ALLOW('@project', P('Projects/sibling')) });
@@ -335,9 +348,9 @@ exit 0
     assert.equal(spawnSync('/usr/bin/pgrep', ['-x', 'AgFakeApp']).status, 0, 'no running AgFakeApp to stand for OpenCode');
     assert.equal(query(ALLOW('@project')), 'go\n');
     // A drop on a running app neither prompts nor records; the log keeps its content and gains the refusal as its own entry.
-    refused('incumbent', ['--project', other], /OpenCode is already open/);
-    assert.match(readFileSync(log, 'utf8'), /^previous launch\nAgent Guard gui \S+ \S+ \S+ refused before launch\nfailed: OpenCode is already open\. [^\n]*\nagent-guard-stage:host-launch\n$/);
-    refused('incumbent, plain', [], /OpenCode is already open/);
+    refused('incumbent', ['--project', other], /OpenCode is already open, so no dropped folder was added\. Quit OpenCode, open Agent Guard, then drop the folder again/);
+    assert.match(readFileSync(log, 'utf8'), /^previous launch\nAgent Guard gui \S+ \S+ \S+ refused before launch\nfailed: OpenCode is already open, so no dropped folder was added\. [^\n]*\nagent-guard-stage:host-launch\n$/);
+    assert.doesNotMatch(refused('incumbent, plain', [], /OpenCode is already open/), /dropped folder/);
   } finally { incumbent.kill(); }
   console.log('ok   --project-query answers ask only for an empty store with @project on, and writes nothing; an open app is refused first');
 
