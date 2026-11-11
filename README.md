@@ -17,7 +17,7 @@ API and server lifecycle; see [OpenCode versions](docs/USAGE.md#opencode-version
 
 | Agent | Write access | Read restrictions | Guard List |
 |---|---|---|---|
-| OpenCode | ALLOW folders, ordinary global configuration and skills, and runtime/cache/temp locations | Explicit DENY entries | Applies |
+| OpenCode | ALLOW folders, ordinary global configuration and skills, and runtime/cache/temp locations | Fixed credential-path and `.env` denies, plus DENY entries | Applies |
 | Pi / OMP | Launched project and permitted runtime/cache/temp locations | Fixed credential-path and `.env` denies | Does not apply |
 | Grok | ALLOW folders, `~/.grok` apart from its settings, hooks and executables, and cache/temp locations | Fixed credential-path and `.env` denies | Applies |
 

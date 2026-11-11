@@ -139,6 +139,10 @@ their existing backend authentication APIs. The command shows completion or an
 error and offers cancellation while waiting. OpenCode Go's API-key methods need
 no browser handoff.
 
+If these commands are missing, the launch continued without the handoff.
+`~/Agent Guard/last-launch-opencode.log` then has a line starting
+`browser handoff unavailable:` that gives the reason.
+
 Claude's command starts `claude auth login --claudeai` in a terminal supplied by
 the plugin, inside the existing desktop sandbox. It uses the shared Claude Code
 account, not an Anthropic API key. The helper forwards its browser request;
@@ -526,7 +530,9 @@ such as husky, lefthook and pre-commit cannot install hooks inside them; run the
 install commands outside the guard. A `core.hooksPath` that is home, a system
 folder or contains the launch folder refuses the launch.
 
-Run these outside the guard, with Grok's own executable (`~/.grok/bin/grok`);
+Run these outside the guard, with Grok's own executable (`~/.grok/bin/grok`, or
+the path the installer and the refusal message name when Grok was a regular file
+at `~/.local/bin/grok`);
 `grok` refuses them in a guarded session and says so: `grok login`, `grok logout`,
 `grok update` and `grok workspace start|restart|resume`. Grok's updater is off in a
 guarded session. The launcher also refuses an explicit `--sandbox` profile other
