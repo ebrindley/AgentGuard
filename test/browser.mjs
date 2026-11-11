@@ -128,6 +128,17 @@ try {
     await ipc.open(allowed[1])
     await ipc.claude()
     assert.ok(readFileSync(captured, 'utf8').includes('code_challenge=fixture'))
+    await assert.rejects(ipc.open('https://example.com/'), /Could not open the sign-in page: unsupported authentication URL/)
+    const slowbin = join(run, 'slow')
+    mkdirSync(slowbin)
+    writeFileSync(join(slowbin, 'claude'), '#!/bin/zsh -f\nexec /bin/sleep 30\n', { mode: 0o755 })
+    process.env.PATH = `${slowbin}:/usr/bin:/bin`
+    const waiting = ipc.claude()
+    await new Promise(resolve => setTimeout(resolve, 500))
+    await ipc.cancelClaude()
+    await assert.rejects(waiting, /was cancelled/)
+    process.env.PATH = '/usr/bin:/bin'
+    await assert.rejects(ipc.claude(), /claude command was not found/)
   } finally {
     dispose?.()
     process.env.PATH = priorPath
