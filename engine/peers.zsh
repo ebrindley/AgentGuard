@@ -50,6 +50,8 @@ agent_guard_peer() {
         previous=sandbox; continue ;;
       codex:--sandbox=*|cursor-agent:--sandbox=*|grok:--sandbox=*)
         value=${arg#*=} ;;
+      codex:-s?*) value=${arg#-s} ;;
+      codex:--full-auto) value=workspace-write ;;
       codex:--config|codex:-c) previous=config; continue ;;
       codex:--no-daemon) daemon=1; continue ;;
       codex:--config=*|codex:-c?*)
@@ -72,6 +74,10 @@ agent_guard_peer() {
     fi
     [[ $arg != *sandbox_mode* ]] && sandbox=1
   done
+  if [[ $previous == sandbox ]]; then
+    print -ru2 -- "agent-guard: $name --sandbox requires a value"
+    return 2
+  fi
   # OpenCode's global options, such as --print-logs and --pure, may precede its
   # subcommand; options that take a separate value (the list in
   # profiles/opencode/runtime.zsh) are skipped with it.

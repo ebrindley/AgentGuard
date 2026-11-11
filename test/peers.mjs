@@ -55,6 +55,7 @@ for (const parent of ['opencode', 'pi', 'omp']) {
     console.log(`ok ${parent} -> ${name}: discovery, argv and approvals`);
   }
   for (const command of ['codex exec --sandbox read-only', 'codex exec -s workspace-write',
+                         'codex exec -sworkspace-write', 'codex exec --full-auto',
                          'codex exec -c sandbox_mode=read-only', 'codex exec --config=sandbox_mode=read-only',
                          'codex exec -csandbox_mode=read-only', 'codex exec -c "sandbox_mode = read-only"',
                          'cursor-agent --sandbox enabled', 'grok --sandbox strict']) {
@@ -66,6 +67,14 @@ for (const parent of ['opencode', 'pi', 'omp']) {
   assert.equal(explicit.status, 0, explicit.stderr);
   assert.equal(explicit.stdout.split('\n').filter(x => x === '--no-daemon').length, 1);
   assert.equal(explicit.stdout.split('\n').filter(x => x === '--sandbox').length, 1);
+  const attached = launch(parent, 'codex exec -sdanger-full-access');
+  assert.equal(attached.status, 0, attached.stderr);
+  assert.equal(attached.stdout.split('\n').filter(x => x === '--sandbox').length, 0);
+  for (const command of ['codex exec --sandbox', 'codex exec -s', 'cursor-agent --sandbox']) {
+    const r = launch(parent, command);
+    assert.equal(r.status, 2, `${parent}: ${command}\n${r.stderr}`);
+    assert.match(r.stderr, /requires a value/);
+  }
   const settings = launch(parent, `claude --settings '${JSON.stringify({ env: { PEER_FIXTURE: 'kept' } })}' --model fixture`);
   assert.equal(settings.status, 0, settings.stderr);
   const merged = JSON.parse(settings.stdout.split('\n')[1]);
