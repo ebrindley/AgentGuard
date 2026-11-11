@@ -245,8 +245,8 @@ path refuses the launch; remove it from the Guard List and reopen OpenCode.
 
 Put one absolute path or `~` path per line. You can drag a path from Finder;
 quotes and Finder's backslash escapes are accepted. Heading names are
-case-insensitive; READ-ONLY is also accepted. Lines starting with `#` and text
-before the first heading are ignored.
+case-insensitive; READ-ONLY is also accepted. Lines starting with `#` are ignored.
+Other lines before the first heading are skipped, and the launch says how many.
 
 The launcher skips nonexistent ALLOW entries and keeps nonexistent READ ONLY entries. It refuses ALLOW
 entries broad enough to contain `~/Library/Application Support`, `~/.config`
@@ -387,8 +387,9 @@ folder for a later launch.
 - Dropping a folder while `@project` is not under ALLOW shows an alert and does
   not launch. Remove the `#` from `@project` first. With `@project` off, the app
   keeps the fixed ALLOW folders and ignores the store.
-- Dropping or opening while OpenCode is already running fails with the usual
-  already-open alert and changes nothing.
+- Dropping or opening while OpenCode is already running fails with an alert
+  that says the dropped folder was not added, and changes nothing. Quit
+  OpenCode, open Agent Guard, then drop the folder again.
 
 ```sh
 agent-guard app-projects                 # list the remembered folders
