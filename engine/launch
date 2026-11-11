@@ -535,12 +535,13 @@ sensitive=($home/Library/Application\ Support $home/.config $home/.local)
 typeset -a allow readonly deny scoped
 typeset -aU link_nodes
 section=
+integer headless=0
 while IFS= read -r line || [[ -n $line ]]; do
   line=${${line%$'\r'}##[[:space:]]##}
   line=${line%%[[:space:]]##}
   [[ -z $line || $line == \#* ]] && continue
   if list_section "$line"; then section=$REPLY; continue; fi
-  [[ -n $section ]] || continue
+  [[ -n $section ]] || { (( ++headless )); continue }
   [[ $line != *$'\t'* ]] || fail "Guard List path contains a tab; remove it: $line"
   if [[ $line == @project ]]; then
     [[ $section == allow ]] || { note "skipped, @project is valid only under ALLOW"; continue }
@@ -576,6 +577,7 @@ while IFS= read -r line || [[ -n $line ]]; do
     scoped+=("${(l:3::0:)${#${p//[^\/]/}}}"$'\t'"$section"$'\t'"$p")
   done
 done < "$list"
+(( ! headless )) || note "skipped $headless Guard List line(s) before the first ALLOW, READ ONLY or DENY heading; put a heading above them in $list"
 # Dropped folders need @project on; the app has no other way to use them.
 (( ! $#app_given || app_listed )) ||
   fail "@project is off in $list, so the dropped folder was not added. Remove the # before @project under ALLOW to turn it on."

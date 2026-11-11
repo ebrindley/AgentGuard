@@ -177,7 +177,11 @@ exit 0
   profile([], { text: ALLOW('@project', '@project') });
   assert.deepEqual(rules().allow, [app]);
   assert.match(logText(), /skipped, @project is already listed/);
-  console.log('ok   @project outside ALLOW, a second @project and a missing folder are skipped and logged');
+  // Lines before the first heading are skipped with a count, and the rest still applies.
+  profile([], { text: `${P('Projects/other')}\n# comment\n\nstray\n${ALLOW(P('Projects/sibling'))}` });
+  assert.deepEqual(rules().allow, [realpathSync(P('Projects/sibling'))]);
+  assert.match(logText(), /skipped 2 Guard List line\(s\) before the first ALLOW, READ ONLY or DENY heading/);
+  console.log('ok   @project outside ALLOW, a second @project and a missing folder are skipped and logged; lines before a heading are counted');
 
   const refuse = (name, args, pattern, options = {}) => {
     const out = launch('profile', args, { ...options, text: ALLOW('@project', P('Projects/sibling')) });
