@@ -82,7 +82,7 @@ const malformed = (name, policy) => {
   const built = spawnSync("/bin/zsh", ["-fc", 'source "$1/checker/snapshot.zsh"; ag_checker_snapshot "$2" "$3" "$1" standard "$4"; rc=$?; print -r -- "$ag_checker_warning"; exit $rc',
     "snapshot", release, account, dest, join(account, "granted")], { encoding: "utf8" })
   assert.equal(built.status, 0, built.stderr)
-  assert.match(built.stdout.trim(), /^checker policy is malformed; the session keeps the dynamic-delete rule and adds no automatic deletion allowances: .*\/policy\.json$/, name)
+  assert.match(built.stdout.trim(), /^checker policy is malformed; the session adds no automatic deletion allowances and turns the dynamic-delete rule on unless a readable policy sets rm\.recursive-force-dynamic-target to off: .*\/policy\.json$/, name)
   assert.equal(readFileSync(join(account, ".cc-safety-net/policy.json"), "utf8"), policy, `${name}: the user's policy is only read`)
   process.env.CC_SAFETY_NET_HOME = dest
   return { session: JSON.parse(readFileSync(join(dest, "policy.json"), "utf8")), cwd: account }
