@@ -261,7 +261,12 @@ opencode_managed() {
   wait $opencode_server_pid || true
   trap - CHLD
   if (( ! opencode_client_done )); then
-    note 'OpenCode V2 server stopped; closing its client. Reopen Agent Guard to start a new service.'
+    # In the Desktop app note only logs; an alert tells the user why it closed.
+    if (( $+functions[alert] )); then
+      alert 'OpenCode V2 server stopped; closing its client. Reopen Agent Guard to start a new service.'
+    else
+      note 'OpenCode V2 server stopped; closing its client. Reopen Agent Guard to start a new service.'
+    fi
     rc=1
   else
     wait $opencode_client_pid || rc=$?
