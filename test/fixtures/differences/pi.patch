@@ -135,7 +135,7 @@ index 9b7c788..2e1c886 100644
        if [ -z "$resolved" ]; then
          emit "$ambient_name='$configured' is not an accepted ambient override."
 -        emit "  Record non-standard installs with: npm run bind"
-+        emit "  Record non-standard installs with: agent-guard bind"
++        emit "  Unset $ambient_name, then record a non-standard install with: agent-guard bind"
          exit 1
        fi
        ;;

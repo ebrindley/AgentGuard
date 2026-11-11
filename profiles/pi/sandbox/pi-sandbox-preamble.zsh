@@ -665,7 +665,7 @@ resolve_agent_executable() {
       resolved="$(resolve_configured_executable "$configured" || true)"
       if [ -z "$resolved" ]; then
         emit "$ambient_name='$configured' is not an accepted ambient override."
-        emit "  Record non-standard installs with: agent-guard bind"
+        emit "  Unset $ambient_name, then record a non-standard install with: agent-guard bind"
         exit 1
       fi
       ;;
