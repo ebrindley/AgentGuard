@@ -900,6 +900,13 @@ fi
 if [ "$ACTUAL_CONFINEMENT" = "1" ]; then
   if own_policy_reentry "$EXPECTED_PROFILE_DIGEST"; then
     emit "existing pi-sandbox-guard confinement detected; skipping nested wrap."
+    # PATH was reset above; keep the peer wrappers the outer session put first.
+    AG_PEER_RELEASE="$HOME_CANON_EARLY/Library/Application Support/AgentGuard/current"
+    if [[ -f "$AG_PEER_RELEASE/peer-runtime.sb" && -d "$AG_PEER_RELEASE/peers" ]]; then
+      export AGENT_GUARD_PEER_PATH
+      PATH="$AG_PEER_RELEASE/peers:$PATH"
+      export PATH
+    fi
     PI_SANDBOX_CMD=()
     return 0 2>/dev/null || true
   fi

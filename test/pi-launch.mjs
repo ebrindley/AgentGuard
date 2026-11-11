@@ -814,6 +814,17 @@ try {
       assert.match(r.stderr, /existing pi-sandbox-guard confinement detected; skipping nested wrap/);
       assert.equal(r.stdout, 'inner-started\n');
     });
+    check('nesting: Pi inside Pi keeps the peer wrappers on PATH', () => {
+      const b = account('nested-peers');
+      const release = join(b.home, 'Library/Application Support/AgentGuard/current');
+      mkdirSync(join(release, 'peers'), { recursive: true });
+      writeFileSync(join(release, 'peer-runtime.sb'), '');
+      const peers = `${realpathSync(release)}/peers`;
+      const outer = session(b, ['/bin/sh', '-c', '"$1" /usr/bin/env', 'sh', join(b.bin, 'pi')]);
+      assert.equal(outer.status, 0, outer.stderr);
+      assert.match(outer.stderr, /skipping nested wrap/);
+      assert.ok(outer.stdout.split('\n').some((l) => l.startsWith(`PATH=${peers}:`)), outer.stdout);
+    });
     check('nesting: OMP inside Pi is refused', () => {
       const r = inner('omp');
       assert.notEqual(r.status, 0);
