@@ -673,13 +673,12 @@ fi
 # hooks folder Git resolves for the launch folder, such as a core.hooksPath, is
 # denied whole. A path broad enough to deny the launch folder or a shared root
 # refuses the launch.
-typeset -a hooks_rules
+typeset -a hooks_rules hooks_dirs
 if (( git_hooks )); then
   hooks_rules=('(deny file-write*
   (require-all
     (regex #"\.git/(hooks|modules/.+/hooks)/")
     (require-not (regex #"/hooks/[^/]*\.sample$"))))')
-  typeset -a hooks_dirs
   # Each project's active hooks folder, as the launch folder's is without one.
   for hooks_base in ${projects:-$PWD}; do
     active_hooks=
@@ -863,8 +862,9 @@ if [[ $harness == opencode ]]; then
     --argjson skills "$(jarr $skill_roots)" --argjson configs "$(jarr $skill_configs)" \
     --argjson writable "$(jarr $writable $darwin_cache $config_roots)" \
     --argjson pins "$(jarr $pinned $state_pins $skill_pins)" --argjson projects "$(jarr $projects)" \
+    --argjson credentials "$(jarr $credential_targets)" --argjson hooks "$(jarr $hooks_dirs)" \
     --arg checker "$session/checker" --arg preparation "$channel" --arg preparationReplies "$replies" --arg preparationStatus "$preparation_status" \
-    '{allow:$allow,readonly:$readonly,deny:$deny,protected:$protected,skills:$skills,configs:$configs,writable:$writable,pins:$pins,projects:$projects,checker:$checker,preparation:$preparation,preparationReplies:$preparationReplies,preparationStatus:$preparationStatus}' > "$context"
+    '{allow:$allow,readonly:$readonly,deny:$deny,protected:$protected,skills:$skills,configs:$configs,writable:$writable,pins:$pins,projects:$projects,credentials:$credentials,hooks:$hooks,checker:$checker,preparation:$preparation,preparationReplies:$preparationReplies,preparationStatus:$preparationStatus}' > "$context"
   export AGENT_GUARD_CONTEXT="$context"
   if (( ! staged )); then
     /bin/cp "$context" "$engine/state/rules.json.$$"
