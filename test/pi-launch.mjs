@@ -321,6 +321,13 @@ try {
       for (const p of ['notes.txt', '.cc-safety-net/logs/audit.log', 'Library/Application Support/other.txt', 'Applications/Other.app', '.config/other.json'])
         assert.equal(sbWrite(params, join(home, p)).status, 0, `denied: ${p}`);
     });
+    check('difference 1: cc-safety-net\'s logs are writable with the home outside the project', () => {
+      const outside = join(run, 'profile/home-outside');
+      mkdirSync(join(outside, '.cc-safety-net/logs'), { recursive: true });
+      const outsideParams = { PROJECT: project, HOME: outside };
+      assert.equal(sbWrite(outsideParams, join(outside, '.cc-safety-net/logs/audit.log')).status, 0, 'logs denied');
+      assert.notEqual(sbWrite(outsideParams, join(outside, '.cc-safety-net/rules.json')).status, 0, 'rules writable');
+    });
     check('difference 1: each AG_LINK_* parameter write-denies the link target it names', () => {
       for (const name of [...Object.keys(protectedFolders), ...Object.keys(protectedFiles)]) {
         const target = join(project, 'targets', name);

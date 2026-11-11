@@ -578,10 +578,18 @@ index 9b7c788..ea31967 100644
 +  -p "$AG_PEER_PROFILE"
  )
 diff --git a/sandbox/pi-sandbox.sb b/sandbox/pi-sandbox.sb
-index f560a31..213a568 100644
+index f560a31..19131f9 100644
 --- a/sandbox/pi-sandbox.sb
 +++ b/sandbox/pi-sandbox.sb
-@@ -113,6 +113,8 @@
+@@ -104,6 +104,7 @@
+   (literal (string-append (param "HOME") "/.pi/agent/security-events.log"))
+   (subpath (string-append (param "HOME") "/.npm"))              ; npm cache
+   (subpath (string-append (param "HOME") "/.cache"))            ; generic tool cache (pip/uv/etc.)
++  (subpath (string-append (param "HOME") "/.cc-safety-net/logs")) ; the command checker's audit log
+   (subpath (string-append (param "HOME") "/Library/Caches"))    ; macOS tool caches (pip/uv/playwright)
+   (literal "/dev/null")
+   (literal "/dev/tty")
+@@ -113,6 +114,8 @@
    (literal "/dev/fd/2")
    (regex #"^/dev/ttys[0-9]+$"))                                 ; pty slaves for the TUI
  
@@ -590,7 +598,7 @@ index f560a31..213a568 100644
  ;; Re-protect the sensitive parts of ~/.pi/agent: the sandboxed process may write
  ;; its operational state (sessions/locks/history) but must NOT tamper with config,
  ;; auth, or the deployed extensions (which would let it DISABLE the guard).
-@@ -160,6 +162,12 @@
+@@ -160,6 +163,12 @@
    ;; refuses a PROJECT whose own path has any of these components, which these
    ;; regexes would otherwise match wholesale, and symlinked .pi/.omp layouts.
    ;; Keep these regexes in step with the PROJECT refusal patterns in pi-sandbox-preamble.zsh.
@@ -603,7 +611,7 @@ index f560a31..213a568 100644
    (require-all
      (subpath (param "PROJECT"))
      (require-any
-@@ -167,7 +175,11 @@
+@@ -167,7 +176,11 @@
        (regex #"/\.omp(/|$)")
        (regex #"/\.(claude|codex)/(extensions|hooks|tools)(/|$)")
        (regex #"/\.gemini/extensions(/|$)")
@@ -616,7 +624,7 @@ index f560a31..213a568 100644
    (subpath (string-append (param "PI_AGENT_STATE") "/extensions"))
    (literal (string-append (param "PI_AGENT_STATE") "/settings.json"))
    (literal (string-append (param "PI_AGENT_STATE") "/auth.json"))
-@@ -180,6 +192,10 @@
+@@ -180,6 +193,10 @@
    (literal (string-append (param "PI_AGENT_STATE") "/SYSTEM.md"))
    (literal (string-append (param "PI_AGENT_STATE") "/APPEND_SYSTEM.md"))
    (literal (string-append (param "PI_AGENT_STATE") "/models.json"))
@@ -627,7 +635,7 @@ index f560a31..213a568 100644
    ;; The shared extension remains at the canonical Pi path even when Pi runtime
    ;; state is relocated. Keep these denies pinned as well as state-relative.
    (subpath (string-append (param "HOME") "/.pi/agent/extensions"))
-@@ -254,6 +270,14 @@
+@@ -254,6 +271,14 @@
    (literal (string-append (param "HOME") "/.npmrc"))
    (subpath (string-append (param "HOME") "/.secrets")))
  
@@ -642,7 +650,7 @@ index f560a31..213a568 100644
  ;; Re-allow the minimum `git init` / submodule-init needs inside the now-denied
  ;; hooks subtrees (last-match-wins, so this overrides the subtree denies above
  ;; but not for the active hook files it does NOT re-allow):
-@@ -298,6 +322,17 @@
+@@ -298,6 +323,17 @@
      (subpath (string-append (param "OMP_STATE_ROOT") "/wt"))
      (regex #"/hooks/[^/]*\.[^/]+$")))
  
@@ -660,7 +668,7 @@ index f560a31..213a568 100644
  ;; ---------------------------------------------------------------------------
  ;; SECRET READS: deny reading host credential material. Scoped to specific HOME
  ;; locations so project files are unaffected. (No blanket *.key/*.pem regexes —
-@@ -323,3 +358,142 @@
+@@ -323,3 +359,142 @@
    (literal (string-append (param "HOME") "/.pi/agent/security-events.log"))
    ;; .env files anywhere (incl. project) — the one project-wide secret deny.
    (regex #"/\.env($|\.)"))

@@ -104,6 +104,7 @@
   (literal (string-append (param "HOME") "/.pi/agent/security-events.log"))
   (subpath (string-append (param "HOME") "/.npm"))              ; npm cache
   (subpath (string-append (param "HOME") "/.cache"))            ; generic tool cache (pip/uv/etc.)
+  (subpath (string-append (param "HOME") "/.cc-safety-net/logs")) ; the command checker's audit log
   (subpath (string-append (param "HOME") "/Library/Caches"))    ; macOS tool caches (pip/uv/playwright)
   (literal "/dev/null")
   (literal "/dev/tty")
