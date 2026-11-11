@@ -541,7 +541,7 @@ try {
     copyFileSync(standIn, untrusted);
     check('difference 5: repair messages name agent-guard bind', () => {
       let r = session(a, ['/bin/echo', 'started'], { env: { PI_EXECUTABLE: untrusted } });
-      refused(r, 'ambient override', /Record non-standard installs with: agent-guard bind/);
+      refused(r, 'ambient override', /Unset PI_EXECUTABLE, then record a non-standard install with: agent-guard bind/);
       writeFileSync(conf, `pi=${join(run, 'runtime', 'missing')}\n`);
       r = session(a, ['/bin/echo', 'started']);
       refused(r, 'stale binding', /Re-record it: agent-guard bind/);
