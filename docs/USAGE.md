@@ -585,6 +585,16 @@ files are not copied or relocated. CLI-specific mixed state files are excluded
 from the new grants. OMP launcher behavior is covered by disposable fixtures;
 real OMP qualification requires an OMP installation.
 
+Start each peer once outside the guard before first using it in a guarded
+session. The runtime grants cover named subfolders and files, such as
+`~/.codex/sessions`, `~/.claude/projects`, `~/.cursor/chats` and
+`~/.grok/sessions`, not their parent folders `~/.codex`, `~/.claude`, `~/.cursor`
+and `~/.grok`, and no launch creates `~/.codex`, `~/.claude` or `~/.cursor`. A
+peer that has never run on this Mac may therefore fail on first use inside the
+guard. Running it once in Terminal creates its folders and its sign-in. A Grok
+session creates `~/.grok` and an OpenCode session creates
+`~/.local/share/opencode` and `~/.local/state/opencode` when it starts.
+
 ## Nested launches
 
 - `pi` or `omp` started inside an OpenCode session refuses, as it refuses under
