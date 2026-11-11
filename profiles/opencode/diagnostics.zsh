@@ -232,7 +232,8 @@ ag_diagnose() {
       "Global configurations:", (.permissions.globalConfigs[]|"  \(.source): \(.classification)"),
       "Permission ownership: \(.permissions.ownershipState)", (.permissions.ownership[]|"  \(.source) \(.key): \(.action)"),
       "Approval preference: \(.permissions.approvalPreference.value) (configured intent)",
-      "Rules snapshot: \(.components.rulebook.classification) (static; readiness not probed)",
+      "Rulebook file: \(.components.rulebook.classification) (static; readiness not probed)",
+      "For a live check, run: agent-guard doctor",
       "Runtime health, effective permissions, desktop auto mode: not observable",
       "Recent failures: \(.recentFailures.state); advisory cached observations", (.recentFailures.events[]|"  \(.layer)/\(.stage): \(.code); rule \(.ruleId); errno \(.errno); remediation \(.remediation)")'
   fi

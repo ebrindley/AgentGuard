@@ -195,5 +195,12 @@ test("migrated forwarders and the Grok link are known classes", () => {
   assert.equal(report.installation.excludedEntries, 0)
   assert.equal(report.installation.drift.find(x => x.class === "grok").linksMissing, 0)
 })
+test("text report labels the rulebook and points to doctor", () => {
+  const f = fixture("label")
+  const { stdout } = collect(f, "label", ["diagnose"])
+  assert.ok(!stdout.includes("Rules snapshot"))
+  assert.ok(stdout.includes("Rulebook file:"))
+  assert.ok(stdout.includes("agent-guard doctor"))
+})
 console.log(`diagnostics fixtures: ${run}`)
 process.exitCode = failures ? 1 : 0
