@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/zsh -f
 # usage: launch [--harness NAME] cli|gui|profile|check [staged] [args...]
 # NAME is the profile to launch (profiles/NAME); the default is opencode.
 emulate -L zsh
@@ -19,6 +19,9 @@ launch_args=("$@")
 # it is not read as part of the launch whose log it follows. The stage line stays
 # last for agent-guard diagnose.
 integer header_written=0
+show_alert() {
+  /usr/bin/osascript -e 'on run argv' -e 'display alert "Agent Guard" message (item 1 of argv) as critical' -e 'end run' "$1" >/dev/null 2>&1 || true
+}
 fail() {
   if [[ -n ${log:-} && -d ${log:h} ]]; then
     {
@@ -29,7 +32,7 @@ fail() {
   fi
   print -ru2 -- "agent-guard: $*"
   if [[ $mode == gui ]]; then
-    /usr/bin/osascript -e 'on run argv' -e 'display alert "Agent Guard" message (item 1 of argv) as critical' -e 'end run' "$*" >/dev/null 2>&1 || true
+    show_alert "$*"
   fi
   exit 1
 }
@@ -89,6 +92,15 @@ note() {
 # The per-launch summary is recorded for the operator. Refusals and warnings
 # stay on the terminal through note; failures use fail.
 record() { print -r -- "$*" >> "$log" }
+# A message that cannot stop the launch: logged, and in gui mode shown as an
+# alert without waiting for it to be dismissed. Use fail when the launch must end.
+alert() {
+  note "$*"
+  if [[ $mode == gui ]]; then
+    { show_alert "$*" &! } 2>/dev/null
+  fi
+  return 0
+}
 
 within() { [[ $2 == / || $1 == "$2" || $1 == "$2"/* ]] }
 
@@ -172,7 +184,9 @@ if [[ -n $inside ]]; then
     note() { print -ru2 -- "agent-guard: $*" }
     export AGENT_GUARD_OUTER_SANDBOX=1
     [[ $mode == cli ]] || fail "already inside another sandbox, where Agent Guard cannot apply its own; open this outside that sandbox"
-    print -ru2 -- "agent-guard: already inside another sandbox; Agent Guard's sandbox is not applied and $title runs under the existing one"
+    outer_note="already inside another sandbox; Agent Guard's sandbox is not applied and $title runs under the existing one"
+    [[ $harness != opencode ]] || outer_note+=", and the Agent Guard plugin refuses its tools unless AGENT_GUARD_BYPASS=1 is set"
+    print -ru2 -- "agent-guard: $outer_note"
   else
     [[ $mode == cli ]] || fail "already inside the guard; run this from Terminal, outside any guard or sandbox"
   fi
@@ -213,6 +227,7 @@ list_section() {
 # --project-query asks whether the app needs a first folder. Everything else goes
 # to the app.
 app_store="$engine/state/opencode/app-projects"
+my_uid=$(/usr/bin/id -u)
 typeset -a app_given app_lines gui_rest
 typeset -aU app_projects app_new
 integer app_listed=0 app_query=0 i=1
@@ -236,7 +251,7 @@ fi
 # the launch, which names it.
 if (( app_query )); then
   answer=go
-  if [[ $harness == opencode ]] && ! { find_app && /usr/bin/pgrep -x "$(/usr/bin/plutil -extract CFBundleExecutable raw "$REPLY/Contents/Info.plist" 2>/dev/null)" >/dev/null 2>&1 }; then
+  if [[ $harness == opencode ]] && ! { find_app && /usr/bin/pgrep -u "$my_uid" -x "$(/usr/bin/plutil -extract CFBundleExecutable raw "$REPLY/Contents/Info.plist" 2>/dev/null)" >/dev/null 2>&1 }; then
     section=
     while IFS= read -r line || [[ -n $line ]]; do
       line=${${line%$'\r'}##[[:space:]]##}
@@ -256,7 +271,12 @@ if [[ $mode == gui && $harness == opencode ]]; then
   find_app || fail "OpenCode.app not found"
   app=$REPLY
   main=$(/usr/bin/plutil -extract CFBundleExecutable raw "$app/Contents/Info.plist")
-  /usr/bin/pgrep -x "$main" >/dev/null && fail "OpenCode is already open. If you opened it from Agent Guard, click OpenCode in the Dock to show its window. Otherwise quit OpenCode, then open Agent Guard."
+  if /usr/bin/pgrep -u "$my_uid" -x "$main" >/dev/null; then
+    if (( $#app_given )); then
+      fail "OpenCode is already open, so no dropped folder was added. Quit OpenCode, open Agent Guard, then drop the folder again."
+    fi
+    fail "OpenCode is already open. If you opened it from Agent Guard, click OpenCode in the Dock to show its window. Otherwise quit OpenCode, then open Agent Guard."
+  fi
   failure_stage=configuration
 fi
 if [[ $mode == (cli|gui) ]]; then
@@ -515,12 +535,13 @@ sensitive=($home/Library/Application\ Support $home/.config $home/.local)
 typeset -a allow readonly deny scoped
 typeset -aU link_nodes
 section=
+integer headless=0
 while IFS= read -r line || [[ -n $line ]]; do
   line=${${line%$'\r'}##[[:space:]]##}
   line=${line%%[[:space:]]##}
   [[ -z $line || $line == \#* ]] && continue
   if list_section "$line"; then section=$REPLY; continue; fi
-  [[ -n $section ]] || continue
+  [[ -n $section ]] || { (( ++headless )); continue }
   [[ $line != *$'\t'* ]] || fail "Guard List path contains a tab; remove it: $line"
   if [[ $line == @project ]]; then
     [[ $section == allow ]] || { note "skipped, @project is valid only under ALLOW"; continue }
@@ -556,6 +577,7 @@ while IFS= read -r line || [[ -n $line ]]; do
     scoped+=("${(l:3::0:)${#${p//[^\/]/}}}"$'\t'"$section"$'\t'"$p")
   done
 done < "$list"
+(( ! headless )) || note "skipped $headless Guard List line(s) before the first ALLOW, READ ONLY or DENY heading; put a heading above them in $list"
 # Dropped folders need @project on; the app has no other way to use them.
 (( ! $#app_given || app_listed )) ||
   fail "@project is off in $list, so the dropped folder was not added. Remove the # before @project under ALLOW to turn it on."
@@ -810,8 +832,11 @@ fi
 darwin_temp=${$(/usr/bin/getconf DARWIN_USER_TEMP_DIR):A}
 darwin_cache=${$(/usr/bin/getconf DARWIN_USER_CACHE_DIR):A}
 
-/bin/mkdir -p $writable
-[[ $mode == gui ]] && /bin/mkdir -p "$writable_gui[1]"
+make_folder() {
+  /bin/mkdir -p "$1" 2>/dev/null || fail "cannot create the folder $1; remove or rename whatever is at that path, such as a file or a broken link, then launch again"
+}
+for p in $writable; do make_folder "$p"; done
+if [[ $mode == gui ]]; then make_folder "$writable_gui[1]"; fi
 
 if [[ $harness == opencode ]]; then
   jarr() { /usr/bin/jq -cn '$ARGS.positional' --args "$@" }
