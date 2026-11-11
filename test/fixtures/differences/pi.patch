@@ -904,7 +904,7 @@ index 4dcdf9c..7bcfc7c 100755
      target="$state_root/$relative"
      mkdir -p "$(dirname "$target")"
 diff --git a/src/index.mjs b/src/index.mjs
-index d997be1..27395a3 100644
+index d997be1..70f7ff2 100644
 --- a/src/index.mjs
 +++ b/src/index.mjs
 @@ -1,15 +1,23 @@
@@ -1006,7 +1006,7 @@ index d997be1..27395a3 100644
  /**
   * Announce filter-only operation when the protected shim's launch marker is
   * absent. This is a MISINSTALL DIAGNOSTIC, not a security control:
-@@ -94,24 +93,131 @@ function trustedPolicyEnv() {
+@@ -94,24 +93,138 @@ function trustedPolicyEnv() {
   *   - Wording says "could not verify" rather than "not detected" because an
   *     unrelated but valid Seatbelt profile would also lack this marker.
   *
@@ -1112,7 +1112,14 @@ index d997be1..27395a3 100644
 +  if (!handler) {
 +    return { failure: 'cc-safety-net failed to load; reinstall Agent Guard by rerunning its installer from Terminal outside any agent session, then relaunch' };
 +  }
-+  const probeCwd = isDirectory(process.cwd()) ? process.cwd() : tmpdir();
++  // The working folder can be deleted under a running session; process.cwd() then throws.
++  let sessionCwd;
++  try {
++    sessionCwd = process.cwd();
++  } catch {
++    return { failure: 'the working folder no longer exists; relaunch Pi or OMP from an existing folder' };
++  }
++  const probeCwd = isDirectory(sessionCwd) ? sessionCwd : tmpdir();
 +  let probe;
 +  try {
 +    probe = await handler(
@@ -1146,7 +1153,7 @@ index d997be1..27395a3 100644
  /**
   * Pi extension default export.
   * @param {import('./pi-types').ExtensionAPI} pi
-@@ -119,148 +225,67 @@ function warnIfUnverifiedSandbox() {
+@@ -119,148 +232,67 @@ function warnIfUnverifiedSandbox() {
  export default function (pi) {
    warnIfUnverifiedSandbox();
  

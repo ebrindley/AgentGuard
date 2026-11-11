@@ -637,6 +637,21 @@ try {
         assert.equal(r.stdout.trim(), 'allow block block', r.stderr);
       });
     }
+    check('difference 17: a deleted working folder blocks every call with a message that names it', () => {
+      const deleted = `
+        import { mkdtempSync, rmdirSync } from 'node:fs';
+        const dir = mkdtempSync(process.env.TMPDIR + '/gone-');
+        process.chdir(dir);
+        rmdirSync(dir);
+        const { default: extension } = await import(${index});
+        let handler;
+        extension({ on: (type, h) => { if (type === 'tool_call') handler = h; } });
+        const r = await handler({ type: 'tool_call', toolName: 'bash', input: { command: 'git status' } }, { cwd: '/' });
+        console.log(r && r.block ? r.reason : 'allow');`;
+      const r = session(a, [process.execPath, '--input-type=module', '-e', deleted]);
+      allowed(r, 'session');
+      assert.match(r.stdout, /Guard unavailable: the working folder no longer exists; relaunch Pi or OMP/);
+    });
     check('difference 17: each launch gets its own copy', () => {
       const first = env('CC_SAFETY_NET_HOME').stdout.trim(), second = env('CC_SAFETY_NET_HOME').stdout.trim();
       assert.notEqual(first, second);

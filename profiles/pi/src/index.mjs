@@ -187,7 +187,14 @@ async function loadChecker() {
   if (!handler) {
     return { failure: 'cc-safety-net failed to load; reinstall Agent Guard by rerunning its installer from Terminal outside any agent session, then relaunch' };
   }
-  const probeCwd = isDirectory(process.cwd()) ? process.cwd() : tmpdir();
+  // The working folder can be deleted under a running session; process.cwd() then throws.
+  let sessionCwd;
+  try {
+    sessionCwd = process.cwd();
+  } catch {
+    return { failure: 'the working folder no longer exists; relaunch Pi or OMP from an existing folder' };
+  }
+  const probeCwd = isDirectory(sessionCwd) ? sessionCwd : tmpdir();
   let probe;
   try {
     probe = await handler(
