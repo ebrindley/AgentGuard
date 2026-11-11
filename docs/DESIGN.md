@@ -524,7 +524,7 @@ The snapshot's member records, the launch canary that every launch carries from 
 
 One list for all harnesses: `~/Agent Guard/Guard List.txt`. The launcher reads it at each launch; edits apply at the next launch. Same headings and rules as OpenCode Guard:
 
-- Headings are ALLOW, READ ONLY (or READ-ONLY) and DENY, in any case, optionally followed by `-` or `:` and text; NESTED follows from the composition release (below). Lines before the first heading and lines starting with `#` are ignored.
+- Headings are ALLOW, READ ONLY (or READ-ONLY) and DENY, in any case, optionally followed by `-`, `:` or `#` and text; NESTED follows from the composition release (below). Lines before the first heading and lines starting with `#` are ignored.
 - An entry is a path starting with `/` or `~`, optionally quoted. Backslash escapes from a Finder drag are removed and symlinks in the path are resolved. Other lines are skipped.
 - An ALLOW or READ ONLY entry that does not exist is skipped. A DENY entry that does not exist is kept, with a spelling warning.
 - DENY always wins, for reads and writes. Otherwise the more specific entry wins.
