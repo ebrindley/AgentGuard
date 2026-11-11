@@ -258,6 +258,7 @@ wrapper "$w/case2/GOOD"
 wrapper "$w/linked"
 wrapper "$w/folder"
 wrapper "$w/bad/bad@name"
+wrapper "$w/bad/-dash"
 print -r -- '#!/bin/sh
 exec "${0%/*}/pi" "$@"' > "$w/bad/shebang"
 print -r -- '#!/bin/zsh -f
@@ -288,6 +289,7 @@ refused 'refuses a symlink' "refusing symlink (install real files only): $w/bad/
 refused 'refuses a file that is not regular' "not a regular file: $w/bad/fifo" "$w/bad/fifo"
 refused 'refuses a missing file' "no such file or folder: $w/nope" "$w/nope"
 refused 'refuses a name outside [A-Za-z0-9._-]' "wrapper name must match [A-Za-z0-9._-]: $w/bad/bad@name" "$w/bad/bad@name"
+refused 'refuses a name that starts with -' "wrapper name must not start with -: $w/bad/-dash" "$w/bad/-dash"
 for f in "$w"/reserved/*; do refused "refuses the reserved name ${f:t}" "'${f:t}' is reserved" "$f"; done
 for f in "$w"/case/*; do refused "refuses ${f:t}: reserved names are compared ignoring case" "'${f:t}' is reserved, ignoring case" "$f"; done
 refused 'refuses a duplicate name' "duplicate wrapper name 'dup', ignoring case: $w/dupB/dup" "$w/dupA" "$w/dupB"

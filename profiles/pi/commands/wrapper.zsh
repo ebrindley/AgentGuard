@@ -106,6 +106,8 @@ pi_wrapper_add() {
     [[ -f $src ]] || pi_wrapper_die "not a regular file: $src"
     (( ${pi_wrapper_reserved[(Ie)$lname]} )) && pi_wrapper_die "'$name' is reserved, ignoring case ($pi_wrapper_reserved): $src"
     [[ $name == [A-Za-z0-9._-]## ]] || pi_wrapper_die "wrapper name must match [A-Za-z0-9._-]: $src"
+    # jq would read a name that starts with - as one of its options.
+    [[ $name == -* ]] && pi_wrapper_die "wrapper name must not start with -: $src"
     (( ${lnames[(Ie)$lname]} )) && pi_wrapper_die "duplicate wrapper name '$name', ignoring case: $src"
     for f in ${(f)known}; do
       [[ ${(L)f} == $lname && $f != $name ]] && pi_wrapper_die "'$name' differs only in case from the recorded name '$f': $src"
@@ -207,7 +209,7 @@ pi_wrapper_remove() {
   done
   if (( $#gone )); then
     json=$(/usr/bin/jq -c '.wrappers |= with_entries(select(.key | IN($ARGS.positional[]) | not))
-      | .historical = (.historical + $ARGS.positional | unique)' --args $gone <<< "$json") || pi_wrapper_die "cannot update $wrappers_json"
+      | .historical = (.historical + $ARGS.positional | unique)' --args -- $gone <<< "$json") || pi_wrapper_die "cannot update $wrappers_json"
     pi_wrapper_write "$json"
   fi
   return $rc
