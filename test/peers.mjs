@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { stage, layout } from './engines/zsh.mjs';
 import './peer-discovery.mjs';
@@ -158,6 +158,14 @@ for (const parent of ['opencode', 'pi', 'omp']) {
   assert.equal(r.stdout.trim(), parent === 'opencode' ? 'unset unset context' : '1 1');
 }
 writeFileSync(opencodeFile, v1Stub);
+// That unguarded plugin still puts the parent's peer wrappers first for Bash, once.
+const outerProbe = `const { AgentGuard } = await import(process.argv[1]); const h = await AgentGuard({ directory: process.cwd() });
+const args = { command: 'pwd' }; for (const n of [1, 2]) await h['tool.execute.before']({ tool: 'bash' }, { args }); console.log(JSON.stringify(args.command));`;
+for (const parent of ['pi', 'omp']) {
+  const r = launch(parent, `AGENT_GUARD_OUTER_SANDBOX=1 AGENT_GUARD_BYPASS=1 ${quote(process.execPath)} --input-type=module -e ${quote(outerProbe)} ${quote(pathToFileURL(join(release, 'profiles/opencode/plugin.js')).href)}`);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(JSON.parse(r.stdout.trim().split('\n').pop()), /^export PATH='[^\n]*\/peers':\$PATH\npwd$/, `${parent}: one peer export`);
+}
 console.log('ok V2 peer commands use private servers under all parent policies');
 mkdirSync(join(home, '.opencode/bin'), { recursive: true });
 renameSync(join(bin, 'opencode'), join(home, '.opencode/bin/opencode'));
