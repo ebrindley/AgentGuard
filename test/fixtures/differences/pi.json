@@ -72,7 +72,7 @@
     },
     {
       "id": 6,
-      "change": "scripts/bind-executable.sh runs as agent-guard bind (commands/bind.zsh) instead of npm run bind: its usage, hints and executables.conf header name agent-guard bind; every mode but --show stops when node is not on PATH, which npm run guaranteed; --checker-node [PATH], which recorded the analyzer's Node in the extension's .guard-node, is accepted and ignored with one line on stderr, and alone it does nothing; an executables.conf that is a symbolic link or not a regular file is refused before it is written. scripts/lib-ops.sh is unchanged.",
+      "change": "scripts/bind-executable.sh runs as agent-guard bind (commands/bind.zsh) instead of npm run bind: its usage, hints and executables.conf header name agent-guard bind; every mode but --show stops when node is not on PATH, which npm run guaranteed; --checker-node [PATH], which recorded the analyzer's Node in the extension's .guard-node, is accepted and ignored with one line on stderr, and alone it does nothing; an executables.conf that is a symbolic link or not a regular file is refused before it is written; Pi and OMP bind independently, so a Mac with only OMP records omp= alone, and a recorded pi=, omp= or node= that no longer validates is dropped (node= is detected again) with a note instead of stopping the command; an empty candidate list no longer fails under bash 3.2. scripts/lib-ops.sh is unchanged.",
       "files": ["scripts/bind-executable.sh"]
     },
     {

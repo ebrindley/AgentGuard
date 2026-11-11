@@ -205,6 +205,24 @@ fi
 runs 're-records the fakes; node= goes with a native target' 0 "recorded in $conf" bind --pi "$fake_pi" --omp "$fake_omp" --yes
 [[ $(/usr/bin/grep -v '^#' "$conf") == "pi=$fake_pi"$'\n'"omp=$fake_omp" ]] && pass 'the record holds pi= and omp= only' || fail 'the record holds pi= and omp= only'
 
+# OMP alone binds and checks without a Pi binding. A recorded value that no longer
+# validates is not kept, so it cannot block re-recording.
+/bin/rm "$conf"
+runs 'records OMP alone' 0 "recorded in $conf" bind --omp "$fake_omp" --yes
+[[ $(/usr/bin/grep -v '^#' "$conf") == "omp=$fake_omp" ]] && pass 'the record holds omp= only' || fail 'the record holds omp= only'
+runs 'check passes with OMP alone' 0 "omp: $fake_omp" bind --check
+print -r -- "pi=$fake_pi"$'\n'"omp=$home/opt/gone/omp" > "$conf"
+runs 'a stale omp does not block recording Pi' 0 'the recorded omp is no longer usable' bind --pi "$fake_pi" --yes
+[[ $(/usr/bin/grep -v '^#' "$conf") == "pi=$fake_pi" ]] && pass 'the stale omp is dropped' || fail 'the stale omp is dropped'
+node_pi="$home/opt/nodepi/cli.js"
+/bin/mkdir -p "${node_pi:h}"
+print -r -- '#!/usr/bin/env node' > "$node_pi"
+/bin/chmod 755 "$node_pi"
+print -r -- "pi=$fake_pi"$'\n'"node=$home/opt/gone/node" > "$conf"
+runs 'a stale node is replaced' 0 'the recorded node is no longer usable' bind --pi "$node_pi" --yes
+[[ $(/usr/bin/grep -v '^#' "$conf") == "pi=$node_pi"$'\n'"node=$want_node" ]] && pass 'the node is detected again' || fail 'the node is detected again'
+runs 'restores both bindings' 0 "recorded in $conf" bind --pi "$fake_pi" --omp "$fake_omp" --yes
+
 # --checker-node is accepted and ignored, with one line, and records nothing.
 runs 'checker-node is ignored' 0 '--checker-node is ignored' bind --checker-node "$run/nodebin/node" --yes
 [[ ! -e $ext/.guard-node ]] && pass 'nothing is recorded' || fail 'nothing is recorded'
@@ -240,6 +258,7 @@ wrapper "$w/case2/GOOD"
 wrapper "$w/linked"
 wrapper "$w/folder"
 wrapper "$w/bad/bad@name"
+wrapper "$w/bad/-dash"
 print -r -- '#!/bin/sh
 exec "${0%/*}/pi" "$@"' > "$w/bad/shebang"
 print -r -- '#!/bin/zsh -f
@@ -270,6 +289,7 @@ refused 'refuses a symlink' "refusing symlink (install real files only): $w/bad/
 refused 'refuses a file that is not regular' "not a regular file: $w/bad/fifo" "$w/bad/fifo"
 refused 'refuses a missing file' "no such file or folder: $w/nope" "$w/nope"
 refused 'refuses a name outside [A-Za-z0-9._-]' "wrapper name must match [A-Za-z0-9._-]: $w/bad/bad@name" "$w/bad/bad@name"
+refused 'refuses a name that starts with -' "wrapper name must not start with -: $w/bad/-dash" "$w/bad/-dash"
 for f in "$w"/reserved/*; do refused "refuses the reserved name ${f:t}" "'${f:t}' is reserved" "$f"; done
 for f in "$w"/case/*; do refused "refuses ${f:t}: reserved names are compared ignoring case" "'${f:t}' is reserved, ignoring case" "$f"; done
 refused 'refuses a duplicate name' "duplicate wrapper name 'dup', ignoring case: $w/dupB/dup" "$w/dupA" "$w/dupB"
@@ -453,6 +473,10 @@ doctor_fails 'an entry point that resolves elsewhere' "pi resolves to $home/shad
 print -r -- 'export PATH="$HOME/.local/bin:$PATH"' > "$run/zdot/.zprofile"
 doctor_fails 'ZDOTDIR cannot hide an entry point that resolves elsewhere' "pi resolves to $home/shadow/pi in a login shell, not to the guard*" -- \
   ZDOTDIR="$run/zdot"
+# A login shell that gives no answer proves nothing, so it is not checked and not ok.
+print -r -- 'exit 0' > "$home/.zprofile"
+doctor_fails 'a login shell that gives no answer'
+[[ $out == *'skip pi not checked'* && $out != *'ok   pi resolves'* && $out != *'ok   omp resolves'* ]] && pass 'the entry points are reported as not checked' || fail 'the entry points are reported as not checked'
 print -r -- 'export PATH="$HOME/.local/bin:$PATH"' > "$home/.zprofile"
 runtime "$home/shadow2/good" 'print real'
 print -r -- 'export PATH="$HOME/shadow2:$HOME/.local/bin:$PATH"' > "$home/.zprofile"
@@ -493,6 +517,16 @@ else
 fi
 /bin/mv "$run/conf" "$conf"
 runs 'restores the omp binding' 0 recorded bind --pi "$fake_pi" --omp "$fake_omp" --yes
+# OMP alone is a valid binding.
+if [[ -e /opt/homebrew/bin/pi || -e /usr/local/bin/pi ]]; then
+  print -r -- 'skip: a Pi CLI on the launcher PATH is found without a binding'
+else
+  /usr/bin/sed -i '' '/^pi=/d' "$conf"
+  doctor_fails 'OMP alone'
+  [[ $out == *"ok   bindings valid: omp=$fake_omp"* ]] && pass 'the OMP binding is checked' || fail 'the OMP binding is checked'
+  json_is '--json: OMP alone' ".runtime_binding == \"ok\" and .pi_binding_path == \"\" and .omp_binding_path == \"$fake_omp\""
+  runs 'restores the pi binding' 0 recorded bind --pi "$fake_pi" --omp "$fake_omp" --yes
+fi
 
 # The checker: the session copy and the installed extension's verdicts.
 /bin/cp "$home/.cc-safety-net/rules/rule.json" "$run/rule.json"

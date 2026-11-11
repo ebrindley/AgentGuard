@@ -73,7 +73,9 @@ pi_wrapper_regular() {
 pi_wrapper_state() {
   local f="$bin/$1" sum
   if [[ ! -e $f && ! -L $f ]]; then REPLY=missing
-  elif [[ -f $f && ! -L $f ]] && sum=$(/usr/bin/shasum -a 256 -- "$f") && [[ ${sum[1,64]} == "$2" ]]; then REPLY=matches
+  # shasum starts the line with a backslash when it escapes the name; the digest is
+  # the first 64 characters after it.
+  elif [[ -f $f && ! -L $f ]] && sum=$(/usr/bin/shasum -a 256 -- "$f") && [[ ${${sum#\\}[1,64]} == "$2" ]]; then REPLY=matches
   else REPLY=changed
   fi
 }
@@ -106,6 +108,8 @@ pi_wrapper_add() {
     [[ -f $src ]] || pi_wrapper_die "not a regular file: $src"
     (( ${pi_wrapper_reserved[(Ie)$lname]} )) && pi_wrapper_die "'$name' is reserved, ignoring case ($pi_wrapper_reserved): $src"
     [[ $name == [A-Za-z0-9._-]## ]] || pi_wrapper_die "wrapper name must match [A-Za-z0-9._-]: $src"
+    # jq would read a name that starts with - as one of its options.
+    [[ $name == -* ]] && pi_wrapper_die "wrapper name must not start with -: $src"
     (( ${lnames[(Ie)$lname]} )) && pi_wrapper_die "duplicate wrapper name '$name', ignoring case: $src"
     for f in ${(f)known}; do
       [[ ${(L)f} == $lname && $f != $name ]] && pi_wrapper_die "'$name' differs only in case from the recorded name '$f': $src"
@@ -137,7 +141,9 @@ pi_wrapper_add() {
   fi
   for name in $names; do
     sum=$(/usr/bin/shasum -a 256 -- "$pi_wrapper_stage/$name") || pi_wrapper_die "cannot hash $name"
-    sums+=("$name" "${sum[1,64]}")
+    sum=${${sum#\\}[1,64]}
+    [[ $sum == [0-9a-f](#c64) ]] || pi_wrapper_die "cannot hash $name"
+    sums+=("$name" "$sum")
   done
   # Recorded first: a wrapper the steps below then fail to install shows as changed
   # or missing in doctor, instead of sitting unrecorded on PATH.
@@ -207,7 +213,7 @@ pi_wrapper_remove() {
   done
   if (( $#gone )); then
     json=$(/usr/bin/jq -c '.wrappers |= with_entries(select(.key | IN($ARGS.positional[]) | not))
-      | .historical = (.historical + $ARGS.positional | unique)' --args $gone <<< "$json") || pi_wrapper_die "cannot update $wrappers_json"
+      | .historical = (.historical + $ARGS.positional | unique)' --args -- $gone <<< "$json") || pi_wrapper_die "cannot update $wrappers_json"
     pi_wrapper_write "$json"
   fi
   return $rc

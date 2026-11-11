@@ -16,7 +16,7 @@
   ;; instructions into later sessions.
   (require-all (subpath (peer-home "/.codex"))
     (require-not (regex #"/\.codex/[^/]+/"))
-    (regex #"/\.codex/(state|logs|queue|thread_history)_[0-9]+\.sqlite(-wal|-shm)?$"))
+    (regex #"/\.codex/(state|logs|queue|thread_history)_[0-9]+\.sqlite(-wal|-shm|-journal)?$"))
   (subpath (peer-home "/.claude/debug"))
   (subpath (peer-home "/.claude/projects"))
   (subpath (peer-home "/.claude/sessions"))

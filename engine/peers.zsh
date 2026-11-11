@@ -50,6 +50,8 @@ agent_guard_peer() {
         previous=sandbox; continue ;;
       codex:--sandbox=*|cursor-agent:--sandbox=*|grok:--sandbox=*)
         value=${arg#*=} ;;
+      codex:-s?*) value=${arg#-s} ;;
+      codex:--full-auto) value=workspace-write ;;
       codex:--config|codex:-c) previous=config; continue ;;
       codex:--no-daemon) daemon=1; continue ;;
       codex:--config=*|codex:-c?*)
@@ -123,6 +125,14 @@ agent_guard_peer() {
     opencode)
       local version managed=0
       local -a reply
+      # Outside an OpenCode session there is no rules snapshot for the plugin;
+      # without this it would apply the last standalone launch's Guard List or
+      # refuse every tool. The parent's sandbox is the boundary, so the plugin
+      # runs unguarded as it does for a launch inside another sandbox, with the
+      # bypass its refusal of unsafe tools needs.
+      if [[ ${AGENT_GUARD_CONTEXT:-} != "$HOME/Library/Application Support/AgentGuard/state/opencode/"* ]]; then
+        export AGENT_GUARD_OUTER_SANDBOX=1 AGENT_GUARD_BYPASS=1
+      fi
       version=$("$target" --version 2>/dev/null) || return 1
       if [[ $version == (opencode\ v2.*|2.*|v2.*) ]]; then
         source "$root/profiles/opencode/runtime.zsh"
