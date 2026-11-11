@@ -184,7 +184,9 @@ if [[ -n $inside ]]; then
     note() { print -ru2 -- "agent-guard: $*" }
     export AGENT_GUARD_OUTER_SANDBOX=1
     [[ $mode == cli ]] || fail "already inside another sandbox, where Agent Guard cannot apply its own; open this outside that sandbox"
-    print -ru2 -- "agent-guard: already inside another sandbox; Agent Guard's sandbox is not applied and $title runs under the existing one"
+    outer_note="already inside another sandbox; Agent Guard's sandbox is not applied and $title runs under the existing one"
+    [[ $harness != opencode ]] || outer_note+=", and the Agent Guard plugin refuses its tools unless AGENT_GUARD_BYPASS=1 is set"
+    print -ru2 -- "agent-guard: $outer_note"
   else
     [[ $mode == cli ]] || fail "already inside the guard; run this from Terminal, outside any guard or sandbox"
   fi
