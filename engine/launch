@@ -651,13 +651,12 @@ fi
 # hooks folder Git resolves for the launch folder, such as a core.hooksPath, is
 # denied whole. A path broad enough to deny the launch folder or a shared root
 # refuses the launch.
-typeset -a hooks_rules
+typeset -a hooks_rules hooks_dirs
 if (( git_hooks )); then
   hooks_rules=('(deny file-write*
   (require-all
     (regex #"\.git/(hooks|modules/.+/hooks)/")
     (require-not (regex #"/hooks/[^/]*\.sample$"))))')
-  typeset -a hooks_dirs
   # Each project's active hooks folder, as the launch folder's is without one.
   for hooks_base in ${projects:-$PWD}; do
     active_hooks=
