@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawn, spawnSync } from 'node:child_process'
 import { createConnection } from 'node:net'
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
@@ -49,8 +49,18 @@ async function request(url) {
   })
 }
 try {
-  for (let i = 0; i < 60 && !existsSync(socket) && child.exitCode === null; i++) await new Promise(resolve => setTimeout(resolve, 25))
-  assert.ok(existsSync(socket), errors || 'helper did not start')
+  // The socket file exists from bind(), before listen(); only a connection shows readiness.
+  const listening = () => new Promise(resolve => {
+    const probe = createConnection(socket)
+    probe.once('connect', () => { probe.destroy(); resolve(true) })
+    probe.once('error', () => resolve(false))
+  })
+  let ready = false
+  for (let i = 0; i < 80 && !ready && child.exitCode === null; i++) {
+    ready = await listening()
+    if (!ready) await new Promise(resolve => setTimeout(resolve, 25))
+  }
+  assert.ok(ready, errors || 'helper did not start')
   const allowed = [
     'https://auth.openai.com/api/accounts/authorize?client_id=dynamic_agent_client&redirect_uri=http%3A%2F%2F127.0.0.1%3A45678%2Fauth%2Fcallback',
     'https://opencode.ai/console/device?user_code=dummy',
