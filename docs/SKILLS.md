@@ -1,6 +1,6 @@
 # OpenCode skills
 
-This describes release 2026.11.08. Releases before 0.2.2 also write-protect skill content.
+This describes release 2026.11.10. Releases before 0.2.2 also write-protect skill content.
 
 OpenCode can create, edit, rename, move and delete skills and their supporting
 files without adding each skill to the Guard List. The automatic global roots
