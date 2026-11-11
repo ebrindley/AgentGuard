@@ -140,6 +140,14 @@ for (const parent of ['opencode', 'pi', 'omp']) {
   assert.match(attach.stderr, /must execute locally/);
 }
 writeFileSync(opencodeFile, v1Stub);
+// Outside an OpenCode session the plugin has no rules snapshot, so the peer runs it unguarded under the parent's sandbox.
+writeFileSync(opencodeFile, v1Stub.replace('print -l -- "$@"', 'print -- "${AGENT_GUARD_OUTER_SANDBOX:-unset} ${AGENT_GUARD_BYPASS:-unset} ${AGENT_GUARD_CONTEXT:+context}"'));
+for (const parent of ['opencode', 'pi', 'omp']) {
+  const r = launch(parent, 'opencode run hello');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout.trim(), parent === 'opencode' ? 'unset unset context' : '1 1');
+}
+writeFileSync(opencodeFile, v1Stub);
 console.log('ok V2 peer commands use private servers under all parent policies');
 mkdirSync(join(home, '.opencode/bin'), { recursive: true });
 renameSync(join(bin, 'opencode'), join(home, '.opencode/bin/opencode'));
