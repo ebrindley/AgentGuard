@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/zsh -f
 # usage: agent-guard doctor|diagnose [--json]|version|update [--check|--to TAG] [--no-prompt] [--restore-edit-permissions] [--approval-preference auto|host]|update-check [on|off]|uninstall|bind [OPTIONS]|wrapper add|remove|list|app-projects [remove PATH]
 emulate -L zsh
 setopt no_unset pipe_fail extended_glob
