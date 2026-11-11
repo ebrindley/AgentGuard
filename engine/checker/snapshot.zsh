@@ -12,8 +12,8 @@
 #   ROOT     folders the harness grants deletion allowances for: recursive deletes
 #            below them are allowed unless the user's policy is restrictive
 # Fails when the copy cannot be built. Sets ag_checker_warning to a sentence when
-# the copy is usable but lacks the allowances (an unusable policy.json), or to the
-# reason when it fails on an unsupported rule source.
+# policy.json is malformed (the copy then keeps only the dynamic-delete rule and
+# has no allowances), or to the reason when it fails on an unsupported rule source.
 ag_checker_snapshot() {
   local home=$1 dest=$2 release=$3 level=$4 source="$1/.cc-safety-net" name spec file
   shift 4
@@ -63,7 +63,17 @@ ag_checker_snapshot() {
   local legacy=${CC_SAFETY_NET_PARANOID_RM-${SAFETY_NET_PARANOID_RM:-}}
   local paranoid=${CC_SAFETY_NET_PARANOID-${SAFETY_NET_PARANOID:-}}
   if ! /usr/bin/jq -e 'type == "object" and ((.destructive_command_protection // {}) | type == "object") and ((.destructive_command_protection.allow_paths // []) | type == "array") and ((.destructive_command_protection.overrides // {}) | type == "object") and ((.safety // {}) | type == "object") and ((.safety.overrides // {}) | type == "object")' "$dest/policy.json" >/dev/null 2>&1; then
-    ag_checker_warning="checker policy copied without automatic deletion allowances: $source/policy.json"
+    ag_checker_warning="checker policy is malformed; the session keeps the dynamic-delete rule and adds no automatic deletion allowances: $source/policy.json"
+    # Without the rule the standard level allows rm -rf "$DIR". The checker ignores a
+    # non-object policy and a wrong-typed container, so only the rule is added.
+    /usr/bin/jq -s '
+      if length == 1 and (.[0] | type) == "object" then .[0]
+        | if (.destructive_command_protection | type) == "object" then . else .destructive_command_protection = {} end
+        | if (.destructive_command_protection.overrides | type) == "object" then . else .destructive_command_protection.overrides = {} end
+        | .destructive_command_protection.overrides |= (. + {"rm.recursive-force-dynamic-target": "on"} + .)
+      else error("checker policy must be one object") end' "$dest/policy.json" > "$dest/.policy" 2>/dev/null ||
+      print -r -- '{"version":1,"destructive_command_protection":{"overrides":{"rm.recursive-force-dynamic-target":"on"}}}' > "$dest/.policy" || return 1
+    /bin/mv "$dest/.policy" "$dest/policy.json" || return 1
     return 0
   fi
   local roots=$(/usr/bin/jq -cn '$ARGS.positional' --args "${roots_list[@]}")
