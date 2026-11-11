@@ -290,10 +290,14 @@ do_ocg_plugin_name() {
 }
 
 do_plugin_take() {
-  local tmp="$plugins/.agent-guard.js.partial"
+  local tmp="$plugins/.agent-guard.js.partial" b="$txn_dir/backup/plugin-take"
   ag_jlast plugin-take
   [[ $REPLY == done ]] && return 0
-  if [[ -z $REPLY ]]; then ag_backup plugin-take "$old_plugin" && ag_jnl plugin-take begun || return 1; fi
+  if [[ -z $REPLY ]]; then
+    ag_backup plugin-take "$old_plugin" || return 1
+    if [[ -L $old_plugin ]]; then /usr/bin/readlink -- "$old_plugin" > "$b/link" || return 1; fi
+    ag_jnl plugin-take begun || return 1
+  fi
   if ! ag_ours "$old_plugin" && ! { [[ ! -e $old_plugin && ! -L $old_plugin ]] && ag_ours "$plugin" }; then
     /bin/rm -f -- "$tmp" && /bin/ln -s "$plugin_target" "$tmp" || return 1
     test_point plugin-take || return 1
@@ -303,11 +307,13 @@ do_plugin_take() {
 }
 
 undo_plugin_take() {
-  local b="$txn_dir/backup/plugin-take/file"
+  local d="$txn_dir/backup/plugin-take" b="$txn_dir/backup/plugin-take/file"
   ag_jlast plugin-take
   [[ $REPLY == (begun|done) ]] || return 0
   /bin/rm -f -- "$plugins/.agent-guard.js.partial"
-  if [[ -f $b ]] && ! { [[ -f $old_plugin && ! -L $old_plugin ]] && /usr/bin/cmp -s -- "$old_plugin" "$b" }; then
+  if [[ -f $d/link ]]; then
+    [[ -L $old_plugin && $(/usr/bin/readlink -- "$old_plugin") == "$(<"$d/link")" ]] || replace_link "$old_plugin" "$(<"$d/link")" || return 1
+  elif [[ -f $b ]] && ! { [[ -f $old_plugin && ! -L $old_plugin ]] && /usr/bin/cmp -s -- "$old_plugin" "$b" }; then
     restore_over_link "$old_plugin" "$b" || return 1
   fi
   ag_jnl plugin-take undone
