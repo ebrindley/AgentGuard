@@ -116,7 +116,9 @@ a strict read-only shell.
 ### Runtime health and permission explanation
 
 In OpenCode, `agent_guard_status` returns JSON with the sandbox observation,
-rules load, safety-net module/API/hooks readiness, preparation observation,
+rules load, the applied ALLOW, READ ONLY, DENY and protected roots,
+safety-net module/API/hooks readiness, the Git-rule check result, preparation
+observation,
 loaded/launcher/installed release, restart need and fixed failure reasons.
 Status remains callable when a required component fails, provided the wrapper
 loaded; ordinary tool calls remain refused. API import failure now retains the
@@ -148,7 +150,8 @@ unobservable from these server observations.
 drift counts, global configuration classification, safe permission ownership,
 requested approval preference and bounded recent failure observations. It does
 not launch OpenCode, perform write probes, change settings, repair files or
-recover transactions. Use `doctor` separately for active checks.
+recover transactions. Its rulebook line classifies the file as written and
+does not probe readiness. Use `doctor` separately for active checks.
 
 The report uses logical path classes, fixed codes and safe rule identifiers.
 It excludes full commands, arguments, credentials, environment dumps, exception
@@ -305,8 +308,10 @@ without running OpenCode Guard's uninstaller:
 1. Quit the OpenCode app and every `opencode` in a terminal first. The installer
    stops while one runs, and names it.
 2. It shows the entries of `~/OpenCode Guard/Guard List.txt` and asks
-   `Import this list? [y/N]`. Yes copies it unchanged to
-   `~/Agent Guard/Guard List.txt`; no, or no terminal, stops with nothing changed.
+   `Import this list?`. Yes copies it unchanged to
+   `~/Agent Guard/Guard List.txt`; no, or no terminal, stops the install with
+   nothing changed. To install without the old entries, create
+   `~/Agent Guard/Guard List.txt` first.
    An existing `~/Agent Guard/Guard List.txt` is never changed.
 3. It keeps OpenCode Guard's permission record, so `agent-guard uninstall` can
    still put back the values you had before OpenCode Guard, and writes no
@@ -616,16 +621,10 @@ loaded; `/reload` loads the extension now on disk.
   scripts keep working. The launcher refuses a stale binding and names this
   command. Bind again after an upgrade
   that moves an executable, such as a new Node under a version manager.
-  `bind` needs Pi: on a Mac with OMP and no Pi binding, `--detect` stops because
-  it finds no Pi, and `--omp` stops with `no Pi path supplied or previously
-  recorded`. There, the install records OMP when it replaces an `omp` in
-  `~/.local/bin`; otherwise the launcher looks for `omp` on its own PATH. To
-  fix a stale OMP binding on such a Mac, set the `omp=` line in
-  `executables.conf` to the OMP executable's full path in Terminal, then run
-  `agent-guard doctor`, which reports a binding the launcher refuses. Deleting
-  the line instead works only for an `omp` in `/opt/homebrew/bin`,
-  `/usr/local/bin` or the system folders, which make up the launcher's PATH; it
-  does not find one in `~/.local/lib/omp` or `~/.bun/bin`.
+  `bind` records Pi and OMP independently: `--omp` and `--detect` work on a Mac
+  with OMP and no Pi. A recorded line that no longer validates is dropped with
+  a note, and `node=` is detected again, so a stale line does not block a new
+  binding.
 - `agent-guard wrapper add FILE|FOLDER...` installs custom wrappers into
   `~/.local/bin`, `agent-guard wrapper remove NAME...` removes them, and
   `agent-guard wrapper list` shows the recorded and earlier names and whether
@@ -816,7 +815,11 @@ that every hook executes or that a remote server is sandboxed. A local MCP child
 inherits the launch profile; an existing or remote service does not. Attaching
 a client to a server does not change that server's permissions.
 The main launcher permits this attachment and logs the distinction. Peer CLI
-wrappers refuse attachment. An unguarded server with the Guard plugin refuses
+wrappers refuse attachment. An OpenCode peer started from a Pi, OMP or Grok
+session has no OpenCode session rules, so its wrapper sets
+`AGENT_GUARD_OUTER_SANDBOX=1` and `AGENT_GUARD_BYPASS=1`: the plugin runs
+unguarded, the command checker still runs, and the parent's sandbox is the
+boundary. An unguarded server with the Guard plugin refuses
 unsafe tools unless `AGENT_GUARD_BYPASS=1` is set; no refusal is assured on a
 server without that plugin.
 

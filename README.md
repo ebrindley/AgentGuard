@@ -28,7 +28,8 @@ configuration restrictions; see [the security policy](SECURITY.md). Network acce
 inside permitted write locations can still be changed or deleted; keep backups
 and review changes before running them outside the guard. Reads outside the
 applicable denies remain broad. The operating system sandbox is the enforcement
-boundary; plugins and analyzers cannot replace it.
+boundary; plugins and analyzers cannot replace it. OpenCode, Pi and OMP check
+shell commands with cc-safety-net; Grok sessions run no command checker.
 
 ## Install and first run
 

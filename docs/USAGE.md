@@ -200,6 +200,9 @@ or left as you set it when the file already had `disabled`.
   does `opencode service start`. Guarded launches do not depend on it.
 - `agent-guard uninstall` removes the key while it is still `true`; a value you
   changed stays.
+- A guarded session can write `service.json`, including its `env` and `remote`
+  settings, which later guarded service launches apply; see
+  [the shared service limitation](../SECURITY.md#opencode-1).
 
 ## Configure OpenCode
 
@@ -242,8 +245,8 @@ path refuses the launch; remove it from the Guard List and reopen OpenCode.
 
 Put one absolute path or `~` path per line. You can drag a path from Finder;
 quotes and Finder's backslash escapes are accepted. Heading names are
-case-insensitive; READ-ONLY is also accepted. Lines starting with `#` and text
-before the first heading are ignored.
+case-insensitive; READ-ONLY is also accepted. Lines starting with `#` are ignored.
+Other lines before the first heading are skipped, and the launch says how many.
 
 The launcher skips nonexistent ALLOW entries and keeps nonexistent READ ONLY entries. It refuses ALLOW
 entries broad enough to contain `~/Library/Application Support`, `~/.config`
@@ -384,8 +387,9 @@ folder for a later launch.
 - Dropping a folder while `@project` is not under ALLOW shows an alert and does
   not launch. Remove the `#` from `@project` first. With `@project` off, the app
   keeps the fixed ALLOW folders and ignores the store.
-- Dropping or opening while OpenCode is already running fails with the usual
-  already-open alert and changes nothing.
+- Dropping or opening while OpenCode is already running fails with an alert
+  that says the dropped folder was not added, and changes nothing. Quit
+  OpenCode, open Agent Guard, then drop the folder again.
 
 ```sh
 agent-guard app-projects                 # list the remembered folders
@@ -448,10 +452,12 @@ and write, and it denies reads of `.env` files and the credential paths.
 If the checker cannot run, every tool call is refused and the message says what
 to fix: relaunch through `pi` or `omp` for a missing session copy, fix
 `~/.cc-safety-net/rules/rule.json` (`npx cc-safety-net doctor` lists the problem)
-when the Git rules did not load, or run `agent-guard update` when cc-safety-net
-fails to load. Seatbelt supplies the enforcement boundary. A direct launch of
-the real Pi/OMP executable is unguarded and refuses every tool call, because it
-has no session copy; see
+when the Git rules did not load, or rerun the installer when cc-safety-net fails
+to load. When the installed release is already the latest, `agent-guard update`
+only runs `doctor` and repairs nothing; see
+[Release channels](OPERATIONS.md#release-channels). Seatbelt supplies the
+enforcement boundary. A direct launch of the real Pi/OMP executable is unguarded
+and refuses every tool call, because it has no session copy; see
 [unguarded execution and maintenance](OPERATIONS.md#running-pi-or-omp-without-the-guard).
 
 Set up Pi credentials outside the guard before the first guarded session: Pi
@@ -506,7 +512,8 @@ When the installer finds Grok, `grok` in a new terminal window, `~/.local/bin/gr
 and Agent Guard's `bin/grok` start Grok inside the guard with `--sandbox off`:
 Grok's own sandbox profiles block the keychain, so `gh` and `git` over https fail
 under them, and Agent Guard's profile takes their place. The Guard List applies as
-for OpenCode, and so does nothing else of OpenCode's: there is no plugin.
+for OpenCode, and so does nothing else of OpenCode's: there is no plugin, and no
+command checker runs, so Seatbelt is the only layer.
 
 Grok can write the folders the Guard List allows, `~/.grok` apart from the files
 below, and its caches. It authors skills, agents, workflows, rules, `AGENTS.md`,
@@ -579,6 +586,16 @@ Runtime state uses the standard user locations. Authentication and configuration
 files are not copied or relocated. CLI-specific mixed state files are excluded
 from the new grants. OMP launcher behavior is covered by disposable fixtures;
 real OMP qualification requires an OMP installation.
+
+Start each peer once outside the guard before first using it in a guarded
+session. The runtime grants cover named subfolders and files, such as
+`~/.codex/sessions`, `~/.claude/projects`, `~/.cursor/chats` and
+`~/.grok/sessions`, not their parent folders `~/.codex`, `~/.claude`, `~/.cursor`
+and `~/.grok`, and no launch creates `~/.codex`, `~/.claude` or `~/.cursor`. A
+peer that has never run on this Mac may therefore fail on first use inside the
+guard. Running it once in Terminal creates its folders and its sign-in. A Grok
+session creates `~/.grok` and an OpenCode session creates
+`~/.local/share/opencode` and `~/.local/state/opencode` when it starts.
 
 ## Nested launches
 
