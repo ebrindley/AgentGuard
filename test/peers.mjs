@@ -92,7 +92,7 @@ for (const parent of ['opencode', 'pi', 'omp']) {
     assert.equal(r.status, 2, r.stderr);
     assert.match(r.stderr, /must execute locally/);
   }
-  for (const relative of ['.codex/installation_id', '.codex/state_5.sqlite', '.codex/logs_2.sqlite-wal', '.claude/debug/test', '.cursor/chats/test', '.grok/sessions/test', '.local/share/opencode/test']) {
+  for (const relative of ['.codex/installation_id', '.codex/state_5.sqlite', '.codex/logs_2.sqlite-wal', '.codex/state_5.sqlite-journal', '.claude/debug/test', '.cursor/chats/test', '.grok/sessions/test', '.local/share/opencode/test']) {
     const path = join(home, relative);
     mkdirSync(dirname(path), { recursive: true });
     const r = launch(parent, `/usr/bin/touch ${quote(path)}`);
