@@ -205,6 +205,24 @@ fi
 runs 're-records the fakes; node= goes with a native target' 0 "recorded in $conf" bind --pi "$fake_pi" --omp "$fake_omp" --yes
 [[ $(/usr/bin/grep -v '^#' "$conf") == "pi=$fake_pi"$'\n'"omp=$fake_omp" ]] && pass 'the record holds pi= and omp= only' || fail 'the record holds pi= and omp= only'
 
+# OMP alone binds and checks without a Pi binding. A recorded value that no longer
+# validates is not kept, so it cannot block re-recording.
+/bin/rm "$conf"
+runs 'records OMP alone' 0 "recorded in $conf" bind --omp "$fake_omp" --yes
+[[ $(/usr/bin/grep -v '^#' "$conf") == "omp=$fake_omp" ]] && pass 'the record holds omp= only' || fail 'the record holds omp= only'
+runs 'check passes with OMP alone' 0 "omp: $fake_omp" bind --check
+print -r -- "pi=$fake_pi"$'\n'"omp=$home/opt/gone/omp" > "$conf"
+runs 'a stale omp does not block recording Pi' 0 'the recorded omp is no longer usable' bind --pi "$fake_pi" --yes
+[[ $(/usr/bin/grep -v '^#' "$conf") == "pi=$fake_pi" ]] && pass 'the stale omp is dropped' || fail 'the stale omp is dropped'
+node_pi="$home/opt/nodepi/cli.js"
+/bin/mkdir -p "${node_pi:h}"
+print -r -- '#!/usr/bin/env node' > "$node_pi"
+/bin/chmod 755 "$node_pi"
+print -r -- "pi=$fake_pi"$'\n'"node=$home/opt/gone/node" > "$conf"
+runs 'a stale node is replaced' 0 'the recorded node is no longer usable' bind --pi "$node_pi" --yes
+[[ $(/usr/bin/grep -v '^#' "$conf") == "pi=$node_pi"$'\n'"node=$want_node" ]] && pass 'the node is detected again' || fail 'the node is detected again'
+runs 'restores both bindings' 0 "recorded in $conf" bind --pi "$fake_pi" --omp "$fake_omp" --yes
+
 # --checker-node is accepted and ignored, with one line, and records nothing.
 runs 'checker-node is ignored' 0 '--checker-node is ignored' bind --checker-node "$run/nodebin/node" --yes
 [[ ! -e $ext/.guard-node ]] && pass 'nothing is recorded' || fail 'nothing is recorded'
@@ -493,6 +511,16 @@ else
 fi
 /bin/mv "$run/conf" "$conf"
 runs 'restores the omp binding' 0 recorded bind --pi "$fake_pi" --omp "$fake_omp" --yes
+# OMP alone is a valid binding.
+if [[ -e /opt/homebrew/bin/pi || -e /usr/local/bin/pi ]]; then
+  print -r -- 'skip: a Pi CLI on the launcher PATH is found without a binding'
+else
+  /usr/bin/sed -i '' '/^pi=/d' "$conf"
+  doctor_fails 'OMP alone'
+  [[ $out == *"ok   bindings valid: omp=$fake_omp"* ]] && pass 'the OMP binding is checked' || fail 'the OMP binding is checked'
+  json_is '--json: OMP alone' ".runtime_binding == \"ok\" and .pi_binding_path == \"\" and .omp_binding_path == \"$fake_omp\""
+  runs 'restores the pi binding' 0 recorded bind --pi "$fake_pi" --omp "$fake_omp" --yes
+fi
 
 # The checker: the session copy and the installed extension's verdicts.
 /bin/cp "$home/.cc-safety-net/rules/rule.json" "$run/rule.json"

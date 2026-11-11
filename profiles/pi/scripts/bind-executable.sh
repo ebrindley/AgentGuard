@@ -23,7 +23,7 @@
 # npm script cannot retarget the launch), and a confined Pi session cannot repoint its
 # own next launch, because the config is not sandbox-writable.
 #
-# Pi is required by setup; OMP is optional.
+# Either runtime may be recorded alone: a Mac with only OMP binds only omp=.
 #
 # --checker-node [<abs-path>] is accepted and ignored: the command checker runs in
 # Pi's own process and no longer needs a recorded Node.
@@ -210,6 +210,18 @@ validate_target() {
   printf '%s\n' "$canon"
 }
 
+# carried_over <label> <recorded path>: the canonical path when a value recorded
+# earlier still validates; otherwise nothing, with a note on stderr. A stale record
+# the operator did not just supply must not block re-recording.
+carried_over() {
+  local res
+  if res="$(validate_target "$2" "$1" 2>&1)"; then
+    printf '%s\n' "$res"
+  else
+    printf 'bind: the recorded %s is no longer usable and is not kept: %s\n' "$1" "${res#bind: }" >&2
+  fi
+}
+
 # Ordered discovery. Each candidate is a real install layout observed in the wild; the
 # list is for PROPOSING a value, never for trusting one — the operator confirms.
 # Ambient PATH is consulted last and only to notice an install the layouts missed.
@@ -256,7 +268,8 @@ detect_pi() {
     fi
   fi
   local seen="" out=""
-  for c in "${candidates[@]}"; do
+  # bash 3.2 (macOS /bin/bash) treats an empty array as unset under set -u.
+  for c in ${candidates[@]+"${candidates[@]}"}; do
     out="$(canonicalize "$c")"
     [ -n "$out" ] || continue
     case "$seen" in *"|$out|"*) continue ;; esac
@@ -323,8 +336,9 @@ case "$MODE" in
     exit 0 ;;
   check)
     pi_rec="$(read_key pi || true)"
-    if [ -z "$pi_rec" ]; then
-      echo "no pi= binding recorded in $CONFIG"
+    omp_rec="$(read_key omp || true)"
+    if [ -z "$pi_rec" ] && [ -z "$omp_rec" ]; then
+      echo "no pi= or omp= binding recorded in $CONFIG"
       echo "  auto-resolution only covers fixed trusted prefixes; run: agent-guard bind --detect"
       exit 3
     fi
@@ -333,10 +347,9 @@ case "$MODE" in
     # directory, relative path, guard script, or write-root executable "ok" while the
     # launcher refuses it — a false green that sends the operator looking somewhere else.
     # validate_target dies on failure, so run it in a subshell and capture the reason.
-    if ! pi_reason="$(validate_target "$pi_rec" "pi" 2>&1 >/dev/null)"; then
+    if [ -n "$pi_rec" ] && ! pi_reason="$(validate_target "$pi_rec" "pi" 2>&1 >/dev/null)"; then
       echo "invalid: ${pi_reason#bind: }"; ok=0
     fi
-    omp_rec="$(read_key omp || true)"
     if [ -n "$omp_rec" ] && ! omp_reason="$(validate_target "$omp_rec" "omp" 2>&1 >/dev/null)"; then
       echo "invalid: ${omp_reason#bind: }"; ok=0
     fi
@@ -347,7 +360,7 @@ case "$MODE" in
       fi
     fi
     if [ "$ok" -eq 1 ]; then
-      echo "binding ok: $pi_rec"
+      if [ -n "$pi_rec" ]; then echo "binding ok: $pi_rec"; else echo "binding ok: no pi= recorded"; fi
       [ -n "$omp_rec" ] && echo "omp: $omp_rec"
       [ -n "$node_rec" ] && echo "interpreter: $node_rec"
       exit 0
@@ -357,6 +370,10 @@ case "$MODE" in
 esac
 
 # --- detect / explicit -------------------------------------------------------
+# Either runtime may be bound alone. A value recorded earlier and not supplied now
+# is kept only while it still validates, so a stale line never blocks re-recording.
+pi_recorded=0
+omp_recorded=0
 if [ "$MODE" = "detect" ] && [ -z "$PI_PATH" ]; then
   # Not mapfile: macOS ships bash 3.2, where it does not exist. Read line-by-line so
   # this runs on a stock host without requiring a newer bash.
@@ -364,14 +381,6 @@ if [ "$MODE" = "detect" ] && [ -z "$PI_PATH" ]; then
   while IFS= read -r line; do
     [ -n "$line" ] && found+=("$line")
   done < <(detect_pi)
-  # The shim is excluded as a candidate (it would point at itself), so once it is
-  # installed and first on PATH, an install layout this script does not enumerate
-  # -- Nix, an unusual prefix -- leaves nothing to propose even though Pi is
-  # present. Name that case: the fix is one flag, not a reinstall.
-  [ "${#found[@]}" -gt 0 ] || die "no Pi install found in the layouts this script knows.
-  If Pi IS installed (Nix or another custom prefix), record it explicitly:
-    agent-guard bind --pi \"\$(command -v pi)\"   # from a shell where that is the REAL pi
-  or pass the absolute path directly: agent-guard bind --pi /abs/path/to/pi"
   if [ "${#found[@]}" -gt 1 ] && [ "$ASSUME_YES" -eq 0 ]; then
     echo "Multiple Pi installs found:"
     i=1; for f in "${found[@]}"; do printf '  %d) %s\n' "$i" "$f"; i=$((i+1)); done
@@ -382,7 +391,7 @@ if [ "$MODE" = "detect" ] && [ -z "$PI_PATH" ]; then
     esac
     [ "$sel" -ge 1 ] && [ "$sel" -le "${#found[@]}" ] || die "selection out of range: $sel"
     PI_PATH="${found[$((sel-1))]}"
-  else
+  elif [ "${#found[@]}" -gt 0 ]; then
     PI_PATH="${found[0]}"
   fi
 fi
@@ -397,23 +406,42 @@ if [ "$MODE" = "detect" ] && [ -z "$OMP_PATH" ]; then
   if [ "${#omp_found[@]}" -gt 0 ]; then
     OMP_PATH="${omp_found[0]}"
   else
-    OMP_PATH="$(read_key omp || true)"
+    OMP_PATH="$(read_key omp || true)"; omp_recorded=1
   fi
 elif [ -z "$OMP_PATH" ]; then
-  OMP_PATH="$(read_key omp || true)"
+  OMP_PATH="$(read_key omp || true)"; omp_recorded=1
+fi
+# The shim is excluded as a candidate (it would point at itself), so once it is
+# installed and first on PATH, an install layout this script does not enumerate
+# -- Nix, an unusual prefix -- leaves nothing to propose even though Pi is
+# present. Name that case: the fix is one flag, not a reinstall.
+if [ "$MODE" = "detect" ] && [ "$omp_recorded" -eq 1 ] && [ -z "$PI_PATH" ]; then
+  die "no Pi or OMP install found in the layouts this script knows.
+  If Pi IS installed (Nix or another custom prefix), record it explicitly:
+    agent-guard bind --pi \"\$(command -v pi)\"   # from a shell where that is the REAL pi
+  or pass the absolute path directly: agent-guard bind --pi /abs/path/to/pi
+  For OMP: agent-guard bind --omp /abs/path/to/omp"
 fi
 
 if [ -z "$PI_PATH" ]; then
-  PI_PATH="$(read_key pi || true)"
+  PI_PATH="$(read_key pi || true)"; pi_recorded=1
 fi
-[ -n "$PI_PATH" ] || die "no Pi path supplied or previously recorded"
 
-PI_CANON="$(validate_target "$PI_PATH" "pi")"
+PI_CANON=""
 OMP_CANON=""
-[ -n "$OMP_PATH" ] && OMP_CANON="$(validate_target "$OMP_PATH" "omp")"
+if [ -z "$PI_PATH" ]; then :
+elif [ "$pi_recorded" -eq 1 ]; then PI_CANON="$(carried_over pi "$PI_PATH")"
+else PI_CANON="$(validate_target "$PI_PATH" "pi")"
+fi
+if [ -z "$OMP_PATH" ]; then :
+elif [ "$omp_recorded" -eq 1 ]; then OMP_CANON="$(carried_over omp "$OMP_PATH")"
+else OMP_CANON="$(validate_target "$OMP_PATH" "omp")"
+fi
+[ -n "$PI_CANON$OMP_CANON" ] || die "no Pi or OMP path supplied or previously recorded; pass --pi or --omp <abs-path>"
 
-if [ -z "$NODE_PATH" ] && needs_interpreter "$PI_CANON"; then
+if [ -z "$NODE_PATH" ] && [ -n "$PI_CANON" ] && needs_interpreter "$PI_CANON"; then
   NODE_PATH="$(read_key node || true)"
+  [ -z "$NODE_PATH" ] || NODE_PATH="$(carried_over node "$NODE_PATH")"
   if [ -z "$NODE_PATH" ]; then
     NODE_PATH="$(detect_node || true)"
   fi
@@ -428,14 +456,14 @@ fi
 
 regular_or_absent "$CONFIG"
 echo "About to record:"
-printf '  pi   = %s\n' "$PI_CANON"
+[ -z "$PI_CANON" ] || printf '  pi   = %s\n' "$PI_CANON"
 if [ -n "$OMP_CANON" ]; then
   printf '  omp  = %s\n' "$OMP_CANON"
 fi
 if [ -n "$NODE_CANON" ]; then
   printf '  node = %s\n' "$NODE_CANON"
-  printf '  launch = %s %s\n' "$NODE_CANON" "$PI_CANON"
-else
+  [ -z "$PI_CANON" ] || printf '  launch = %s %s\n' "$NODE_CANON" "$PI_CANON"
+elif [ -n "$PI_CANON" ]; then
   printf '  launch = %s\n' "$PI_CANON"
 fi
 printf '  config = %s\n' "$CONFIG"
@@ -466,7 +494,7 @@ else
     echo "# that moves these paths (nvm/volta/mise version bumps, brew upgrades)."
   } >>"$tmp"
 fi
-printf 'pi=%s\n' "$PI_CANON" >>"$tmp"
+[ -n "$PI_CANON" ] && printf 'pi=%s\n' "$PI_CANON" >>"$tmp"
 [ -n "$OMP_CANON" ] && printf 'omp=%s\n' "$OMP_CANON" >>"$tmp"
 [ -n "$NODE_CANON" ] && printf 'node=%s\n' "$NODE_CANON" >>"$tmp"
 chmod 600 "$tmp"

@@ -89,19 +89,20 @@ pi_doctor() {
   pi_doctor_resolves omp 'the guard'
 
   # The recorded bindings, with status.sh's states: bind --check decides, and only
-  # when a Pi binding is recorded. A Node for bind and for the checker below comes
-  # first on PATH because bind resolves paths with node.
+  # when a Pi or OMP binding is recorded. A Node for bind and for the checker below
+  # comes first on PATH because bind resolves paths with node.
   if [[ -f $conf ]]; then
     pi_rec=$(/usr/bin/sed -n 's/^[[:space:]]*pi[[:space:]]*=[[:space:]]*//p' "$conf" | /usr/bin/head -1)
     omp_rec=$(/usr/bin/sed -n 's/^[[:space:]]*omp[[:space:]]*=[[:space:]]*//p' "$conf" | /usr/bin/head -1)
     node_rec=$(/usr/bin/sed -n 's/^[[:space:]]*node[[:space:]]*=[[:space:]]*//p' "$conf" | /usr/bin/head -1)
   fi
   pi_doctor_node && jsnode=$REPLY
-  if [[ -z $pi_rec ]]; then
+  if [[ -z $pi_rec && -z $omp_rec ]]; then
     pi_doctor_say "skip bindings: no Pi binding recorded in ${conf/#$home/~}"
   elif out=$(pi_doctor_bind --check 2>&1); then
     state=ok
-    pi_doctor_say "ok   bindings valid: pi=$pi_rec${omp_rec:+, omp=$omp_rec}${node_rec:+, node=$node_rec}"
+    lines=(${pi_rec:+pi=$pi_rec} ${omp_rec:+omp=$omp_rec} ${node_rec:+node=$node_rec})
+    pi_doctor_say "ok   bindings valid: ${(j:, :)lines}"
   else
     rc=$?
     state=stale
