@@ -227,6 +227,7 @@ list_section() {
 # --project-query asks whether the app needs a first folder. Everything else goes
 # to the app.
 app_store="$engine/state/opencode/app-projects"
+my_uid=$(/usr/bin/id -u)
 typeset -a app_given app_lines gui_rest
 typeset -aU app_projects app_new
 integer app_listed=0 app_query=0 i=1
@@ -250,7 +251,7 @@ fi
 # the launch, which names it.
 if (( app_query )); then
   answer=go
-  if [[ $harness == opencode ]] && ! { find_app && /usr/bin/pgrep -x "$(/usr/bin/plutil -extract CFBundleExecutable raw "$REPLY/Contents/Info.plist" 2>/dev/null)" >/dev/null 2>&1 }; then
+  if [[ $harness == opencode ]] && ! { find_app && /usr/bin/pgrep -u "$my_uid" -x "$(/usr/bin/plutil -extract CFBundleExecutable raw "$REPLY/Contents/Info.plist" 2>/dev/null)" >/dev/null 2>&1 }; then
     section=
     while IFS= read -r line || [[ -n $line ]]; do
       line=${${line%$'\r'}##[[:space:]]##}
@@ -270,7 +271,12 @@ if [[ $mode == gui && $harness == opencode ]]; then
   find_app || fail "OpenCode.app not found"
   app=$REPLY
   main=$(/usr/bin/plutil -extract CFBundleExecutable raw "$app/Contents/Info.plist")
-  /usr/bin/pgrep -x "$main" >/dev/null && fail "OpenCode is already open. If you opened it from Agent Guard, click OpenCode in the Dock to show its window. Otherwise quit OpenCode, then open Agent Guard."
+  if /usr/bin/pgrep -u "$my_uid" -x "$main" >/dev/null; then
+    if (( $#app_given )); then
+      fail "OpenCode is already open, so no dropped folder was added. Quit OpenCode, open Agent Guard, then drop the folder again."
+    fi
+    fail "OpenCode is already open. If you opened it from Agent Guard, click OpenCode in the Dock to show its window. Otherwise quit OpenCode, then open Agent Guard."
+  fi
   failure_stage=configuration
 fi
 if [[ $mode == (cli|gui) ]]; then

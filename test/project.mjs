@@ -335,9 +335,9 @@ exit 0
     assert.equal(spawnSync('/usr/bin/pgrep', ['-x', 'AgFakeApp']).status, 0, 'no running AgFakeApp to stand for OpenCode');
     assert.equal(query(ALLOW('@project')), 'go\n');
     // A drop on a running app neither prompts nor records; the log keeps its content and gains the refusal as its own entry.
-    refused('incumbent', ['--project', other], /OpenCode is already open/);
-    assert.match(readFileSync(log, 'utf8'), /^previous launch\nAgent Guard gui \S+ \S+ \S+ refused before launch\nfailed: OpenCode is already open\. [^\n]*\nagent-guard-stage:host-launch\n$/);
-    refused('incumbent, plain', [], /OpenCode is already open/);
+    refused('incumbent', ['--project', other], /OpenCode is already open, so no dropped folder was added\. Quit OpenCode, open Agent Guard, then drop the folder again/);
+    assert.match(readFileSync(log, 'utf8'), /^previous launch\nAgent Guard gui \S+ \S+ \S+ refused before launch\nfailed: OpenCode is already open, so no dropped folder was added\. [^\n]*\nagent-guard-stage:host-launch\n$/);
+    assert.doesNotMatch(refused('incumbent, plain', [], /OpenCode is already open/), /dropped folder/);
   } finally { incumbent.kill(); }
   console.log('ok   --project-query answers ask only for an empty store with @project on, and writes nothing; an open app is refused first');
 
