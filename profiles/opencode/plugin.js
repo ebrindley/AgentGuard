@@ -289,6 +289,11 @@ async function guard(input) {
   }
   const fixedMessage = (shown, reason) =>
     `Agent Guard: ${shown} is blocked by a fixed Agent Guard protection (${reason}). It cannot be changed from the Guard List; see "Configure OpenCode" in USAGE.md and SECURITY.md in the Agent Guard documentation.`
+  // Shell startup files can prepend native CLIs ahead of the session wrappers.
+  const peerPath = args => {
+    if (typeof args.command !== "string" || !RELEASE || !existsSync(join(RELEASE, "peers"))) return
+    args.command = `export PATH=${shellQuote(join(RELEASE, "peers"))}:$PATH\n${args.command}`
+  }
   const target = (raw, tool) => {
     if (typeof raw !== "string" || !raw || raw.includes("\0"))
       refuse(tool, "Agent Guard: invalid path", "path-resolve", "path-invalid", "review-path", "guard.path.invalid")
@@ -353,7 +358,13 @@ async function guard(input) {
     if (!guarded) {
       if (!bypass && !SAFE_UNGUARDED.has(tool))
         refuse(tool, "Agent Guard: OpenCode was started without the guard. Quit it and open Agent Guard, or run opencode from a new terminal. To run without the guard on purpose, set AGENT_GUARD_BYPASS=1 in OpenCode's environment.", "tool-hook", "unguarded", "launch-guarded")
-      return tool === "bash" ? net?.["tool.execute.before"]?.(info, output) : undefined
+      if (tool !== "bash") return
+      // A peer of another guarded session keeps that session's peer wrappers first.
+      const peer = outer && !!process.env.AGENT_GUARD_PEER_PATH && typeof args.command === "string"
+      if (peer) args.command = normalizedCommand(args.command)
+      await net?.["tool.execute.before"]?.(info, output)
+      if (peer) peerPath(args)
+      return
     }
     if (DELEGATE === false) refuse(tool, "Agent Guard was updated. Quit, then open Agent Guard again for the app, or run opencode again in a terminal.", "tool-hook", "launcher-release-unavailable", "relaunch")
     if (!rules) refuse(tool, "Agent Guard: rules unavailable; relaunch OpenCode.", "tool-hook", "rules-unavailable", "relaunch")
@@ -384,11 +395,7 @@ async function guard(input) {
       recordEvent({ layer: "guard", stage: "safety-net", code: "safety-net-failed", remediation: "review-policy", ruleId, tool: toolClass(tool), errno: ERRNOS.has(error.code) ? error.code : "unknown" })
       throw error
     }
-    // Shell startup files can prepend native CLIs ahead of the session wrappers.
-    if (tool === "bash" && typeof args.command === "string" && RELEASE && existsSync(join(RELEASE, "peers"))) {
-      const peers = shellQuote(join(RELEASE, "peers"))
-      args.command = `export PATH=${peers}:$PATH\n${args.command}`
-    }
+    if (tool === "bash") peerPath(args)
   }
 
   const state = !guarded ? outer || sandbox.result === "unconfined" ? "inactive" : "unknown" :

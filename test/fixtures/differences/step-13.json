@@ -1,0 +1,11 @@
+{
+  "step": 13,
+  "reason": "Permit the rollback journal of Codex's SQLite stores, which Codex creates when it initialises a new database.",
+  "inserts": [],
+  "replaces": [
+    {
+      "before": "    (regex #\"/\\.codex/(state|logs|queue|thread_history)_[0-9]+\\.sqlite(-wal|-shm)?$\"))\n",
+      "after": "    (regex #\"/\\.codex/(state|logs|queue|thread_history)_[0-9]+\\.sqlite(-wal|-shm|-journal)?$\"))\n"
+    }
+  ]
+}

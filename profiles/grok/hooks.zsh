@@ -20,8 +20,9 @@ grok_protect() {
 # settings cannot be written, and the launch arguments are accepted, which means no
 # shared leader is configured and no sandbox profile is requested.
 grok_check() {
-  local f
+  local f found=0
   if next_cli; then
+    found=1
     f=$REPLY
     print "ok   Grok executable $f"
     $sandbox -D GUI=0 /usr/bin/touch -c "${f:A}" 2>/dev/null && { print "FAIL Grok executable write allowed"; ok=0 } || print "ok   Grok executable write denied"
@@ -29,5 +30,6 @@ grok_check() {
     print "FAIL Grok executable not found"; ok=0
   fi
   $sandbox -D GUI=0 /usr/bin/touch "$home/.grok/sandbox.toml" 2>/dev/null && { print "FAIL Grok settings write allowed"; ok=0 } || print "ok   Grok settings write denied"
-  if grok_args --version; then print "ok   Grok runs locally: sandbox off, updater off, no shared leader"; else print "FAIL $REPLY"; ok=0; fi
+  (( found )) || return 0
+  if grok_args --version; then print "ok   Grok runs locally: launch arguments set sandbox off and updater off, and no shared leader is configured"; else print "FAIL $REPLY"; ok=0; fi
 }
