@@ -118,6 +118,17 @@ exit 0
   assert.match(logText(), /^unreadable and unwritable for OpenCode: .*\.ssh.*, \.env files$/m);
   console.log('ok   the OpenCode launch log records the credential paths');
 
+  // A heading may carry a # suffix like a - or : one; it does not start a path line.
+  const dashed = `ALLOW - note\n${P('Projects/other')}\nREAD ONLY - note\n${P('Projects/sibling')}\nDENY - note\n${P('Projects/app')}\n`;
+  profile([], { text: dashed });
+  const sections = () => { const { allow, readonly, deny } = rules(); return { allow, readonly, deny }; };
+  const dashSections = sections();
+  assert.deepEqual(Object.values(dashSections).map((s) => s.length), [1, 1, 1]);
+  profile([], { text: dashed.replaceAll(' - note', ' # note') });
+  assert.deepEqual(sections(), dashSections);
+  assert.doesNotMatch(logText(), /skipped, not a full path/);
+  console.log('ok   a heading with a # suffix opens its section like a - suffix');
+
   // @project resolves to the same profile as the folder it names.
   const same = (name, args, folder, options = {}, entry = folder) => {
     const got = profile(args, { ...options, text: ALLOW('@project') }).stdout;

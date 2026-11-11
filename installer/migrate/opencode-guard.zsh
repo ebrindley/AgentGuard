@@ -140,9 +140,9 @@ ag_m_opencode_guard_list_import() {
   /usr/bin/awk '
     { t = $0; sub(/\r$/, "", t); gsub(/^[[:space:]]+|[[:space:]]+$/, "", t); u = toupper(t) }
     t == "" || t ~ /^#/ { next }
-    u ~ /^ALLOW([[:space:]]*[-:].*)?$/ { s = "ALLOW"; next }
-    u ~ /^READ([[:space:]]+|-)ONLY([[:space:]]*[-:].*)?$/ { s = "READ ONLY"; next }
-    u ~ /^DENY([[:space:]]*[-:].*)?$/ { s = "DENY"; next }
+    u ~ /^ALLOW([[:space:]]*[-:#].*)?$/ { s = "ALLOW"; next }
+    u ~ /^READ([[:space:]]+|-)ONLY([[:space:]]*[-:#].*)?$/ { s = "READ ONLY"; next }
+    u ~ /^DENY([[:space:]]*[-:#].*)?$/ { s = "DENY"; next }
     s != "" { e[s] = e[s] "    " t "\n" }
     END { n = split("ALLOW,READ ONLY,DENY", k, ",")
           for (i = 1; i <= n; i++) printf "  %s\n%s", k[i], (k[i] in e ? e[k[i]] : "    (none)\n") }' "$old_list" || return 1

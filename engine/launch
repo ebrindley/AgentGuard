@@ -193,9 +193,9 @@ export HOME=$home
 # A list line that opens a section sets REPLY to its name.
 list_section() {
   case ${(U)1} in
-    (ALLOW(|[[:space:]]#[-:]*)) REPLY=allow ;;
-    (READ([[:space:]]##|-)ONLY(|[[:space:]]#[-:]*)) REPLY=readonly ;;
-    (DENY(|[[:space:]]#[-:]*)) REPLY=deny ;;
+    (ALLOW(|[[:space:]]#[-:#]*)) REPLY=allow ;;
+    (READ([[:space:]]##|-)ONLY(|[[:space:]]#[-:#]*)) REPLY=readonly ;;
+    (DENY(|[[:space:]]#[-:#]*)) REPLY=deny ;;
     (*) return 1 ;;
   esac
 }
