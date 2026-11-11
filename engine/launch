@@ -753,9 +753,9 @@ if [[ $harness == opencode ]]; then
 else
   record "always writable for $title itself: ${(j:, :)writable}, /private/tmp, per-user temp and cache"
   record "write-protected for $title: ${(j:, :)protected_paths}"
-  record "unreadable and unwritable for $title: ${(j:, :)credential_paths}, .env files"
-  if (( agents )); then record "SSH and GPG agents unreachable for $title"; else record "SSH and GPG agents reachable for $title (AGENT_GUARD_SSH_AGENT=allow)"; fi
 fi
+record "unreadable and unwritable for $title: ${(j:, :)credential_paths}, .env files"
+if (( agents )); then record "SSH and GPG agents unreachable for $title"; else record "SSH and GPG agents reachable for $title (AGENT_GUARD_SSH_AGENT=allow)"; fi
 if (( git_hooks )); then
   record "write-protected for $title: Git hooks in every .git folder${hooks_dirs:+ and the active hooks folder ${(j:, :)hooks_dirs}}"
 fi

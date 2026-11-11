@@ -115,6 +115,8 @@ exit 0
   const fromTemplate = profile([], { text: template }).stdout;
   assert.equal(fromTemplate, profile([], { text: template.replace(/^# @project$/m, '') }).stdout);
   console.log('ok   the template lists @project commented out');
+  assert.match(logText(), /^unreadable and unwritable for OpenCode: .*\.ssh.*, \.env files$/m);
+  console.log('ok   the OpenCode launch log records the credential paths');
 
   // @project resolves to the same profile as the folder it names.
   const same = (name, args, folder, options = {}, entry = folder) => {
