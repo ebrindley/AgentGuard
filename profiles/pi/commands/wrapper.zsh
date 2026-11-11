@@ -73,7 +73,9 @@ pi_wrapper_regular() {
 pi_wrapper_state() {
   local f="$bin/$1" sum
   if [[ ! -e $f && ! -L $f ]]; then REPLY=missing
-  elif [[ -f $f && ! -L $f ]] && sum=$(/usr/bin/shasum -a 256 -- "$f") && [[ ${sum[1,64]} == "$2" ]]; then REPLY=matches
+  # shasum starts the line with a backslash when it escapes the name; the digest is
+  # the first 64 characters after it.
+  elif [[ -f $f && ! -L $f ]] && sum=$(/usr/bin/shasum -a 256 -- "$f") && [[ ${${sum#\\}[1,64]} == "$2" ]]; then REPLY=matches
   else REPLY=changed
   fi
 }
@@ -139,7 +141,9 @@ pi_wrapper_add() {
   fi
   for name in $names; do
     sum=$(/usr/bin/shasum -a 256 -- "$pi_wrapper_stage/$name") || pi_wrapper_die "cannot hash $name"
-    sums+=("$name" "${sum[1,64]}")
+    sum=${${sum#\\}[1,64]}
+    [[ $sum == [0-9a-f](#c64) ]] || pi_wrapper_die "cannot hash $name"
+    sums+=("$name" "$sum")
   done
   # Recorded first: a wrapper the steps below then fail to install shows as changed
   # or missing in doctor, instead of sitting unrecorded on PATH.

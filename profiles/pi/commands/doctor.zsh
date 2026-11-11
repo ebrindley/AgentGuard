@@ -121,7 +121,7 @@ pi_doctor() {
       want=$(/usr/bin/jq -r --arg n "$rt" '.wrappers[$n].sha256' <<< "$out")
       p="$bin/$rt"
       if [[ ! -e $p && ! -L $p ]]; then pi_doctor_say "FAIL wrapper ${p/#$home/~} is missing" drift; continue
-      elif [[ ! -f $p || -L $p ]] || ! sum=$(/usr/bin/shasum -a 256 -- "$p") || [[ ${sum[1,64]} != "$want" ]]; then
+      elif [[ ! -f $p || -L $p ]] || ! sum=$(/usr/bin/shasum -a 256 -- "$p") || [[ ${${sum#\\}[1,64]} != "$want" ]]; then
         pi_doctor_say "FAIL wrapper ${p/#$home/~} changed since it was recorded" drift
       elif [[ ! -x $p ]]; then pi_doctor_say "FAIL wrapper ${p/#$home/~} is not executable" drift
       else pi_doctor_say "ok   wrapper ${p/#$home/~} matches its recorded hash"
