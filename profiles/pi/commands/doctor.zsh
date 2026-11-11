@@ -82,9 +82,6 @@ pi_doctor() {
     l=${l#agent-guard-resolve:}
     where[${l%%:*}]=${l#*:}
   done
-  for rt in pi omp $wnames; do
-    [[ -n ${where[$rt]:-} ]] || where[$rt]=$(command -v -- $rt 2>/dev/null) || where[$rt]=
-  done
   pi_doctor_resolves pi 'the guard'
   pi_doctor_resolves omp 'the guard'
 
@@ -266,7 +263,9 @@ pi_doctor_say() {
 # shell; WHAT names that in the line.
 pi_doctor_resolves() {
   local r=${where[$1]:-} p="$bin/$1"
-  if [[ -z $r ]]; then pi_doctor_say "FAIL $1 is not on PATH in a login shell"
+  # The caller's PATH is not what a guarded launch uses, so it is no evidence.
+  if (( ! ${+where[$1]} )); then pi_doctor_say "skip $1 not checked: the login shell gave no answer"
+  elif [[ -z $r ]]; then pi_doctor_say "FAIL $1 is not on PATH in a login shell"
   elif [[ $r == /* && ${r:A} == ${p:A} ]]; then pi_doctor_say "ok   $1 resolves to $2 in a login shell ($r)"
   else pi_doctor_say "FAIL $1 resolves to $r in a login shell, not to $2; put ~/.local/bin before the real binaries in PATH"
   fi

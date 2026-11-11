@@ -471,6 +471,10 @@ doctor_fails 'an entry point that resolves elsewhere' "pi resolves to $home/shad
 print -r -- 'export PATH="$HOME/.local/bin:$PATH"' > "$run/zdot/.zprofile"
 doctor_fails 'ZDOTDIR cannot hide an entry point that resolves elsewhere' "pi resolves to $home/shadow/pi in a login shell, not to the guard*" -- \
   ZDOTDIR="$run/zdot"
+# A login shell that gives no answer proves nothing, so it is not checked and not ok.
+print -r -- 'exit 0' > "$home/.zprofile"
+doctor_fails 'a login shell that gives no answer'
+[[ $out == *'skip pi not checked'* && $out != *'ok   pi resolves'* && $out != *'ok   omp resolves'* ]] && pass 'the entry points are reported as not checked' || fail 'the entry points are reported as not checked'
 print -r -- 'export PATH="$HOME/.local/bin:$PATH"' > "$home/.zprofile"
 runtime "$home/shadow2/good" 'print real'
 print -r -- 'export PATH="$HOME/shadow2:$HOME/.local/bin:$PATH"' > "$home/.zprofile"
