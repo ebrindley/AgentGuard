@@ -82,26 +82,24 @@ pi_doctor() {
     l=${l#agent-guard-resolve:}
     where[${l%%:*}]=${l#*:}
   done
-  for rt in pi omp $wnames; do
-    [[ -n ${where[$rt]:-} ]] || where[$rt]=$(command -v -- $rt 2>/dev/null) || where[$rt]=
-  done
   pi_doctor_resolves pi 'the guard'
   pi_doctor_resolves omp 'the guard'
 
   # The recorded bindings, with status.sh's states: bind --check decides, and only
-  # when a Pi binding is recorded. A Node for bind and for the checker below comes
-  # first on PATH because bind resolves paths with node.
+  # when a Pi or OMP binding is recorded. A Node for bind and for the checker below
+  # comes first on PATH because bind resolves paths with node.
   if [[ -f $conf ]]; then
     pi_rec=$(/usr/bin/sed -n 's/^[[:space:]]*pi[[:space:]]*=[[:space:]]*//p' "$conf" | /usr/bin/head -1)
     omp_rec=$(/usr/bin/sed -n 's/^[[:space:]]*omp[[:space:]]*=[[:space:]]*//p' "$conf" | /usr/bin/head -1)
     node_rec=$(/usr/bin/sed -n 's/^[[:space:]]*node[[:space:]]*=[[:space:]]*//p' "$conf" | /usr/bin/head -1)
   fi
   pi_doctor_node && jsnode=$REPLY
-  if [[ -z $pi_rec ]]; then
+  if [[ -z $pi_rec && -z $omp_rec ]]; then
     pi_doctor_say "skip bindings: no Pi binding recorded in ${conf/#$home/~}"
   elif out=$(pi_doctor_bind --check 2>&1); then
     state=ok
-    pi_doctor_say "ok   bindings valid: pi=$pi_rec${omp_rec:+, omp=$omp_rec}${node_rec:+, node=$node_rec}"
+    lines=(${pi_rec:+pi=$pi_rec} ${omp_rec:+omp=$omp_rec} ${node_rec:+node=$node_rec})
+    pi_doctor_say "ok   bindings valid: ${(j:, :)lines}"
   else
     rc=$?
     state=stale
@@ -123,7 +121,7 @@ pi_doctor() {
       want=$(/usr/bin/jq -r --arg n "$rt" '.wrappers[$n].sha256' <<< "$out")
       p="$bin/$rt"
       if [[ ! -e $p && ! -L $p ]]; then pi_doctor_say "FAIL wrapper ${p/#$home/~} is missing" drift; continue
-      elif [[ ! -f $p || -L $p ]] || ! sum=$(/usr/bin/shasum -a 256 -- "$p") || [[ ${sum[1,64]} != "$want" ]]; then
+      elif [[ ! -f $p || -L $p ]] || ! sum=$(/usr/bin/shasum -a 256 -- "$p") || [[ ${${sum#\\}[1,64]} != "$want" ]]; then
         pi_doctor_say "FAIL wrapper ${p/#$home/~} changed since it was recorded" drift
       elif [[ ! -x $p ]]; then pi_doctor_say "FAIL wrapper ${p/#$home/~} is not executable" drift
       else pi_doctor_say "ok   wrapper ${p/#$home/~} matches its recorded hash"
@@ -265,7 +263,9 @@ pi_doctor_say() {
 # shell; WHAT names that in the line.
 pi_doctor_resolves() {
   local r=${where[$1]:-} p="$bin/$1"
-  if [[ -z $r ]]; then pi_doctor_say "FAIL $1 is not on PATH in a login shell"
+  # The caller's PATH is not what a guarded launch uses, so it is no evidence.
+  if (( ! ${+where[$1]} )); then pi_doctor_say "skip $1 not checked: the login shell gave no answer"
+  elif [[ -z $r ]]; then pi_doctor_say "FAIL $1 is not on PATH in a login shell"
   elif [[ $r == /* && ${r:A} == ${p:A} ]]; then pi_doctor_say "ok   $1 resolves to $2 in a login shell ($r)"
   else pi_doctor_say "FAIL $1 resolves to $r in a login shell, not to $2; put ~/.local/bin before the real binaries in PATH"
   fi
