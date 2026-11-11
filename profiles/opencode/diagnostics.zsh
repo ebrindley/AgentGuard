@@ -9,6 +9,10 @@ ag_diag_size() { # FILE LIMIT: reject unbounded, nonregular or unreadable input
   [[ $bytes == <-> ]] && (( bytes <= $2 ))
 }
 
+ag_diag_single() { # FILE: exactly one JSON document; several would break the report
+  /usr/bin/jq -e -s 'length == 1' "$1" >/dev/null 2>&1
+}
+
 ag_diag_class() { # PATH: export a logical class, never the path
   case $1 in
     ("$engine"/releases/*) REPLY=release ;;
@@ -84,7 +88,7 @@ ag_diagnose() {
   fi
   if [[ -e $engine/state/opencode-preferences.json || -L $engine/state/opencode-preferences.json ]]; then
     preference_state=error
-    if ag_diag_size "$engine/state/opencode-preferences.json" 65536 && /usr/bin/jq -e 'type=="object" and .schemaVersion==1 and (.approvalPreference=="auto" or .approvalPreference=="host")' "$engine/state/opencode-preferences.json" >/dev/null 2>&1; then
+    if ag_diag_size "$engine/state/opencode-preferences.json" 65536 && ag_diag_single "$engine/state/opencode-preferences.json" && /usr/bin/jq -e 'type=="object" and .schemaVersion==1 and (.approvalPreference=="auto" or .approvalPreference=="host")' "$engine/state/opencode-preferences.json" >/dev/null 2>&1; then
       preference=$(/usr/bin/jq -r .approvalPreference "$engine/state/opencode-preferences.json")
       preference_state=valid
     fi
@@ -92,7 +96,7 @@ ag_diagnose() {
   active=$(/usr/bin/jq -nr --arg v "$active" '$v | if test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$") then . else "unknown" end')
   if [[ -e $stamp || -L $stamp ]]; then
     stamp_state=error
-    if ag_diag_size "$stamp" 2097152 && /usr/bin/jq -e --arg current "$engine/current" --arg bin "$engine/bin" '
+    if ag_diag_size "$stamp" 2097152 && ag_diag_single "$stamp" && /usr/bin/jq -e --arg current "$engine/current" --arg bin "$engine/bin" '
         type == "object" and (.files|type)=="object" and (.links|type)=="object"
         and (.files|length)<=10000 and (.links|length)<=1000
         and all(.files|to_entries[]; (.key|explode|all(.>=32 and .!=127)) and (.value|type)=="string" and (.value|test("^[a-f0-9]{64}$")))
@@ -105,7 +109,8 @@ ag_diagnose() {
       stamp_state=valid
       installed=$(/usr/bin/jq -r .release "$stamp") version=$(/usr/bin/jq -r .version "$stamp")
       out=$(/usr/bin/jq -r '.files|to_entries[]|.key,.value' "$stamp")
-      v=("${(@f)out}") files=("${(@)v}")
+      v=(); [[ -n $out ]] && v=("${(@f)out}")
+      files=("${(@)v}")
       for p want in "${(@)v}"; do
         ag_diag_class "$p"; klass=$REPLY
         (( totals[$klass]++ ))
@@ -149,7 +154,7 @@ ag_diagnose() {
   done
   if [[ -e $record || -L $record ]]; then
     ownership_state=error
-    if ag_diag_size "$record" 1048576 && /usr/bin/jq -e 'type=="object"' "$record" >/dev/null 2>&1; then
+    if ag_diag_size "$record" 1048576 && ag_diag_single "$record" && /usr/bin/jq -e 'type=="object"' "$record" >/dev/null 2>&1; then
       ownership_state=valid
       # Recognize only managed files/keys. No patterns or original values leave
       # the collector, including operator-supplied identifiers and agent names.
@@ -173,7 +178,7 @@ ag_diagnose() {
   # The launcher publishes a last-launch snapshot, not live process health.
   if [[ -e $engine/state/rules.json || -L $engine/state/rules.json ]]; then
     snapshot='{"state":"error","observation":"cached"}'
-    if ag_diag_size "$engine/state/rules.json" 1048576 && /usr/bin/jq -e 'type=="object" and (.allow|type)=="array" and (.readonly|type)=="array" and (.deny|type)=="array"' "$engine/state/rules.json" >/dev/null 2>&1; then
+    if ag_diag_size "$engine/state/rules.json" 1048576 && ag_diag_single "$engine/state/rules.json" && /usr/bin/jq -e 'type=="object" and (.allow|type)=="array" and (.readonly|type)=="array" and (.deny|type)=="array"' "$engine/state/rules.json" >/dev/null 2>&1; then
       snapshot_at=$(/usr/bin/stat -f %m -- "$engine/state/rules.json" 2>/dev/null)
       [[ $snapshot_at == <-> ]] || snapshot_at=0
       snapshot=$(/usr/bin/jq -c --argjson at "$snapshot_at" --argjson now "$now" '{state:"available", observation:"cached", preparationStatus:(.preparationStatus|if .=="ready" or .=="warning" then . else "unknown" end), timestamp:($at*1000), ageSeconds:([$now-$at,0]|max), readiness:"not_probed"}' "$engine/state/rules.json")
@@ -182,11 +187,12 @@ ag_diagnose() {
   if [[ -e $home/.cc-safety-net/rules/agent-guard/rulebook.json ]]; then
     rulebook=error
     ag_diag_size "$home/.cc-safety-net/rules/agent-guard/rulebook.json" 1048576 &&
+      ag_diag_single "$home/.cc-safety-net/rules/agent-guard/rulebook.json" &&
       /usr/bin/jq -e 'type=="object"' "$home/.cc-safety-net/rules/agent-guard/rulebook.json" >/dev/null 2>&1 && rulebook=json
   fi
   if [[ -e $events_file || -L $events_file ]]; then
     event_state=error
-    if ag_diag_size "$events_file" 65536 && /usr/bin/jq -e 'type=="object" and .schemaVersion==1 and .advisory==true and (.events|type)=="array" and (.events|length)<=64' "$events_file" >/dev/null 2>&1; then
+    if ag_diag_size "$events_file" 65536 && ag_diag_single "$events_file" && /usr/bin/jq -e 'type=="object" and .schemaVersion==1 and .advisory==true and (.events|type)=="array" and (.events|length)<=64' "$events_file" >/dev/null 2>&1; then
       event_state=cached
       events=$(/usr/bin/jq -c --argjson now "$now" '
         def enum($xs): . as $v | if ($xs|index($v))!=null then $v else "unknown" end;
