@@ -448,10 +448,12 @@ and write, and it denies reads of `.env` files and the credential paths.
 If the checker cannot run, every tool call is refused and the message says what
 to fix: relaunch through `pi` or `omp` for a missing session copy, fix
 `~/.cc-safety-net/rules/rule.json` (`npx cc-safety-net doctor` lists the problem)
-when the Git rules did not load, or run `agent-guard update` when cc-safety-net
-fails to load. Seatbelt supplies the enforcement boundary. A direct launch of
-the real Pi/OMP executable is unguarded and refuses every tool call, because it
-has no session copy; see
+when the Git rules did not load, or rerun the installer when cc-safety-net fails
+to load. When the installed release is already the latest, `agent-guard update`
+only runs `doctor` and repairs nothing; see
+[Release channels](OPERATIONS.md#release-channels). Seatbelt supplies the
+enforcement boundary. A direct launch of the real Pi/OMP executable is unguarded
+and refuses every tool call, because it has no session copy; see
 [unguarded execution and maintenance](OPERATIONS.md#running-pi-or-omp-without-the-guard).
 
 Set up Pi credentials outside the guard before the first guarded session: Pi
