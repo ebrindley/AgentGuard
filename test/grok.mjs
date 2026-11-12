@@ -91,8 +91,8 @@ for (const [name, args, extra, text] of [
   ['--leader', ['--leader'], {}, /shared leader/],
   ['GROK_SANDBOX', ['-p', 'x'], { GROK_SANDBOX: 'workspace' }, /unset GROK_SANDBOX/],
   ['relocated GROK_HOME', ['-p', 'x'], { GROK_HOME: join(run, 'elsewhere') }, /GROK_HOME/],
-  ['update', ['update'], {}, /run it outside, as .*\.grok\/bin\/grok update/],
-  ['login', ['login'], {}, /outside/],
+  ['update', ['update'], {}, /run Grok's own executable: .*\.grok\/bin\/grok update, then agent-guard doctor/],
+  ['login', ['login'], {}, /run Grok's own executable: .*\.grok\/bin\/grok login$/m],
   ['workspace start', ['workspace', 'start'], {}, /outlives the session/],
   ['workspace start after --sandbox off', ['--sandbox', 'off', 'workspace', 'start'], {}, /outlives the session/],
   ['workspace restart after an option value', ['-m', 'fixture', 'workspace', 'restart'], {}, /outlives the session/],
@@ -255,7 +255,7 @@ put(join(engine, 'state/grok-executable'), `${join(engine, 'state/grok-kept/grok
 const kept = launch(['-p', 'kept']);
 assert.equal(kept.status, 0, kept.stderr);
 assert.match(kept.stdout, /^argv:--sandbox\|off\|-p\|kept$/m);
-assert.ok(launch(['update']).stderr.includes(`as ${join(engine, 'state/grok-kept/grok').replaceAll(' ', '\\ ')} update`), 'the message names the recorded executable, shell-quoted');
+assert.ok(launch(['update']).stderr.includes(`executable: ${join(engine, 'state/grok-kept/grok').replaceAll(' ', '\\ ')} update`), 'the message names the recorded executable, shell-quoted');
 put(join(engine, 'state/grok-executable'), `${join(grok, 'bin/grok')}\n`);
 ok('the kept copy of a replaced executable runs');
 // Peer commands in a guarded session find the recorded executable (the link in
