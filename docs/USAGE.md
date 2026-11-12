@@ -280,6 +280,10 @@ AWS profiles and SSO are opt-in. Start a terminal session with
 from Terminal. Set the choice before launch; a setting inside OpenCode or its
 shell does not change the active profile.
 
+Desktop opened from the app does not read `AGENT_GUARD_*` or `CC_SAFETY_NET_*`
+settings from shell startup files such as `~/.zshenv`. To use one in Desktop,
+start `opencode-gui` from Terminal with it set, as in the AWS command above.
+
 This permits reads under `~/.aws` and writes only under `sso/cache`,
 `login/cache` and `cli/cache`. Configuration and credential files remain
 write-protected, including their resolved symlink targets. Cache directory
