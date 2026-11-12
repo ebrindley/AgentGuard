@@ -177,11 +177,11 @@ exit 0
   profile([], { text: ALLOW('@project', '@project') });
   assert.deepEqual(rules().allow, [app]);
   assert.match(logText(), /skipped, @project is already listed/);
-  // Lines before the first heading are skipped with a count, and the rest still applies.
+  // Lines before the first heading are ignored without a note, and the rest still applies.
   profile([], { text: `${P('Projects/other')}\n# comment\n\nstray\n${ALLOW(P('Projects/sibling'))}` });
   assert.deepEqual(rules().allow, [realpathSync(P('Projects/sibling'))]);
-  assert.match(logText(), /skipped 2 Guard List line\(s\) before the first ALLOW, READ ONLY or DENY heading/);
-  console.log('ok   @project outside ALLOW, a second @project and a missing folder are skipped and logged; lines before a heading are counted');
+  assert.doesNotMatch(logText(), /stray|before the first/);
+  console.log('ok   @project outside ALLOW, a second @project and a missing folder are skipped and logged; lines before a heading are ignored');
 
   // A writable path that is a file refuses the launch with its name, not a bare mkdir error.
   rmSync(P('.npm'), { recursive: true, force: true });
