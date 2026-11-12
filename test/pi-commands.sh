@@ -546,8 +546,13 @@ doctor_fails 'the checker passes again'
 print -r -- '# edited' >> "$lb/good"
 /bin/rm "$lb/good2"
 /bin/cp "$w/dir/w1" "$lb/w1"
-doctor_fails 'wrappers: changed, missing, historical still executable' 'wrapper ~/.local/bin/good changed since it was recorded' \
+doctor_fails 'wrappers: changed, missing, historical still executable' \
+  'wrapper ~/.local/bin/good changed since it was recorded; if intentional, record it again with agent-guard wrapper add ~/.local/bin/good' \
   'wrapper ~/.local/bin/good2 is missing' '~/.local/bin/w1 was removed as a wrapper but is still executable'
+# The installer's checks warn about new content and keep the other failures.
+doctor_fails "the installer's checks: changed content is a warning" \
+  'wrapper ~/.local/bin/good2 is missing' '~/.local/bin/w1 was removed as a wrapper but is still executable' -- AGENT_GUARD_GATE=1
+[[ $out == *'warn wrapper ~/.local/bin/good changed since it was recorded; if intentional'* ]] && pass 'the warning names the changed wrapper' || fail 'the warning names the changed wrapper'
 json_is '--json: wrapper problems are drift' '.drift == 1'
 /bin/rm "$lb/w1"
 runs 'restores the wrappers' 0 installed wrapper add "$w/good" "$w/good2"
