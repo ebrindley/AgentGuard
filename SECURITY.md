@@ -260,6 +260,12 @@ behind linked ancestors. These changes follow the 0.2.0 prerelease.
   launcher runs it under that sandbox without Agent Guard's profile, so that
   sandbox's rules confine it, not the Guard List
   ([Inside another sandbox](docs/USAGE.md#inside-another-sandbox)).
+- Work a shared Grok leader runs. Agent Guard covers the Grok process its
+  launcher starts, interactive or headless (`grok -p`), with Grok's tools running
+  in that process. `grok workspace start` and `grok worker start` run a leader
+  that takes work from xAI's Computer Hub or from Cursor. The launcher refuses to
+  start them, so they run outside the guard, and the leader and the work it runs
+  have no Agent Guard profile.
 
 ## Known limitations
 
@@ -471,6 +477,18 @@ parameter not set`; difference 18 removed the `.guard-node` check behind it):
   move Pi's configuration past the profile's denies.
 - The preamble's `PI_SANDBOX=0` and non-transparent branches cannot be reached;
   they have no effect on a session.
+
+### Grok
+
+- **A leader running outside the guard can run a guarded session's work
+  unguarded.** The launcher refuses `--leader` and `use_leader = true`, but it
+  checks only the arguments and configuration of the launch it performs. A
+  process in a guarded session can run Grok's own executable with `--leader`, and
+  Grok then sends that work to the leader, outside the profile (inference from
+  Grok 1.0.77's help and the profile's rules; not tested against a running
+  leader). This needs a leader the operator started outside the guard; one
+  started inside a session inherits the session's profile. Stop the leader
+  (`~/.grok/bin/grok leader kill`) before relying on a guarded session.
 
 ## Bug or vulnerability
 
