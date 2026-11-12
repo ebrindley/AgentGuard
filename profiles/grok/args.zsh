@@ -12,7 +12,7 @@ grok_args() {
   local h=${home:-$HOME} arg prev= pending= id= saved= f real=${home:-$HOME}/.grok/bin/grok
   integer literal=0 resume=0 cont=0
   # Options that take a value in Grok's --help (-w and -r take an optional one).
-  local value_options='--add-dir|--agent|--agents|--allow|--allowedTools|--allowed-tools|--cwd|--debug-file|--deny|--disallowedTools|--disallowed-tools|--json-schema|--leader-socket|-m|--model|--max-turns|--output-format|-p|--prompt|--single|--permission-mode|--prompt-file|--prompt-json|--reasoning-effort|--rules|-s|--session-id|--system-prompt-override|--tools|--worktree-ref|-w|--worktree'
+  local value_options='--add-dir|--agent|--agents|--allow|--allowedTools|--allowed-tools|--cwd|--debug-file|--deny|--disallowedTools|--disallowed-tools|--json-schema|--leader-socket|-m|--model|--max-turns|--output-format|-p|--prompt|--single|--permission-mode|--prompt-file|--prompt-json|--reasoning-effort|--effort|--rules|-s|--session-id|--system-prompt|--system-prompt-override|--tools|--ref|--worktree-ref|-w|--worktree'
   local -a out found
   # The executable to run directly: the one the installer recorded, which is a
   # kept copy when Grok has no install folder.
