@@ -553,9 +553,11 @@ folder or contains the launch folder refuses the launch.
 Run these outside the guard, with Grok's own executable (`~/.grok/bin/grok`, or
 the path the installer and the refusal message name when Grok was a regular file
 at `~/.local/bin/grok`);
-`grok` refuses them in a guarded session and says so: `grok login`, `grok logout`,
-`grok update` and `grok workspace start|restart|resume`. Grok's updater is off in a
-guarded session. The launcher also refuses an explicit `--sandbox` profile other
+Agent Guard's `grok` refuses them from any terminal and says so: `grok login`,
+`grok logout`, `grok update` and `grok workspace start|restart|resume`. After
+`grok update`, run `agent-guard doctor`: the update can put Grok's own link back at
+`~/.local/bin/grok`, and doctor then fails until you run the installer again.
+Grok's updater is off in a guarded session. The launcher also refuses an explicit `--sandbox` profile other
 than `off` (and `GROK_SANDBOX`), `--leader`, `use_leader = true` in the
 configuration, a `GROK_HOME` other than `~/.grok`, and resuming a session that
 was saved with a sandbox profile, which Grok keeps for the life of the session.

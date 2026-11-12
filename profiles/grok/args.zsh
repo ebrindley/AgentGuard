@@ -54,7 +54,8 @@ grok_args() {
     # subcommand name is refused (an option missing from the list can hide one).
     case $arg in
       (update|login|logout)
-        REPLY="grok $arg changes Grok's installed files or account and cannot run in Agent Guard; run it outside, as ${(q)real} $arg"
+        REPLY="grok $arg changes Grok's installed files or account, and Agent Guard's grok does not run it; run Grok's own executable: ${(q)real} $arg"
+        [[ $arg == update ]] && REPLY+=", then agent-guard doctor"
         return 1 ;;
       (start|restart|resume)
         if [[ $prev == workspace ]]; then
