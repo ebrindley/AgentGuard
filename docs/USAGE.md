@@ -506,6 +506,12 @@ name; a changed wrapper is reported and left in place. `agent-guard doctor`
 checks each recorded hash and reports an earlier wrapper name that is still
 executable.
 
+After you edit a recorded wrapper, record it again with
+`agent-guard wrapper add ~/.local/bin/NAME`. Until then `agent-guard doctor`
+fails on it. Install and update report the changed content as a warning and
+continue; a wrapper that is missing, a link or not a regular file still stops
+them.
+
 Helpers run before Seatbelt with the account's full authority. The check validates
 the permitted wrapper syntax and helper paths; it does not prove helper arguments
 safe. Review download and output destinations before installing a wrapper.

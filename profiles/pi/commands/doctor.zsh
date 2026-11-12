@@ -41,7 +41,7 @@ pi_doctor() {
   local cur="$engine/current" bin="$home/.local/bin" ext="$home/.pi/agent/extensions/pi-sandbox-guard"
   local conf="$home/.config/pi-sandbox-guard/executables.conf" wrec="$engine/state/wrappers.json"
   local scripts="$release/profiles/pi/scripts" jsnode= state=unbound pi_rec= omp_rec= node_rec=
-  local p rel rt label rec out err want sum work darwin_temp l rid= rg= rl= match=absent copy= sdir=
+  local p rel rt label rec out err want sum sev work darwin_temp l rid= rg= rl= match=absent copy= sdir=
   local -a names lines wnames
   local -A where
   integer json=0 failed=0 drift=0 guard_present=0 launchers_present=0 rc
@@ -121,8 +121,15 @@ pi_doctor() {
       want=$(/usr/bin/jq -r --arg n "$rt" '.wrappers[$n].sha256' <<< "$out")
       p="$bin/$rt"
       if [[ ! -e $p && ! -L $p ]]; then pi_doctor_say "FAIL wrapper ${p/#$home/~} is missing" drift; continue
-      elif [[ ! -f $p || -L $p ]] || ! sum=$(/usr/bin/shasum -a 256 -- "$p") || [[ ${${sum#\\}[1,64]} != "$want" ]]; then
+      elif [[ ! -f $p || -L $p ]] || ! sum=$(/usr/bin/shasum -a 256 -- "$p"); then
         pi_doctor_say "FAIL wrapper ${p/#$home/~} changed since it was recorded" drift
+      elif [[ ${${sum#\\}[1,64]} != "$want" ]]; then
+        # The installer's checks set AGENT_GUARD_GATE=1. Sessions cannot write a
+        # recorded wrapper, so new content is the owner's edit, and rolling back
+        # would not remove it: there it is a warning.
+        sev=FAIL
+        [[ ${AGENT_GUARD_GATE:-} == 1 ]] && sev=warn
+        pi_doctor_say "$sev wrapper ${p/#$home/~} changed since it was recorded; if intentional, record it again with agent-guard wrapper add ~/.local/bin/$rt" drift
       elif [[ ! -x $p ]]; then pi_doctor_say "FAIL wrapper ${p/#$home/~} is not executable" drift
       else pi_doctor_say "ok   wrapper ${p/#$home/~} matches its recorded hash"
       fi
