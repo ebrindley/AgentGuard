@@ -245,8 +245,8 @@ path refuses the launch; remove it from the Guard List and reopen OpenCode.
 
 Put one absolute path or `~` path per line. You can drag a path from Finder;
 quotes and Finder's backslash escapes are accepted. Heading names are
-case-insensitive; READ-ONLY is also accepted. Lines starting with `#` are ignored.
-Other lines before the first heading are skipped, and the launch says how many.
+case-insensitive; READ-ONLY is also accepted. Lines starting with `#` and
+lines before the first heading are ignored.
 
 The launcher skips nonexistent ALLOW entries and keeps nonexistent READ ONLY entries. It refuses ALLOW
 entries broad enough to contain `~/Library/Application Support`, `~/.config`
