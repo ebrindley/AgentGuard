@@ -74,7 +74,7 @@ const dup = launch(['--sandbox', 'off', '-p', 'x', '--', '--sandbox', 'strict'])
 assert.match(dup.stdout, /^argv:--sandbox\|off\|-p\|x\|--\|--sandbox\|strict$/m);
 ok('an explicit --sandbox off is kept once, and arguments after -- are untouched');
 // The value of an option is not a command, whatever it says.
-for (const args of [['-p', 'update'], ['-m', 'update'], ['--model=update'], ['--prompt-file', 'login', '-m', 'logout'], ['-w', 'workspace', '-p', 'x']]) {
+for (const args of [['-p', 'update'], ['-m', 'update'], ['--model=update'], ['--prompt-file', 'login', '-m', 'logout'], ['-w', 'workspace', '-p', 'x'], ['--system-prompt', 'login', '--effort', 'update', '--ref', 'logout']]) {
   const r = launch(args);
   assert.equal(r.status, 0, `${args.join(' ')}: ${r.stderr}`);
   assert.ok(r.stdout.includes(`argv:--sandbox|off|${args.join('|')}\n`), `${args.join(' ')}: ${r.stdout}`);
