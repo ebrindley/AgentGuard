@@ -51,7 +51,7 @@ const protectedFile = join(home, '.cc-safety-net', marker);
 if (name !== 'rules-missing') fs.writeFileSync(join(state, 'rules.json'), JSON.stringify({
   allow: [directory], readonly: [], deny: [deniedRoot], skills: [], configs: [], protected: [], credentials: [join(home, '.ssh')], checker, preparationStatus: 'ready',
 }));
-let net = 'export default { server: async () => ({ "tool.execute.before": async (_info, output) => { if(output.args?.command?.includes("FAIL-NET")) throw new Error("' + marker + '"); } }) };';
+let net = 'export default { server: async () => ({ "tool.execute.before": async (_info, output) => { if(output.args?.command?.includes("FAIL-RULE")) throw new Error("blocked\\nRule: custom.agent-guard-git/hooks-path\\n"); if(output.args?.command?.includes("FAIL-NET")) throw new Error("' + marker + '"); } }) };';
 if (name === 'engine-import') net = 'throw new Error("' + marker + '");';
 if (name === 'engine-init') net = 'export default { server: async () => { throw new Error("' + marker + '"); } };';
 if (name === 'hooks-missing') net = 'export default { server: async () => ({}) };';
@@ -173,9 +173,11 @@ if (ready) {
   assert.deepEqual(health.roots.deny, [deniedRoot]);
   assert.ok(health.roots.protected.includes(join(home, '.cc-safety-net')));
   await assert.rejects(before({ tool: 'bash' }, { args: { command: 'FAIL-NET' } }), new RegExp(marker));
+  await assert.rejects(before({ tool: 'bash' }, { args: { command: 'FAIL-RULE' } }), /Rule: custom\.agent-guard-git\/hooks-path/);
   const observedText = fs.readFileSync(join(logs, 'agent-guard-events.json'), 'utf8');
   assert.equal(observedText.includes(marker), false);
   const observed = JSON.parse(observedText).events;
+  assert.ok(observed.some(event => event.code === 'safety-net-failed' && event.ruleId === 'custom'));
   assert.ok(observed.some(event => event.layer === 'filesystem' && event.code === 'filesystem-error' && event.errno === 'EPERM'));
   assert.ok(observed.some(event => event.layer === 'guard' && event.code === 'path-protected' && event.remediation === 'none' && event.errno === 'EPERM'));
   assert.ok(observed.some(event => event.layer === 'guard' && event.ruleId === 'guard.path.protected' && event.errno === 'EPERM'));

@@ -383,7 +383,7 @@ async function guard(input) {
       }
     }
     try { if (tool === "bash") await net["tool.execute.before"](info, output) } catch (error) {
-      const matched = typeof error.message === "string" ? error.message.slice(0, 8192).match(/^Rule: ([a-z0-9.-]{1,100})$/m)?.[1] : null
+      const matched = typeof error.message === "string" ? error.message.slice(0, 8192).match(/^Rule: ([a-z0-9._/-]{1,100})$/m)?.[1] : null
       const ruleId = matched ? RULE_IDS.has(matched) ? matched : "custom" : "unattributed"
       recordEvent({ layer: "guard", stage: "safety-net", code: "safety-net-failed", remediation: "review-policy", ruleId, tool: toolClass(tool), errno: ERRNOS.has(error.code) ? error.code : "unknown" })
       throw error
