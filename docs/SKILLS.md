@@ -50,7 +50,7 @@ skill locations retain Guard List permissions; environment variables and
 
 ## Deletes and checker policy
 
-New OpenCode sessions use cc-safety-net 2.6.0 at the standard preset, with the recursive-delete dynamic-target rule on.
+New OpenCode sessions use cc-safety-net 2.7.12 at the standard preset, with the recursive-delete dynamic-target rule on.
 Operator capability overrides and stronger environment settings remain effective.
 The managed recursive-delete block is omitted from new-session policy only when
 its definition matches Agent Guard's factory rule. User changes and additional
