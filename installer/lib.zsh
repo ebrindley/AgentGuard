@@ -991,8 +991,11 @@ do_rulebook() {
     ag_backup rulebook "$rb" && ag_jnl rulebook begun || return 1
   fi
   test_point rulebook || return 1
-  /bin/rm -f -- "$rb" "$cc/agent-guard/.rulebook.json.partial" || return 1
-  /bin/rmdir -- "$cc/agent-guard" 2>/dev/null
+  # A resumed step checks again: a copy changed or linked since it began stays.
+  if [[ ! -L $rb ]] && { [[ ! -e $rb ]] || ag_factory_rulebook "$rb" }; then
+    /bin/rm -f -- "$rb" "$cc/agent-guard/.rulebook.json.partial" || return 1
+    /bin/rmdir -- "$cc/agent-guard" 2>/dev/null
+  fi
   ag_jnl rulebook done
 }
 
@@ -1000,7 +1003,7 @@ undo_rulebook() {
   local rb="$cc/agent-guard/rulebook.json" partial="$cc/agent-guard/.rulebook.json.partial" b="$txn_dir/backup/rulebook/file"
   ag_jlast rulebook
   [[ $REPLY == (begun|done) ]] || return 0
-  if [[ -f $b && ! -e $rb ]]; then
+  if [[ -f $b && ! -e $rb && ! -L $rb ]]; then
     /bin/mkdir -p -- "$cc/agent-guard" && /bin/cp -p -- "$b" "$partial" && /bin/mv -f -- "$partial" "$rb" || return 1
   fi
   ag_jnl rulebook undone
