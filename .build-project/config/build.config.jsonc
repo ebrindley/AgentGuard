@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/ebrindley/Poetic/main/schemas/poetic.config.schema.json",
+  "$schema": "https://cdn.jsdelivr.net/npm/@ebrindley/build/schemas/build.config.schema.json",
 
   // Cursor remains available for explicit use; automatic work uses this order.
   "defaults": {
@@ -22,12 +22,11 @@
     },
   },
 
-  // Hosted verification owns landing. Poetic's outer sandbox prevents these
+  // Hosted verification owns landing. Build's outer sandbox prevents these
   // confinement tests from applying their own sandbox, so local CI is disabled.
   "ci": {
     "enabled": false,
     "commands": ["script/test"],
-    "statusContext": "Poetic Local CI",
     "authorityPaths": ["script/", "test/", ".github/workflows/"],
   },
 
@@ -49,7 +48,7 @@
   },
 
   // Telemetry Configuration — variant performance tracking (all data stored locally)
-  // Databases live under the Poetic data root, outside this checkout, so deleting
+  // Databases live under the Build data root, outside this checkout, so deleting
   // the checkout does not delete its execution history. The deprecated
   // "database" key is an override for relocating them; leave it unset.
   "telemetry": {
@@ -61,7 +60,7 @@
   // "allow" (default) leaves every provider CLI's own behavior alone.
   // "human-only" makes attribution belong to the human author only: the Guard
   // kit rejects agent identities, co-author trailers, and agent bylines, and
-  // `poetic guard sync` turns off each provider's own attribution where it can.
+  // `build guard sync` turns off each provider's own attribution where it can.
   // Resolution: this project file, then the user file, then "allow".
   // "git": {
   //   "attribution": "human-only",
@@ -83,6 +82,6 @@
     "concurrencyMultiplier": 2,
 
     // Merge-time repair uses runtime defaults unless explicitly configured.
-    // Override via config or env: POETIC_BIOME_REPAIR_PROVIDER / POETIC_BIOME_REPAIR_MODEL
+    // Override via config or env: BUILD_BIOME_REPAIR_PROVIDER / BUILD_BIOME_REPAIR_MODEL
   },
 }

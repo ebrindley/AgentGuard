@@ -1,4 +1,4 @@
-// Standalone generated kit. No Poetic installation, AI calls, or dependency install required.
+// Standalone generated kit. No Build installation, AI calls, or dependency install required.
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
@@ -7,7 +7,7 @@ const START = '<!-- poetic-ci-incident:v1\n';
 const END = '\n-->';
 const RUN_START = '<!-- poetic-ci-run:v1\n';
 const RESOLUTION_START = '<!-- poetic-ci-resolution:v1\n';
-const POLICY = '.poetic/config/delivery-policy.json';
+const POLICY = '.build-project/config/delivery-policy.json';
 const FAILED = new Set(['failure', 'timed_out', 'action_required', 'startup_failure']);
 
 export function readIncident(body) {
@@ -480,9 +480,9 @@ export async function handleIncident(api, event, env) {
 /** Run only inside the generated repository-wide serialized dispatcher job. */
 export async function dispatchIncident(api, env) {
   if (
-    env.POETIC_REPAIR_DISPATCH_ENABLED !== 'true' ||
-    !env.POETIC_REPAIR_WORKFLOW ||
-    env.POETIC_REPAIR_CALLBACK_CONFIGURED !== 'true'
+    env.BUILD_REPAIR_DISPATCH_ENABLED !== 'true' ||
+    !env.BUILD_REPAIR_WORKFLOW ||
+    env.BUILD_REPAIR_CALLBACK_CONFIGURED !== 'true'
   )
     return { status: 'record-only' };
   const ctx = await context(api, env.GITHUB_REPOSITORY);
@@ -556,9 +556,9 @@ export async function dispatchIncident(api, env) {
     return { status: 'source-no-longer-failing' };
   const executor = await api(
     'GET',
-    `${ctx.base}/actions/workflows/${encodeURIComponent(env.POETIC_REPAIR_WORKFLOW.split('/').at(-1))}`
+    `${ctx.base}/actions/workflows/${encodeURIComponent(env.BUILD_REPAIR_WORKFLOW.split('/').at(-1))}`
   );
-  if (executor.path !== env.POETIC_REPAIR_WORKFLOW || executor.state !== 'active')
+  if (executor.path !== env.BUILD_REPAIR_WORKFLOW || executor.state !== 'active')
     throw new Error('Owner-provided executor workflow is not active.');
   // All kit writers share the workflow concurrency group. Re-read for external closure
   // or default-branch movement during API inspection before reserving paid execution.
@@ -644,7 +644,7 @@ export async function reconcileIncident(api, event, env) {
       (state.status === 'needs-attention' && state.completion?.callbackMissing === true)
     ) ||
     state.attempts !== Number(input.expected_attempt) ||
-    state.executor !== env.POETIC_REPAIR_WORKFLOW ||
+    state.executor !== env.BUILD_REPAIR_WORKFLOW ||
     state.executorRunId !== Number(input.executor_run_id)
   )
     throw new Error('The callback does not match the active reserved attempt.');
@@ -704,7 +704,7 @@ export async function reconcileIncident(api, event, env) {
 
 /** Completion relay runs after the bound executor, including cancellation and failure. */
 export async function handleExecutorCompletion(api, event, env) {
-  if (event.action !== 'completed' || !event.workflow_run?.id || !env.POETIC_REPAIR_WORKFLOW)
+  if (event.action !== 'completed' || !event.workflow_run?.id || !env.BUILD_REPAIR_WORKFLOW)
     return { status: 'ignored' };
   const ctx = await context(api, env.GITHUB_REPOSITORY);
   const run = await api('GET', `${ctx.base}/actions/runs/${event.workflow_run.id}`);
@@ -715,7 +715,7 @@ export async function handleExecutorCompletion(api, event, env) {
     run.head_branch !== ctx.repo.default_branch ||
     run.repository?.full_name?.toLowerCase() !== env.GITHUB_REPOSITORY.toLowerCase() ||
     run.head_repository?.full_name?.toLowerCase() !== env.GITHUB_REPOSITORY.toLowerCase() ||
-    workflow.path !== env.POETIC_REPAIR_WORKFLOW
+    workflow.path !== env.BUILD_REPAIR_WORKFLOW
   )
     return { status: 'ignored' };
   const incident = (await ownedIssues(api, ctx.base)).find(

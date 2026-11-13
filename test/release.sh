@@ -42,8 +42,8 @@ else
   fail "archive lists exactly the release files"
   /usr/bin/diff <(print -rl -- ${(o)expected/#/$name/}) <(print -rl -- ${(o)${(f)listed}})
 fi
-unwanted=(${(M)${(f)listed}:#(*/|)(test|docs|backlog|.poetic)/*} ${(M)${(f)listed}:#*(.DS_Store|/._*)})
-(( $#unwanted == 0 )) && pass "no test, docs, backlog, .poetic, .DS_Store or AppleDouble entries" || fail "unwanted entries: $unwanted"
+unwanted=(${(M)${(f)listed}:#(*/|)(test|docs|backlog|.build-project)/*} ${(M)${(f)listed}:#*(.DS_Store|/._*)})
+(( $#unwanted == 0 )) && pass "no test, docs, backlog, .build-project, .DS_Store or AppleDouble entries" || fail "unwanted entries: $unwanted"
 (cd "${archive:h}" && /usr/bin/shasum -a 256 -c "${archive:t}.sha256" >/dev/null 2>&1) && pass "shasum -a 256 -c accepts the .sha256" || fail "checksum"
 [[ $(/usr/bin/tar -xOzf "$archive" "$name/VERSION") == $version ]] && pass "VERSION holds $version" || fail "VERSION"
 if [[ -z $(/usr/bin/git -C "$source_root" status --porcelain) ]]; then want=$(/usr/bin/git -C "$source_root" rev-parse HEAD); else want=dev; fi
