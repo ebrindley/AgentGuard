@@ -14,32 +14,27 @@ cpSync(join(tree, "engine/vendor"), join(release, "vendor"), { recursive: true }
 const source = join(home, ".cc-safety-net"), rules = join(source, "rules")
 const factory = JSON.parse(readFileSync(join(root, "profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json"), "utf8"))
 const factoryText = readFileSync(join(root, "profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json"), "utf8")
-const installerEngine = join(run, "rulebook-engine"), installerRules = join(run, "rulebook-rules")
-for (const version of ["old", "new"]) {
-  const dir = join(installerEngine, "releases", version, "profiles/opencode/templates/cc-safety-net/rules/agent-guard")
-  mkdirSync(dir, { recursive: true })
-  writeFileSync(join(dir, "rulebook.json"), version === "new" ? factoryText : JSON.stringify({ ...factory, version: "previous-factory" }))
-}
-mkdirSync(join(installerRules, "agent-guard"), { recursive: true })
+const installerRules = join(run, "rulebook-rules")
 const installedRulebook = join(installerRules, "agent-guard/rulebook.json")
-for (const [name, content, expected, previous] of [
-  ["formatted factory", JSON.stringify(factory), factoryText, "old"],
-  ["previous factory", JSON.stringify({ ...factory, version: "previous-factory" }), factoryText, "old"],
-  ["custom update", JSON.stringify({ ...factory, version: "operator-custom" }), null, "old"],
-  ["custom install", JSON.stringify({ ...factory, version: "operator-custom" }), null, ""],
+// The installer removes only a byte-identical factory copy.
+for (const [name, content, removed] of [
+  ["factory", factoryText, true],
+  ["reformatted factory", JSON.stringify(factory), false],
+  ["custom", JSON.stringify({ ...factory, version: "operator-custom" }), false],
 ]) {
+  mkdirSync(join(installerRules, "agent-guard"), { recursive: true })
   writeFileSync(installedRulebook, content)
   const result = spawnSync("/bin/zsh", ["-fc", `source "$1"
-engine=$2 cc=$3 ag_rid_old=$4 ag_rid_new=new
+cc=$2
 ag_jlast() { REPLY=; }
 ag_backup() { :; }
 ag_jnl() { :; }
-ag_sha() { REPLY=fixture; }
-do_rulebook`, "rulebook", join(root, "installer/lib.zsh"), installerEngine, installerRules, previous], { encoding: "utf8" })
+do_rulebook`, "rulebook", join(root, "installer/lib.zsh"), installerRules], { encoding: "utf8" })
   assert.equal(result.status, 0, result.stderr)
-  assert.equal(readFileSync(installedRulebook, "utf8"), expected ?? content, name)
+  if (removed) assert.equal(existsSync(join(installerRules, "agent-guard")), false, name)
+  else assert.equal(readFileSync(installedRulebook, "utf8"), content, name)
 }
-console.log("ok installer rulebooks: formatted factory, previous factory, custom update and custom install")
+console.log("ok installer rulebooks: factory removed, reformatted factory and custom kept")
 if (process.argv[2] === "rulebook") process.exit(0)
 const custom = { name: "custom-printf", command: "printf", block_args: ["custom-denied"], reason: "Operator restriction" }
 const mixed = { ...factory, allowed_commands: ["rm", "printf"], rules: [...factory.rules, custom] }

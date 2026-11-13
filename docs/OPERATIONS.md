@@ -232,9 +232,11 @@ its `uninstall.sh` in the engine folder first). Over OpenCode Guard or
 pi-sandbox-guard it migrates (below). It assembles the new release in
 `~/Library/Application Support/AgentGuard/releases/<version>-<UTC time>`, builds
 the app, and tests that release with `launch check staged` before it changes
-anything outside the engine folder and `~/Agent Guard`. It then switches the
-rulebook, the app, `current`, the plugin link, the OpenCode permission values,
-OpenCode's shared service opt-out and the PATH blocks, and runs the gate:
+anything outside the engine folder and `~/Agent Guard`. It then removes the
+legacy rulebook when it is unmodified (below), adds the wrapper entries to an
+existing `~/.cc-safety-net/rules/rule.json`, and switches the app, `current`, the
+plugin link, the OpenCode permission values, OpenCode's shared service opt-out
+and the PATH blocks, and runs the gate:
 `agent-guard doctor` and a launch of `opencode --version` through the new PATH
 shim. With Pi's guard, the staged
 checks also test the new Pi files, the switch also replaces the Pi files at
@@ -299,6 +301,25 @@ launch's, are kept. A launch that ends without starting OpenCode (a refusal,
 `profile` or `check`) leaves its folder for a later prune. A folder left by an
 interrupted launch is safe to delete by hand once no OpenCode session uses it.
 
+### The legacy recursive-rm rulebook
+
+Earlier releases installed `~/.cc-safety-net/rules/agent-guard/rulebook.json`
+and listed `agent-guard` in `~/.cc-safety-net/rules/rule.json`. Its one rule,
+`recursive-rm`, denies every `rm -r`, `-R` or `--recursive` in any tool that runs
+cc-safety-net with your configuration. Agent Guard sessions do not use it: each
+session's checker copy drops that rule and checks recursive deletes by scope
+instead ([Deletes and checker policy](SKILLS.md#deletes-and-checker-policy)).
+
+Releases no longer install it. An install or `agent-guard update` removes the
+file, and then the `agent-guard` entry in `rule.json`, only when the file is
+byte-identical to the version Agent Guard shipped; if a check after the switch
+fails, both are put back. A changed copy and its entry stay, and the installer
+prints `custom rulebook kept` with the path. Sessions drop the `recursive-rm` rule
+from a changed copy as before. To stop a changed copy applying in a separately
+installed cc-safety-net, delete `~/.cc-safety-net/rules/agent-guard` and remove
+`agent-guard` from `rules` in `rule.json`. `agent-guard uninstall` removes both,
+changed or not.
+
 ## Moving from OpenCode Guard
 
 Run the appropriate installer under [Release channels](#release-channels).
@@ -319,9 +340,9 @@ without running OpenCode Guard's uninstaller:
    Guard; those stay as you set them.
 4. It tests the new release, then switches the PATH blocks, the plugin
    (`opencode-guard.js` becomes `agent-guard.js` in one rename, so OpenCode never
-   sees both or neither), the app (`OpenCode Guard.app` goes; drag
-   `Agent Guard.app` to the Dock in place of its Dock item) and the rulebook. If a
-   check after the switch fails, OpenCode Guard is put back as it was.
+   sees both or neither) and the app (`OpenCode Guard.app` goes; drag
+   `Agent Guard.app` to the Dock in place of its Dock item). If a check after the
+   switch fails, OpenCode Guard is put back as it was.
 5. It then removes the rest of OpenCode Guard: its rulebook and `rule.json`
    entry, and `launch`, `profile.sb`, `uninstall.sh`, `vendor/` and `state/` in
    `~/Library/Application Support/OpenCodeGuard`. If that fails (for example
@@ -581,7 +602,7 @@ loaded; `/reload` loads the extension now on disk.
   Valid 0.1.x stamps without a harness list still mean OpenCode alone. It removes PATH blocks, restores the permission values
   the installer changed and removes the shared service opt-out's `disabled: true`
   (unless you changed them since), then removes the app,
-  the rulebook, after a migration the forwarders, then the plugin and the engine
+  the legacy rulebook and its `rule.json` entry if present, after a migration the forwarders, then the plugin and the engine
   folder. `~/Agent Guard` stays. A value it could not restore is reported, and
   the permission record is saved to `~/Agent Guard/permissions-backup.json` first
   (OpenCode Guard's, after a migration, to

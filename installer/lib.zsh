@@ -878,13 +878,14 @@ ag_assemble() {
   /bin/mv -- "$r" "$engine/releases/$ag_rid_new"
 }
 
-ag_rule_merge() {  # IN OUT TEMPLATE
-  /usr/bin/jq --slurpfile t "$3" '.rules = ((.rules // []) + ["agent-guard"] | unique)
+ag_rule_merge() {  # IN OUT TEMPLATE [DROP]: with DROP 1, agent-guard also leaves rules
+  /usr/bin/jq --slurpfile t "$3" --arg drop "${4:-0}" 'if $drop == "1" and (.rules | type) == "array" then .rules -= ["agent-guard"] else . end
     | .transparent_wrappers = ((.transparent_wrappers // []) + $t[0].transparent_wrappers | unique)' "$1" > "$2" 2>/dev/null &&
     /usr/bin/jq -e 'type == "object"' "$2" >/dev/null 2>&1
 }
 
-# P5: validates the rulebook and the merged rule.json; builds the app when needed.
+# P5: validates the factory rulebook that session copies drop (engine/checker/
+# snapshot.zsh) and the merged rule.json; builds the app when needed.
 ag_build() {
   local rel="$engine/releases/$ag_rid_new" s="$ag_stage/Agent Guard.app" tpl id k
   tpl="$rel/profiles/opencode/templates/cc-safety-net/rules"
@@ -893,7 +894,7 @@ ag_build() {
   ag_rule_merge "$tpl/rule.json" "$ag_stage/rule.template.json" "$tpl/rule.json" ||
     { ag_err "the release's rule.json template is not valid"; return 1 }
   if [[ -e $cc/rule.json ]] && ! ag_rule_merge "$cc/rule.json" "$ag_stage/rule.json" "$tpl/rule.json"; then
-    ag_warnings+=("$cc/rule.json not changed (invalid JSON): add agent-guard to its rules and env, exec, nice, nohup, setsid, stdbuf, time and timeout to its transparent_wrappers")
+    ag_warnings+=("$cc/rule.json not changed (invalid JSON): add env, exec, nice, nohup, setsid, stdbuf, time and timeout to its transparent_wrappers, and remove agent-guard from its rules unless $cc/agent-guard/rulebook.json exists")
   fi
   (( ag_app_rebuild )) || return 0
   ag_app_script
@@ -965,95 +966,88 @@ ag_selftest_staged() {
 # actions.zsh. Each is idempotent forward (do_*) and backward (undo_*): a begun
 # action is finished or undone from its journal line and backup.
 
+# True when FILE is byte-identical to a rulebook an earlier release installed at
+# $cc/agent-guard. The template, profiles/opencode/templates/cc-safety-net/rules/
+# agent-guard/rulebook.json, has shipped in one version under that name.
 ag_factory_rulebook() {
-  /usr/bin/jq -se 'length == 2 and .[0] == .[1]' "$1" "$2" >/dev/null 2>&1
+  ag_sha "$1" || return 1
+  [[ $REPLY == 69ac6f11c794ac68a4b9f3b2247071f2cbde4ad26533dda439f10396a9b5fcc1 ]]
 }
 
+# Releases no longer install the factory rulebook. This removes one an earlier
+# release left, unless it was changed; a changed copy stays. Sessions drop its
+# recursive-rm rule from their copy either way (engine/checker/snapshot.zsh).
 do_rulebook() {
-  local rb="$cc/agent-guard/rulebook.json" partial="$cc/agent-guard/.rulebook.json.partial" src folder
-  src="$engine/releases/$ag_rid_new/profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json"
+  local rb="$cc/agent-guard/rulebook.json"
   ag_jlast rulebook
   [[ $REPLY == done ]] && return 0
   if [[ -z $REPLY ]]; then
-    if [[ -f $rb ]]; then
-      if /usr/bin/cmp -s -- "$src" "$rb"; then test_point rulebook; return; fi
-      if ! ag_factory_rulebook "$src" "$rb" &&
-         { [[ -z $ag_rid_old ]] || ! ag_factory_rulebook "$engine/releases/$ag_rid_old/profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json" "$rb"; }; then
-        ag_warn "custom rulebook kept: $rb"
-        test_point rulebook
-        return
-      fi
+    if [[ ! -f $rb || -L $rb ]]; then test_point rulebook; return; fi
+    if ! ag_factory_rulebook "$rb"; then
+      ag_warn "custom rulebook kept: $rb"
+      test_point rulebook
+      return
     fi
-    folder=0
-    [[ -d $cc/agent-guard ]] && folder=1
-    ag_backup rulebook "$rb" && ag_jnl rulebook begun "folder=$folder" || return 1
+    ag_backup rulebook "$rb" && ag_jnl rulebook begun || return 1
   fi
   test_point rulebook || return 1
-  /bin/mkdir -p -- "$cc/agent-guard" && /bin/cp -- "$src" "$partial" && /bin/mv -f -- "$partial" "$rb" || return 1
-  ag_sha "$rb" && ag_jnl rulebook done "$REPLY"
+  # A resumed step checks again: a copy changed or linked since it began stays.
+  if [[ ! -L $rb ]] && { [[ ! -e $rb ]] || ag_factory_rulebook "$rb" }; then
+    /bin/rm -f -- "$rb" "$cc/agent-guard/.rulebook.json.partial" || return 1
+    /bin/rmdir -- "$cc/agent-guard" 2>/dev/null
+  fi
+  ag_jnl rulebook done
 }
 
 undo_rulebook() {
   local rb="$cc/agent-guard/rulebook.json" partial="$cc/agent-guard/.rulebook.json.partial" b="$txn_dir/backup/rulebook/file"
   ag_jlast rulebook
   [[ $REPLY == (begun|done) ]] || return 0
-  ag_jfind rulebook begun
-  ag_jval folder
-  if [[ -f $b ]]; then
+  if [[ -f $b && ! -e $rb && ! -L $rb ]]; then
     /bin/mkdir -p -- "$cc/agent-guard" && /bin/cp -p -- "$b" "$partial" && /bin/mv -f -- "$partial" "$rb" || return 1
-  elif [[ $REPLY == 0 ]]; then
-    /bin/rm -rf -- "$cc/agent-guard" || return 1
-  else
-    /bin/rm -f -- "$rb" "$partial" || return 1
   fi
   ag_jnl rulebook undone
 }
 
+# Merges the release's transparent_wrappers into an existing rule.json and, when
+# no agent-guard rulebook is left, takes agent-guard out of its rules. A missing
+# rule.json stays missing.
 do_rulejson() {
-  local rj="$cc/rule.json" new="$ag_tstage/rule.json" st existed=0 added=1 tpl in
+  local rj="$cc/rule.json" new="$ag_tstage/rule.json" st drop=0 tpl
   tpl="$engine/releases/$ag_rid_new/profiles/opencode/templates/cc-safety-net/rules/rule.json"
   ag_jlast rulejson
   st=$REPLY
   [[ $st == done ]] && return 0
-  in=$rj
-  [[ -e $rj ]] || in=$tpl
-  if ! ag_rule_merge "$in" "$new" "$tpl"; then
+  [[ -e $cc/agent-guard/rulebook.json || -L $cc/agent-guard/rulebook.json ]] || drop=1
+  if [[ ! -e $rj ]] || ! ag_rule_merge "$rj" "$new" "$tpl" $drop; then
     [[ -z $st ]] || return 1
     test_point rulejson
     return
   fi
   if [[ -z $st ]]; then
-    if [[ -e $rj ]] && /usr/bin/cmp -s -- "$rj" "$new"; then test_point rulejson; return; fi
-    if [[ -e $rj ]]; then
-      existed=1
-      /usr/bin/jq -e '(.rules // []) | index("agent-guard") != null' "$rj" >/dev/null 2>&1 && added=0
-    fi
-    ag_backup rulejson "$rj" && ag_jnl rulejson begun "existed=$existed added=$added" || return 1
+    if /usr/bin/cmp -s -- "$rj" "$new"; then test_point rulejson; return; fi
+    ag_backup rulejson "$rj" && ag_sha "$new" && ag_jnl rulejson begun "new=$REPLY" || return 1
   fi
   test_point rulejson || return 1
-  /bin/mkdir -p -- "$cc" && replace_file "$rj" "$new" || return 1
+  replace_file "$rj" "$new" || return 1
   ag_sha "$rj" && ag_jnl rulejson done "$REPLY"
 }
 
+# Puts the backup back only over the file this step wrote; a rule.json changed
+# since stays as it is.
 undo_rulejson() {
-  local rj="$cc/rule.json" b="$txn_dir/backup/rulejson/file" tmp="$ag_tstage/rule.undo.json" st done_hash= existed added
+  local rj="$cc/rule.json" b="$txn_dir/backup/rulejson/file" st wrote=
   ag_jlast rulejson
   st=$REPLY
   [[ $st == (begun|done) ]] || return 0
-  ag_jfind rulejson begun
-  local detail=$REPLY
-  ag_jval existed; existed=$REPLY
-  REPLY=$detail; ag_jval added; added=$REPLY
-  [[ $st == done ]] && ag_jfind rulejson done && done_hash=$REPLY
+  if [[ $st == done ]]; then
+    ag_jfind rulejson done && wrote=$REPLY
+  else
+    ag_jfind rulejson begun && ag_jval new && wrote=$REPLY
+  fi
   ag_sha "$rj"
-  if [[ $existed == 1 && -f $b ]] && /usr/bin/cmp -s -- "$rj" "$b"; then
-    :
-  elif [[ $existed == 0 && ! -e $rj ]]; then
-    :
-  elif [[ -n $done_hash && $REPLY == "$done_hash" ]]; then
-    if [[ $existed == 1 ]]; then replace_file "$rj" "$b" || return 1; else /bin/rm -f -- "$rj" || return 1; fi
-  elif [[ $added == 1 && -e $rj ]] && /usr/bin/jq '.rules -= ["agent-guard"]' "$rj" > "$tmp" 2>/dev/null; then
-    /usr/bin/cmp -s -- "$rj" "$tmp" || replace_file "$rj" "$tmp" || return 1
+  if [[ -f $b && -n $wrote && $REPLY == "$wrote" ]]; then
+    replace_file "$rj" "$b" || return 1
   fi
   ag_jnl rulejson undone
 }
@@ -1300,13 +1294,13 @@ ag_gate() {
 
 # K1: the stamp is the commit point, written only after the checks passed. It
 # records the harnesses the transaction installed (design section 6, Candidate
-# inventory), and hashes the release folder, the rulebook, the app and each
-# harness's installed files outside them (files hook).
+# inventory), and hashes the release folder, the app and each harness's installed
+# files outside them (files hook).
 ag_stamp_write() {
   local out="$ag_tstage/stamp.json" rel="$engine/releases/$ag_rid_new" sums links harnesses h m
   local -a files kv
   test_point stamp || return 1
-  files=("$rel"/**/*(.DN) "$cc/agent-guard/rulebook.json"(N) "$app"/**/*(.DN))
+  files=("$rel"/**/*(.DN) "$app"/**/*(.DN))
   for h in $ag_harnesses; do reply=(); ag_hook_opt h $h files; files+=("${reply[@]}"); done
   sums=$(/usr/bin/shasum -a 256 -- $files) || return 1
   kv=("$engine/current" "$(/usr/bin/readlink -- "$engine/current")" "$engine/bin" "$(/usr/bin/readlink -- "$engine/bin")")

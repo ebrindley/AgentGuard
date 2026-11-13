@@ -109,15 +109,16 @@ strip_block() {  # FILE: FILE without its agent-guard block
 
 # The disposable home: a .zprofile that puts the fake CLI first, as a user's own
 # PATH line would; a symlinked .zshrc with mode 600; an OpenCode config; a rule.json
-# with another rule and an override; a stale copy of the rulebook; the fake app.
+# with another rule, an override and the agent-guard entry, and the unmodified
+# factory rulebook an earlier release installed; the fake app.
 /bin/mkdir -p "$home/dotfiles" "$cc/agent-guard"
 print -r -- "path=(\"$fakebin\" \$path)" > "$home/.zprofile"
 print -r -- 'export EDITOR=vi' > "$home/dotfiles/zshrc"
 /bin/chmod 600 "$home/dotfiles/zshrc"
 /bin/ln -s "$home/dotfiles/zshrc" "$home/.zshrc"
 print -r -- "$original" > "$cfg"
-print -r -- '{"version":1,"rules":["custom"],"overrides":{"custom/x":"off"},"transparent_wrappers":["env"]}' > "$cc/rule.json"
-/usr/bin/jq -c . "$source_root/profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json" > "$cc/agent-guard/rulebook.json"
+print -r -- '{"version":1,"rules":["custom","agent-guard"],"overrides":{"custom/x":"off"},"transparent_wrappers":["env"]}' > "$cc/rule.json"
+/bin/cp "$source_root/profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json" "$cc/agent-guard/rulebook.json"
 fake_app="$home/Applications/OpenCode.app"
 /bin/mkdir -p "$fake_app/Contents/MacOS"
 print -r -- '<?xml version="1.0" encoding="UTF-8"?>
@@ -148,10 +149,9 @@ label=S4
 one_block "$home/dotfiles/zshrc" && one_block "$home/.zprofile" && pass 'one PATH block in the target and in .zprofile' || fail 'one PATH block each'
 /usr/bin/grep -qFx 'export EDITOR=vi' "$home/dotfiles/zshrc" && pass "the target keeps its contents" || fail "the target keeps its contents"
 label=S6
-/usr/bin/jq -e '.rules == ["agent-guard", "custom"] and .overrides == {"custom/x": "off"}' "$cc/rule.json" >/dev/null &&
-  pass 'rule.json keeps the other rule and its override' || fail 'rule.json keeps the other rule and its override'
-/usr/bin/cmp -s "$cc/agent-guard/rulebook.json" "$source_root/profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json" &&
-  pass "the stale rulebook is replaced by the release's" || fail "the stale rulebook is replaced by the release's"
+/usr/bin/jq -e '.rules == ["custom"] and .overrides == {"custom/x": "off"} and (.transparent_wrappers | index("timeout") != null)' "$cc/rule.json" >/dev/null &&
+  pass 'rule.json keeps the other rule and its override, gains the wrappers and loses agent-guard' || fail 'rule.json keeps the other rule and its override, gains the wrappers and loses agent-guard'
+[[ ! -e $cc/agent-guard ]] && pass 'the unmodified factory rulebook is removed' || fail 'the unmodified factory rulebook is removed'
 label=S7
 icon=$(/usr/bin/plutil -extract CFBundleIconFile raw "$app/Contents/Info.plist")
 [[ $icon == *.icns ]] || icon+=.icns
@@ -377,6 +377,39 @@ rc=$?
 [[ $(sha "$state/permissions.json") == "$record_hash" ]] && pass 'S2 the permission record is unchanged' || fail 'S2 the permission record changed'
 same_snapshot 'everything as before the update' "$run/A.snapshot"
 probe_entry_points "$home" "$base" "$engine/bin:$base"
+
+# --- S8: over an earlier release's unmodified rulebook and its rule.json entry, a
+# post-switch failure puts both back and an update removes both; a changed copy
+# and its entry stay; uninstall removes an unmodified copy and its entry.
+label=S8
+restore A
+/bin/mkdir -p "$cc/agent-guard"
+/bin/cp "$source_root/profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json" "$cc/agent-guard/rulebook.json"
+/usr/bin/jq '.rules += ["agent-guard"]' "$cc/rule.json" > "$run/rule.json" && /bin/cp "$run/rule.json" "$cc/rule.json"
+save S8
+snapshot "$home" > "$run/S8.snapshot"
+point=fail:doctor-live boot v0.0.2
+rc=$?
+(( rc != 0 )) && pass "post-switch failure: exit $rc" || { fail 'exit 0'; show }
+same_snapshot 'the rollback puts the rulebook and its rule.json entry back' "$run/S8.snapshot"
+point= boot v0.0.2
+rc=$?
+(( rc == 0 )) && [[ ! -e $cc/agent-guard ]] && /usr/bin/jq -e '.rules == ["custom"]' "$cc/rule.json" >/dev/null &&
+  pass 'the update removes the unmodified rulebook and its entry' || { fail "update (exit $rc)"; show }
+restore S8
+/usr/bin/jq -c . "$cc/agent-guard/rulebook.json" > "$run/rulebook.json" && /bin/cp "$run/rulebook.json" "$cc/agent-guard/rulebook.json"
+rulebook_hash=$(sha "$cc/agent-guard/rulebook.json")
+point= boot v0.0.2
+rc=$?
+(( rc == 0 )) && [[ $(sha "$cc/agent-guard/rulebook.json") == "$rulebook_hash" ]] &&
+  /usr/bin/jq -e '.rules == ["custom", "agent-guard"]' "$cc/rule.json" >/dev/null &&
+  /usr/bin/grep -qF "custom rulebook kept: $cc/agent-guard/rulebook.json" "$out" &&
+  pass 'a reformatted copy stays with its entry and is named' || { fail "update (exit $rc)"; show }
+restore S8
+point= ag uninstall
+rc=$?
+(( rc == 0 )) && [[ ! -e $cc/agent-guard ]] && /usr/bin/jq -e '.rules == ["custom"]' "$cc/rule.json" >/dev/null &&
+  pass 'uninstall removes the unmodified rulebook and its entry' || { fail "uninstall (exit $rc)"; show }
 
 # --- G3: the same on a fresh install removes what the run added.
 label=G3
