@@ -28,14 +28,7 @@ source "$source_root/test/lib.zsh"
 
 run=$(/usr/bin/mktemp -d "$source_root/test/.run-migrate-pi-XXXXXX")
 run=${run:A}
-served="$run/served"
-/bin/mkdir -p "$served"
-node "$source_root/test/release-server.mjs" "$served" > "$run/port" 2> "$run/server.log" &
-server=$!
-for i in {1..100}; do [[ -s $run/port ]] && break; sleep 0.05; done
-port=$(<"$run/port")
-[[ $port == <-> ]] || { print -ru2 "release server did not start: $(<"$run/server.log")"; kill $server; exit 1 }
-url="http://127.0.0.1:$port/ebrindley/AgentGuard"
+start_release_server
 typeset -a exercised
 finish() {
   local p
@@ -94,7 +87,6 @@ want_node=$(stable_node "$node_bin")
 
 # Releases: v0.0.1 and v0.0.2 from this checkout, the same files apart from VERSION,
 # and v0.0.3 whose Pi profile has one more comment line.
-build() { node "$adapter" release "$1" "$served" "$home" "v$2" "$2" "$url" >/dev/null }
 build "$source_root" 0.0.1 || { print -ru2 'cannot build v0.0.1'; finish }
 build "$source_root" 0.0.2 || { print -ru2 'cannot build v0.0.2'; finish }
 /bin/mkdir -p "$run/src-c"
@@ -106,7 +98,6 @@ print -r -- v0.0.1 > "$served/latest.txt"
 point= pgrep_status= pi_path=
 typeset -a extra_env
 # note_point: records the test points named in $point as exercised.
-note_point() { local p; for p in ${=point}; do exercised+=("${p#*:}"); done }
 # envv: the environment of a run, from point, pgrep_status, pi_path and extra_env.
 envv() {
   reply=(/usr/bin/env -i HOME="$home" PATH="$base" TMPDIR="$darwin_temp/" AG_TEST_POINT="$point")
@@ -129,10 +120,8 @@ ag() {
   envv
   run_timeout 600 $reply "$engine/bin/agent-guard" "$@" < /dev/null > "$out" 2>&1
 }
-save() { /bin/rm -rf "$run/saved-$1"; /bin/cp -Rp "$home" "$run/saved-$1" }
 restore() { /bin/chmod -R u+w "$home" 2>/dev/null; /bin/rm -rf "$home"; /bin/cp -Rp "$run/saved-$1" "$home" }
 saved() { REPLY="$run/saved-$1${2#$home}" }
-sha() { /usr/bin/shasum -a 256 < "$1" 2>/dev/null }
 show() { print -r -- "$(<"$out")" | /usr/bin/sed 's/^/    | /' }
 replace_once() {  # FILE FROM TO
   local text=$(<"$1")

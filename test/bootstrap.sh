@@ -15,14 +15,7 @@ source "$source_root/test/lib.zsh"
 
 run=$(/usr/bin/mktemp -d "$source_root/test/.run-bootstrap-XXXXXX")
 run=${run:A}
-served="$run/served"
-/bin/mkdir -p "$served"
-node "$source_root/test/release-server.mjs" "$served" > "$run/port" 2> "$run/server.log" &
-server=$!
-for i in {1..100}; do [[ -s $run/port ]] && break; sleep 0.05; done
-port=$(<"$run/port")
-[[ $port == <-> ]] || { print -ru2 "release server did not start: $(<"$run/server.log")"; kill $server; exit 1 }
-url="http://127.0.0.1:$port/ebrindley/AgentGuard"
+start_release_server
 
 new_home "$run/home"
 home=$REPLY
@@ -30,7 +23,6 @@ engine="$home/Library/Application Support/AgentGuard"
 state="$engine/state"
 out="$run/out"
 
-build() { node "$adapter" release "$1" "$served" "$home" "v$2" "$2" "$url" >/dev/null }
 build "$source_root" 0.0.1 || { print -ru2 'cannot build v0.0.1'; kill $server; exit 1 }
 print v0.0.1 > "$served/latest.txt"
 a=agent-guard-0.0.1.tar.gz
