@@ -206,6 +206,17 @@ Beyond the baseline's requirement of concrete inputs leading to plausible damage
   refuting cost more than the review.
 - **Separation of observation from inference.** SECURITY.md marks its inferences
   as such; findings should too.
+- **Whether the gap is already documented.** A checker miss that DESIGN.md or
+  SECURITY.md already records is not a new finding. Section 3 asks for coverage
+  of the spellings agents emit naturally; a reproduction does not show that a
+  documented miss is one of them, a command or failure recorded from real use
+  does. Example: DESIGN.md section 5 (Command checker) records that Agent Guard's
+  Git rulebook, which replaces cc-safety-net's built-in restore and checkout rules
+  under D13, misses `git -C <dir> restore .`.
+- **Whose limitation it is.** When an upstream component documents a behaviour
+  and only Agent Guard's integration choice exposes it, any justified fix belongs
+  in Agent Guard, not in an upstream report. Example: cc-safety-net's rulebook
+  matcher fails open by design on unlisted options that take a value.
 
 Removing an existing control follows the baseline disposition rule: show it is out
 of scope, redundant in the same enforcement path, or disproportionate, and map

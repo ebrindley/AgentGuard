@@ -14,6 +14,10 @@ Applies to commits, pull requests, issues, backlog items, release notes, documen
 - No process narration. Name a tool or version only when the result depends on it.
 - No AI attribution, "generated with" lines or co-author trailers. Keep upstream copyright, license and attribution notices.
 
+## Findings
+
+Judge findings from reviews and audits, including other agents' reports, against docs/THREAT-MODEL.md sections 3 and 5 before proposing a change or an upstream report.
+
 ## Contributions
 
 External pull requests are not accepted. Issues are welcome. Report vulnerabilities privately; see SECURITY.md.
