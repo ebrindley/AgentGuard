@@ -13,10 +13,6 @@ command -v node >/dev/null || { print -ru2 'Node is required for the release ser
 
 source_root=${0:A:h:h}
 adapter="$source_root/test/engines/zsh.mjs"
-integer fails=0 checks=0
-label=
-pass() { checks+=1; print -r -- "ok   ${label:+$label: }$*" }
-fail() { checks+=1; fails+=1; print -r -- "FAIL ${label:+$label: }$*" }
 source "$source_root/test/lib.zsh"
 
 run=$(/usr/bin/mktemp -d "$source_root/test/.run-grok-install-XXXXXX")
@@ -24,18 +20,10 @@ run=${run:A}
 start_release_server
 typeset -a exercised
 finish() {
-  local p
-  local -a missing
   label=coverage
-  for p in $grok_points; do (( ${exercised[(Ie)$p]} )) || missing+=("$p"); done
-  (( $#missing == 0 )) && pass "all $#grok_points Grok test points are exercised" || fail "Grok test points not exercised: $missing"
-  kill $server 2>/dev/null
-  wait $server 2>/dev/null
-  /bin/chmod -R u+w "$run" 2>/dev/null
-  /bin/rm -r "$run"
-  print -r -- "$checks checks, $fails failure(s)"
-  (( fails == 0 ))
-  exit
+  points_exercised Grok $grok_points
+  stop_release_server
+  end_run
 }
 
 new_home "$run/home"
@@ -45,12 +33,9 @@ state="$engine/state"
 lb="$home/.local/bin"
 grok="$home/.grok"
 darwin_temp=${$(/usr/bin/getconf DARWIN_USER_TEMP_DIR):A}
-node_bin=${$(command -v node):A}
-fakebin="$run/fakebin" nodebin="$run/nodebin"
-/bin/mkdir -p "$fakebin" "$nodebin"
-print -r -- "#!/bin/sh
-exec '$node_bin' '$source_root/test/fake-opencode.mjs' \"\$@\"" > "$fakebin/opencode"
-/bin/chmod 755 "$fakebin/opencode"
+fake_opencode
+nodebin="$run/nodebin"
+/bin/mkdir -p "$nodebin"
 /bin/ln -s "$node_bin" "$nodebin/node"
 base="$fakebin:$nodebin:/usr/bin:/bin:/usr/sbin:/sbin"
 

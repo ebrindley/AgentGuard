@@ -1,5 +1,5 @@
 # Helpers for the installer test runners (test/bootstrap.sh; the install and
-# migration runners use the rest). Source it after defining pass and fail.
+# migration runners use the rest).
 # Paths follow the engine layout in design section 1.1: current -> releases/<rid>,
 # bin -> current/bin, state/.
 
@@ -21,6 +21,13 @@ pi_points=(psg-wrappers pi-bindings pi-preamble pi-profile pi-launcher-pi pi-lau
 # The same for the Grok harness, which only test/grok-install.sh exercises.
 grok_points=(grok-kept grok-binding grok-shim grok-keep)
 
+# pass and fail MESSAGE: a check's result line, after $label when it is set,
+# counted in checks and fails.
+integer fails=0 checks=0
+label=
+pass() { checks+=1; print -r -- "ok   ${label:+$label: }$*" }
+fail() { checks+=1; fails+=1; print -r -- "FAIL ${label:+$label: }$*" }
+
 # start_release_server: serves $run/served with test/release-server.mjs and sets
 # served, server, port and url; exits when the server does not start.
 start_release_server() {
@@ -34,6 +41,29 @@ start_release_server() {
   url="http://127.0.0.1:$port/ebrindley/AgentGuard"
 }
 
+# stop_release_server: stops the server start_release_server started.
+stop_release_server() { kill $server 2>/dev/null; wait $server 2>/dev/null }
+
+# end_run: removes $run, prints the counts and exits, non-zero after any failure.
+end_run() {
+  /bin/chmod -R u+w "$run" 2>/dev/null
+  /bin/rm -rf "$run"
+  print -r -- "$checks checks, $fails failure(s)"
+  (( fails == 0 ))
+  exit
+}
+
+# fake_opencode: $run/fakebin/opencode runs test/fake-opencode.mjs with this
+# Node. Sets node_bin and fakebin.
+fake_opencode() {
+  node_bin=${$(command -v node):A}
+  fakebin="$run/fakebin"
+  /bin/mkdir -p "$fakebin"
+  print -r -- "#!/bin/sh
+exec '$node_bin' '$source_root/test/fake-opencode.mjs' \"\$@\"" > "$fakebin/opencode"
+  /bin/chmod 755 "$fakebin/opencode"
+}
+
 # build SOURCE VERSION: a test release of SOURCE, tag vVERSION, served from $served
 # for $home and $url.
 build() { node "$adapter" release "$1" "$served" "$home" "v$2" "$2" "$url" >/dev/null }
@@ -41,11 +71,37 @@ build() { node "$adapter" release "$1" "$served" "$home" "v$2" "$2" "$url" >/dev
 # save NAME: a copy of $home as $run/saved-NAME.
 save() { /bin/rm -rf "$run/saved-$1"; /bin/cp -Rp "$home" "$run/saved-$1" }
 
+# restore NAME: replaces $home with $run/saved-NAME.
+restore() { /bin/chmod -R u+w "$home" 2>/dev/null; /bin/rm -rf "$home"; /bin/cp -Rp "$run/saved-$1" "$home" }
+
+# show: the output in $out, indented.
+show() { print -r -- "$(<"$out")" | /usr/bin/sed 's/^/    | /' }
+
 # sha FILE: FILE's SHA-256 line, empty when FILE cannot be read.
 sha() { /usr/bin/shasum -a 256 < "$1" 2>/dev/null }
 
 # note_point: records each test point in $point as exercised.
 note_point() { local p; for p in ${=point}; do exercised+=("${p#*:}"); done }
+
+# points_exercised KIND POINT...: every POINT is in $exercised.
+points_exercised() {
+  local kind=$1 p
+  local -a missing
+  shift
+  for p; do (( ${exercised[(Ie)$p]} )) || missing+=("$p"); done
+  (( $#missing == 0 )) && pass "all $# $kind test points are exercised" || fail "$kind test points not exercised: $missing"
+}
+
+# stable_node NODE: the resolved NODE, or its Homebrew opt link, as the installer
+# and pi-sandbox-guard's deploy-local.sh record a Node interpreter.
+stable_node() {
+  local r=${1:A} s
+  if [[ $r == (#b)(/opt/homebrew|/usr/local)/Cellar/(node(|@<->))/[^/]##/bin/node ]]; then
+    s="$match[1]/opt/$match[2]/bin/node"
+    [[ ${s:A} == $r ]] && { print -r -- $s; return }
+  fi
+  print -r -- $r
+}
 
 # new_home DIR: replaces DIR with an empty disposable home. REPLY is its real path.
 new_home() {
@@ -102,6 +158,16 @@ snapshot() {
     [[ -f $e/current/VERSION ]] && print -r -- "current $(<"$e/current/VERSION")" || print -r -- "current absent"
     [[ -f $e/state/stamp.json ]] && print -r -- "stamp $(/usr/bin/jq -r .version "$e/state/stamp.json")" || print -r -- "stamp absent"
   } | /usr/bin/sed -E -e "s/$rid_pattern/<rid>/g" -e 's/ +- *$//' | /usr/bin/sort
+}
+
+# same_snapshot NAME FILE: passes NAME when the home's snapshot equals the one in
+# FILE, otherwise fails it and prints the difference.
+same_snapshot() {
+  local now
+  now=$(snapshot "$home")
+  if [[ $now == "$(<$2)" ]]; then pass "$1"
+  else fail "$1"; /usr/bin/diff <(print -r -- "$(<$2)") <(print -r -- "$now") | /usr/bin/sed 's/^/    /'
+  fi
 }
 
 # kill_tree PID: kills PID and every descendant.

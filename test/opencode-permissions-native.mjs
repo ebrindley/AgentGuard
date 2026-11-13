@@ -4,10 +4,10 @@ import { dirname, join, resolve } from "node:path"
 import { tmpdir } from "node:os"
 import { fileURLToPath } from "node:url"
 import { spawn, spawnSync } from "node:child_process"
-import { createServer } from "node:http"
 import { DatabaseSync } from "node:sqlite"
 import * as adapter from "./engines/zsh.mjs"
 import { quote } from "./fixture-home.mjs"
+import { startModel } from "./scripted-model.mjs"
 
 assert.equal(process.versions.node.split(".")[0], "24", "native permission fixture requires Node 24")
 assert.ok(!process.env.AGENT_GUARD_SANDBOXED && !process.env.OPENCODE_SANDBOXED, "run the fixture outside an existing sandbox")
@@ -72,9 +72,7 @@ export const PermissionObserver = async () => {
   ]
   let mainIndex = 0, childIndex = 0, planIndex = 0, requestIndex = 0
   const observedTools = [], actionIDs = []
-  const model = createServer(async (req, res) => {
-    if (req.method === "GET") { res.writeHead(200, { "content-type": "application/json" }); res.end("{}"); return }
-    let body = ""; for await (const data of req) body += data
+  const { server: model, url } = await startModel(body => {
     writeFileSync(join(run, mode, `model-request-${requestIndex++}.json`), body)
     const payload = JSON.parse(body), names = (payload.tools ?? []).map(tool => tool.function?.name ?? tool.name)
     let action = null, role = "auxiliary", index = 0
@@ -86,14 +84,8 @@ export const PermissionObserver = async () => {
     }
     const id = `${mode}-${role}-${index}`
     if (action) actionIDs.push({ id, role, tool: action[0], args: action[1] })
-    res.writeHead(200, { "content-type": "text/event-stream" })
-    const base = { id, object: "chat.completion.chunk", created: 0, model: "fixture" }
-    const delta = action ? { role: "assistant", tool_calls: [{ index: 0, id, type: "function", function: { name: action[0], arguments: JSON.stringify(action[1]) } }] } : { role: "assistant", content: "done" }
-    res.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`)
-    res.end(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: {}, finish_reason: action ? "tool_calls" : "stop" }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } })}\n\ndata: [DONE]\n\n`)
+    return { id, action }
   })
-  await new Promise(resolve => model.listen(0, "127.0.0.1", resolve))
-  const url = `http://127.0.0.1:${model.address().port}`
   const agent = mode === "auto-protection" ? { explore: { permission: { external_directory: "ask" } } } : undefined
   writeFileSync(join(config, "opencode.json"), JSON.stringify({
     permission: { bash: "allow", external_directory: "allow" }, agent,

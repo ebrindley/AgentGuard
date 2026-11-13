@@ -20,10 +20,6 @@ command -v node >/dev/null || { print -ru2 'Node is required for the release ser
 source_root=${0:A:h:h}
 adapter="$source_root/test/engines/zsh.mjs"
 fixtures="$source_root/test/fixtures/installs"
-integer fails=0 checks=0
-label=
-pass() { checks+=1; print -r -- "ok   ${label:+$label: }$*" }
-fail() { checks+=1; fails+=1; print -r -- "FAIL ${label:+$label: }$*" }
 source "$source_root/test/lib.zsh"
 
 run=$(/usr/bin/mktemp -d "$source_root/test/.run-migrate-pi-XXXXXX")
@@ -31,19 +27,11 @@ run=${run:A}
 start_release_server
 typeset -a exercised
 finish() {
-  local p
-  local -a missing
   # Every Pi test point (test/lib.zsh) was exercised here.
   label=coverage
-  for p in $pi_points; do (( ${exercised[(Ie)$p]} )) || missing+=("$p"); done
-  (( $#missing == 0 )) && pass "all $#pi_points Pi test points are exercised" || fail "Pi test points not exercised: $missing"
-  kill $server 2>/dev/null
-  wait $server 2>/dev/null
-  /bin/chmod -R u+w "$run" 2>/dev/null
-  /bin/rm -rf "$run"
-  print -r -- "$checks checks, $fails failure(s)"
-  (( fails == 0 ))
-  exit
+  points_exercised Pi $pi_points
+  stop_release_server
+  end_run
 }
 
 new_home "$run/home"
@@ -64,25 +52,12 @@ darwin_temp=${$(/usr/bin/getconf DARWIN_USER_TEMP_DIR):A}
 
 # The fake OpenCode CLI (test/fake-opencode.mjs) and Node, each through a folder of
 # its own, so no other program on Node's folder (CI's npm global opencode) is on PATH.
-node_bin=${$(command -v node):A}
-fakebin="$run/fakebin" nodebin="$run/nodebin"
-/bin/mkdir -p "$fakebin" "$nodebin"
-print -r -- "#!/bin/sh
-exec '$node_bin' '$source_root/test/fake-opencode.mjs' \"\$@\"" > "$fakebin/opencode"
-/bin/chmod 755 "$fakebin/opencode"
+fake_opencode
+nodebin="$run/nodebin"
+/bin/mkdir -p "$nodebin"
 /bin/ln -s "$node_bin" "$nodebin/node"
 base="$fakebin:$nodebin:/usr/bin:/bin:/usr/sbin:/sbin"
-# The Node as deploy-local.sh records it for pi-sandbox-guard's analyzer, and as the
-# installer records an interpreter for a Node script: the resolved node, or its
-# Homebrew opt link.
-stable_node() {
-  local r=${1:A} s
-  if [[ $r == (#b)(/opt/homebrew|/usr/local)/Cellar/(node(|@<->))/[^/]##/bin/node ]]; then
-    s="$match[1]/opt/$match[2]/bin/node"
-    [[ ${s:A} == $r ]] && { print -r -- $s; return }
-  fi
-  print -r -- $r
-}
+# The Node as deploy-local.sh records it for pi-sandbox-guard's analyzer.
 want_node=$(stable_node "$node_bin")
 
 # Releases: v0.0.1 and v0.0.2 from this checkout, the same files apart from VERSION,
@@ -120,9 +95,7 @@ ag() {
   envv
   run_timeout 600 $reply "$engine/bin/agent-guard" "$@" < /dev/null > "$out" 2>&1
 }
-restore() { /bin/chmod -R u+w "$home" 2>/dev/null; /bin/rm -rf "$home"; /bin/cp -Rp "$run/saved-$1" "$home" }
 saved() { REPLY="$run/saved-$1${2#$home}" }
-show() { print -r -- "$(<"$out")" | /usr/bin/sed 's/^/    | /' }
 replace_once() {  # FILE FROM TO
   local text=$(<"$1")
   (( ${#text} - ${#${text//$2/}} == ${#2} )) || { print -ru2 -- "must occur once in $1: $2"; finish }
