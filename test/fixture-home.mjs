@@ -2,7 +2,9 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 
 // Only test copies use these seams. Production has no env/flag override for home.
-const quote = (home) => "'" + home.replaceAll("'", "'\\''") + "'";
+
+// One single-quoted shell word for s.
+export const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 
 // The launcher's inline lookup.
 export function fixtureHome(file, home) {

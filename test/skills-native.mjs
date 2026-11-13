@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url"
 import { createServer } from "node:http"
 import { spawn } from "node:child_process"
 import * as adapter from "./engines/zsh.mjs"
+import { quote } from "./fixture-home.mjs"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const run = mkdtempSync(join(root, "test/.run-skills-native-")), home = join(run, "home"), tree = join(run, "source")
@@ -19,7 +20,6 @@ cpSync(join(tree, "engine/vendor"), join(release, "vendor"), { recursive: true }
 symlinkSync(join(release, "profiles/opencode/plugin.js"), join(home, ".config/opencode/plugins/agent-guard.js"))
 writeFileSync(join(home, ".config/opencode/.gitignore"), "node_modules\npackage.json\npackage-lock.json\nbun.lock\n.gitignore\n")
 writeFileSync(join(home, "Agent Guard/Guard List.txt"), `ALLOW\n${home}/Projects\nREAD ONLY\nDENY\n`)
-const quote = p => "'" + p.replaceAll("'", "'\\''") + "'"
 writeFileSync(join(home, "fakebin/opencode"), `#!/bin/sh\nexec ${quote(realpathSync(realCLI))} "$@"\n`, { mode: 0o755 })
 const localSkill = join(project, ".opencode/skills/native"), globalSkill = join(home, ".agents/skills/native")
 const projectConfig = join(project, "opencode.json")

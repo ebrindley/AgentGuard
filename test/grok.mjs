@@ -8,6 +8,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { layout, stage } from './engines/zsh.mjs';
+import { quote as q } from './fixture-home.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const run = mkdtempSync(join(root, 'test/.run-grok-'));
@@ -54,7 +55,6 @@ const exec = (file, args, extra = {}, cwd = project) =>
   spawnSync(file, args, { cwd, env: { ...env, ...extra }, encoding: 'utf8', timeout: 20000 });
 const launch = (args, extra, cwd) => exec(shim, args, extra, cwd);
 const probe = (command, extra = {}) => launch([], { AG_PROBE: command, ...extra });
-const q = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 const ok = (message) => console.log(`ok   ${message}`);
 
 // Plain and scripted launches reach the guard and run Grok with the guard's arguments.

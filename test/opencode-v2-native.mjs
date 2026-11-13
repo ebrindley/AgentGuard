@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto"
 import { homedir, tmpdir } from "node:os"
 import * as adapter from "./engines/zsh.mjs"
 import { groupExists, signalGroup } from "./process-group.mjs"
+import { quote } from "./fixture-home.mjs"
 
 assert.equal(process.versions.node.split(".")[0], "24")
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
@@ -19,7 +20,6 @@ assert.ok(selected.every(mode => modes.includes(mode)))
 const accountHome = realpathSync(homedir())
 const run = realpathSync(mkdtempSync(join(tmpdir(), "agentguard-v2-")))
 assert.ok(!run.startsWith(accountHome + "/"), "native V2 fixtures must be outside the account home")
-const quote = value => "'" + value.replaceAll("'", "'\\''") + "'"
 console.log(`OpenCode V2 fixture: ${run}`)
 
 for (const mode of selected) {

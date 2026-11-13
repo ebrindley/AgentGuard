@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, symlinkSync, writeFile
 import { dirname, join } from "node:path"
 import { homedir } from "node:os"
 import { spawnSync } from "node:child_process"
+import { quote } from "./fixture-home.mjs"
 
 const [plugin, mode] = process.argv.slice(2)
 const home = homedir(), project = join(home, "Projects/app"), second = join(home, "Projects/second")
@@ -28,7 +29,6 @@ async function shell(command, workdir = project, allowed = true, handler = befor
     assert.equal(r.status, 0, r.stderr)
   }
 }
-const quote = p => "'" + p.replaceAll("'", "'\\''") + "'"
 if (mode === "lifecycle") {
   assert.equal(JSON.parse(await hooks.tool.agent_guard_status.execute()).state, "active")
   assert.equal(existsSync(join(project, ".opencode/skills")), false)

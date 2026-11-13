@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { spawnSync } from "node:child_process"
 import { stage, layout, isolateHarness } from "./engines/zsh.mjs"
+import { quote } from "./fixture-home.mjs"
 
 assert.equal(process.versions.node.split(".")[0], "24", "Node 24 is required")
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
@@ -21,7 +22,6 @@ cpSync(join(tree, "engine/vendor"), join(release, "vendor"), { recursive: true }
 const profilePath = join(release, "profile.sb")
 writeFileSync(profilePath, readFileSync(profilePath, "utf8").replace('(subpath "/private/tmp")', `(require-all (subpath "/private/tmp") (require-not (subpath (param "HOME"))))`))
 writeFileSync(join(home, "Agent Guard/Guard List.txt"), `ALLOW\n${project}\nREAD ONLY\nDENY\n`)
-const quote = value => "'" + value.replaceAll("'", "'\\''") + "'"
 const env = { HOME: home, SHELL: "/bin/zsh", PATH: "/usr/bin:/bin:/usr/sbin:/sbin", LANG: "en_US.UTF-8", TMPDIR: process.env.TMPDIR }
 const launch = (mode, args = [], terminal = false) => spawnSync(terminal ? "/usr/bin/script" : "/bin/zsh", [...(terminal ? ["-q", "/dev/null", "/bin/zsh"] : []), join(release, "launch"), mode, ...args], { cwd: project, env, stdio: ["ignore", "pipe", "pipe"], encoding: "utf8", timeout: 20000 })
 const selected = process.argv[2] ?? "all"

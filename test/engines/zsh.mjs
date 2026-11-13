@@ -5,7 +5,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, syml
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { fixtureAccount, fixtureHome } from '../fixture-home.mjs';
+import { fixtureAccount, fixtureHome, quote } from '../fixture-home.mjs';
 
 export const name = 'zsh';
 
@@ -62,8 +62,7 @@ export function identity(source, env) {
   const end = text.indexOf('release=${0:A:h}\n');
   assert.notEqual(end, -1, 'release resolution line not found in engine/launch');
   const [home, engine] = run(text.slice(0, end) + '\nprint -rl -- "$home" "$engine"');
-  const quoted = "'" + join(source, 'engine/account.zsh').replaceAll("'", "'\\''") + "'";
-  const [account] = run(`source ${quoted} && account_home && print -r -- "\${REPLY:A}"`);
+  const [account] = run(`source ${quote(join(source, 'engine/account.zsh'))} && account_home && print -r -- "\${REPLY:A}"`);
   assert.equal(account, home, 'engine/account.zsh and engine/launch disagree on the account home');
   return { home, engine };
 }
@@ -104,7 +103,6 @@ const pgrep = 'local pgrep=ag_test_pgrep; ag_test_pgrep() { [[ ${AG_TEST_PGREP:-
 // system folders, so the launcher never finds a Pi or OMP of the test Mac.
 const piSearch = 'pi_roots=(${=AG_TEST_PI_ROOTS:-}) pi_path=${AG_TEST_PI_PATH:-}';
 const piPath = 'PATH="/usr/bin:/bin:/usr/sbin:/sbin"';
-const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 
 function replaceOnce(file, from, to) {
   const text = readFileSync(file, 'utf8');
