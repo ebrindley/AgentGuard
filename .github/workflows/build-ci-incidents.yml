@@ -1,5 +1,5 @@
 # Generated locally after review; publish to activate.
-name: Poetic CI incidents
+name: Build CI incidents
 on:
   workflow_run:
     workflows:
@@ -39,7 +39,7 @@ jobs:
     if: github.event_name == 'workflow_run'
     runs-on: ubuntu-latest
     concurrency:
-      group: poetic-incident-dispatch
+      group: build-incident-dispatch
       cancel-in-progress: false
       queue: max
     steps:
@@ -50,7 +50,7 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
           node-version: "24"
-      - run: node .poetic/ci/incident-intake.mjs intake
+      - run: node .build-project/ci/incident-intake.mjs intake
         env:
           GITHUB_TOKEN: ${{ github.token }}
   reconcile:
@@ -63,7 +63,7 @@ jobs:
       pull-requests: read
       checks: read
     concurrency:
-      group: poetic-incident-dispatch
+      group: build-incident-dispatch
       cancel-in-progress: false
       queue: max
     steps:
@@ -74,21 +74,21 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
           node-version: "24"
-      - run: node .poetic/ci/incident-intake.mjs reconcile
+      - run: node .build-project/ci/incident-intake.mjs reconcile
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          POETIC_REPAIR_WORKFLOW: ${{ vars.POETIC_REPAIR_WORKFLOW }}
+          BUILD_REPAIR_WORKFLOW: ${{ vars.BUILD_REPAIR_WORKFLOW }}
   dispatch:
     needs:
       - intake
       - reconcile
     if: always() && (needs.intake.result == 'success' || needs.reconcile.result ==
-      'success') && vars.POETIC_REPAIR_DISPATCH_ENABLED == 'true' &&
-      vars.POETIC_REPAIR_CALLBACK_CONFIGURED == 'true' &&
-      vars.POETIC_REPAIR_WORKFLOW != ''
+      'success') && vars.BUILD_REPAIR_DISPATCH_ENABLED == 'true' &&
+      vars.BUILD_REPAIR_CALLBACK_CONFIGURED == 'true' &&
+      vars.BUILD_REPAIR_WORKFLOW != ''
     runs-on: ubuntu-latest
     concurrency:
-      group: poetic-incident-dispatch
+      group: build-incident-dispatch
       cancel-in-progress: false
       queue: max
     permissions:
@@ -103,9 +103,9 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
         with:
           node-version: "24"
-      - run: node .poetic/ci/incident-intake.mjs dispatch
+      - run: node .build-project/ci/incident-intake.mjs dispatch
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          POETIC_REPAIR_DISPATCH_ENABLED: ${{ vars.POETIC_REPAIR_DISPATCH_ENABLED }}
-          POETIC_REPAIR_WORKFLOW: ${{ vars.POETIC_REPAIR_WORKFLOW }}
-          POETIC_REPAIR_CALLBACK_CONFIGURED: ${{ vars.POETIC_REPAIR_CALLBACK_CONFIGURED }}
+          BUILD_REPAIR_DISPATCH_ENABLED: ${{ vars.BUILD_REPAIR_DISPATCH_ENABLED }}
+          BUILD_REPAIR_WORKFLOW: ${{ vars.BUILD_REPAIR_WORKFLOW }}
+          BUILD_REPAIR_CALLBACK_CONFIGURED: ${{ vars.BUILD_REPAIR_CALLBACK_CONFIGURED }}

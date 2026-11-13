@@ -145,7 +145,7 @@ a Git root only in the active fixture project; sibling directories are external.
 The full hosted matrix runs these native cases on its pinned CLI. Native auto
 acceptance does not attest the desktop UI's stored auto-accept state.
 
-Poetic local CI is disabled. Its verification runner applies an outer macOS
+Build local CI is disabled. Its verification runner applies an outer macOS
 sandbox, which prevents these confinement fixtures from applying their own.
 A temporary-checkout fixture correction passed independently, but the actual
 local queue still refused nested sandbox initialization. Hosted CI owns landing;
@@ -158,7 +158,7 @@ means full stage proof is unverified. Before publishing a
 release, require a successful full run on its exact source commit and retain the
 existing packaging/seam checks. Local gate success alone is not release proof.
 
-The delivery policy declares the scopes. `poetic ci status --delivery` inspects
+The delivery policy declares the scopes. `build ci status --delivery` inspects
 hosted background evidence; it does not relabel ordinary Local CI runs as new
 stage proofs. The generated incident kit records failing matrix jobs/steps and
 closes them after the originally failing steps pass in a newer run on main's
@@ -170,7 +170,7 @@ settings; deleting the service binding alone does not disable account triggers.
 The dormant `.cursor/config/bugbot.yaml` and `.cursor/BUGBOT.md` are retained for
 deliberate reactivation. Repository Autofix remains disabled.
 
-The project provider order excludes Cursor from automatic Poetic selection.
+The project provider order excludes Cursor from automatic Build selection.
 Explicit provider selections, profiles and higher-precedence defaults can
 override that order; inspect resolved configuration before unattended execution.
 
