@@ -206,6 +206,22 @@ Beyond the baseline's requirement of concrete inputs leading to plausible damage
   refuting cost more than the review.
 - **Separation of observation from inference.** SECURITY.md marks its inferences
   as such; findings should too.
+- **Whether a recorded decision already accepts the gap.** A gap that DESIGN.md
+  records as the consequence of a decision is that decision's accepted cost, not
+  a new finding. A reproduction alone does not reopen it; a failure recorded from
+  real use does, and the response is to revisit the decision. Example: D13
+  replaces cc-safety-net's built-in restore and checkout rules with narrower
+  custom rules, which miss `git -C <dir> restore .` (DESIGN.md section 5,
+  Command checker).
+- **Whose limitation it is.** When an upstream component documents a behaviour
+  and only Agent Guard's integration choice exposes it, any justified fix belongs
+  in Agent Guard, not in an upstream report. Example: cc-safety-net documents that
+  its rulebook matcher fails open on unlisted options that take a value; its
+  built-in Git rules are unaffected.
+
+The last two rules come from the 2026-11-12 review of an external audit of the
+checker integration: most proposed fixes, and a drafted upstream issue, addressed
+gaps those rules now place out of scope.
 
 Removing an existing control follows the baseline disposition rule: show it is out
 of scope, redundant in the same enforcement path, or disproportionate, and map
