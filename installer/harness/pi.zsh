@@ -196,6 +196,11 @@ ag_pi_node() {
   return 0
 }
 
+# True when PATH is a Node script: its first line is a #! line that runs node.
+ag_pi_node_script() {
+  /usr/bin/head -c 128 -- "$1" 2>/dev/null | /usr/bin/head -1 | /usr/bin/grep -Eq '^#!.*[ /]node( |$)'
+}
+
 # True when an entry the staged bindings record is a Node script and no interpreter
 # is recorded for it: the launcher's pinned PATH may hold no node (bind-executable.sh,
 # needs_interpreter). OMP is native.
@@ -203,8 +208,7 @@ ag_pi_needs_node() {
   local rt t rec
   ag_pi_conf_get node && return 1
   for rt t rec in $ag_pi_entries; do
-    (( rec )) && [[ $rt == pi ]] &&
-      /usr/bin/head -c 128 -- "$t" 2>/dev/null | /usr/bin/head -1 | /usr/bin/grep -Eq '^#!.*[ /]node( |$)' && return 0
+    (( rec )) && [[ $rt == pi ]] && ag_pi_node_script "$t" && return 0
   done
   return 1
 }
@@ -279,8 +283,7 @@ ag_pi_stage() {
     (( rec )) || continue
     set+=("$rt" "$t")
     # A Node entry point needs its interpreter recorded (ag_pi_needs_node).
-    if [[ $rt == pi ]] && /usr/bin/head -c 128 -- "$t" 2>/dev/null | /usr/bin/head -1 | /usr/bin/grep -Eq '^#!.*[ /]node( |$)' &&
-       ! ag_pi_conf_get node; then
+    if [[ $rt == pi ]] && ag_pi_node_script "$t" && ! ag_pi_conf_get node; then
       set+=(node "$ag_pi_node_path")
     fi
   done
