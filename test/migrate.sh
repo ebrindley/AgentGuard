@@ -180,11 +180,22 @@ save clean
 # install.sh and every file it installs equal v1.0.3's, apart from the list template,
 # which equals v1.0.1's.
 versions=(1.0.4 1.0.3 1.0.1 1.0.0)
+# The tree each version installs from. v1.0.0 and v1.0.1 are stored without vendor/
+# and assets/, which equal v1.0.3's (test/fixtures/installs/README.md), and install
+# from a copy completed with them.
+typeset -A ocg_tree
+for v in $versions; do ocg_tree[$v]="$fixtures/opencode-guard-$v"; done
+for v in 1.0.1 1.0.0; do
+  ocg_tree[$v]="$run/fixtures/opencode-guard-$v"
+  /bin/mkdir -p "$run/fixtures" && /bin/cp -R "$fixtures/opencode-guard-$v" "$run/fixtures/" &&
+    /bin/cp -R "$fixtures/opencode-guard-1.0.3/vendor" "$fixtures/opencode-guard-1.0.3/assets" "${ocg_tree[$v]}/" ||
+    { print -ru2 "cannot complete the v$v fixture"; finish }
+done
 # ocg_install VERSION: OpenCode Guard VERSION installed by its own installer.
 # user_edits: the user edits a config: bash changed and edit removed in
 # opencode.json, a key added to config.json.
 ocg_install() {
-  run_timeout 120 /usr/bin/env -i HOME="$home" PATH="$base" /bin/zsh "$fixtures/opencode-guard-$1/install.sh" --projects "$home/Projects" < /dev/null > "$out" 2>&1
+  run_timeout 120 /usr/bin/env -i HOME="$home" PATH="$base" /bin/zsh "${ocg_tree[$1]}/install.sh" --projects "$home/Projects" < /dev/null > "$out" 2>&1
 }
 user_edits() {
   /usr/bin/jq -c '.permission.bash = "ask" | del(.permission.edit)' "$cfg" > "$cfg.new" && /bin/mv "$cfg.new" "$cfg"
@@ -204,7 +215,7 @@ for v in $versions; do
   ocg_files > "$run/ocg-$v.files"
   snapshot "$home" > "$run/ocg-$v.snapshot"
   # What OpenCode Guard's own uninstaller leaves in the configs (M9).
-  run_timeout 60 /usr/bin/env -i HOME="$home" PATH="$base" /bin/zsh "$fixtures/opencode-guard-$v/uninstall.sh" < /dev/null > "$out" 2>&1 ||
+  run_timeout 60 /usr/bin/env -i HOME="$home" PATH="$base" /bin/zsh "${ocg_tree[$v]}/uninstall.sh" < /dev/null > "$out" 2>&1 ||
     { fail "OpenCode Guard $v's uninstall.sh (exit $?)"; show }
   /usr/bin/jq -S . "$cfg" > "$run/twin-$v.cfg"
   /usr/bin/jq -S . "$cfg2" > "$run/twin-$v.cfg2"
