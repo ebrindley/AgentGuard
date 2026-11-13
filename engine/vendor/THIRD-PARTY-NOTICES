@@ -1,6 +1,6 @@
 Third-party notices for engine/vendor
 
-cc-safety-net 2.4.14 is covered by cc-safety-net/LICENSE.
+cc-safety-net 2.6.0 is covered by cc-safety-net/LICENSE.
 
 Local matcher change: V2 rulebooks accept `git_restore_worktree: true` in
 `match`. It requires a non-terminal Git restore that modifies the worktree,
