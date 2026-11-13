@@ -2,10 +2,10 @@ import assert from "node:assert/strict"
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
-import { createServer } from "node:http"
 import { spawn } from "node:child_process"
 import * as adapter from "./engines/zsh.mjs"
 import { quote } from "./fixture-home.mjs"
+import { startModel } from "./scripted-model.mjs"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const run = mkdtempSync(join(root, "test/.run-skills-native-")), home = join(run, "home"), tree = join(run, "source")
@@ -41,21 +41,12 @@ const calls = [
 ]
 const mode = process.argv[2] ?? "cli"
 let requests = 0, totalRequests = 0
-const server = createServer(async (req, res) => {
-  if (req.method === "GET") { res.writeHead(200, { "content-type": "application/json" }); res.end("{}"); return }
-  let body = ""; for await (const data of req) body += data
+const { server, url } = await startModel(body => {
   writeFileSync(join(run, `model-request-${totalRequests++}.json`), body)
   const payload = JSON.parse(body)
   const action = payload.tools?.length ? calls[requests++] : null
-  res.writeHead(200, { "content-type": "text/event-stream" })
-  const event = delta => res.write(`data: ${JSON.stringify({ id: `fixture-${requests}`, object: "chat.completion.chunk", created: 0, model: "fixture", choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`)
-  if (action) event({ role: "assistant", tool_calls: [{ index: 0, id: `call-${requests}`, type: "function", function: { name: action[0], arguments: JSON.stringify(action[1]) } }] })
-  else event({ role: "assistant", content: "done" })
-  res.write(`data: ${JSON.stringify({ id: `fixture-${requests}`, object: "chat.completion.chunk", created: 0, model: "fixture", choices: [{ index: 0, delta: {}, finish_reason: action ? "tool_calls" : "stop" }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } })}\n\ndata: [DONE]\n\n`)
-  res.end()
+  return { id: `fixture-${requests}`, action, callId: `call-${requests}` }
 })
-await new Promise(resolve => server.listen(0, "127.0.0.1", resolve))
-const url = `http://127.0.0.1:${server.address().port}`
 // Both execute directly, before model tool hooks. Kernel confinement must hold.
 const containment = `
 import fs from 'node:fs';

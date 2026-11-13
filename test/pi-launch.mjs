@@ -10,6 +10,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { userInfo } from 'node:os';
+import { check, report } from './check.mjs';
 import { layout, stage } from './engines/zsh.mjs';
 import { quote } from './fixture-home.mjs';
 import { checkSettingsLocks } from './pi-settings-lock.mjs';
@@ -26,16 +27,6 @@ const temp = realpathSync(execFileSync('/usr/bin/getconf', ['DARWIN_USER_TEMP_DI
 // Writable through the session's TMPDIR grant, outside every account home.
 const scratch = realpathSync(mkdtempSync(join(temp, 'agent-guard-pi-')));
 const inert = '/private/tmp/pi-sandbox-guard-unused/agent-guard-no-link';
-let fails = 0;
-function check(name, fn) {
-  try {
-    fn();
-    console.log(`ok   ${name}`);
-  } catch (error) {
-    fails++;
-    console.log(`FAIL ${name}\n     ${error.message.replaceAll('\n', '\n     ')}`);
-  }
-}
 
 // The stand-in Pi: drops the injected extension flag and runs the rest.
 const standIn = join(run, 'runtime', 'pi');
@@ -882,5 +873,4 @@ try {
   rmSync(run, { recursive: true, force: true });
   rmSync(scratch, { recursive: true, force: true });
 }
-console.log(`${fails} failure(s)`);
-process.exit(fails ? 1 : 0);
+report();

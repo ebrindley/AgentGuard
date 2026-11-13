@@ -11,22 +11,12 @@ command -v node >/dev/null || { print -ru2 'Node is required for the checker and
 
 source_root=${0:A:h:h}
 adapter="$source_root/test/engines/zsh.mjs"
-integer fails=0 checks=0
-label=
 out=
-pass() { checks+=1; print -r -- "ok   ${label:+$label: }$*" }
-fail() { checks+=1; fails+=1; print -r -- "FAIL ${label:+$label: }$*" }
 source "$source_root/test/lib.zsh"
 
 run=$(/usr/bin/mktemp -d "$source_root/test/.run-pi-XXXXXX")
 run=${run:A}
-finish() {
-  /bin/chmod -R u+w "$run" 2>/dev/null
-  /bin/rm -rf "$run"
-  print -r -- "$checks checks, $fails failure(s)"
-  (( fails == 0 ))
-  exit
-}
+finish() { end_run }
 new_home "$run/home"
 home=$REPLY
 engine="$home/Library/Application Support/AgentGuard"
@@ -117,15 +107,7 @@ node_bin=${$(command -v node):A}
 /bin/ln -s "$node_bin" "$run/nodebin/node"
 darwin_temp=${$(/usr/bin/getconf DARWIN_USER_TEMP_DIR):A}
 base="$run/nodebin:/usr/bin:/bin:/usr/sbin:/sbin"
-# The Node bind records: the resolved node, or its Homebrew opt link.
-stable_node() {
-  local r=${1:A} s
-  if [[ $r == (#b)(/opt/homebrew|/usr/local)/Cellar/(node(|@<->))/[^/]##/bin/node ]]; then
-    s="$match[1]/opt/$match[2]/bin/node"
-    [[ ${s:A} == $r ]] && { print -r -- $s; return }
-  fi
-  print -r -- $r
-}
+# The Node bind records.
 want_node=$(stable_node "$node_bin")
 
 # ag ARGS...: agent-guard from the installed release in a clean environment; extra

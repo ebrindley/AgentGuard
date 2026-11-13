@@ -19,21 +19,12 @@ import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { check, report } from './check.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const vendored = join(root, 'profiles/pi');
 const record = JSON.parse(readFileSync(join(root, 'test/fixtures/differences/pi.json'), 'utf8'));
 const patch = readFileSync(join(root, 'test/fixtures/differences', record.patch), 'utf8');
-let fails = 0;
-function check(name, fn) {
-  try {
-    fn();
-    console.log(`ok   ${name}`);
-  } catch (error) {
-    fails++;
-    console.log(`FAIL ${name}\n     ${error.message.replaceAll('\n', '\n     ')}`);
-  }
-}
 
 const blob = (bytes) => createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
 function walk(dir) {
@@ -121,5 +112,4 @@ check('no user-facing text in the launchers, preamble or extension names an npm 
   }
 });
 
-console.log(`${fails} failure(s)`);
-process.exit(fails ? 1 : 0);
+report();

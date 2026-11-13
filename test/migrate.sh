@@ -18,10 +18,6 @@ command -v node >/dev/null || { print -ru2 'Node is required for the release ser
 source_root=${0:A:h:h}
 adapter="$source_root/test/engines/zsh.mjs"
 fixtures="$source_root/test/fixtures/installs"
-integer fails=0 checks=0
-label=
-pass() { checks+=1; print -r -- "ok   ${label:+$label: }$*" }
-fail() { checks+=1; fails+=1; print -r -- "FAIL ${label:+$label: }$*" }
 source "$source_root/test/lib.zsh"
 
 run=$(/usr/bin/mktemp -d "$source_root/test/.run-migrate-XXXXXX")
@@ -29,14 +25,10 @@ run=${run:A}
 start_release_server
 typeset -a exercised
 finish() {
-  local p
-  local -a missing
   # Every migration test point (test/lib.zsh) was exercised here.
   label=coverage
-  for p in $migrate_points; do (( ${exercised[(Ie)$p]} )) || missing+=("$p"); done
-  (( $#missing == 0 )) && pass "all $#migrate_points migration test points are exercised" || fail "migration test points not exercised: $missing"
-  kill $server 2>/dev/null
-  wait $server 2>/dev/null
+  points_exercised migration $migrate_points
+  stop_release_server
   print -r -- "migration fixtures: $run"
   print -r -- "$checks checks, $fails failure(s)"
   (( fails == 0 ))
@@ -61,13 +53,7 @@ old_list="$home/OpenCode Guard/Guard List.txt"
 out="$run/out"
 
 # The fake CLI first on PATH, as in test/install.sh.
-node_bin=${$(command -v node):A}
-fake="$source_root/test/fake-opencode.mjs"
-fakebin="$run/fakebin"
-/bin/mkdir -p "$fakebin"
-print -r -- "#!/bin/sh
-exec '$node_bin' '$fake' \"\$@\"" > "$fakebin/opencode"
-/bin/chmod 755 "$fakebin/opencode"
+fake_opencode
 system_path=/usr/bin:/bin:/usr/sbin:/sbin
 base="$fakebin:$system_path"
 old_path="$ocg/bin:$base"
@@ -114,15 +100,6 @@ ag() {
   note_point
   envv
   run_timeout 240 $reply "$engine/bin/agent-guard" "$@" < /dev/null > "$out" 2>&1
-}
-restore() { /bin/chmod -R u+w "$home" 2>/dev/null; /bin/rm -rf "$home"; /bin/cp -Rp "$run/saved-$1" "$home" }
-show() { print -r -- "$(<"$out")" | /usr/bin/sed 's/^/    | /' }
-same_snapshot() {  # NAME FILE: the home's snapshot equals the one in FILE
-  local now
-  now=$(snapshot "$home")
-  if [[ $now == "$(<$2)" ]]; then pass "$1"
-  else fail "$1"; /usr/bin/diff <(print -r -- "$(<$2)") <(print -r -- "$now") | /usr/bin/sed 's/^/    /'
-  fi
 }
 # ocg_files: path and hash (or link target) of every OpenCode Guard file, startup
 # file and config, for the byte-identical cases.

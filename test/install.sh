@@ -12,24 +12,12 @@ command -v node >/dev/null || { print -ru2 'Node is required for the release ser
 
 source_root=${0:A:h:h}
 adapter="$source_root/test/engines/zsh.mjs"
-integer fails=0 checks=0
-label=
-pass() { checks+=1; print -r -- "ok   ${label:+$label: }$*" }
-fail() { checks+=1; fails+=1; print -r -- "FAIL ${label:+$label: }$*" }
 source "$source_root/test/lib.zsh"
 
 run=$(/usr/bin/mktemp -d "$source_root/test/.run-install-XXXXXX")
 run=${run:A}
 start_release_server
-finish() {
-  kill $server 2>/dev/null
-  wait $server 2>/dev/null
-  /bin/chmod -R u+w "$run" 2>/dev/null
-  /bin/rm -rf "$run"
-  print -r -- "$checks checks, $fails failure(s)"
-  (( fails == 0 ))
-  exit
-}
+finish() { stop_release_server; end_run }
 
 new_home "$run/home"
 home=$REPLY
@@ -45,13 +33,7 @@ out="$run/out"
 original='{"model":"m","permission":{"bash":{"ls *":"allow","*":"ask"},"task":"ask"}}'
 
 # The fake CLI, first on PATH.
-node_bin=${$(command -v node):A}
-fake="$source_root/test/fake-opencode.mjs"
-fakebin="$run/fakebin"
-/bin/mkdir -p "$fakebin"
-print -r -- "#!/bin/sh
-exec '$node_bin' '$fake' \"\$@\"" > "$fakebin/opencode"
-/bin/chmod 755 "$fakebin/opencode"
+fake_opencode
 system_path=/usr/bin:/bin:/usr/sbin:/sbin
 base="$fakebin:$system_path"
 tpath=$base
@@ -89,17 +71,8 @@ boot() {
 ag() {
   run_timeout 180 /usr/bin/env -i HOME="$home" PATH="$tpath" AG_TEST_POINT="$point" "$engine/bin/agent-guard" "$@" < /dev/null > "$out" 2>&1
 }
-restore() { /bin/chmod -R u+w "$home" 2>/dev/null; /bin/rm -rf "$home"; /bin/cp -Rp "$run/saved-$1" "$home" }
 stamp_version() { if [[ -f $state/stamp.json ]]; then /usr/bin/jq -r .version "$state/stamp.json"; else print -r -- absent; fi }
 current_rid() { if [[ -f $engine/current/RELEASE ]]; then print -r -- "$(<"$engine/current/RELEASE")"; else print -r -- absent; fi }
-show() { print -r -- "$(<"$out")" | /usr/bin/sed 's/^/    | /' }
-same_snapshot() {  # NAME FILE: the home's snapshot equals the one in FILE
-  local now
-  now=$(snapshot "$home")
-  if [[ $now == "$(<$2)" ]]; then pass "$1"
-  else fail "$1"; /usr/bin/diff <(print -r -- "$(<$2)") <(print -r -- "$now") | /usr/bin/sed 's/^/    /'
-  fi
-}
 one_block() {  # FILE: one complete agent-guard block
   [[ $(/usr/bin/grep -cFx '# >>> agent-guard >>>' "$1") == 1 && $(/usr/bin/grep -cFx '# <<< agent-guard <<<' "$1") == 1 ]]
 }

@@ -8,9 +8,6 @@ command -v node >/dev/null || { print -ru2 'Node is required for the release ser
 
 source_root=${0:A:h:h}
 adapter="$source_root/test/engines/zsh.mjs"
-fails=0
-pass() { print -r -- "ok   $*" }
-fail() { print -r -- "FAIL $*"; fails=$((fails + 1)) }
 source "$source_root/test/lib.zsh"
 
 run=$(/usr/bin/mktemp -d "$source_root/test/.run-bootstrap-XXXXXX")

@@ -10,6 +10,7 @@ import { homedir, tmpdir } from "node:os"
 import * as adapter from "./engines/zsh.mjs"
 import { groupExists, signalGroup } from "./process-group.mjs"
 import { quote } from "./fixture-home.mjs"
+import { startModel } from "./scripted-model.mjs"
 
 assert.equal(process.versions.node.split(".")[0], "24")
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
@@ -50,21 +51,12 @@ for (const mode of selected) {
   ]
   let index = 0
   const requests = []
-  const model = createServer(async (req, res) => {
-    if (req.method === "GET") { res.writeHead(200, { "content-type": "application/json" }); res.end("{}"); return }
-    let body = ""; for await (const data of req) body += data
+  const { server: model, url } = await startModel(body => {
     const payload = JSON.parse(body)
     requests.push(payload)
     const action = payload.tools?.length ? calls[index++] : null
-    const id = `fixture-${index}`
-    const delta = action ? { role: "assistant", tool_calls: [{ index: 0, id, type: "function", function: { name: action[0], arguments: JSON.stringify(action[1]) } }] } : { role: "assistant", content: "done" }
-    const base = { id, object: "chat.completion.chunk", created: 0, model: "fixture" }
-    res.writeHead(200, { "content-type": "text/event-stream" })
-    res.write(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta, finish_reason: null }] })}\n\n`)
-    res.end(`data: ${JSON.stringify({ ...base, choices: [{ index: 0, delta: {}, finish_reason: action ? "tool_calls" : "stop" }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } })}\n\ndata: [DONE]\n\n`)
+    return { id: `fixture-${index}`, action }
   })
-  await new Promise(resolve => model.listen(0, "127.0.0.1", resolve))
-  const url = `http://127.0.0.1:${model.address().port}`
   const reservation = createServer()
   await new Promise(resolve => reservation.listen(0, "127.0.0.1", resolve))
   const servicePort = reservation.address().port

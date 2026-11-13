@@ -11,7 +11,9 @@ node -e 'if (process.versions.node.split(".")[0] !== "24") { console.error("Node
 root=${0:A:h:h}
 cd "$root" || exit 1
 started=$SECONDS
-print -r -- 'Gate scope: 3 fixed baseline files and 10 update, OpenCode configuration, health, diagnostics, permission, runtime, authentication, browser, AWS authentication and project files (sequential)'
+print -r -- 'Gate scope: the duplicate-block check, 3 fixed baseline files and 10 update, OpenCode configuration, health, diagnostics, permission, runtime, authentication, browser, AWS authentication and project files (sequential)'
+print -r -- 'Gate duplicate blocks: script/check-duplicates.mjs'
+node script/check-duplicates.mjs || exit $?
 for file in test/golden.mjs test/skills-policy.mjs test/pi-launch.mjs; do
   print -r -- "Gate fixed baseline: $file"
   node "$file" || exit $?
