@@ -1,4 +1,4 @@
-import { closeSync, constants, existsSync, fstatSync, ftruncateSync, lstatSync, openSync, readFileSync, realpathSync, statSync, unlinkSync, writeFileSync, writeSync } from "node:fs"
+import { closeSync, constants, existsSync, fstatSync, ftruncateSync, lstatSync, openSync, readFileSync, realpathSync, unlinkSync, writeSync } from "node:fs"
 import { basename, dirname, join, resolve } from "node:path"
 import { homedir, tmpdir } from "node:os"
 import { randomBytes } from "node:crypto"
@@ -374,8 +374,7 @@ async function guard(input) {
     if (tool === "bash" && typeof args.workdir === "string") {
       const workdir = target(args.workdir, tool)
       if (!under(workdir, canonical(directory))) {
-        const quoted = "'" + workdir.replaceAll("'", "'\\''") + "'"
-        const decision = checkCommand({ command: `cd ${quoted} && ${args.command}`, cwd: directory })
+        const decision = checkCommand({ command: `cd ${shellQuote(workdir)} && ${args.command}`, cwd: directory })
         if (decision.kind === "deny") {
           const ruleId = RULE_IDS.has(decision.ruleId) ? decision.ruleId : "custom"
           refuse(tool, `Agent Guard: ${decision.reason}`, "workdir", "command-denied", "review-policy", ruleId)
@@ -411,7 +410,7 @@ async function guard(input) {
       // gitRuleCheck is the one Git-rule sentinel probe, not overall checker health.
       safetyNet: { moduleLoaded, apiLoaded: !!checkCommand, hooksReady: !!net, semanticHealth: "not-probed", gitRuleCheck },
       roots: roots(),
-      projects: Array.isArray(rules?.projects) ? rules.projects.filter(p => typeof p === "string").slice(0, 100) : [],
+      projects: list(rules?.projects),
       preparation: { status: ["ready", "warning"].includes(rules?.preparationStatus) ? rules.preparationStatus : "not-observed", origin: "snapshot" },
       releases: { loaded: publicReleaseID(loaded), launcher: publicReleaseID(launcher), installed: publicReleaseID(installed), version: VERSION },
       restartNeeded: DELEGATE === false || !!(installed && loaded && installed !== loaded) || !!(launcher && loaded && launcher !== loaded),
