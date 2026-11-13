@@ -1,5 +1,6 @@
 # The Pi checks of agent-guard doctor (docs/DESIGN.md section 11, Commands).
-# Sourced by agent-guard, which sets home, engine and release.
+# Sourced by agent-guard, which sets home, engine and release, through the Pi
+# harness's doctor entry after loading the installer (ag_bounded).
 #
 # What pi-sandbox-guard's status.sh and check-path.sh checked, against the current
 # release's profiles/pi copies instead of a checkout, plus the profile self-test,
@@ -76,7 +77,7 @@ pi_doctor() {
   # npm update that puts a real pi back in ~/.local/bin.
   [[ -f $wrec ]] && wnames=(${(f)"$(/usr/bin/jq -r '.wrappers | objects | keys[]' "$wrec" 2>/dev/null)"})
   wnames=(${(M)wnames:#[A-Za-z0-9._-]##})
-  out=$(pi_doctor_bounded 20 /usr/bin/env "HOME=$home" /bin/zsh -lc \
+  out=$(ag_bounded 20 /usr/bin/env "HOME=$home" /bin/zsh -lc \
     'for n; do print -r -- "agent-guard-resolve:$n:$(command -v -- $n)"; done' zsh pi omp $wnames 2>/dev/null) || out=
   for l in ${(M)${(f)out}:#agent-guard-resolve:*}; do
     l=${l#agent-guard-resolve:}
@@ -151,7 +152,7 @@ pi_doctor() {
   fi
 
   # The profile self-test, strict, against the installed profile.
-  out=$(pi_doctor_bounded 120 /usr/bin/env PI_SANDBOX_PROFILE_STRICT=1 /bin/bash "$cur/profiles/pi/scripts/test-sandbox-profile.sh" "$bin/pi-sandbox.sb" 2>&1)
+  out=$(ag_bounded 120 /usr/bin/env PI_SANDBOX_PROFILE_STRICT=1 /bin/bash "$cur/profiles/pi/scripts/test-sandbox-profile.sh" "$bin/pi-sandbox.sb" 2>&1)
   rc=$?
   if (( rc == 0 )); then pi_doctor_say "ok   profile self-test of ~/.local/bin/pi-sandbox.sb"
   else pi_doctor_say "FAIL profile self-test of ~/.local/bin/pi-sandbox.sb: $(pi_doctor_reason "$out" $rc 120)"
@@ -192,7 +193,7 @@ pi_doctor() {
       if [[ -z $jsnode ]]; then
         pi_doctor_say "skip the installed extension not asked about commands: no usable node on PATH to load it"
       else
-        out=$(cd "$work/project" && pi_doctor_bounded 60 /usr/bin/env -u CC_SAFETY_NET_WORKTREE -u SAFETY_NET_WORKTREE -u CC_SAFETY_NET_AUDIT_HOME \
+        out=$(cd "$work/project" && ag_bounded 60 /usr/bin/env -u CC_SAFETY_NET_WORKTREE -u SAFETY_NET_WORKTREE -u CC_SAFETY_NET_AUDIT_HOME \
           -u CC_SAFETY_NET_LEVEL "HOME=$home" "CC_SAFETY_NET_HOME=$copy/checker" "AGENT_GUARD_RELEASE=$rid" PI_SANDBOX_PROFILE_DIGEST=doctor \
           "$jsnode" --input-type=module -e "$pi_doctor_checker_js" "$ext" "$work/project" "$sdir/audit" 2>&1)
         rc=$?
@@ -218,7 +219,7 @@ pi_doctor() {
     # Each runtime through ~/.local/bin, from a scratch project: Pi refuses the home
     # folder as a project. No binding and no CLI is a runtime that is not there.
     for rt label rec in pi Pi "$pi_rec" omp OMP "$omp_rec"; do
-      out=$(cd "$work/project" && pi_doctor_bounded 20 /usr/bin/env "PI_PROJECT=$work/project" "$bin/$rt" --version 2>"$work/$rt.err")
+      out=$(cd "$work/project" && ag_bounded 20 /usr/bin/env "PI_PROJECT=$work/project" "$bin/$rt" --version 2>"$work/$rt.err")
       rc=$?
       err=$(<"$work/$rt.err")
       if (( rc == 124 )); then
@@ -318,26 +319,4 @@ pi_doctor_bind() {
   [[ -n $jsnode ]] && p="${jsnode:h}:$PATH"
   /usr/bin/env -u PI_SANDBOX_CONFIG_DIR -u PI_SANDBOX_SHIM -u OMP_SANDBOX_SHIM "HOME=$home" "PATH=$p" \
     /bin/bash "$scripts/bind-executable.sh" "$@"
-}
-
-# pi_doctor_bounded SECONDS CMD...: CMD's status, or 124 when it runs longer. The
-# limit is measured on the clock: on a loaded Mac each poll takes longer than its
-# sleep, so a count of polls would allow far more than SECONDS.
-pi_doctor_bounded() {
-  zmodload zsh/datetime || return 1
-  float end=$(( EPOCHREALTIME + $1 ))
-  integer pid
-  shift
-  "$@" </dev/null &
-  pid=$!
-  while kill -0 $pid 2>/dev/null; do
-    if (( EPOCHREALTIME > end )); then
-      /usr/bin/pkill -KILL -P $pid 2>/dev/null
-      kill -KILL $pid 2>/dev/null
-      wait $pid 2>/dev/null
-      return 124
-    fi
-    /bin/sleep 0.1
-  done
-  wait $pid
 }
