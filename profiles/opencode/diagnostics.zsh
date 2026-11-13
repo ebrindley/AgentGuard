@@ -204,7 +204,7 @@ ag_diagnose() {
           code:(.code|enum(["sandbox-unverified","rules-unavailable","engine-unavailable","api-unavailable","hooks-unavailable","release-unavailable","launcher-release-unavailable","unguarded","path-denied","path-protected","path-not-writable","path-invalid","patch-paths-missing","filesystem-error","safety-net-failed","command-denied"])),
           tool:(.tool|enum(["read","bash","write","other"])),
           ruleId:(.ruleId|enum(["guard.path.deny","guard.path.protected","guard.path.readonly","guard.path.unlisted","guard.path.invalid","unattributed","custom","secret.basename.env","git.reset-hard","rm.recursive-force-root-or-home","rm.recursive-force-outside-cwd"])),
-          errno:(.errno|enum(["EPERM","EACCES","ENOENT","ENOTDIR","ELOOP"])),
+          errno:(.errno|enum(["EPERM","EACCES","ENOENT","ENOTDIR","ELOOP","ENAMETOOLONG"])),
           remediation:(.remediation|enum(["relaunch","reinstall","review-guard-list","review-policy","review-path","launch-guarded","none"])),
           release:(.release|if type=="string" and test($re) then . else "unknown" end)
         } | . + {ageSeconds:(if .timestamp==null then null else (($now-.timestamp/1000)|floor|if .<0 then 0 else . end) end)}]
