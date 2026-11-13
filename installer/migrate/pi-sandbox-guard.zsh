@@ -199,22 +199,8 @@ undo_psg_wrappers() {
 }
 
 # The switch time, last in the migration's switch, as OpenCode Guard's M8.
-do_psg_switch_time() {
-  ag_jlast psg-switch-time
-  [[ $REPLY == done ]] && return 0
-  if [[ -z $REPLY ]]; then ag_backup psg-switch-time "$migration" && ag_jnl psg-switch-time begun || return 1; fi
-  test_point psg-switch-time || return 1
-  ag_mig_put "$(/usr/bin/jq -cn --argjson t "$EPOCHSECONDS" '{from: "pi-sandbox-guard", switched_at: $t, retired: false}')" pi-sandbox-guard || return 1
-  ag_jnl psg-switch-time done
-}
-
-undo_psg_switch_time() {
-  local b="$txn_dir/backup/psg-switch-time/file"
-  ag_jlast psg-switch-time
-  [[ $REPLY == (begun|done) ]] || return 0
-  if [[ -f $b ]]; then replace_file "$migration" "$b" || return 1; else /bin/rm -f -- "$migration" || return 1; fi
-  ag_jnl psg-switch-time undone
-}
+do_psg_switch_time() { ag_mig_switch_time psg-switch-time pi-sandbox-guard pi-sandbox-guard }
+undo_psg_switch_time() { ag_mig_switch_time_undo psg-switch-time }
 
 # ag_psg_into FROM TO: FROM moved to TO by one rename; an earlier TO is kept under a
 # time suffix.

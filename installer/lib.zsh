@@ -501,6 +501,30 @@ ag_mig_put() {
   /bin/rm -f -- "$tmp"
 }
 
+# ag_mig_switch_time ACTION FROM REPLACES...: a migration's switch action, last in
+# its switch: the record {from: FROM, switched_at: now, retired: false} replaces
+# those whose from is one of REPLACES, with migration.json backed up under ACTION.
+ag_mig_switch_time() {
+  local a=$1 from=$2
+  shift 2
+  ag_jlast $a
+  [[ $REPLY == done ]] && return 0
+  if [[ -z $REPLY ]]; then ag_backup $a "$migration" && ag_jnl $a begun || return 1; fi
+  test_point $a || return 1
+  ag_mig_put "$(/usr/bin/jq -cn --argjson t "$EPOCHSECONDS" --arg from "$from" '{from: $from, switched_at: $t, retired: false}')" "$@" || return 1
+  ag_jnl $a done
+}
+
+# ag_mig_switch_time_undo ACTION: migration.json back from ACTION's backup, or
+# removed when there was none.
+ag_mig_switch_time_undo() {
+  local a=$1 b="$txn_dir/backup/$1/file"
+  ag_jlast $a
+  [[ $REPLY == (begun|done) ]] || return 0
+  if [[ -f $b ]]; then replace_file "$migration" "$b" || return 1; else /bin/rm -f -- "$migration" || return 1; fi
+  ag_jnl $a undone
+}
+
 # --- Preflight (design section 3.1).
 
 ag_tree_info() {
