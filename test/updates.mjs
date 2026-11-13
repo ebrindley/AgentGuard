@@ -57,7 +57,7 @@ const helperPid = join(temp, 'helper-pid'), alertArgs = join(temp, 'alert-args')
 // start when AG_WAIT_HELPER is set, so a missed stop is visible as a live pid.
 function ui() {
   executable(join(temp, 'dialog'), `if [[ $1 == -l ]]; then print -r -- $$ > ${quote(helperPid)}; exec /bin/sleep 30; fi\n` +
-    `[[ "$*" == *'display alert'* ]] && print -rl -- "$@" > ${quote(alertArgs)}\n` +
+    `[[ "$*" == *'display dialog'* ]] && print -rl -- "$@" > ${quote(alertArgs)}\n` +
     `[[ "$*" == *'display notification'* ]] && print -rl -- "$@" > ${quote(noticeArgs)}\n` +
     `print -r -- ${quote(answer)}\n`);
   executable(join(release, 'bin/agent-guard'), `print -r -- "$*" >> ${quote(installCalls)}\n` +
@@ -107,7 +107,7 @@ try {
     assert.equal(r.status, 0, r.stderr);
     const alert = readFileSync(alertArgs, 'utf8');
     assert.match(alert, /buttons \{"Later", "Update"\} default button "Update" cancel button "Later"/);
-    assert.ok(alert.includes('display alert "Agent Guard" message'));
+    assert.ok(alert.includes('display dialog (item 2 of argv) with title "Agent Guard"'));
     assert.ok(alert.endsWith('An update is available: 2026.11.05.\nYou have 2026.11.01.\n'));
     assert.ok(readFileSync(noticeArgs, 'utf8').endsWith('Agent Guard updated to 2026.11.05.\n'));
     assert.ok(helperStopped());

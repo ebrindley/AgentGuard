@@ -90,7 +90,7 @@ JXA
 ag_update_startup() {
   emulate -L zsh
   setopt no_unset extended_glob
-  local mode=$1 tag installed answer= rc=0 helper=
+  local mode=$1 tag installed answer= rc=0 helper= icon
   shift 2
   if [[ ${AGENT_GUARD_UPDATE_RESTART:-} == 1 ]]; then
     unset AGENT_GUARD_UPDATE_RESTART
@@ -106,8 +106,11 @@ ag_update_startup() {
   tag=$REPLY
   installed=$(/usr/bin/jq -r .tag "$engine/state/stamp.json" 2>/dev/null) || return 0
   if [[ $mode == gui ]]; then
-    answer=$(/usr/bin/osascript -e 'on run argv' -e 'button returned of (display alert "Agent Guard" message (item 1 of argv) buttons {"Later", "Update"} default button "Update" cancel button "Later")' -e 'end run' \
-      "An update is available: ${tag#v}."$'\n'"You have ${installed#v}." 2>/dev/null) || return 0
+    # display alert shows osascript's own icon; display dialog takes a file.
+    icon="$engine/current/profiles/opencode/assets/AgentGuard.icns"
+    [[ -r $icon ]] && icon='POSIX file (item 1 of argv)' || icon=note
+    answer=$(/usr/bin/osascript -e 'on run argv' -e 'button returned of (display dialog (item 2 of argv) with title "Agent Guard" buttons {"Later", "Update"} default button "Update" cancel button "Later" with icon '"$icon"')' -e 'end run' \
+      "$engine/current/profiles/opencode/assets/AgentGuard.icns" "An update is available: ${tag#v}."$'\n'"You have ${installed#v}." 2>/dev/null) || return 0
     [[ $answer == Update ]] || return 0
   else
     print -ru2 -- "Agent Guard ${tag#v} is available. You have ${installed#v}."
