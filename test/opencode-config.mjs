@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, sym
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { spawn, spawnSync } from "node:child_process"
+import { quote } from "./fixture-home.mjs"
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const run = mkdtempSync(join(root, "test/.run-opencode-config-"))
@@ -362,7 +363,7 @@ for (const name of ["runtime.zsh", "v2.js"]) assert.equal(readFileSync(join(asse
 // Recovery stops the server of a check whose shell is gone, including one an
 // earlier release recorded in .serve.pid, but not the server of a running check.
 const recovery = fixture("check-recovery")
-const node = "'" + process.execPath.replaceAll("'", "'\\''") + "'"
+const node = quote(process.execPath)
 shell(recovery, `
   spawn() { REPLY=$("$@" >/dev/null 2>&1 & print $!) }
   started() { REPLY=$(/bin/ps -o lstart= -p $1) && REPLY=\${(j: :)\${=REPLY}} }

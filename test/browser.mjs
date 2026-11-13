@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
 import { createRequire } from 'node:module'
+import { quote } from './fixture-home.mjs'
 
 assert.equal(process.versions.node.split('.')[0], '24', 'Node 24 required')
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -25,7 +26,6 @@ const run = mkdtempSync('/tmp/agentguard-browser-test.')
 console.log(`Browser fixture: ${run}`)
 const socket = join(run, 's'), captured = join(run, 'opened'), app = join(run, 'Browser.app')
 mkdirSync(app)
-const quote = value => "'" + value.replaceAll("'", "'\\''") + "'"
 const opener = join(run, 'open')
 writeFileSync(opener, `#!/bin/zsh -f\nprint -r -- "$@" >> ${quote(captured)}\n`, { mode: 0o755 })
 const helper = join(run, 'helper.zsh')

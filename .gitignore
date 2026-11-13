@@ -1,6 +1,5 @@
 .DS_Store
 test/.run-*/
-test/.home/
 backlog/archive/
 dist/
 !engine/vendor/cc-safety-net/dist/

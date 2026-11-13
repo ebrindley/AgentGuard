@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { release } from './engines/zsh.mjs';
+import { quote as q } from './fixture-home.mjs';
 import { mkdtempSync,mkdirSync,writeFileSync,symlinkSync,readFileSync,existsSync,lstatSync,cpSync,rmSync,readdirSync,readlinkSync } from 'node:fs';
 import { spawn,spawnSync } from 'node:child_process';
 const root=resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -160,7 +161,6 @@ try {
       const active=engine+'/'+readlinkSync(engine+'/current');
       const candidate=engine+'/releases/0.0.1-20990101T000000Z';
       cpSync(active,candidate,{recursive:true,dereference:false,verbatimSymlinks:true});
-      const q=s=>"'"+s.replaceAll("'","'\\''")+"'";
       const lib=candidate+'/installer/lib.zsh';
       writeFileSync(lib,readFileSync(lib,'utf8')+`\nag_recover() { /bin/mv ${q(candidate)} ${q(run+'/recovered-candidate')}; }\n`);
       const r=command(candidate+'/bin/agent-guard',['update'],'update-recovered-release');

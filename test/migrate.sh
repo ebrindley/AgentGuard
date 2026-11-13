@@ -26,14 +26,7 @@ source "$source_root/test/lib.zsh"
 
 run=$(/usr/bin/mktemp -d "$source_root/test/.run-migrate-XXXXXX")
 run=${run:A}
-served="$run/served"
-/bin/mkdir -p "$served"
-node "$source_root/test/release-server.mjs" "$served" > "$run/port" 2> "$run/server.log" &
-server=$!
-for i in {1..100}; do [[ -s $run/port ]] && break; sleep 0.05; done
-port=$(<"$run/port")
-[[ $port == <-> ]] || { print -ru2 "release server did not start: $(<"$run/server.log")"; kill $server; exit 1 }
-url="http://127.0.0.1:$port/ebrindley/AgentGuard"
+start_release_server
 typeset -a exercised
 finish() {
   local p
@@ -81,7 +74,6 @@ old_path="$ocg/bin:$base"
 
 # Releases: A (v0.0.1) from this checkout, and A whose profile lets the guard write
 # the engine's state folder (design A14), which fails the staged check.
-build() { node "$adapter" release "$1" "$served" "$home" "v$2" "$2" "$url" >/dev/null }
 build "$source_root" 0.0.1 || { print -ru2 'cannot build v0.0.1'; finish }
 /bin/mkdir -p "$run/src-broken"
 /bin/cp -R "$source_root"/{engine,profiles,installer,scripts,install.sh,LICENSE} "$run/src-broken/"
@@ -92,7 +84,6 @@ print -r -- v0.0.1 > "$served/latest.txt"
 
 point= pgrep_status= boot_at=
 # note_point: records the test points named in $point as exercised.
-note_point() { local p; for p in ${=point}; do exercised+=("${p#*:}"); done }
 # envv: the environment of a run, from point, pgrep_status and boot_at.
 envv() {
   reply=(/usr/bin/env -i HOME="$home" PATH="${tpath:-$base}" AG_TEST_POINT="$point")
@@ -124,9 +115,7 @@ ag() {
   envv
   run_timeout 240 $reply "$engine/bin/agent-guard" "$@" < /dev/null > "$out" 2>&1
 }
-save() { /bin/rm -rf "$run/saved-$1"; /bin/cp -Rp "$home" "$run/saved-$1" }
 restore() { /bin/chmod -R u+w "$home" 2>/dev/null; /bin/rm -rf "$home"; /bin/cp -Rp "$run/saved-$1" "$home" }
-sha() { /usr/bin/shasum -a 256 < "$1" 2>/dev/null }
 show() { print -r -- "$(<"$out")" | /usr/bin/sed 's/^/    | /' }
 same_snapshot() {  # NAME FILE: the home's snapshot equals the one in FILE
   local now

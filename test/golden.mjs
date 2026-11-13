@@ -20,7 +20,7 @@ const run = mkdtempSync(join(root, 'test/.run-golden-'));
 const home = join(run, 'home with spaces');
 const source = join(run, 'source');
 const engine = join(home, 'Library/Application Support/AgentGuard');
-const reference = join(root, 'test/fixtures/opencode-guard-1.0.3');
+const reference = join(root, 'test/fixtures/installs/opencode-guard-1.0.3/engine');
 // Recorded, reviewed changes to the generated profile since v1.0.3, applied in step
 // order to the renamed v1.0.3 output: each inserts lines right after an anchor line,
 // or after each of its anchors in order. step-7c.json and then step-7f.json apply only

@@ -39,7 +39,7 @@ jobs:
           opencode --version
       - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node test/golden.mjs
-      # Offline focused scopes also run in the nine-file local gate.
+      # Offline focused scopes also run in the required gate, script/test.
       - name: OpenCode permission configuration
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node test/opencode-config.mjs

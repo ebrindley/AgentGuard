@@ -11,7 +11,6 @@ unset AGENT_GUARD_RELEASE AGENT_GUARD_SANDBOXED OPENCODE_SANDBOXED XDG_CACHE_HOM
 command -v node >/dev/null || { print -ru2 'Node is required for the release server and the fake CLI'; exit 1 }
 
 source_root=${0:A:h:h}
-node "$source_root/test/opencode-config.mjs" || exit 1
 adapter="$source_root/test/engines/zsh.mjs"
 integer fails=0 checks=0
 label=
@@ -21,14 +20,7 @@ source "$source_root/test/lib.zsh"
 
 run=$(/usr/bin/mktemp -d "$source_root/test/.run-install-XXXXXX")
 run=${run:A}
-served="$run/served"
-/bin/mkdir -p "$served"
-node "$source_root/test/release-server.mjs" "$served" > "$run/port" 2> "$run/server.log" &
-server=$!
-for i in {1..100}; do [[ -s $run/port ]] && break; sleep 0.05; done
-port=$(<"$run/port")
-[[ $port == <-> ]] || { print -ru2 "release server did not start: $(<"$run/server.log")"; kill $server; exit 1 }
-url="http://127.0.0.1:$port/ebrindley/AgentGuard"
+start_release_server
 finish() {
   kill $server 2>/dev/null
   wait $server 2>/dev/null
@@ -67,7 +59,6 @@ tpath=$base
 # Releases: A (v0.0.1) from this checkout; B (v0.0.2) with another app icon, so an
 # update rebuilds the app; v0.0.3-broken, B whose profile lets the guard write the
 # engine's state folder (design A14).
-build() { node "$adapter" release "$1" "$served" "$home" "v$2" "$2" "$url" >/dev/null }
 copy_source() { /bin/mkdir -p "$2" && /bin/cp -R "$1"/{engine,profiles,installer,scripts,install.sh,LICENSE} "$2/" }
 build "$source_root" 0.0.1 || { print -ru2 'cannot build v0.0.1'; finish }
 copy_source "$source_root" "$run/src-b"
@@ -98,11 +89,9 @@ boot() {
 ag() {
   run_timeout 180 /usr/bin/env -i HOME="$home" PATH="$tpath" AG_TEST_POINT="$point" "$engine/bin/agent-guard" "$@" < /dev/null > "$out" 2>&1
 }
-save() { /bin/rm -rf "$run/saved-$1"; /bin/cp -Rp "$home" "$run/saved-$1" }
 restore() { /bin/chmod -R u+w "$home" 2>/dev/null; /bin/rm -rf "$home"; /bin/cp -Rp "$run/saved-$1" "$home" }
 stamp_version() { if [[ -f $state/stamp.json ]]; then /usr/bin/jq -r .version "$state/stamp.json"; else print -r -- absent; fi }
 current_rid() { if [[ -f $engine/current/RELEASE ]]; then print -r -- "$(<"$engine/current/RELEASE")"; else print -r -- absent; fi }
-sha() { /usr/bin/shasum -a 256 < "$1" 2>/dev/null }
 show() { print -r -- "$(<"$out")" | /usr/bin/sed 's/^/    | /' }
 same_snapshot() {  # NAME FILE: the home's snapshot equals the one in FILE
   local now

@@ -21,6 +21,32 @@ pi_points=(psg-wrappers pi-bindings pi-preamble pi-profile pi-launcher-pi pi-lau
 # The same for the Grok harness, which only test/grok-install.sh exercises.
 grok_points=(grok-kept grok-binding grok-shim grok-keep)
 
+# start_release_server: serves $run/served with test/release-server.mjs and sets
+# served, server, port and url; exits when the server does not start.
+start_release_server() {
+  served="$run/served"
+  /bin/mkdir -p "$served"
+  node "$source_root/test/release-server.mjs" "$served" > "$run/port" 2> "$run/server.log" &
+  server=$!
+  for i in {1..100}; do [[ -s $run/port ]] && break; sleep 0.05; done
+  port=$(<"$run/port")
+  [[ $port == <-> ]] || { print -ru2 "release server did not start: $(<"$run/server.log")"; kill $server; exit 1 }
+  url="http://127.0.0.1:$port/ebrindley/AgentGuard"
+}
+
+# build SOURCE VERSION: a test release of SOURCE, tag vVERSION, served from $served
+# for $home and $url.
+build() { node "$adapter" release "$1" "$served" "$home" "v$2" "$2" "$url" >/dev/null }
+
+# save NAME: a copy of $home as $run/saved-NAME.
+save() { /bin/rm -rf "$run/saved-$1"; /bin/cp -Rp "$home" "$run/saved-$1" }
+
+# sha FILE: FILE's SHA-256 line, empty when FILE cannot be read.
+sha() { /usr/bin/shasum -a 256 < "$1" 2>/dev/null }
+
+# note_point: records each test point in $point as exercised.
+note_point() { local p; for p in ${=point}; do exercised+=("${p#*:}"); done }
+
 # new_home DIR: replaces DIR with an empty disposable home. REPLY is its real path.
 new_home() {
   /bin/rm -rf -- "$1"

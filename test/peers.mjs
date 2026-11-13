@@ -4,6 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { stage, layout } from './engines/zsh.mjs';
+import { quote } from './fixture-home.mjs';
 import './peer-discovery.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -19,7 +20,6 @@ stage(root, tree, home);
 const release = layout(tree, engine);
 cpSync(join(tree, 'engine/vendor'), join(release, 'vendor'), { recursive: true });
 writeFileSync(join(home, 'Agent Guard/Guard List.txt'), `ALLOW\n${project}\nREAD ONLY\nDENY\n`);
-const quote = s => "'" + s.replaceAll("'", "'\\''") + "'";
 const peers = ['codex', 'claude', 'cursor-agent', 'grok', 'opencode'];
 for (const name of peers) {
   const prefix = name === 'opencode' ? 'if [[ ${1:-} == --version ]]; then print 1.19.3; exit; fi\nif [[ ${1:-} == /* ]]; then exec "$@"; fi\n' : '';

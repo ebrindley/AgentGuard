@@ -7,6 +7,7 @@ import { spawn, spawnSync } from "node:child_process"
 import { createServer } from "node:http"
 import { DatabaseSync } from "node:sqlite"
 import * as adapter from "./engines/zsh.mjs"
+import { quote } from "./fixture-home.mjs"
 
 assert.equal(process.versions.node.split(".")[0], "24", "native permission fixture requires Node 24")
 assert.ok(!process.env.AGENT_GUARD_SANDBOXED && !process.env.OPENCODE_SANDBOXED, "run the fixture outside an existing sandbox")
@@ -20,7 +21,6 @@ const modes = ["explore-default", "plan-paths", "auto-protection"]
 const selected = process.argv[2] ? [process.argv[2]] : modes
 assert.ok(selected.every(mode => modes.includes(mode)), "expected explore-default, plan-paths, or auto-protection")
 const run = realpathSync(mkdtempSync(join(root, "test/.run-opencode-permissions-native-")))
-const quote = value => "'" + value.replaceAll("'", "'\\''") + "'"
 const reports = []
 console.log(`OpenCode ${version.stdout.trim()}; fixture: ${run}`)
 

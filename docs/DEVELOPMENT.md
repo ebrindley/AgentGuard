@@ -17,9 +17,9 @@ unguarded parent for the Seatbelt probe.
 `node test/browser-native.mjs` additionally checks that OpenCode 2.2.5 loads the
 local GUI plugin package and serves its commands through the native plugin API.
 `AG_TEST_OPENCODE` selects the CLI. It uses an isolated home and project and does
-not open the renderer or authenticate an account. The required hosted gate
-remains one check, adding the focused browser file to its existing sequential
-scope; the version-specific native fixture remains an explicit development test.
+not open the renderer or authenticate an account. The required gate runs
+`test/browser.mjs`; the version-specific native fixture is an explicit
+development test that no workflow runs.
 
 `node test/aws-auth.mjs` checks AWS opt-in reads, atomic token-cache writes,
 configuration protection, Guard List precedence and redirected-cache refusal
@@ -29,8 +29,7 @@ recursive write deny with three cache exclusions, adds three write grants and
 seven unique directory-entry write denials. Without the opt-in, these totals
 are unchanged. With key agents denied, the AWS socket-path outbound deny also
 changes from one to zero; other credential socket denies are unchanged.
-The existing hosted gate gains this one sequential test file;
-no new hosted check is added.
+The required gate runs this file.
 
 ### Offline checker comparison
 
@@ -85,9 +84,7 @@ case is separate from the default 2.0.32 matrix and never contacts a provider.
 Desktop environment loading adds one confined login-shell execution per GUI
 launch. Provider values are passed only to sandboxed host processes; the trusted
 launcher retains its original environment. Filesystem grants, credential denies
-and process/Launch Services restrictions are unchanged. The required hosted
-check count remains one; with AWS authentication, its sequential file scope
-grows from ten to twelve.
+and process/Launch Services restrictions are unchanged.
 
 Each host still registers one Guard tool-before hook and uses the same command
 checker and filesystem rules. V2 adds one adapter registration and one read-only
@@ -103,19 +100,16 @@ failed probe at the incumbent check now reports an unrecognized status instead
 of a separate inspection failure.
 Managed launches add one child-exit signal handler to end the client and its
 original service together; the filesystem and command policy is unchanged.
-The required hosted check remains one; its sequential file
-scope grows from seven to eight. Full background matrix jobs grow from four to
-six by adding V2 on macOS 15 and 26. The release aggregate requires all six.
+Full validation runs six macOS jobs, its suites, Pi migration and OpenCode V2
+jobs on macOS 15 and 26; its `full-tests` aggregate requires all of them.
 
 ### Fast landing and background validation
 
 `script/test` is the required macOS gate: profile characterization,
 rulebook/policy checks and real Seatbelt launch checks in disposable homes. It
 requires Node 24 and an unguarded CI/orchestration process; it does not disable a
-coding agent's sandbox. The initial measurement on the development Mac was 62
-checks in 35 seconds. Installation, GUI, native OpenCode and migration suites
-remain in the full macOS 15/26 matrix.
-The bootstrap GitHub check completed in 51 seconds on macOS 26 with Node 24.
+coding agent's sandbox. Installation, GUI, native OpenCode and migration suites
+run in the full macOS 15/26 matrix.
 
 The GitHub `tests` check runs this gate for pull requests. After independent
 review and required checks pass, use GitHub's protected squash merge for the
@@ -128,12 +122,9 @@ and merges at the reviewed head with an empty body. The `tests` check runs the
 same subject check on the pull request title. Local gate execution is useful for
 focused development, but is not required in addition to the hosted gate.
 
-The gate keeps the three baseline files and runs ten update and OpenCode files:
-`test/updates.mjs`, `test/opencode-config.mjs`, `test/plugin-health.mjs`, `test/diagnostics.mjs`,
-`test/permissions.mjs`, `test/opencode-runtime.mjs`, `test/authentication.mjs`,
-`test/browser.mjs`, `test/aws-auth.mjs` and `test/project.mjs` (`@project`, including the app's remembered projects,
-on a disposable home, under the real `sandbox-exec`). Run a failing file by
-itself during development. The
+`script/test` lists the files the gate runs, in order. `test/project.mjs` checks
+`@project`, including the app's remembered projects, on a disposable home under
+the real `sandbox-exec`. Run a failing file by itself during development. The
 health fixture injects failures only into disposable modules and mocked probes;
 the diagnostic fixture compares all file bytes and links before/after collection.
 `node test/opencode-permissions-native.mjs` runs three native cases with a local
@@ -147,8 +138,7 @@ acceptance does not attest the desktop UI's stored auto-accept state.
 
 Build local CI is disabled. Its verification runner applies an outer macOS
 sandbox, which prevents these confinement fixtures from applying their own.
-A temporary-checkout fixture correction passed independently, but the actual
-local queue still refused nested sandbox initialization. Hosted CI owns landing;
+Hosted CI owns landing;
 no local status substitutes for the required GitHub Actions check.
 
 `Full validation` runs automatically on pushes to main and by manual dispatch.
@@ -174,11 +164,10 @@ The project provider order excludes Cursor from automatic Build selection.
 Explicit provider selections, profiles and higher-precedence defaults can
 override that order; inspect resolved configuration before unattended execution.
 
-Required check count stays one: hosted `tests`. Declared automated advisory
-reviewers change from one to zero. The four full macOS jobs move
-from PR blocking to main background execution. Three hosted workflows remain:
-the fast gate, full validation and record-only incident intake. No local CI gate
-is active.
+The one required check is the hosted `tests`. The full macOS jobs run in the
+background on main, not on pull requests. There are three hosted workflows: the
+fast gate, full validation and record-only incident intake. No local CI gate is
+active.
 
 For skill changes, run `node test/skills.mjs`, `node test/skills.mjs readonly`,
 `node test/skills.mjs kernel`, `node test/skills.mjs linked`, `node test/skills.mjs stdin` and
