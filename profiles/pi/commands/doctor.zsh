@@ -295,6 +295,6 @@ pi_doctor_reason() {
 pi_doctor_bind() {
   local p=$PATH
   [[ -n $jsnode ]] && p="${jsnode:h}:$PATH"
-  /usr/bin/env -u PI_SANDBOX_CONFIG_DIR -u PI_SANDBOX_SHIM -u OMP_SANDBOX_SHIM "HOME=$home" "PATH=$p" \
-    /bin/bash "$scripts/bind-executable.sh" "$@"
+  ag_pi_bind_env
+  /usr/bin/env "${reply[@]}" "PATH=$p" /bin/bash "$scripts/bind-executable.sh" "$@"
 }

@@ -110,6 +110,11 @@ ag_pi_cli() {
   reply=("${ag_pi_cli_found[@]}")
 }
 
+# reply = the env arguments that run bind-executable.sh as agent-guard bind runs
+# it: HOME the account home and its path variables unset, so it reads and writes
+# the executables.conf the launcher reads.
+ag_pi_bind_env() { reply=(-u PI_SANDBOX_CONFIG_DIR -u PI_SANDBOX_SHIM -u OMP_SANDBOX_SHIM "HOME=$home") }
+
 # ag_pi_conf_get KEY: REPLY = KEY's value in executables.conf, as the preamble
 # reads it (config_value_for_key); fails when there is none.
 ag_pi_conf_get() {
