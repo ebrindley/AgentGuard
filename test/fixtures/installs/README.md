@@ -1,4 +1,4 @@
-Unmodified OpenCode Guard release trees for the migration tests (`test/migrate.sh`),
+OpenCode Guard release trees for the migration tests (`test/migrate.sh`),
 extracted with `git archive` of the OpenCode Guard repository:
 
 | Folder | Tag | Commit |
@@ -8,8 +8,14 @@ extracted with `git archive` of the OpenCode Guard repository:
 | `opencode-guard-1.0.3` | v1.0.3 | `9242c1ad45c895efd63e903e1b27d7bab53620ad` |
 | `opencode-guard-1.0.4` | v1.0.4 | `1ac39a24030658b6f681b8d49d8f78640c2c3f2b` |
 
-Each holds `install.sh`, `uninstall.sh`, `LICENSE`, `engine/`, `plugin/`,
-`templates/`, `vendor/` and `assets/OpenCodeGuard.icns` at that tag, nothing else.
+Each holds `install.sh`, `uninstall.sh`, `LICENSE`, `engine/`, `plugin/` and
+`templates/` at that tag, unmodified. `opencode-guard-1.0.3` and
+`opencode-guard-1.0.4` also hold `vendor/` and `assets/OpenCodeGuard.icns`.
+`opencode-guard-1.0.0` and `opencode-guard-1.0.1` do not: theirs equal v1.0.3's
+byte for byte, and `test/migrate.sh` installs those two versions from a copy
+completed with v1.0.3's. `test/golden.mjs` and `test/test.sh` read
+`opencode-guard-1.0.3/engine`, and `test/skills-policy.mjs` reads
+`opencode-guard-1.0.4/vendor`.
 The tests run each tree's own `install.sh` and `uninstall.sh` with `HOME` set to a
 disposable home; both take home from `$HOME`. MIT licensed; see each `LICENSE`.
 
