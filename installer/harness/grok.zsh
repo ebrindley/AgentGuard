@@ -87,17 +87,8 @@ ag_grok_stage() {
 # P7: the staged release's own check, with the executable found as the launcher
 # finds it before the switch.
 ag_h_grok_staged() {
-  local out rc
-  local -a found
   ag_grok_stage || { ag_failed+=('FAIL cannot stage the Grok record'); return 1 }
-  out=$("$engine/releases/$ag_rid_new/launch" --harness grok check staged 2>&1)
-  rc=$?
-  ag_say "$out"
-  (( rc == 0 )) && return 0
-  found=(${(M)${(f)out}:#FAIL*})
-  (( $#found )) || found=("FAIL Grok check staged exited $rc")
-  ag_failed+=($found)
-  return 1
+  ag_run_check 'FAIL Grok check staged' "$engine/releases/$ag_rid_new/launch" --harness grok check staged
 }
 
 # --- Switch actions, registered in actions.zsh: the record, then the link, so the

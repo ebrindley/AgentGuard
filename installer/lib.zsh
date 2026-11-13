@@ -1225,6 +1225,23 @@ ag_bounded() {
   wait $pid
 }
 
+# ag_run_check LABEL CMD...: runs a release's check and prints its output. When it
+# fails, its FAIL lines go to ag_failed, or "LABEL exited STATUS" when it printed
+# none, and it returns 1.
+ag_run_check() {
+  local label=$1 out rc
+  local -a found
+  shift
+  out=$("$@" 2>&1)
+  rc=$?
+  ag_say "$out"
+  (( rc == 0 )) && return 0
+  found=(${(M)${(f)out}:#FAIL*})
+  (( $#found )) || found=("$label exited $rc")
+  ag_failed+=($found)
+  return 1
+}
+
 # The checks that need the switched install (design section 4.2): the live
 # doctor, then each installed harness's checks (OpenCode: a bounded launch through
 # bin/opencode whose log names the release), then the migrated source's.

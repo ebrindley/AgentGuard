@@ -116,16 +116,7 @@ ag_h_opencode_procs() {
 
 # P7: the staged release's own check (design section 4.1).
 ag_h_opencode_staged() {
-  local out rc
-  local -a found
-  out=$(AGENT_GUARD_GATE=1 "$engine/releases/$ag_rid_new/launch" check staged 2>&1)
-  rc=$?
-  ag_say "$out"
-  (( rc == 0 )) && return 0
-  found=(${(M)${(f)out}:#FAIL*})
-  (( $#found )) || found=("FAIL check staged exited $rc")
-  ag_failed+=($found)
-  return 1
+  AGENT_GUARD_GATE=1 ag_run_check 'FAIL check staged' "$engine/releases/$ag_rid_new/launch" check staged
 }
 
 ag_h_opencode_gate() { ag_launch_check "$engine/bin/opencode" bin/opencode }
