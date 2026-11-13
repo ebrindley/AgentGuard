@@ -248,12 +248,9 @@ restoring what was there. Both run in the full validation.
 `zsh test/pi.sh` tests Pi's guard. It runs pi-sandbox-guard's launcher and profile
 suites from `profiles/pi/test` and `profiles/pi/scripts` against Agent Guard's
 copy, changed for recorded behavior differences and test diagnostics;
-`profiles/pi/test/checker.mjs`, which tests the extension against cc-safety-net;
-`test/pi-files.mjs`,
-which compares `profiles/pi` with pi-sandbox-guard 7ad441f and allows only the
-changes in `test/fixtures/differences/pi.json` and `pi.patch`; and
-`test/pi-launch.mjs`, which tests each recorded difference and the nested
-launches in disposable homes. It needs Node. `profiles/pi/test/shim.mjs` runs
+`profiles/pi/test/checker.mjs`, which tests the extension against cc-safety-net; and
+`test/pi-launch.mjs`, which tests the differences recorded in
+`test/fixtures/differences/pi.json` and the nested launches in disposable homes. It needs Node. `profiles/pi/test/shim.mjs` runs
 the launcher's preamble against the account's real home: it creates and removes
 `~/.local/share/pi-sandbox-bindable-*` folders there and creates
 `~/.cache/opencode/bin` when it is missing. It also prepares active Pi/OMP roots,

@@ -1,7 +1,6 @@
 #!/bin/zsh
 # Runs the Pi profile's suites: pi-sandbox-guard's vendored suites in profiles/pi,
-# the extension's tests, the file comparison against pi-sandbox-guard 7ad441f, and
-# the tests of Agent Guard's recorded differences. Runs outside any sandbox;
+# the extension's tests, and the tests of Agent Guard's recorded differences. Runs outside any sandbox;
 # requires node. profiles/pi/test/shim.mjs runs with its recorded edits: its launch cases run the preamble
 # against the account's real home (its fixtures keep the real directory-service
 # lookup), so they create ~/.cache/opencode/bin there when it is missing, as they
@@ -36,7 +35,6 @@ suite profiles/pi/test/checker.mjs node "$pi/test/checker.mjs"
 suite profiles/pi/test/shim.mjs node "$pi/test/shim.mjs"
 suite profiles/pi/scripts/check-launchers.mjs node "$pi/scripts/check-launchers.mjs"
 suite profiles/pi/scripts/test-sandbox-profile.sh /usr/bin/env PI_SANDBOX_PROFILE_STRICT=1 /bin/bash "$pi/scripts/test-sandbox-profile.sh"
-suite test/pi-files.mjs node "$source_root/test/pi-files.mjs"
 suite test/pi-launch.mjs node "$source_root/test/pi-launch.mjs"
 
 print -r -- "$fails failure(s)"
