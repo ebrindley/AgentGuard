@@ -215,9 +215,8 @@ Beyond the baseline's requirement of concrete inputs leading to plausible damage
   under D13, misses `git -C <dir> restore .`.
 - **Whose limitation it is.** When an upstream component documents a behaviour
   and only Agent Guard's integration choice exposes it, any justified fix belongs
-  in Agent Guard, not in an upstream report. Example: cc-safety-net documents that
-  its rulebook matcher fails open on unlisted options that take a value; its
-  built-in Git rules are unaffected.
+  in Agent Guard, not in an upstream report. Example: cc-safety-net's rulebook
+  matcher fails open by design on unlisted options that take a value.
 
 Removing an existing control follows the baseline disposition rule: show it is out
 of scope, redundant in the same enforcement path, or disproportionate, and map
