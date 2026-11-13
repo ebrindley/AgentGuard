@@ -72,7 +72,7 @@
     },
     {
       "id": 6,
-      "change": "scripts/bind-executable.sh runs as agent-guard bind (commands/bind.zsh) instead of npm run bind: its usage, hints and executables.conf header name agent-guard bind; every mode but --show stops when node is not on PATH, which npm run guaranteed; --checker-node [PATH], which recorded the analyzer's Node in the extension's .guard-node, is accepted and ignored with one line on stderr, and alone it does nothing; an executables.conf that is a symbolic link or not a regular file is refused before it is written; Pi and OMP bind independently, so a Mac with only OMP records omp= alone, and a recorded pi=, omp= or node= that no longer validates is dropped (node= is detected again) with a note instead of stopping the command; an empty candidate list no longer fails under bash 3.2. scripts/lib-ops.sh is unchanged.",
+      "change": "scripts/bind-executable.sh runs as agent-guard bind (commands/bind.zsh) instead of npm run bind: its usage, hints and executables.conf header name agent-guard bind; every mode but --show stops when node is not on PATH, which npm run guaranteed; --checker-node [PATH], which recorded the analyzer's Node in the extension's .guard-node, is accepted and ignored with one line on stderr, and alone it does nothing; an executables.conf that is a symbolic link or not a regular file is refused before it is written; Pi and OMP bind independently, so a Mac with only OMP records omp= alone, and a recorded pi=, omp= or node= that no longer validates is dropped (node= is detected again) with a note instead of stopping the command; an empty candidate list no longer fails under bash 3.2.",
       "files": ["scripts/bind-executable.sh"]
     },
     {
@@ -133,6 +133,11 @@
         "launchers/pi",
         "sandbox/pi-sandbox-preamble.zsh"
       ]
+    },
+    {
+      "id": 20,
+      "change": "Code with no caller in Agent Guard is removed: from scripts/lib-ops.sh, the helpers of pi-sandbox-guard's deploy, status and hook scripts (ops_die, ops_say, ops_warn, ops_require_single_line, ops_hash_file, ops_require_same_hash, ops_git_meta, ops_make_release_id, ops_stamp_get, ops_json_quote, ops_default_guard_dest, ops_default_launchers_dest), keeping ops_stable_node_path and ops_path_is_known_sandbox_write_root, which bind-executable.sh and installer/harness/pi.zsh call; from scripts/check-launchers.mjs, the --deployed mode and its PI_SANDBOX_CHECK_DEPLOYED and PI_SANDBOX_DEPLOYED_ROOT variables, which checked pi-sandbox-guard's deployed launchers in ~/.local/bin and which Agent Guard never ran (docs/DESIGN.md section 11).",
+      "files": ["scripts/lib-ops.sh", "scripts/check-launchers.mjs"]
     }
   ],
   "test_notes": [

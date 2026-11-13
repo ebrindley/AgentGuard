@@ -1,11 +1,9 @@
 #!/usr/bin/env node
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-const home = process.env.HOME || homedir();
 
 // `--sources <path>...` lints arbitrary launcher files (used by deploy-launchers.sh
 // to gate BEFORE installing anything). Without it, the repo's own launchers/ dir is
@@ -17,14 +15,6 @@ const explicitSources =
 const sourcePiPath = join(repoRoot, 'launchers', 'pi');
 const sourcePreamblePath = join(repoRoot, 'sandbox', 'pi-sandbox-preamble.zsh');
 const sourceProfilePath = join(repoRoot, 'sandbox', 'pi-sandbox.sb');
-const checkDeployed =
-  process.argv.includes('--deployed') || process.env.PI_SANDBOX_CHECK_DEPLOYED === '1';
-
-const deployedRoot = process.env.PI_SANDBOX_DEPLOYED_ROOT || join(home, '.local', 'bin');
-const deployedPiPath = join(deployedRoot, 'pi');
-const deployedOmpPath = join(deployedRoot, 'omp');
-const deployedPreamblePath = join(deployedRoot, 'pi-sandbox-preamble.zsh');
-const deployedProfilePath = join(deployedRoot, 'pi-sandbox.sb');
 
 // Prefixes accepted for pre-sandbox helper resolution. `/tmp`, `$HOME/bin`, and
 // friends are deliberately absent: an absolute path is NOT the security property.
@@ -97,18 +87,6 @@ function repoExampleLaunchers() {
   return readdirSync(dir)
     .filter((name) => name !== 'pi' && !name.startsWith('.') && !name.endsWith('.md'))
     .map((name) => join(dir, name));
-}
-
-// Launcher names recorded by the last deploy, so --deployed re-checks extras that
-// came from --extra-launchers. Falls back to `pi` when no stamp is present.
-function deployedLauncherNames() {
-  const stamp = join(deployedRoot, '.pi-sandbox-launchers-version');
-  if (!existsSync(stamp)) return ['pi'];
-  const line = read(stamp)
-    .split('\n')
-    .find((l) => l.startsWith('launcher_names='));
-  if (!line) return ['pi'];
-  return line.slice('launcher_names='.length).split(',').filter(Boolean);
 }
 
 function stripFullLineComments(content, marker) {
@@ -586,24 +564,6 @@ if (explicitSources.length > 0) {
   }
   checkPreamble(sourcePreamblePath, { required: true });
   checkProfile(sourceProfilePath, { required: true });
-}
-
-if (checkDeployed) {
-  // Verify every launcher the provenance stamp says was installed, so an extra
-  // wrapper deployed via --extra-launchers is re-checked in place.
-  const deployedNames = deployedLauncherNames();
-  const deployedPaths = [deployedPiPath, deployedPreamblePath, deployedProfilePath];
-  if (!deployedPaths.some((path) => existsSync(path))) {
-    fail(`--deployed requested but no deployed launcher artifacts found under ${deployedRoot}`);
-  }
-  checkPiShim(deployedPiPath, { required: true });
-  checkPiShim(deployedOmpPath, { required: true });
-  for (const name of deployedNames) {
-    if (name === 'pi' || name === 'omp') continue;
-    checkLauncher(join(deployedRoot, name), { required: true });
-  }
-  checkPreamble(deployedPreamblePath, { required: true });
-  checkProfile(deployedProfilePath, { required: true });
 }
 
 if (process.exitCode) {

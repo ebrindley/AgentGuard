@@ -7,9 +7,10 @@
 // After a reviewed change to a vendored file, regenerate the patch from the two
 // commits that vendored the files unchanged, <profile> ("Vendor pi-sandbox-guard
 // 7ad441f's Pi profile unchanged") and <bind> ("Vendor pi-sandbox-guard 7ad441f's
-// bind-executable.sh and lib-ops.sh"), and record the change in pi.json:
-//   git diff --relative=profiles/pi/ <profile> -- profiles/pi ':!profiles/pi/package.json' \
-//     ':!profiles/pi/commands' ':!profiles/pi/scripts/bind-executable.sh' \
+// bind-executable.sh and lib-ops.sh"), and record the change in pi.json. The first
+// diff keeps modified files only, since retired and added files are not in the patch:
+//   git diff --diff-filter=M --relative=profiles/pi/ <profile> -- profiles/pi \
+//     ':!profiles/pi/package.json' ':!profiles/pi/commands'':!profiles/pi/scripts/bind-executable.sh' \
 //     ':!profiles/pi/scripts/lib-ops.sh' > test/fixtures/differences/pi.patch
 //   git diff --relative=profiles/pi/ <bind> -- profiles/pi/scripts/bind-executable.sh \
 //     profiles/pi/scripts/lib-ops.sh >> test/fixtures/differences/pi.patch
