@@ -73,7 +73,10 @@ function run(argv) {
   }
   const deadline = Date.now() + 30 * 60 * 1000;
   while (Date.now() < deadline && $.kill(pid, 0) === 0) {
+    const tick = Date.now();
     $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(0.2));
+    // runUntilDate returns at once when the run loop has no sources.
+    if (Date.now() - tick < 100) delay(0.2);
     const stage = lastStage();
     if (stage) label.setStringValue(stage);
   }
