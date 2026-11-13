@@ -85,11 +85,12 @@ JXA
 }
 
 # MODE TITLE RESTART ARG...; a successful upgrade execs RESTART exactly once.
+# TITLE is accepted for existing callers and unused.
 # A failed check is optional; a failed accepted installation ends this launch.
 ag_update_startup() {
   emulate -L zsh
   setopt no_unset extended_glob
-  local mode=$1 title=$2 tag installed answer= rc=0 helper=
+  local mode=$1 tag installed answer= rc=0 helper=
   shift 2
   if [[ ${AGENT_GUARD_UPDATE_RESTART:-} == 1 ]]; then
     unset AGENT_GUARD_UPDATE_RESTART
