@@ -14,6 +14,11 @@ Applies to commits, pull requests, issues, backlog items, release notes, documen
 - No process narration. Name a tool or version only when the result depends on it.
 - No AI attribution, "generated with" lines or co-author trailers. Keep upstream copyright, license and attribution notices.
 
+## Shared code
+
+- Shared helpers live in `engine/account.zsh` (account lookup), `installer/lib.zsh` and `installer/harness/pi.zsh` (installer helpers, which `engine/agent-guard` also loads for the profile command files), and `test/lib.zsh` and `test/fixture-home.mjs` for tests. A new module reuses them instead of copying a sibling.
+- The launch policy exists twice, in the Pi launcher preamble `profiles/pi/sandbox/pi-sandbox-preamble.zsh` and in `engine/launch`. A fix to one is applied to both.
+
 ## Findings
 
 Judge findings from reviews and audits, including other agents' reports, against docs/THREAT-MODEL.md sections 3 and 5 before proposing a change or an upstream report.
