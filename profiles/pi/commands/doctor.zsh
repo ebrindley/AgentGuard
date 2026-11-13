@@ -89,12 +89,11 @@ pi_doctor() {
   # The recorded bindings, with status.sh's states: bind --check decides, and only
   # when a Pi or OMP binding is recorded. A Node for bind and for the checker below
   # comes first on PATH because bind resolves paths with node.
-  if [[ -f $conf ]]; then
-    pi_rec=$(/usr/bin/sed -n 's/^[[:space:]]*pi[[:space:]]*=[[:space:]]*//p' "$conf" | /usr/bin/head -1)
-    omp_rec=$(/usr/bin/sed -n 's/^[[:space:]]*omp[[:space:]]*=[[:space:]]*//p' "$conf" | /usr/bin/head -1)
-    node_rec=$(/usr/bin/sed -n 's/^[[:space:]]*node[[:space:]]*=[[:space:]]*//p' "$conf" | /usr/bin/head -1)
-  fi
-  pi_doctor_node && jsnode=$REPLY
+  # Read as the launcher reads them (ag_pi_conf_get).
+  ag_pi_conf_get pi; pi_rec=$REPLY
+  ag_pi_conf_get omp; omp_rec=$REPLY
+  ag_pi_conf_get node; node_rec=$REPLY
+  ag_pi_js_node "$release" && jsnode=$REPLY
   if [[ -z $pi_rec && -z $omp_rec ]]; then
     pi_doctor_say "skip bindings: no Pi binding recorded in ${conf/#$home/~}"
   elif out=$(pi_doctor_bind --check 2>&1); then
@@ -291,27 +290,6 @@ pi_doctor_reason() {
   elif (( $#l )); then print -r -- "${l[-1]#\[pi-sandbox-guard\] }"
   else print -r -- "exit $2"
   fi
-}
-
-# lib-ops.sh's rule: PATH lies in a folder Pi sessions can write.
-pi_doctor_write_root() {
-  /bin/bash -c '. "$1" && ops_path_is_known_sandbox_write_root "$2" "$3"' _ "$scripts/lib-ops.sh" "$1" "$home"
-}
-
-# REPLY = a Node for the checks that run JavaScript: the recorded interpreter, else
-# the node on PATH or in Homebrew's folders; an absolute executable file outside
-# every folder Pi sessions can write. Fails when there is none.
-pi_doctor_node() {
-  local c
-  REPLY=
-  for c in "$node_rec" "$(command -v node 2>/dev/null)" /opt/homebrew/bin/node /usr/local/bin/node; do
-    [[ $c == /* && -x ${c:A} && ! -d ${c:A} ]] || continue
-    pi_doctor_write_root "$c" && continue
-    pi_doctor_write_root "${c:A}" && continue
-    REPLY=$c
-    return 0
-  done
-  return 1
 }
 
 pi_doctor_bind() {

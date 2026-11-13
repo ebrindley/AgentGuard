@@ -125,9 +125,29 @@ ag_pi_conf_get() {
 }
 
 # The rule of lib-ops.sh: true when PATH lies in a folder Pi sessions can write.
-ag_pi_write_root() {
+# LIB is the lib-ops.sh that decides, by default the installed tree's.
+ag_pi_write_root() {  # PATH [LIB]
   ( ag_pi_clean_env
-    /bin/bash -c '. "$1" && ops_path_is_known_sandbox_write_root "$2" "$3"' _ "$ag_tree/profiles/pi/scripts/lib-ops.sh" "$1" "$home" )
+    /bin/bash -c '. "$1" && ops_path_is_known_sandbox_write_root "$2" "$3"' _ "${2:-$ag_tree/profiles/pi/scripts/lib-ops.sh}" "$1" "$home" )
+}
+
+# ag_pi_js_node RELEASE: REPLY = a Node for agent-guard's commands that run
+# JavaScript (the doctor's checker, wrapper add's check-launchers.mjs): the
+# interpreter recorded in executables.conf, else the node on PATH or in Homebrew's
+# folders; an absolute executable file outside every folder Pi sessions can write,
+# by RELEASE's lib-ops.sh. Fails when there is none.
+ag_pi_js_node() {
+  local lib="$1/profiles/pi/scripts/lib-ops.sh" rec c
+  ag_pi_conf_get node
+  rec=$REPLY REPLY=
+  for c in "$rec" "$(command -v node 2>/dev/null)" /opt/homebrew/bin/node /usr/local/bin/node; do
+    [[ $c == /* && -x ${c:A} && ! -d ${c:A} ]] || continue
+    ag_pi_write_root "$c" "$lib" && continue
+    ag_pi_write_root "${c:A}" "$lib" && continue
+    REPLY=$c
+    return 0
+  done
+  return 1
 }
 
 # ag_pi_target PATH: as agent-guard bind validates a target (bind-executable.sh,
