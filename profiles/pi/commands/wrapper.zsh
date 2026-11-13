@@ -172,23 +172,11 @@ pi_wrapper_add() {
   pi_wrapper_stage=
 }
 
-# The Node that runs check-launchers.mjs: the interpreter recorded in
-# executables.conf, else the node on PATH or in Homebrew's folders; an absolute
-# executable file outside every sandbox-writable root (lib-ops.sh), as doctor
-# accepts one.
+# The Node that runs check-launchers.mjs, chosen as doctor chooses one
+# (ag_pi_js_node in the Pi harness, which load_installer loads).
 pi_wrapper_node() {
-  local conf="$home/.config/pi-sandbox-guard/executables.conf" rec= c p ok
-  [[ -f $conf ]] && rec=$(/usr/bin/sed -n 's/^[[:space:]]*node[[:space:]]*=[[:space:]]*//p' "$conf" | /usr/bin/head -1)
-  for c in "$rec" "$(command -v node 2>/dev/null)" /opt/homebrew/bin/node /usr/local/bin/node; do
-    [[ $c == /* && -x ${c:A} && ! -d ${c:A} ]] || continue
-    ok=1
-    for p in "$c" "${c:A}"; do
-      /bin/bash -c '. "$1" && ops_path_is_known_sandbox_write_root "$2" "$3"' _ \
-        "$release/profiles/pi/scripts/lib-ops.sh" "$p" "$home" && ok=0
-    done
-    (( ok )) && { REPLY=$c; return 0 }
-  done
-  pi_wrapper_die 'no usable node to run the wrapper check; install Node (for example: brew install node)'
+  ag_pi_js_node "$release" ||
+    pi_wrapper_die 'no usable node to run the wrapper check; install Node (for example: brew install node)'
 }
 
 pi_wrapper_remove() {

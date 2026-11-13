@@ -110,6 +110,11 @@ ag_pi_cli() {
   reply=("${ag_pi_cli_found[@]}")
 }
 
+# reply = the env arguments that run bind-executable.sh as agent-guard bind runs
+# it: HOME the account home and its path variables unset, so it reads and writes
+# the executables.conf the launcher reads.
+ag_pi_bind_env() { reply=(-u PI_SANDBOX_CONFIG_DIR -u PI_SANDBOX_SHIM -u OMP_SANDBOX_SHIM "HOME=$home") }
+
 # ag_pi_conf_get KEY: REPLY = KEY's value in executables.conf, as the preamble
 # reads it (config_value_for_key); fails when there is none.
 ag_pi_conf_get() {
@@ -125,9 +130,29 @@ ag_pi_conf_get() {
 }
 
 # The rule of lib-ops.sh: true when PATH lies in a folder Pi sessions can write.
-ag_pi_write_root() {
+# LIB is the lib-ops.sh that decides, by default the installed tree's.
+ag_pi_write_root() {  # PATH [LIB]
   ( ag_pi_clean_env
-    /bin/bash -c '. "$1" && ops_path_is_known_sandbox_write_root "$2" "$3"' _ "$ag_tree/profiles/pi/scripts/lib-ops.sh" "$1" "$home" )
+    /bin/bash -c '. "$1" && ops_path_is_known_sandbox_write_root "$2" "$3"' _ "${2:-$ag_tree/profiles/pi/scripts/lib-ops.sh}" "$1" "$home" )
+}
+
+# ag_pi_js_node RELEASE: REPLY = a Node for agent-guard's commands that run
+# JavaScript (the doctor's checker, wrapper add's check-launchers.mjs): the
+# interpreter recorded in executables.conf, else the node on PATH or in Homebrew's
+# folders; an absolute executable file outside every folder Pi sessions can write,
+# by RELEASE's lib-ops.sh. Fails when there is none.
+ag_pi_js_node() {
+  local lib="$1/profiles/pi/scripts/lib-ops.sh" rec c
+  ag_pi_conf_get node
+  rec=$REPLY REPLY=
+  for c in "$rec" "$(command -v node 2>/dev/null)" /opt/homebrew/bin/node /usr/local/bin/node; do
+    [[ $c == /* && -x ${c:A} && ! -d ${c:A} ]] || continue
+    ag_pi_write_root "$c" "$lib" && continue
+    ag_pi_write_root "${c:A}" "$lib" && continue
+    REPLY=$c
+    return 0
+  done
+  return 1
 }
 
 # ag_pi_target PATH: as agent-guard bind validates a target (bind-executable.sh,
@@ -171,6 +196,11 @@ ag_pi_node() {
   return 0
 }
 
+# True when PATH is a Node script: its first line is a #! line that runs node.
+ag_pi_node_script() {
+  /usr/bin/head -c 128 -- "$1" 2>/dev/null | /usr/bin/head -1 | /usr/bin/grep -Eq '^#!.*[ /]node( |$)'
+}
+
 # True when an entry the staged bindings record is a Node script and no interpreter
 # is recorded for it: the launcher's pinned PATH may hold no node (bind-executable.sh,
 # needs_interpreter). OMP is native.
@@ -178,8 +208,7 @@ ag_pi_needs_node() {
   local rt t rec
   ag_pi_conf_get node && return 1
   for rt t rec in $ag_pi_entries; do
-    (( rec )) && [[ $rt == pi ]] &&
-      /usr/bin/head -c 128 -- "$t" 2>/dev/null | /usr/bin/head -1 | /usr/bin/grep -Eq '^#!.*[ /]node( |$)' && return 0
+    (( rec )) && [[ $rt == pi ]] && ag_pi_node_script "$t" && return 0
   done
   return 1
 }
@@ -254,8 +283,7 @@ ag_pi_stage() {
     (( rec )) || continue
     set+=("$rt" "$t")
     # A Node entry point needs its interpreter recorded (ag_pi_needs_node).
-    if [[ $rt == pi ]] && /usr/bin/head -c 128 -- "$t" 2>/dev/null | /usr/bin/head -1 | /usr/bin/grep -Eq '^#!.*[ /]node( |$)' &&
-       ! ag_pi_conf_get node; then
+    if [[ $rt == pi ]] && ag_pi_node_script "$t" && ! ag_pi_conf_get node; then
       set+=(node "$ag_pi_node_path")
     fi
   done
@@ -531,11 +559,7 @@ ag_h_pi_keep() {
     ag_jfind pi-launcher-$rt begun
     ag_jval old
     [[ $REPLY == other ]] || continue
-    /bin/mkdir -p -- "$pi_replaced" || return 1
-    if [[ -e $pi_replaced/$rt || -L $pi_replaced/$rt ]]; then
-      /bin/mv -- "$pi_replaced/$rt" "$pi_replaced/$rt.$EPOCHSECONDS" || return 1
-    fi
-    /bin/mv -- "$b" "$pi_replaced/$rt" || return 1
+    move_into "$b" "$pi_replaced/$rt" || return 1
   done
   return 0
 }

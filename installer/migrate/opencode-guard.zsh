@@ -370,22 +370,8 @@ undo_app_old() {
 }
 
 # M8: the switch time, last. Forwarder removal waits for a boot after it.
-do_switch_time() {
-  ag_jlast switch-time
-  [[ $REPLY == done ]] && return 0
-  if [[ -z $REPLY ]]; then ag_backup switch-time "$migration" && ag_jnl switch-time begun || return 1; fi
-  test_point switch-time || return 1
-  ag_mig_put "$(/usr/bin/jq -cn --argjson t "$EPOCHSECONDS" '{from: "opencode-guard", switched_at: $t, retired: false}')" $ag_ocg_froms || return 1
-  ag_jnl switch-time done
-}
-
-undo_switch_time() {
-  local b="$txn_dir/backup/switch-time/file"
-  ag_jlast switch-time
-  [[ $REPLY == (begun|done) ]] || return 0
-  if [[ -f $b ]]; then replace_file "$migration" "$b" || return 1; else /bin/rm -f -- "$migration" || return 1; fi
-  ag_jnl switch-time undone
-}
+do_switch_time() { ag_mig_switch_time switch-time opencode-guard $ag_ocg_froms }
+undo_switch_time() { ag_mig_switch_time_undo switch-time }
 
 # The gate's second bounded launch, through the forwarder at OpenCode Guard's old path.
 ag_m_opencode_guard_gate() {

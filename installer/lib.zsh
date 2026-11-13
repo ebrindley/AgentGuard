@@ -266,6 +266,14 @@ replace_link() {
   /bin/ln -s "$2" "$tmp" && /bin/mv -fh -- "$tmp" "$1"
 }
 
+# move_into FROM TO: FROM moved to TO by one rename; an earlier TO is kept under a
+# time suffix.
+move_into() {
+  /bin/mkdir -p -- "${2:h}" || return 1
+  if [[ -e $2 || -L $2 ]]; then /bin/mv -- "$2" "$2.$EPOCHSECONDS" || return 1; fi
+  /bin/mv -- "$1" "$2"
+}
+
 # restore_over_link LINK FILE: replaces LINK itself, never its target, with a copy of FILE.
 restore_over_link() {
   local tmp="${1:h}/.${1:t}.partial"
@@ -499,6 +507,30 @@ ag_mig_put() {
   /usr/bin/jq --argjson r "$rec" '[.[] | select(.from | IN($ARGS.positional[]) | not)] + [$r] | if length == 1 then .[0] else . end' \
     --args "$@" <<< "$REPLY" > "$tmp" && replace_file "$migration" "$tmp" || { /bin/rm -f -- "$tmp"; return 1 }
   /bin/rm -f -- "$tmp"
+}
+
+# ag_mig_switch_time ACTION FROM REPLACES...: a migration's switch action, last in
+# its switch: the record {from: FROM, switched_at: now, retired: false} replaces
+# those whose from is one of REPLACES, with migration.json backed up under ACTION.
+ag_mig_switch_time() {
+  local a=$1 from=$2
+  shift 2
+  ag_jlast $a
+  [[ $REPLY == done ]] && return 0
+  if [[ -z $REPLY ]]; then ag_backup $a "$migration" && ag_jnl $a begun || return 1; fi
+  test_point $a || return 1
+  ag_mig_put "$(/usr/bin/jq -cn --argjson t "$EPOCHSECONDS" --arg from "$from" '{from: $from, switched_at: $t, retired: false}')" "$@" || return 1
+  ag_jnl $a done
+}
+
+# ag_mig_switch_time_undo ACTION: migration.json back from ACTION's backup, or
+# removed when there was none.
+ag_mig_switch_time_undo() {
+  local a=$1 b="$txn_dir/backup/$1/file"
+  ag_jlast $a
+  [[ $REPLY == (begun|done) ]] || return 0
+  if [[ -f $b ]]; then replace_file "$migration" "$b" || return 1; else /bin/rm -f -- "$migration" || return 1; fi
+  ag_jnl $a undone
 }
 
 # --- Preflight (design section 3.1).
@@ -1203,14 +1235,18 @@ ag_switch() {
   ag_do_actions switch
 }
 
-# ag_bounded SECONDS CMD...: CMD's status, or 124 when it runs longer.
+# ag_bounded SECONDS CMD...: CMD's status, or 124 when it runs longer. The limit
+# is measured on the clock: on a loaded Mac each poll takes longer than its sleep,
+# so a count of polls would allow far more than SECONDS.
 ag_bounded() {
-  integer limit=$(( $1 * 10 )) i=0 pid
+  zmodload zsh/datetime || return 1
+  float end=$(( EPOCHREALTIME + $1 ))
+  integer pid
   shift
   "$@" </dev/null &
   pid=$!
   while kill -0 $pid 2>/dev/null; do
-    if (( ++i > limit )); then
+    if (( EPOCHREALTIME > end )); then
       /usr/bin/pkill -KILL -P $pid 2>/dev/null
       kill -KILL $pid 2>/dev/null
       wait $pid 2>/dev/null
@@ -1219,6 +1255,23 @@ ag_bounded() {
     /bin/sleep 0.1
   done
   wait $pid
+}
+
+# ag_run_check LABEL CMD...: runs a release's check and prints its output. When it
+# fails, its FAIL lines go to ag_failed, or "LABEL exited STATUS" when it printed
+# none, and it returns 1.
+ag_run_check() {
+  local label=$1 out rc
+  local -a found
+  shift
+  out=$("$@" 2>&1)
+  rc=$?
+  ag_say "$out"
+  (( rc == 0 )) && return 0
+  found=(${(M)${(f)out}:#FAIL*})
+  (( $#found )) || found=("$label exited $rc")
+  ag_failed+=($found)
+  return 1
 }
 
 # The checks that need the switched install (design section 4.2): the live
