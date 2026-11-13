@@ -48,7 +48,7 @@ function run(argv) {
     $.NSMakeRect(0, 0, 340, 90), $.NSWindowStyleMaskTitled, $.NSBackingStoreBuffered, false);
   win.setTitle('Agent Guard');
   win.setLevel($.NSFloatingWindowLevel);
-  win.center();
+  win.center;
   const spinner = $.NSProgressIndicator.alloc.initWithFrame($.NSMakeRect(20, 29, 32, 32));
   spinner.setStyle($.NSProgressIndicatorStyleSpinning);
   spinner.setIndeterminate(true);
@@ -60,7 +60,7 @@ function run(argv) {
   win.contentView.addSubview(spinner);
   win.contentView.addSubview(label);
   spinner.startAnimation($());
-  win.orderFrontRegardless();
+  win.orderFrontRegardless;
   function lastStage() {
     try {
       const data = $.NSData.dataWithContentsOfFile(log);
