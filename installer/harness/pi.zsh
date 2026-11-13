@@ -559,11 +559,7 @@ ag_h_pi_keep() {
     ag_jfind pi-launcher-$rt begun
     ag_jval old
     [[ $REPLY == other ]] || continue
-    /bin/mkdir -p -- "$pi_replaced" || return 1
-    if [[ -e $pi_replaced/$rt || -L $pi_replaced/$rt ]]; then
-      /bin/mv -- "$pi_replaced/$rt" "$pi_replaced/$rt.$EPOCHSECONDS" || return 1
-    fi
-    /bin/mv -- "$b" "$pi_replaced/$rt" || return 1
+    move_into "$b" "$pi_replaced/$rt" || return 1
   done
   return 0
 }

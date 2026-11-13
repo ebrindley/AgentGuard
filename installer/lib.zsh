@@ -266,6 +266,14 @@ replace_link() {
   /bin/ln -s "$2" "$tmp" && /bin/mv -fh -- "$tmp" "$1"
 }
 
+# move_into FROM TO: FROM moved to TO by one rename; an earlier TO is kept under a
+# time suffix.
+move_into() {
+  /bin/mkdir -p -- "${2:h}" || return 1
+  if [[ -e $2 || -L $2 ]]; then /bin/mv -- "$2" "$2.$EPOCHSECONDS" || return 1; fi
+  /bin/mv -- "$1" "$2"
+}
+
 # restore_over_link LINK FILE: replaces LINK itself, never its target, with a copy of FILE.
 restore_over_link() {
   local tmp="${1:h}/.${1:t}.partial"

@@ -202,14 +202,6 @@ undo_psg_wrappers() {
 do_psg_switch_time() { ag_mig_switch_time psg-switch-time pi-sandbox-guard pi-sandbox-guard }
 undo_psg_switch_time() { ag_mig_switch_time_undo psg-switch-time }
 
-# ag_psg_into FROM TO: FROM moved to TO by one rename; an earlier TO is kept under a
-# time suffix.
-ag_psg_into() {
-  /bin/mkdir -p -- "${2:h}" || return 1
-  if [[ -e $2 || -L $2 ]]; then /bin/mv -- "$2" "$2.$EPOCHSECONDS" || return 1; fi
-  /bin/mv -- "$1" "$2"
-}
-
 # After the stamp, before the cleanup deletes the transaction backup: the files
 # the switch replaced, pi-sandbox-guard's originals, move into the legacy bundle:
 # local-bin/ for pi, omp, pi-sandbox.sb and pi-sandbox-preamble.zsh, extension/
@@ -228,13 +220,13 @@ ag_m_pi_sandbox_guard_keep() {
         ag_jval old
         [[ $REPLY == guard ]] || continue
       fi
-      ag_psg_into "$b" "$psg_legacy/local-bin/$name" || return 1
+      move_into "$b" "$psg_legacy/local-bin/$name" || return 1
     elif ! ag_jfind $a begun && [[ -f $pi_bin/$name && ! -L $pi_bin/$name ]]; then
       ag_psg_copy "$pi_bin/$name" "$psg_legacy/local-bin/$name" || return 1
     fi
   done
   b="$txn_dir/backup/pi-extension/folder"
-  if [[ -e $b || -L $b ]]; then ag_psg_into "$b" "$psg_legacy/extension/pi-sandbox-guard" || return 1
+  if [[ -e $b || -L $b ]]; then move_into "$b" "$psg_legacy/extension/pi-sandbox-guard" || return 1
   elif ! ag_jfind pi-extension begun && [[ -d $pi_ext && ! -L $pi_ext ]]; then
     ag_psg_copy "$pi_ext" "$psg_legacy/extension/pi-sandbox-guard" || return 1
   fi
@@ -274,15 +266,15 @@ ag_psg_retire() {
   names+=(${(s:,:)REPLY})
   names=(${(u)${(M)names:#[A-Za-z0-9._-]##}})
   for f in "$pi_bin"/${^names}.bak.<->.<->(N); do
-    ag_psg_into "$f" "$psg_legacy/local-bin/${f:t}" || { ag_warn "cannot move $f into $psg_legacy"; return 1 }
+    move_into "$f" "$psg_legacy/local-bin/${f:t}" || { ag_warn "cannot move $f into $psg_legacy"; return 1 }
   done
   if [[ -e $psg_stamp ]]; then
-    ag_psg_into "$psg_stamp" "$psg_legacy/local-bin/${psg_stamp:t}" || { ag_warn "cannot move $psg_stamp into $psg_legacy"; return 1 }
+    move_into "$psg_stamp" "$psg_legacy/local-bin/${psg_stamp:t}" || { ag_warn "cannot move $psg_stamp into $psg_legacy"; return 1 }
   fi
   ag_rjnl psg-retire-launchers done
   test_point psg-retire-backups || return 1
   if [[ -e $psg_ext_backups || -L $psg_ext_backups ]]; then
-    ag_psg_into "$psg_ext_backups" "$psg_legacy/extension-backups" || { ag_warn "cannot move $psg_ext_backups into $psg_legacy"; return 1 }
+    move_into "$psg_ext_backups" "$psg_legacy/extension-backups" || { ag_warn "cannot move $psg_ext_backups into $psg_legacy"; return 1 }
   fi
   ag_rjnl psg-retire-backups done
   ag_mig_put "$(/usr/bin/jq -c '.retired = true' <<< "$rec")" pi-sandbox-guard || return 1

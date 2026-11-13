@@ -155,9 +155,7 @@ ag_h_grok_keep() {
   local b="$txn_dir/backup/grok-shim/file"
   test_point grok-keep || return 1
   [[ -e $b || -L $b ]] || return 0
-  /bin/mkdir -p -- "$grok_replaced" || return 1
-  [[ -e $grok_replaced/grok || -L $grok_replaced/grok ]] && { /bin/mv -- "$grok_replaced/grok" "$grok_replaced/grok.$EPOCHSECONDS" || return 1 }
-  /bin/mv -- "$b" "$grok_replaced/grok"
+  move_into "$b" "$grok_replaced/grok"
 }
 
 # Names the executable the install recorded, which is the kept copy when Grok was
