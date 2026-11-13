@@ -66,8 +66,10 @@ tighten these checks but cannot weaken them.
 Each launch materializes policy and registered rulebooks in an engine-owned
 snapshot; the checker's reader rejects links beneath its policy root. Snapshots
 remain for child processes that inherited them; a staged release check removes
-its own snapshot when it ends. Independent checker consumers
-and older OpenCode sessions retain the shared legacy rulebook. New child
+its own snapshot when it ends. Independent checker consumers read
+`~/.cc-safety-net` directly. Releases no longer install the legacy `agent-guard`
+rulebook there; an install or update removes an unmodified copy and keeps a
+changed one (see [OPERATIONS.md](OPERATIONS.md#the-legacy-recursive-rm-rulebook)). New child
 processes inherit their guarded session's checker policy.
 
 Force-push and pipe-to-shell remain blocked. The current integration returns
