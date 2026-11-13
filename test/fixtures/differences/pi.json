@@ -1,38 +1,7 @@
 {
   "source": "pi-sandbox-guard",
   "commit": "7ad441f",
-  "reason": "profiles/pi carries pi-sandbox-guard 7ad441f's Pi profile with the protections Agent Guard adds to Pi sessions (docs/DESIGN.md section 11). Every change to a vendored file is in the patch and listed here; test/pi-files.mjs checks both, test/pi-launch.mjs tests differences 1 to 5, 7, 9, 13 and 18, test/pi-commands.sh difference 6 and profiles/pi/test/checker.mjs difference 17.",
-  "patch": "pi.patch",
-  "files": {
-    "LICENSE": { "mode": "644", "blob": "18a32b25985be476250a26c9e8c47f823ae92172", "commit": "b60240a", "note": "From b60240a, the pi-sandbox-guard commit after 7ad441f that changed only LICENSE's copyright line, to name pi-sandbox-guard contributors." },
-    "launchers/example-custom": { "mode": "755", "blob": "2f942582100886b8d692c9dd30279203df6d0226" },
-    "launchers/pi": { "mode": "755", "blob": "f5e94c2190a90829f670d6740282ac479f12228a" },
-    "sandbox/pi-sandbox-preamble.zsh": { "mode": "644", "blob": "9b7c7885c787dc911ee2592d7d075f16c553df9f" },
-    "sandbox/pi-sandbox.sb": { "mode": "644", "blob": "f560a319d701e3381238010dc185749499e502ed" },
-    "scripts/bind-executable.sh": { "mode": "755", "blob": "3fe1692ae5902f01058895f9a928ed06d8d68ba6" },
-    "scripts/check-launchers.mjs": { "mode": "644", "blob": "e69270f00af20d12ff24a4f78ecaefcfe30bc9f1" },
-    "scripts/extension-entry.ts": { "mode": "644", "blob": "28af70dc91218de34d442b6d09287e2d0033331c" },
-    "scripts/lib-ops.sh": { "mode": "755", "blob": "aca2e2124e45d60a239bc088bcf0648fdc783695" },
-    "scripts/test-sandbox-profile.sh": { "mode": "755", "blob": "4dcdf9c919b45acd4afbf41844c147d8846be627" },
-    "src/index.mjs": { "mode": "644", "blob": "d997be1bc417effcf0c0318cdc2e3bafb542b342" },
-    "src/pi-types.d.ts": { "mode": "644", "blob": "8a88e39d7dd5f5a2609914ed22eda0d57716655d" },
-    "test/shim.mjs": { "mode": "644", "blob": "98d10e2434e169a416f0b2b1472714beca978de2" }
-  },
-  "added": {
-    "package.json": "Replaces 7ad441f's package.json, whose scripts run the npm deploy, bind and status commands that Agent Guard replaces; keeps the module fields.",
-    "commands/bind.zsh": "agent-guard bind: runs scripts/bind-executable.sh with HOME set to the account home and its path overrides unset; replaces npm run bind.",
-    "commands/doctor.zsh": "The Pi checks of agent-guard doctor, which replace scripts/status.sh and scripts/check-path.sh.",
-    "commands/wrapper.zsh": "agent-guard wrapper add|remove|list; replaces deploy-launchers.sh --extra-launchers.",
-    "test/checker.mjs": "Tests the extension of difference 17 against a disposable release and session copy; replaces test/adapter.mjs and test/degraded.mjs, which tested the analyzer adapter."
-  },
-  "not_vendored": {
-    "scripts/test-ops.sh": "Tests pi-sandbox-guard's npm deploy, status and bind scripts, which Agent Guard replaces.",
-    "scripts/deploy-all.sh, scripts/deploy-launchers.sh, scripts/deploy-local.sh, scripts/setup-hooks.sh, .githooks/pre-push": "Replaced by Agent Guard's installer and CI.",
-    "scripts/status.sh, scripts/check-path.sh": "Replaced by agent-guard doctor; the vendored suites do not need them.",
-    "test/e2e-demo.mjs": "A manual demonstration, not a suite.",
-    "src/guard-core.mjs, src/validate-bash-command.sh, test/smoke.mjs, test/corpus.mjs, test/corpus/corpus.json": "The analyzer and the suites that tested only it, retired when Pi and OMP moved to cc-safety-net (difference 17). They are 7ad441f's apart from Agent Guard's differences 8 and 15 and test edits, which were retired with them; the last commit that holds them is the one before the release that removed them.",
-    "config/, docs/, README.md, SECURITY.md, CONTRIBUTING.md, .github/": "pi-sandbox-guard's own documentation and repository files."
-  },
+  "reason": "profiles/pi began as pi-sandbox-guard 7ad441f's Pi profile and is maintained in this repository (docs/DESIGN.md section 15, decision D17). The differences are the changes Agent Guard made to it, numbered as code comments cite them. test/pi-launch.mjs tests differences 1 to 5, 7, 9, 13 and 18, test/pi-commands.sh difference 6 and profiles/pi/test/checker.mjs difference 17.",
   "differences": [
     {
       "id": 1,
