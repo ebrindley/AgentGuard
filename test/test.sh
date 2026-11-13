@@ -559,7 +559,7 @@ done
 
 # Shim loop: OpenCode Guard v1.0.3 installed next to Agent Guard, both shim folders on PATH.
 /bin/mkdir -p "$old_engine/bin" "$home/OpenCode Guard" "$home/stub" "$home/linkbin"
-/bin/cp "$source_root/test/fixtures/opencode-guard-1.0.3/launch" "$source_root/test/fixtures/opencode-guard-1.0.3/profile.sb" "$old_engine/"
+/bin/cp "$source_root/test/fixtures/installs/opencode-guard-1.0.3/engine/launch" "$source_root/test/fixtures/installs/opencode-guard-1.0.3/engine/profile.sb" "$old_engine/"
 print -r -- $'#!/bin/zsh\nexec "${0:A:h:h}/launch" cli "$@"' > "$old_engine/bin/opencode"
 /bin/cp "$list" "$home/OpenCode Guard/Guard List.txt"
 print -r -- $'#!/bin/sh\n[ "${1:-}" = --version ] && { echo 1.18.33; exit 0; }\ntouch "$HOME/Documents/stub-escaped" 2>/dev/null && c=escaped || c=confined\nprintf "%s %s %s\\n" "${AGENT_GUARD_SANDBOXED:--}" "${OPENCODE_SANDBOXED:--}" "$c" >> "$HOME/Projects/app/stub-runs"' > "$home/stub/opencode"
