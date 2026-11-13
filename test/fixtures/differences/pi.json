@@ -138,6 +138,11 @@
       "id": 20,
       "change": "Code with no caller in Agent Guard is removed: from scripts/lib-ops.sh, the helpers of pi-sandbox-guard's deploy, status and hook scripts (ops_die, ops_say, ops_warn, ops_require_single_line, ops_hash_file, ops_require_same_hash, ops_git_meta, ops_make_release_id, ops_stamp_get, ops_json_quote, ops_default_guard_dest, ops_default_launchers_dest), keeping ops_stable_node_path and ops_path_is_known_sandbox_write_root, which bind-executable.sh and installer/harness/pi.zsh call; from scripts/check-launchers.mjs, the --deployed mode and its PI_SANDBOX_CHECK_DEPLOYED and PI_SANDBOX_DEPLOYED_ROOT variables, which checked pi-sandbox-guard's deployed launchers in ~/.local/bin and which Agent Guard never ran (docs/DESIGN.md section 11).",
       "files": ["scripts/lib-ops.sh", "scripts/check-launchers.mjs"]
+    },
+    {
+      "id": 21,
+      "change": "Comments in the preamble name the block of engine/launch that implements the same launch policy (account home, Git selectors and checkout check, project refusals, active hooks folder, protected link targets and pins, peer runtime, checker level, SSH agent switch), so a fix to one is made to both; engine/launch carries the matching comments. No behavior change.",
+      "files": ["sandbox/pi-sandbox-preamble.zsh"]
     }
   ],
   "test_notes": [

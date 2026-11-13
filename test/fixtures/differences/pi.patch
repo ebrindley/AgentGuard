@@ -114,7 +114,7 @@ index f5e94c2..171544a 100755
  # resolved target is a `node` shebang script and an interpreter was recorded. Execing
  # the vector instead of "$PI_EXECUTABLE" is what makes a recorded interpreter real:
 diff --git a/sandbox/pi-sandbox-preamble.zsh b/sandbox/pi-sandbox-preamble.zsh
-index 9b7c788..52ed215 100644
+index 9b7c788..c1e4876 100644
 --- a/sandbox/pi-sandbox-preamble.zsh
 +++ b/sandbox/pi-sandbox-preamble.zsh
 @@ -15,6 +15,19 @@
@@ -137,7 +137,15 @@ index 9b7c788..52ed215 100644
  # Trusted absolute paths — do NOT resolve security-critical tools via $PATH.
  # Pin before any ambient PATH work; keep readonly where zsh permits.
  typeset -r SANDBOX_EXEC="/usr/bin/sandbox-exec"
-@@ -48,6 +61,7 @@ unset _PI_GIT_ENV_NAME
+@@ -35,6 +48,7 @@ typeset -r HEAD_BIN="/usr/bin/head"
+ # repository/config than the directory the operator launched from. Clear only
+ # discovery/config selectors; ordinary identity and transport settings remain
+ # available to the sandboxed Pi process.
++# Twin: engine/launch, resolve_project's Git toplevel probe; change both together.
+ unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR
+ unset GIT_CEILING_DIRECTORIES GIT_DISCOVERY_ACROSS_FILESYSTEM
+ unset GIT_CONFIG GIT_CONFIG_SYSTEM GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
+@@ -48,6 +62,7 @@ unset _PI_GIT_ENV_NAME
  
  # Sanitize PATH before any remaining external lookups. Keep Homebrew + system
  # bins so trusted Pi resolution still works; drop ambient hostile entries.
@@ -145,7 +153,15 @@ index 9b7c788..52ed215 100644
  PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
  
  # Homebrew versioned Node formulae do not link `node` into /opt/homebrew/bin.
-@@ -241,7 +255,7 @@ resolve_runtime_state() {
+@@ -84,6 +99,7 @@ fi
+ # Bind HOME to the login user's real macOS home before deriving config/profile
+ # paths. A repo-local env or wrapper must not make Seatbelt params point at a
+ # fake home and thereby miss real credential/config paths.
++# Twin: engine/launch, account_home; change both together.
+ if [ -z "$LOGIN_USER" ] || ! REAL_HOME="$("$DSCL_BIN" /Search -read "/Users/$LOGIN_USER" NFSHomeDirectory 2>/dev/null)"; then
+   emit "cannot resolve login user's home; refusing ambient HOME."
+   exit 1
+@@ -241,7 +257,7 @@ resolve_runtime_state() {
          "$HOME"/.pi/*) PI_AGENT_STATE="$candidate" ;;
          *)
            emit "protected Pi requires PI_CODING_AGENT_DIR to stay under ~/.pi."
@@ -154,7 +170,7 @@ index 9b7c788..52ed215 100644
            return 1
            ;;
        esac
-@@ -303,7 +317,7 @@ resolve_runtime_state() {
+@@ -303,12 +319,13 @@ resolve_runtime_state() {
      candidate="$(canonical_path "$PI_CODING_AGENT_DIR")"
      if [ "$candidate" != "$OMP_AGENT_STATE" ]; then
        emit "protected OMP does not support relocating PI_CODING_AGENT_DIR."
@@ -163,7 +179,13 @@ index 9b7c788..52ed215 100644
        return 1
      fi
    fi
-@@ -547,7 +561,7 @@ resolve_configured_executable() {
+ }
+ 
++# Twin: engine/launch, the Git hooks section's active hooks folder; change both together.
+ resolve_active_hooks() {
+   local project="$1"
+   local raw="" resolved=""
+@@ -547,7 +564,7 @@ resolve_configured_executable() {
  }
  
  # Operator-recorded binding: an absolute path written to the pinned config by a
@@ -172,7 +194,7 @@ index 9b7c788..52ed215 100644
  # no fixed path shape can describe the real install surface — Homebrew's Cellar,
  # npm user prefixes, nvm/fnm/volta/asdf/mise version dirs, pnpm/bun/yarn global
  # roots, and Nix store paths are all legitimate and all differently shaped.
-@@ -664,7 +678,7 @@ resolve_agent_executable() {
+@@ -664,7 +681,7 @@ resolve_agent_executable() {
        resolved="$(resolve_configured_executable "$configured" || true)"
        if [ -z "$resolved" ]; then
          emit "$ambient_name='$configured' is not an accepted ambient override."
@@ -181,7 +203,7 @@ index 9b7c788..52ed215 100644
          exit 1
        fi
        ;;
-@@ -672,7 +686,7 @@ resolve_agent_executable() {
+@@ -672,7 +689,7 @@ resolve_agent_executable() {
        resolved="$(resolve_bound_executable "$bound" || true)"
        if [ -z "$resolved" ]; then
          emit "recorded $runtime_label binding is no longer usable: '$bound'"
@@ -190,7 +212,7 @@ index 9b7c788..52ed215 100644
          exit 1
        fi
        ;;
-@@ -680,7 +694,7 @@ resolve_agent_executable() {
+@@ -680,7 +697,7 @@ resolve_agent_executable() {
        resolved="$(resolve_command_outside_shim_dir "$PI_SANDBOX_RUNTIME" || true)"
        if [ -z "$resolved" ]; then
          emit "cannot auto-resolve the real $runtime_label executable outside the shim path."
@@ -199,7 +221,7 @@ index 9b7c788..52ed215 100644
          exit 1
        fi
        ;;
-@@ -705,7 +719,7 @@ resolve_agent_executable() {
+@@ -705,7 +722,7 @@ resolve_agent_executable() {
        interpreter="$(resolve_bound_interpreter "$bound_interpreter" || true)"
        [ -n "$interpreter" ] || {
          emit "recorded Node interpreter is no longer usable: '$bound_interpreter'"
@@ -208,7 +230,7 @@ index 9b7c788..52ed215 100644
          exit 1
        }
      fi
-@@ -886,6 +900,13 @@ fi
+@@ -886,6 +903,13 @@ fi
  if [ "$ACTUAL_CONFINEMENT" = "1" ]; then
    if own_policy_reentry "$EXPECTED_PROFILE_DIGEST"; then
      emit "existing pi-sandbox-guard confinement detected; skipping nested wrap."
@@ -222,7 +244,7 @@ index 9b7c788..52ed215 100644
      PI_SANDBOX_CMD=()
      return 0 2>/dev/null || true
    fi
-@@ -919,12 +940,30 @@ if [ "$PI_SANDBOX_TRANSPARENT" = "1" ] && { [ -n "${PI_SANDBOX_SHIM_ACTIVE:-}" ]
+@@ -919,12 +943,30 @@ if [ "$PI_SANDBOX_TRANSPARENT" = "1" ] && { [ -n "${PI_SANDBOX_SHIM_ACTIVE:-}" ]
    emit "PI_SANDBOX_SHIM_ACTIVE/PROFILE_DIGEST set but no active confinement detected; applying sandbox."
  fi
  
@@ -255,13 +277,14 @@ index 9b7c788..52ed215 100644
  fi
  if [ -z "$EXPECTED_PROFILE_DIGEST" ]; then
    emit "cannot compute sandbox profile digest for $PROFILE; refusing to launch."; exit 1
-@@ -953,6 +992,22 @@ fi
+@@ -953,6 +995,23 @@ fi
  PROJECT="$(cd -P "$PROJECT" 2>/dev/null && pwd -P)" || {
    emit "cannot resolve project dir '$PROJECT'; refusing."; exit 1; }
  
 +# .git/config is writable in a session. Anchor Git's selected work tree to the
 +# physical checkout entry so core.worktree cannot grant a sibling or ancestor.
 +# A .git file covers linked worktrees and separate-git-dir checkouts too.
++# Twin: engine/launch, resolve_project's checkout check; change both together.
 +if [ "$PROJECT_VIA" = "git-toplevel" ]; then
 +  _pi_checkout="${PWD:P}"
 +  while [[ "$_pi_checkout" != / && ! -d "$_pi_checkout/.git" && ! -f "$_pi_checkout/.git" ]]; do
@@ -278,7 +301,14 @@ index 9b7c788..52ed215 100644
  # Refuse dangerous boundaries (the actual safety check). A fresh empty project dir
  # is fine; broad roots, system prefixes, and credential/home subtrees are not.
  # This matters more now that a non-git cwd falls back to $PWD: ANY directory you
-@@ -969,7 +1024,7 @@ INSTALL_DIR_CANON="$(cd -P "$PI_SANDBOX_INSTALL_DIR" 2>/dev/null && pwd -P || ec
+@@ -964,12 +1023,14 @@ PROJECT="$(cd -P "$PROJECT" 2>/dev/null && pwd -P)" || {
+ #   - sensitive home subtrees (~/.ssh, ~/.aws, ~/.config, ~/.docker, ~/.gnupg,
+ #     ~/.kube, ~/Desktop, ~/Documents, ~/Downloads, ~/Library)
+ # Canonicalize HOME for an accurate comparison (handles symlinked home).
++# Twin, with the refusals below through agent_guard_protected: engine/launch,
++# project_refusal; change both together.
+ HOME_CANON="$(cd -P "$HOME" 2>/dev/null && pwd -P || echo "$HOME")"
+ INSTALL_DIR_CANON="$(cd -P "$PI_SANDBOX_INSTALL_DIR" 2>/dev/null && pwd -P || echo "$PI_SANDBOX_INSTALL_DIR")"
  case "$INSTALL_DIR_CANON" in
    "$PROJECT"|"$PROJECT"/*)
      emit "refusing unsafe boundary '$PROJECT' because it contains the sandbox guard install dir '$INSTALL_DIR_CANON'."
@@ -287,7 +317,7 @@ index 9b7c788..52ed215 100644
  esac
  #
  # NOTE on what is and isn't listed:
-@@ -1002,22 +1057,114 @@ case "$PROJECT" in
+@@ -1002,22 +1063,116 @@ case "$PROJECT" in
    |"$HOME_CANON/Documents"|"$HOME_CANON/Documents/"* \
    |"$HOME_CANON/Downloads"|"$HOME_CANON/Downloads/"*)
      emit "refusing unsafe boundary '$PROJECT' (broad/system/credential path)."
@@ -322,6 +352,8 @@ index 9b7c788..52ed215 100644
 +# PROJECT that is, contains or is inside one of the folders, or is or is inside a
 +# folder's link target, would launch partly or wholly read-only, so refuse it. A
 +# PROJECT that contains a link target launches with the target denied.
++# Twin: engine/launch, the protected list's link targets and the pinned folders
++# above them; change both together.
 +typeset -ga AG_SANDBOX_PARAMS
 +AG_SANDBOX_PARAMS=()
 +typeset -gaU AG_PINS
@@ -405,7 +437,7 @@ index 9b7c788..52ed215 100644
  ACTIVE_HOOKS="$(resolve_active_hooks "$PROJECT")" || exit 1
  TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
  
-@@ -1028,16 +1175,40 @@ TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
+@@ -1028,16 +1183,40 @@ TMPDIR_CANON="$(canonical_safe_tmpdir "${TMPDIR:-/tmp}")" || exit 1
  # PROJECT and the launch cwd (Pi resolves <cwd>/.pi). Links that stay inside the
  # config folder (npm .bin links) or point to non-writable locations are fine.
  # Prints the offending path and returns 1 on a refused layout.
@@ -449,7 +481,7 @@ index 9b7c788..52ed215 100644
          target="${link:A}"
          case "$target" in "$dir_canon"|"$dir_canon"/*) continue ;; esac
          # Probe a child so a link to a write root itself (e.g. PROJECT) matches too.
-@@ -1054,9 +1225,9 @@ _pi_config_bases=("$PROJECT")
+@@ -1054,9 +1233,9 @@ _pi_config_bases=("$PROJECT")
  [ "${PWD:A}" = "$PROJECT" ] || _pi_config_bases+=("${PWD:A}")
  if ! _pi_config_offender="$(project_config_symlink_offender "${_pi_config_bases[@]}")"; then
    emit "refusing to launch: symlinked project agent config '$_pi_config_offender'."
@@ -462,7 +494,7 @@ index 9b7c788..52ed215 100644
    exit 1
  fi
  unset _pi_config_bases _pi_config_offender
-@@ -1084,12 +1255,67 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
+@@ -1084,12 +1263,67 @@ for _pi_launch_element in "${PI_LAUNCH_VECTOR[@]}"; do
      # the recorded interpreter, and both --detect and a bare --pi re-derive node via
      # detect_node, which takes the first PATH hit with no write-root filter — so
      # either would re-record the same unsafe path and fail identically next launch.
@@ -531,10 +563,12 @@ index 9b7c788..52ed215 100644
  emit "OS sandbox ON. Runtime [$PI_SANDBOX_RUNTIME]. Project [$PROJECT_VIA]: $PROJECT"
  emit "  active Git hooks denied: $ACTIVE_HOOKS"
  if [ "$PI_SANDBOX_RUNTIME" = "pi" ]; then
-@@ -1112,6 +1338,50 @@ fi
+@@ -1112,6 +1346,54 @@ fi
  export PI_SANDBOX_PROFILE_DIGEST PI_SANDBOX_PROJECT_BOUNDARY
  export PI_SANDBOX_ACTIVE_HOOKS_BOUNDARY PI_SANDBOX_AGENT_STATE_BOUNDARY
  
++# Twin: engine/launch, the peer runtime grants in the profile and the peers folder
++# put first on PATH before exec; change both together.
 +AG_PEER_RELEASE="$HOME_CANON/Library/Application Support/AgentGuard/current"
 +AG_PEER_PROFILE="$(<"$PROFILE")"
 +if [[ -f "$AG_PEER_RELEASE/peer-runtime.sb" && -d "$AG_PEER_RELEASE/peers" ]]; then
@@ -552,6 +586,7 @@ index 9b7c788..52ed215 100644
 +# variable unset, and the extension then blocks every tool call and says why.
 +unset CC_SAFETY_NET_HOME CC_SAFETY_NET_WORKTREE SAFETY_NET_WORKTREE CC_SAFETY_NET_AUDIT_HOME AGENT_GUARD_RELEASE
 +export CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY=1
++# Twin: engine/launch, the default CC_SAFETY_NET_LEVEL; change both together.
 +[[ ${CC_SAFETY_NET_LEVEL:-} == (strict|paranoid) ]] || export CC_SAFETY_NET_LEVEL=standard
 +AG_ENGINE_STATE="$HOME_CANON/Library/Application Support/AgentGuard/state"
 +AG_RELEASE_DIR="${AG_PEER_RELEASE:A}"
@@ -577,12 +612,13 @@ index 9b7c788..52ed215 100644
 +
 +# Agent Guard difference 16: the SSH agent's socket is denied unless the operator
 +# set AGENT_GUARD_SSH_AGENT=allow outside the guard.
++# Twin: engine/launch, the credentials section's agent sockets; change both together.
 +AG_SSH_AGENT=deny
 +[[ ${AGENT_GUARD_SSH_AGENT:-} == allow ]] && AG_SSH_AGENT=allow
  PI_SANDBOX_CMD=(
    "$SANDBOX_EXEC"
    -D "PROJECT=$PROJECT"
-@@ -1122,5 +1392,7 @@ PI_SANDBOX_CMD=(
+@@ -1122,5 +1404,7 @@ PI_SANDBOX_CMD=(
    -D "OMP_AGENT_STATE=$OMP_AGENT_STATE"
    -D "OMP_STATE_ROOT=$OMP_STATE_ROOT"
    -D "OMP_BASE_ROOT=$OMP_BASE_ROOT"
