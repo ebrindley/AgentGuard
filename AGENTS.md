@@ -16,7 +16,7 @@ Applies to commits, pull requests, issues, backlog items, release notes, documen
 
 ## Findings
 
-Judge findings from reviews and audits, including other agents' reports, against docs/THREAT-MODEL.md, section 5 in particular, before proposing a change or an upstream report.
+Judge findings from reviews and audits, including other agents' reports, against docs/THREAT-MODEL.md sections 3 and 5 before proposing a change or an upstream report.
 
 ## Contributions
 
