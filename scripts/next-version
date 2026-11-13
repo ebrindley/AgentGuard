@@ -1,0 +1,19 @@
+#!/bin/zsh
+# usage: scripts/next-version
+# Prints the version for a release made now: the UTC date as YEAR.MONTH.DAY, without
+# leading zeros, and a counter after it when that date already has a release tag.
+# Reads the tags of this checkout; fetch them first.
+emulate -L zsh
+setopt err_exit no_unset pipe_fail extended_glob
+root=${0:A:h:h}
+date=$(TZ=UTC /bin/date +%Y.%-m.%-d)
+integer n=-1 k
+for tag in ${(f)"$(/usr/bin/git -C "$root" tag -l "v$date" "v$date.*")"}; do
+  case $tag in
+    (v$date) k=0 ;;
+    (v$date.<->) k=${tag##*.} ;;
+    (*) continue ;;
+  esac
+  (( k > n )) && n=k
+done
+(( n < 0 )) && print -r -- "$date" || print -r -- "$date.$(( n + 1 ))"

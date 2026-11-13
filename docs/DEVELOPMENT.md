@@ -279,6 +279,14 @@ on `test/`.
 
 ## Building a release
 
+A release version is the UTC date, `YEAR.MONTH.DAY` without leading zeros, with a
+counter for further releases on the same date: `2026.11.21`, then `2026.11.21.1`.
+`scripts/next-version` prints the version for a release made now, from the
+checkout's tags; fetch tags first. `agent-guard update` offers only a higher
+version, so a version dated ahead of the calendar hides the dated versions before
+it. `v2026.11.14` to `v2026.11.19` were published on 2026-11-13; releases on those
+dates start at `.1`.
+
 ```sh
 scripts/release.sh [--dev] [--out DIR] 0.2.0
 ```
