@@ -13,13 +13,18 @@ rid_pattern='[0-9A-Za-z.+-]+-[0-9]{8}T[0-9]{6}Z'
 migrate_points=(list-import import discard fwd-cli fwd-gui plugin-take plugin-name app-old switch-time
                 retire-rulejson retire-rulebook retire-compare retire-engine retire-note uninstall-forwarders)
 # The same for the Pi harness and the move from pi-sandbox-guard, which only
-# test/migrate-pi.sh exercises; it fails for any it does not exercise. ag_pi_put
-# names the points of the copies in ~/.local/bin by variable.
+# test/migrate-pi.sh exercises; it fails for any it does not exercise.
 pi_points=(psg-wrappers pi-bindings pi-preamble pi-profile pi-launcher-pi pi-launcher-omp pi-extension pi-extension-gap
            psg-switch-time pi-keep psg-keep psg-retire-launchers psg-retire-backups psg-uninstall-copy)
 
 # The same for the Grok harness, which only test/grok-install.sh exercises.
 grok_points=(grok-kept grok-binding grok-shim grok-keep)
+
+# ag_pi_put, ag_mig_switch_time and do_forwarder pass their point names in a
+# variable, so test/install.sh's scan for literal test_point names cannot find
+# those points (pi-preamble, pi-profile, pi-launcher-pi, pi-launcher-omp,
+# grok-kept, grok-binding, switch-time, psg-switch-time, fwd-cli, fwd-gui); only
+# these lists name them.
 
 # pass and fail MESSAGE: a check's result line, after $label when it is set,
 # counted in checks and fails.
