@@ -146,6 +146,35 @@ The snapshot's member records, the launch canary that every launch carries from 
 
 **Alternatives not taken** (decision D3, section 15): grant every present runtime with no opt-in, the plan before 2026-10-02, which makes every session on a Mac with two harnesses pay the cost above, logins included, though only nested launches use the grants; or keep refusing cross-harness nested launches, so that Pi cannot be started from an OpenCode session, or the reverse.
 
+## 5. Inner layer
+
+### Plugin core and adapters
+
+Planned. Step 9 splits `profiles/opencode/plugin.js` into `plugin/core.mjs`, used by every adapter, and `plugin/opencode.js`, the OpenCode adapter with the cc-safety-net compatibility wrapper; the 79 plugin checks stay unchanged (section 8). The adapter keeps a `.js` name, as the built plugin has: whether OpenCode loads a `.js` link whose target is `.mjs` is unverified. Step 10d adds `plugin/pi.mjs`, the adapter for Pi and OMP with the wrapper for cc-safety-net's Pi entry, and `plugin/pi-entry.ts`, the `.ts` re-export that Pi's discovery loads.
+
+The core:
+
+- **Release, before registration.** The plugin computes its release from its own real path and compares it with `AGENT_GUARD_RELEASE`. In OpenCode it hands over to the launch release, as built. Until no kept release predates step 9, the handover also accepts that release's `profiles/opencode/plugin.js`, the path the built plugin uses. In Pi the launcher injects the launch release's copy with `-e`, and discovery may also load `current`'s copy. A nested launch injects the outer launch's release, which the snapshot names, so plugin code stays at the outer launch's release (section 7, Nested launch). A copy whose release differs from `AGENT_GUARD_RELEASE` stands aside, registering nothing, only when Pi's arguments (`process.argv`) carry `-e` or `--extension` with the launch release's `plugin/pi-entry.ts`; that copy loads first and registers. Otherwise it hands over to the launch release as the OpenCode plugin does, with the same checks and the same refusal when that release is missing, so a stray or agent-set variable on a direct start cannot leave Pi with no plugin. On a direct start the variable is unset and the discovered copy registers. The decision is made at every load, so it holds across `/reload`.
+- **Registration lifecycle.** Pi's `/reload` builds a new extension runner in the same process. In Pi 0.99.2, `reload` in `core/agent-session.js` emits `session_shutdown`, invalidates the old runner, has the resource loader clear its extension cache and load every extension again (`reload` in `core/resource-loader.js`), builds a new runner and emits `session_start`. Process-wide state such as `globalThis` survives. The plugin therefore registers its handlers and tools on every load it is given, with no process-wide "already registered" flag, which would outlive the handlers it stands for. Per-event deduplication of copies of the same source, and independent verdicts for different physical copies, stay as pi-sandbox-guard has them (`src/index.mjs`).
+- **Probe**, as built: an `O_CREAT|O_EXCL|O_NOFOLLOW` create in `state/`; EPERM means guarded.
+- **Snapshot.** Read from the file `AGENT_GUARD_STATE` names (section 7, Per-launch snapshot), accepted only as a regular file directly in `state/launch/`. Writes are refused when it is missing or malformed. Until the composition release (section 11, OpenCode's releases) a snapshot names one profile and runtime, and a snapshot of another profile or runtime than the adapter's counts as unguarded (below): a Pi started directly inside an OpenCode session inherits OpenCode's variables, and the probe alone would report it guarded. From the composition release a snapshot lists its members (section 3, Composition). An adapter accepts a snapshot that lists its runtime, and uses its own member record (checker settings and ask list, plugin arguments) and the shared projection; a snapshot that does not list its runtime counts as unguarded.
+- **Decisions.** `decide({op, paths, cwd})` checks reads (a folder listing is a read) and writes against the snapshot's projection: DENY, READ ONLY, a write outside ALLOW, temp and the runtime grants, the protection union (section 3, Every installed harness) on the path as typed and as resolved, and dangling links, which are refused. These are the built semantics, generalized. Pi gains them at step 10d; pi-sandbox-guard's extension checks only `bash`. From the composition release the projection covers every member's grants. Where the credential set applies (section 3, Credentials), the projection mirrors its classes: tool credentials are unreadable; inference credentials are readable, with their config locked and their token caches writable; `.env` files are unreadable apart from the three template names and OMP's two `.env` files.
+- **Unguarded refusal.** Every tool except the adapter's safe set is refused unless `AGENT_GUARD_BYPASS=1`, as built. For Pi this is a behavior change (section 11).
+- **Status text**, as built, and the command checker (below).
+
+| | OpenCode (`opencode.js`) | Pi and OMP (`pi.mjs`) |
+|---|---|---|
+| Hook | `tool.execute.before`; refuse by throwing (built) | `pi.on('tool_call')`; refuse with `{block, reason}`; a throw also blocks |
+| Tools mapped to operations | `read`, `list`, `glob`, `grep`, `lsp` (`filePath`, else `path`, else the session folder): read; `edit`, `write` (`filePath`) and each path in `apply_patch`'s `patchText`: write; `bash` (`command`, `workdir`): shell. As built; `list` keeps its test. | `read`, `grep`, `find`, `ls` (`path`; the last three default to the working folder): read; `edit`, `write` (`path`): write; `bash`, `powershell` (`command`): shell |
+| Shell input rules | as cc-safety-net's entry applies them | as pi-sandbox-guard's adapter has them: a non-string command blocks; a whitespace-only command is allowed before health checks; a degraded checker blocks |
+| Working folders for shell | `workdir`, else the session folder | `event.input.cwd`, `event.cwd` and `ctx.cwd`, each kept only if it is an existing folder; worst verdict wins; none left blocks |
+| Ask verdict | Refuse. OpenCode 1.18.34 never calls the declared `permission.ask` plugin hook, and `tool.execute.before` can only throw. A plugin-registered tool can call `context.ask`; whether that could carry an ask tier is unverified and not needed now (section 15). | `ctx.ui.confirm` when `ctx.hasUI`; refuse otherwise, and on a decline or a confirm error. Print and JSON modes have no UI. In RPC mode the client program answers, as today (decision D4, section 15). |
+| Status tool | `agent_guard_status` (built) | `registerTool` of `agent_guard_status`, by the registering copy only |
+| Safe set when unguarded | the built list | defined at step 10d |
+| Loading | link in `~/.config/opencode/plugins` (built) | discovery link `~/.pi/agent/extensions/agent-guard.ts` to `$engine/current/plugin/pi-entry.ts`, for direct starts, plus `-e <launch release>/plugin/pi-entry.ts` from the launcher. Pi 0.99.2 puts `-e` paths first and drops a later path with the same real path (`mergePaths` in `core/resource-loader.js`); neither settings nor `-ne` can disable a `-e` extension. |
+
+Known limit, carried over: Pi runs `tool_call` handlers in load order and passes each the same `event.input` (`emitToolCall` in `core/extensions/runner.js`). With `-e` the guard's handler runs first, so a later extension can change `event.input` after the guard approved it. pi-sandbox-guard has the same limit; Seatbelt is unaffected. Wrapping the built-in tools instead would make Pi refuse to start whenever another extension registers the same tool name: Pi 0.99.2 reports such a conflict as an extension load error and exits (`detectExtensionConflicts` in `core/resource-loader.js`, `main.js`). The same rule is why only the registering copy registers the status tool.
+
 ## 7. Rust launcher
 
 Not built (decision D12). This section is kept as the record of the design that was planned; the zsh engine in `engine/launch` stays.
@@ -420,3 +449,29 @@ Differences between the adopted guard (from 0.2.0) and the shared engine, per ha
 | Writes covered by Pi's and OMP's denies inside granted folders (section 9) | allowed where OpenCode's grants or an ALLOW entry cover them | denied, rendered in every launch (section 3, Every installed harness) |
 | Nested launch under an Agent Guard session started before step 9 | runs directly | unchanged until the release after step 9 reaches every Mac (section 7, Nested launch) |
 | Everything else | | unchanged at Pi's migration; then changed by OpenCode's releases (below). Only moving the cc-safety-net audit log out of `~/.cc-safety-net/logs` and read-denying it stays an opt-in (section 3, Event log) |
+
+### OpenCode's releases
+
+Step 10e. Releases 1 to 3 need step 10c, and the hooks release also step 10a, so they can ship alongside Pi's migration (step 10d); releases 4 and 5 come after it. One change per release, in this order; until its release, OpenCode keeps the built behavior for that change. The items under each release are its release notes: what users see.
+
+Releases 2 and 3 are built, and DESIGN.md describes them as built. Under them below are only the items that were not built as written.
+
+1. **The executable release.** OpenCode's executable is chosen by the selection procedure every profile uses, with the writable-set check (section 3, Executables and launch links). It comes first because composition checks every member's executable against the combined writable set (section 3, Composition).
+   - A launch refuses, naming the path, when OpenCode's executable or a launch link to it lies inside the writable set, for example under an ALLOW entry such as `/opt/homebrew`.
+   - A stale binding refuses with the `agent-guard bind` command that fixes it.
+2. **The credentials release.** The credential set applies to OpenCode (section 3, Credentials).
+   - Git over SSH, HTTPS pushes that use `gh` as the credential helper, GPG signing, Docker and Kubernetes logins, `gh` itself and all of npm's user config (registries, proxies, the CA file) stop working inside sessions.
+   - Cloud command-line tools keep working, and AWS token refreshes are saved.
+   - A `{file:...}` key file under `~/.secrets` is readable only when OpenCode's config in `~/.config/opencode` names it. Any config OpenCode loads that names a denied file, a project config for example, stops OpenCode at startup with a config error.
+3. **The hooks release.** Git hooks protection and the Git selector removals apply to OpenCode, and OpenCode refuses the ask list's `core.hooksPath` entry (section 3, Git hooks). The app has no project folder (step 10a, section 4), so R8 in `gui` mode resolves from the launch folder, as built (section 7, Launch pipeline).
+   - Only the launched project's hooks are protected.
+   - A `GIT_CONFIG_GLOBAL` or other Git selector variable set before the launch does not reach the session.
+4. **The composition release**, for every launch, Pi's and OpenCode's: the Guard List's NESTED heading, member grants, member snapshots and a launch canary (section 3, Composition; section 7, Per-launch snapshot and Nested launch). It needs Pi's migration and the items section 9 lists for before composition (section 9, Other code in writable folders).
+   - Nothing changes until a runtime is listed under NESTED. A nested launch of an unlisted runtime is refused with a message naming the heading.
+   - Pi and OMP, when listed, run inside an OpenCode session or inside each other's when their project, state folders, OMP profile and hooks folder match the session's (section 7, Nested launch).
+   - Every session of another harness can write a listed runtime's data, such as Pi's sessions and OpenCode's `~/.local/share/opencode`, but not its logins or instruction files; OMP's logins live in `agent.db`, which listing `omp` makes writable. Configuration stays write-denied in every session.
+   - A harness installed or listed during a session is not included until the session is restarted; an uninstalled one keeps its grants until the session ends.
+5. **The nested-launch release.** OpenCode moves from `nested = "inherit"` to `"same-boundary"`, and the field is removed (section 7, Nested launch).
+   - OpenCode started inside a Pi or OMP session runs when its project, state folders and hooks folder match the session's.
+   - OpenCode inside an OpenCode session in a different project, which runs under `inherit`, is refused. That is the cost of requiring the same project.
+   - A nested launch runs the executable the session's snapshot records instead of searching PATH.
