@@ -82,7 +82,6 @@ ag() {
   run_timeout 600 $reply "$engine/bin/agent-guard" "$@" < /dev/null > "$run/out" 2>&1
 }
 show() { print -r -- "$(<"$run/out")" | /usr/bin/sed 's/^/    | /' }
-sha() { /usr/bin/shasum -a 256 < "$1" 2>/dev/null }
 
 # The stand-in grok installed as Grok does: ~/.grok/bin/grok -> ../downloads/<file>,
 # and ~/.local/bin/grok -> ~/.grok/bin/grok. It prints its version, or the
