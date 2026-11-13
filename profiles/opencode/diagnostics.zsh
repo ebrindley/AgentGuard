@@ -73,7 +73,7 @@ ag_diagnose() {
   local configs='[]' label classification klass summary report rel launch_failures='{"state":"unavailable"}' launch_stage launch_at
   local -a rows v config_files config_labels
   local -A files totals missing changed extra link_missing link_changed
-  integer bad=0 excluded=0 now=${EPOCHSECONDS:-0}
+  integer bad=0 excluded=0 now
   now=$(/bin/date +%s)
   for klass in release engine rules opencode pi grok app unknown; do
     totals[$klass]=0 missing[$klass]=0 changed[$klass]=0 extra[$klass]=0
@@ -81,7 +81,8 @@ ag_diagnose() {
   done
   # Restrict identifiers to the installer's release naming scheme. A custom
   # release name is not an export-safe label just because it contains no slash.
-  rid=$(/usr/bin/jq -nr --arg v "${release:t}" '$v | if test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$") then . else "unknown" end')
+  local release_re='^(dev|[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$'
+  rid=$(/usr/bin/jq -nr --arg v "${release:t}" --arg re "$release_re" '$v | if test($re) then . else "unknown" end')
   if [[ -L $engine/current ]]; then
     rel=${engine}/current
     [[ ${rel:A:h} == "$engine/releases" ]] && active=${rel:A:t}
@@ -93,15 +94,15 @@ ag_diagnose() {
       preference_state=valid
     fi
   fi
-  active=$(/usr/bin/jq -nr --arg v "$active" '$v | if test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$") then . else "unknown" end')
+  active=$(/usr/bin/jq -nr --arg v "$active" --arg re "$release_re" '$v | if test($re) then . else "unknown" end')
   if [[ -e $stamp || -L $stamp ]]; then
     stamp_state=error
-    if ag_diag_size "$stamp" 2097152 && ag_diag_single "$stamp" && /usr/bin/jq -e --arg current "$engine/current" --arg bin "$engine/bin" '
+    if ag_diag_size "$stamp" 2097152 && ag_diag_single "$stamp" && /usr/bin/jq -e --arg current "$engine/current" --arg bin "$engine/bin" --arg re "$release_re" '
         type == "object" and (.files|type)=="object" and (.links|type)=="object"
         and (.files|length)<=10000 and (.links|length)<=1000
         and all(.files|to_entries[]; (.key|explode|all(.>=32 and .!=127)) and (.value|type)=="string" and (.value|test("^[a-f0-9]{64}$")))
         and all(.links|to_entries[]; (.key|explode|all(.>=32 and .!=127)) and (.value|type)=="string" and (.value|explode|all(.>=32 and .!=127)))
-        and (.release|type)=="string" and (.release|test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$"))
+        and (.release|type)=="string" and (.release|test($re))
         and (.version|type)=="string" and (.version|test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)$"))
         and (.version as $v | .release|startswith($v+"-"))
         and (.links|has($current) and has($bin))
@@ -194,7 +195,7 @@ ag_diagnose() {
     event_state=error
     if ag_diag_size "$events_file" 65536 && ag_diag_single "$events_file" && /usr/bin/jq -e 'type=="object" and .schemaVersion==1 and .advisory==true and (.events|type)=="array" and (.events|length)<=64' "$events_file" >/dev/null 2>&1; then
       event_state=cached
-      events=$(/usr/bin/jq -c --argjson now "$now" '
+      events=$(/usr/bin/jq -c --argjson now "$now" --arg re "$release_re" '
         def enum($xs): . as $v | if ($xs|index($v))!=null then $v else "unknown" end;
         [.events[-32:][] | select(type=="object") | {
           timestamp:(.timestamp | if type=="number" and .>=0 and .<=($now*1000+60000) then . else null end),
@@ -205,7 +206,7 @@ ag_diagnose() {
           ruleId:(.ruleId|enum(["guard.path.deny","guard.path.protected","guard.path.readonly","guard.path.unlisted","guard.path.invalid","unattributed","custom","secret.basename.env","git.reset-hard","rm.recursive-force-root-or-home","rm.recursive-force-outside-cwd"])),
           errno:(.errno|enum(["EPERM","EACCES","ENOENT","ENOTDIR","ELOOP"])),
           remediation:(.remediation|enum(["relaunch","reinstall","review-guard-list","review-policy","review-path","launch-guarded","none"])),
-          release:(.release|if type=="string" and test("^(dev|[0-9]+\\.[0-9]+\\.[0-9]+(\\.[0-9]+)?(-(rc|beta|alpha|pre)[.-]?[0-9]+)?)-[0-9]{8}T[0-9]{6}Z$") then . else "unknown" end)
+          release:(.release|if type=="string" and test($re) then . else "unknown" end)
         } | . + {ageSeconds:(if .timestamp==null then null else (($now-.timestamp/1000)|floor|if .<0 then 0 else . end) end)}]
       ' "$events_file" 2>/dev/null) || { events='[]'; event_state=error; }
       latest=$(/usr/bin/jq -cn --argjson e "$events" '[$e[].timestamp|select(.!=null)]|if length==0 then null else max end')
