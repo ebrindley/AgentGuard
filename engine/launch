@@ -584,6 +584,11 @@ done < "$list"
 sbpl() { local s=${1//\\/\\\\}; REPLY="\"${s//\"/\\\"}\"" }
 typeset -aU user_readonly skill_roots skill_pins skill_configs config_roots protected_targets pi_guard
 user_readonly=($readonly)
+# Pi's guard files, once Pi is installed (docs/DESIGN.md section 11, What changes
+# for OpenCode sessions): the launchers, profile, preamble and recorded wrappers,
+# which run outside the sandbox at the next Pi start, the extension folder and the
+# bindings, and pi-sandbox-guard-extension, the extension folder the launcher loads
+# instead when it exists beside it; that one is usually absent and must stay so.
 (( ${installed[(Ie)pi]} )) && pi_guard=("$home"/.local/bin/{pi,omp,pi-sandbox.sb,pi-sandbox-preamble.zsh,pi-sandbox-guard-extension} "${(@)pi_wrappers/#/$home/.local/bin/}"
   "$home/.pi/agent/extensions/pi-sandbox-guard" "$home/.config/pi-sandbox-guard/executables.conf")
 [[ $harness != opencode ]] || opencode_skill_globals
@@ -741,18 +746,10 @@ pin_above() { local a=${1:h}; while [[ $a != / && $a != "$home" ]]; do state_pin
 # a session and interpreted as a different grant at the next launch.
 p="$home/.cache"
 for q in "$p" "${p:A}"; do state_pins+=("$q"); pin_above "$q"; done
-# Pi's guard files, once Pi is installed (docs/DESIGN.md section 11, What changes
-# for OpenCode sessions): the launchers, profile, preamble and recorded wrappers,
-# which run outside the sandbox at the next Pi start, the extension folder and the
-# bindings, and pi-sandbox-guard-extension, the extension folder the launcher loads
-# instead when it exists beside it; that one is usually absent and must stay so.
-# Each is denied as named, with its folder resolved, and at its target.
-# Each folder on the way from home, as named, and the folders above each of those
-# and above the target are pinned, so no link on the way can be moved or removed.
-typeset -aU pi_guard
-(( ${installed[(Ie)pi]} )) &&
-  pi_guard=("$home"/.local/bin/{pi,omp,pi-sandbox.sb,pi-sandbox-preamble.zsh,pi-sandbox-guard-extension} "${(@)pi_wrappers/#/$home/.local/bin/}"
-            "$home/.pi/agent/extensions/pi-sandbox-guard" "$home/.config/pi-sandbox-guard/executables.conf")
+# Each of Pi's guard files is denied as named, with its folder resolved, and at
+# its target. Each folder on the way from home, as named, and the folders above
+# each of those and above the target are pinned, so no link on the way can be
+# moved or removed.
 for p in $protected_paths $pi_guard; do
   for q in "$p" "${${p:h:A}%/}/${p:t}" "${p:A}"; do protected_targets+=("$q"); sbpl_path "$q"; state_rules+=("  (subpath $REPLY)"); pin_above "$q"; done
   a=${p:h}
@@ -886,12 +883,14 @@ case $mode in
         [[ $arg == -- ]] && break
         [[ $arg == --attach || $arg == --attach=* ]] && attached=1
       done
-      (( attached )) && note "attached client is sandboxed; the server executes tools under its own permissions"
       opencode_major "$cli"
       if [[ $REPLY == 2 ]]; then
+        # This notes an attached client itself.
         opencode_cli_args "$@"
         set -- "${reply[@]}"
         (( ! managed )) || managed_cli=$cli
+      elif (( attached )); then
+        note "attached client is sandboxed; the server executes tools under its own permissions"
       fi
       set -- -D GUI=0 "$cli" "$@"
     else

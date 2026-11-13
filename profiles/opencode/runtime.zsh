@@ -229,12 +229,9 @@ opencode_managed() {
   trap 'exit 143' TERM HUP
   [[ $mode != gui ]] || opencode_browser_start
   $sandbox -D GUI=0 "${opencode_host_env[@]}" "$cli" serve --service --hostname 127.0.0.1 > "$session/server.log" 2>&1 &
-  typeset -g opencode_server_pid=$! opencode_client_pid= opencode_client_done=0
+  opencode_server_pid=$!
   # The server writes its own log under its normal writable state root. This
   # launcher's capture is opened before confinement, like the diagnostic probe.
-  trap opencode_stop_children EXIT
-  trap 'exit 130' INT
-  trap 'exit 143' TERM HUP
   for i in {1..60}; do
     kill -0 $opencode_server_pid 2>/dev/null || fail "OpenCode V2 server exited before readiness; its output is in $session/server.log"
     opencode_service_state "$cli"
