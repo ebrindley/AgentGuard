@@ -128,8 +128,8 @@ Run these commands from Terminal outside an agent session:
 See [release channels](docs/OPERATIONS.md#release-channels) for tagged installs.
 
 Agent launches check GitHub once for a newer stable release by default. When one
-is available, interactive launches offer to upgrade before starting. Accepting
-runs the updater, then prints “AgentGuard updated. Restarting…” and restarts the
+is available, interactive launches offer to update before starting. Accepting
+runs the updater, reports “Agent Guard updated to <version>.” and restarts the
 launcher with the same project and arguments. Declining or an unavailable update
 check continues normally. Use `agent-guard update-check off` to disable startup
 checks; noninteractive launches never prompt or upgrade.

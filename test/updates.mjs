@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fixtureAccount } from './fixture-home.mjs';
@@ -49,13 +49,25 @@ const run = (body, input = '') => new Promise((done, reject) => {
   child.on('error', reject); child.on('close', (status) => done({ status, stdout, stderr })); child.stdin.end(input);
 });
 const executable = (path, text) => writeFileSync(path, '#!/bin/zsh -f\n' + text, { mode: 0o755 });
-const startup = (mode = 'gui', args = '') => run(`ag_update_startup ${mode} OpenCode ${quote(join(temp, 'restart'))} ${args}; exit $?`);
+const startup = (mode = 'gui', args = '', input = '') => run(`ag_update_startup ${mode} OpenCode ${quote(join(temp, 'restart'))} ${args}; exit $?`, input);
 const installCalls = join(temp, 'install-calls');
 executable(join(temp, 'restart'), `home=${quote(home)}; engine=${quote(engine)}; source ${quote(module)}\nag_update_startup gui OpenCode "$0" "$@" || exit $?\n/usr/bin/jq -cn --arg cwd "$PWD" --arg marker "\${AGENT_GUARD_UPDATE_RESTART:-}" --args '{cwd:$cwd,marker:$marker,args:$ARGS.positional}' -- "$@"\n`);
+const helperPid = join(temp, 'helper-pid'), alertArgs = join(temp, 'alert-args'), noticeArgs = join(temp, 'notice-args');
+// The window helper stub idles until stopped. The updater stub waits for it to
+// start when AG_WAIT_HELPER is set, so a missed stop is visible as a live pid.
 function ui() {
-  executable(join(temp, 'dialog'), `print -r -- ${quote(answer)}\n`);
-  executable(join(release, 'bin/agent-guard'), `print -r -- "$*" >> ${quote(installCalls)}\nexit ${updateStatus}\n`);
+  executable(join(temp, 'dialog'), `if [[ $1 == -l ]]; then print -r -- $$ > ${quote(helperPid)}; exec /bin/sleep 30; fi\n` +
+    `[[ "$*" == *'display alert'* ]] && print -rl -- "$@" > ${quote(alertArgs)}\n` +
+    `[[ "$*" == *'display notification'* ]] && print -rl -- "$@" > ${quote(noticeArgs)}\n` +
+    `print -r -- ${quote(answer)}\n`);
+  executable(join(release, 'bin/agent-guard'), `print -r -- "$*" >> ${quote(installCalls)}\n` +
+    `if [[ -n \${AG_WAIT_HELPER:-} ]]; then repeat 50 { [[ -e ${quote(helperPid)} ]] && break; /bin/sleep 0.1 }; fi\nexit ${updateStatus}\n`);
 }
+const helperStopped = () => {
+  const pid = Number(readFileSync(helperPid, 'utf8'));
+  try { process.kill(pid, 0); } catch (e) { return e.code === 'ESRCH'; }
+  process.kill(pid, 'SIGKILL'); return false;
+};
 let checks = 0;
 const check = async (name, fn) => { await fn(); checks++; console.log(`ok   ${name}`); };
 try {
@@ -90,23 +102,42 @@ try {
     assert.equal(requests.filter((p) => p.includes('/download/')).length, 0);
   });
   await check('accepted upgrade installs the offered tag and restarts once with cwd and literal arguments', async () => {
-    answer = 'Upgrade'; ui(); const before = requests.length;
-    const r = await startup('gui', "'a project' '--prompt' 'a; $literal' '雪'");
+    answer = 'Update'; ui(); const before = requests.length; rmSync(helperPid, { force: true });
+    const r = await run(`export AG_WAIT_HELPER=1; ag_update_startup gui OpenCode ${quote(join(temp, 'restart'))} 'a project' '--prompt' 'a; $literal' '雪'; exit $?`);
     assert.equal(r.status, 0, r.stderr);
+    const alert = readFileSync(alertArgs, 'utf8');
+    assert.match(alert, /buttons \{"Later", "Update"\} default button "Update" cancel button "Later"/);
+    assert.ok(alert.includes('display alert "Agent Guard" message'));
+    assert.ok(alert.endsWith('An update is available: 2026.11.05.\nYou have 2026.11.01.\n'));
+    assert.ok(readFileSync(noticeArgs, 'utf8').endsWith('Agent Guard updated to 2026.11.05.\n'));
+    assert.ok(helperStopped());
     assert.deepEqual(JSON.parse(r.stdout), { cwd: temp, marker: '', args: ['a project', '--prompt', 'a; $literal', '雪'] });
     assert.equal(requests.length - before, 1);
     assert.equal(readFileSync(installCalls, 'utf8').trim(), `update --to ${tag} --no-prompt`);
   });
   await check('failed accepted installation stops without relaunching', async () => {
-    updateStatus = 1; ui(); const r = await startup(); assert.equal(r.status, 1); assert.equal(r.stdout, '');
+    updateStatus = 1; answer = 'Update'; ui(); rmSync(helperPid, { force: true });
+    const r = await run(`export AG_WAIT_HELPER=1; ag_update_startup gui OpenCode ${quote(join(temp, 'restart'))}; exit $?`);
+    assert.equal(r.status, 1); assert.equal(r.stdout, ''); assert.ok(helperStopped());
+    updateStatus = 0;
+  });
+  // Treat stdin and stderr as terminals for the rest of the file.
+  source = replaceOnce(source, '[[ -t 0 && -t 2 ]]', 'true');
+  writeFileSync(module, source);
+  await check('terminal offer updates on an empty answer or yes and not on no', async () => {
+    const calls = () => readFileSync(installCalls, 'utf8').split('\n').length;
+    for (const [input, updates] of [['\n', true], ['Yes\n', true], ['n\n', false], ['maybe\n', false], ['', false]]) {
+      ui(); const before = calls(); const r = await startup('cli', '', input);
+      assert.match(r.stderr, /Agent Guard 2026\.11\.05 is available\. You have 2026\.11\.01\.\nUpdate now\? \[Y\/n\] /);
+      assert.equal(calls() - before, updates ? 1 : 0, JSON.stringify(input));
+      if (updates) assert.match(r.stderr, /Agent Guard updated to 2026\.11\.05\./);
+    }
   });
 
   await check('Pi and OMP restart through their shim with the saved peer PATH, cwd and arguments', async () => {
     // Keep the real shim and startup preamble through the update hook. Replace
     // account/runtime/probe inputs and stop before unrelated policy construction.
-    source = replaceOnce(source, '[[ -t 0 && -t 2 ]]', 'true');
-    writeFileSync(module, source);
-    answer = 'Upgrade'; updateStatus = 0; ui();
+    updateStatus = 0; ui();
     const bin = join(home, '.local/bin'); mkdirSync(bin, { recursive: true });
     const agent = join(temp, 'pi-agent');
     executable(agent, `/usr/bin/jq -cn --arg cwd "$PWD" --arg peers "$AGENT_GUARD_PEER_PATH" --arg marker "\${AGENT_GUARD_UPDATE_RESTART:-}" --args '{cwd:$cwd,peers:$peers,marker:$marker,args:$ARGS.positional}' -- "$@"\n`);
@@ -127,7 +158,7 @@ try {
       const result = JSON.parse(r.stdout);
       assert.equal(result.cwd, temp); assert.equal(result.peers, originalPath); assert.equal(result.marker, '');
       assert.deepEqual(result.args.slice(2), ['--prompt', 'a; $literal']);
-      assert.match(r.stderr, /updated\. Restarting/); assert.equal(requests.length - before, 1);
+      assert.match(r.stderr, /Agent Guard updated to 2026\.11\.05\./); assert.equal(requests.length - before, 1);
     }
   });
 

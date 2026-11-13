@@ -1440,6 +1440,8 @@ ag_txn_run() {
 
   ag_txn_open || ag_abort "cannot open a transaction in $txn_dir"
   ag_phase=staged
+  # The desktop update window shows these two lines verbatim.
+  (( ${ag_update:-0} )) && ag_say 'Preparing update…'
   test_point txn-open || ag_abort 'stopped at txn-open'
   ag_say "engine: $engine (release $ag_rid_new)"
   [[ -n $ag_source ]] && ag_hook_opt m $ag_source begin
@@ -1459,6 +1461,7 @@ ag_txn_run() {
   [[ -n $ag_source ]] && { ag_hook_opt m $ag_source before_switch || ag_abort }
 
   ag_phase=switch
+  (( ${ag_update:-0} )) && ag_say 'Installing update…'
   ag_switch || ag_abort 'the switch failed'
   ag_gate || ag_abort 'the checks after the switch failed'
   ag_stamp_write || ag_abort "cannot write $stamp"

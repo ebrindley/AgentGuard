@@ -490,15 +490,18 @@ the switch and names what to do.
 OpenCode terminal and desktop, Grok, Pi and OMP launches check GitHub's latest
 stable release once before starting the agent. The lookup has a two-second total
 timeout and no retries during that launch. A failed lookup leaves startup alone.
-Interactive launches offer “Upgrade” or “Later”; declining continues the launch
-and the next launch checks again. Noninteractive launches only report availability
-on stderr. Help, version requests, nested launches, desktop project queries and
+Desktop launches show an alert with “Later” and “Update”; terminal launches
+print the offered and installed versions and ask `Update now? [Y/n]`, where an
+empty answer updates. Declining continues the launch and the next launch checks
+again. Noninteractive launches only report availability on stderr. Help, version requests, nested launches, desktop project queries and
 installer checks do not check for updates.
 
 Accepting installs the offered tag through the existing updater, then restarts
 the launcher once with the original working directory and arguments. The handoff
-skips the repeated check. Desktop upgrades record output in
-`~/Agent Guard/last-update.log`. An accepted upgrade that fails stops that launch;
+skips the repeated check. Desktop upgrades show a small progress window
+(“Downloading update…”, “Preparing update…”, “Installing update…”) and record
+output in `~/Agent Guard/last-update.log`; the window follows the stage lines the
+installer prints and has no effect on the update. An accepted upgrade that fails stops that launch;
 run `agent-guard update` from Terminal to finish recovery before reopening.
 
 `agent-guard update-check` shows `on` or `off`; adding `on` or `off` changes the

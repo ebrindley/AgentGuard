@@ -33,12 +33,63 @@ ag_update_available() {
   older "$installed" "$REPLY"
 }
 
+# Desktop update window: JXA source for `osascript -l JavaScript`, given the log
+# path and the launcher's PID. It only shows progress; any failure ends it
+# without affecting the update. The stage lines are printed by the installer.
+ag_update_window_source() {
+  read -rd '' REPLY <<'JXA' || true
+ObjC.import('Cocoa');
+ObjC.import('signal');
+function run(argv) {
+  const log = argv[0], pid = parseInt(argv[1], 10);
+  const stages = ['Preparing update…', 'Installing update…'];
+  $.NSApplication.sharedApplication.setActivationPolicy($.NSApplicationActivationPolicyAccessory);
+  const win = $.NSWindow.alloc.initWithContentRectStyleMaskBackingDefer(
+    $.NSMakeRect(0, 0, 340, 90), $.NSWindowStyleMaskTitled, $.NSBackingStoreBuffered, false);
+  win.setTitle('Agent Guard');
+  win.setLevel($.NSFloatingWindowLevel);
+  win.center();
+  const spinner = $.NSProgressIndicator.alloc.initWithFrame($.NSMakeRect(20, 29, 32, 32));
+  spinner.setStyle($.NSProgressIndicatorStyleSpinning);
+  spinner.setIndeterminate(true);
+  const label = $.NSTextField.alloc.initWithFrame($.NSMakeRect(64, 33, 256, 24));
+  label.setEditable(false);
+  label.setBordered(false);
+  label.setDrawsBackground(false);
+  label.setStringValue('Downloading update…');
+  win.contentView.addSubview(spinner);
+  win.contentView.addSubview(label);
+  spinner.startAnimation($());
+  win.orderFrontRegardless();
+  function lastStage() {
+    try {
+      const data = $.NSData.dataWithContentsOfFile(log);
+      const text = ObjC.unwrap($.NSString.alloc.initWithDataEncoding(data, $.NSUTF8StringEncoding));
+      if (typeof text !== 'string') return null;
+      const lines = text.split('\n');
+      for (let i = lines.length - 1; i >= 0; i--) if (stages.indexOf(lines[i]) >= 0) return lines[i];
+    } catch (e) {}
+    return null;
+  }
+  const deadline = Date.now() + 30 * 60 * 1000;
+  while (Date.now() < deadline && $.kill(pid, 0) === 0) {
+    const tick = Date.now();
+    $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(0.2));
+    // runUntilDate returns at once when the run loop has no sources.
+    if (Date.now() - tick < 100) delay(0.2);
+    const stage = lastStage();
+    if (stage) label.setStringValue(stage);
+  }
+}
+JXA
+}
+
 # MODE TITLE RESTART ARG...; a successful upgrade execs RESTART exactly once.
 # A failed check is optional; a failed accepted installation ends this launch.
 ag_update_startup() {
   emulate -L zsh
   setopt no_unset extended_glob
-  local mode=$1 title=$2 tag installed answer= rc=0
+  local mode=$1 title=$2 tag installed answer= rc=0 helper=
   shift 2
   if [[ ${AGENT_GUARD_UPDATE_RESTART:-} == 1 ]]; then
     unset AGENT_GUARD_UPDATE_RESTART
@@ -54,26 +105,37 @@ ag_update_startup() {
   tag=$REPLY
   installed=$(/usr/bin/jq -r .tag "$engine/state/stamp.json" 2>/dev/null) || return 0
   if [[ $mode == gui ]]; then
-    answer=$(/usr/bin/osascript -e 'on run argv' -e 'button returned of (display dialog (item 1 of argv) buttons {"Later", "Upgrade"} default button "Later" cancel button "Later" with title "Agent Guard")' -e 'end run' \
-      "Agent Guard ${tag#v} is available (installed: ${installed#v}). Upgrade before starting $title? This may take a minute; Agent Guard will restart automatically." 2>/dev/null) || return 0
-    [[ $answer == Upgrade ]] || return 0
+    answer=$(/usr/bin/osascript -e 'on run argv' -e 'button returned of (display alert "Agent Guard" message (item 1 of argv) buttons {"Later", "Update"} default button "Update" cancel button "Later")' -e 'end run' \
+      "An update is available: ${tag#v}."$'\n'"You have ${installed#v}." 2>/dev/null) || return 0
+    [[ $answer == Update ]] || return 0
   else
-    print -ru2 -- "agent-guard: ${tag#v} is available (installed: ${installed#v})."
+    print -ru2 -- "Agent Guard ${tag#v} is available. You have ${installed#v}."
     [[ -t 0 && -t 2 ]] || return 0
-    print -nu2 -- "Upgrade before starting $title? [y/N] "
+    print -nu2 -- 'Update now? [Y/n] '
     IFS= read -r answer || return 0
-    [[ $answer == (y|Y|yes|YES) ]] || return 0
+    [[ -z $answer || ${(L)answer} == (y|yes) ]] || return 0
   fi
   if [[ $mode == gui ]]; then
-    "$engine/current/bin/agent-guard" update --to "$tag" --no-prompt > "$home/Agent Guard/last-update.log" 2>&1 || rc=$?
+    # The window helper is stopped before any later step, on every path.
+    {
+      ag_update_window_source
+      /usr/bin/osascript -l JavaScript -e "$REPLY" "$home/Agent Guard/last-update.log" $$ >/dev/null 2>&1 &
+      helper=$!
+      "$engine/current/bin/agent-guard" update --to "$tag" --no-prompt > "$home/Agent Guard/last-update.log" 2>&1 || rc=$?
+    } always {
+      if [[ -n $helper ]]; then
+        kill $helper 2>/dev/null
+        wait $helper 2>/dev/null
+      fi
+    }
   else
     "$engine/current/bin/agent-guard" update --to "$tag" --no-prompt || rc=$?
   fi
   (( rc == 0 )) || return 1
   if [[ $mode == gui ]]; then
-    /usr/bin/osascript -e 'display notification "AgentGuard updated. Restarting…" with title "Agent Guard"' >/dev/null 2>&1 || true
+    /usr/bin/osascript -e 'on run argv' -e 'display notification (item 1 of argv) with title "Agent Guard"' -e 'end run' "Agent Guard updated to ${tag#v}." >/dev/null 2>&1 || true
   else
-    print -ru2 -- 'AgentGuard updated. Restarting…'
+    print -ru2 -- "Agent Guard updated to ${tag#v}."
   fi
   export AGENT_GUARD_UPDATE_RESTART=1
   exec "$@"
