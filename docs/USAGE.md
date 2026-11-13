@@ -528,12 +528,12 @@ command checker runs, so Seatbelt is the only layer.
 Grok can write the folders the Guard List allows, `~/.grok` apart from the files
 below, and its caches. It authors skills, agents, workflows, rules, `AGENTS.md`,
 memory, plugins and sessions as usual. These stay write-protected:
-`~/.grok/config.toml`, `sandbox.toml`, `requirements.toml`, `managed_config.toml`
-and `trusted_folders.toml`; `hooks`, `hooks-paths` and the targets it names; `bin`,
+`~/.grok/config.toml`, `sandbox.toml`, `requirements.toml` and `managed_config.toml`;
+`hooks`, `hooks-paths` and the targets it names; `bin`,
 `downloads`, `vendor`, `bundled` and `bundles`; the `grok` link; and
 `~/.config/gh`, which stays readable. A setting changed inside a session, such as
-`/model` or a folder-trust answer, therefore applies to that session only; change
-`config.toml` outside the guard.
+`/model`, therefore applies to that session only; change `config.toml` outside the
+guard. A folder-trust answer is saved.
 
 `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.git-credentials`, `~/.config/git/credentials`,
 `~/.netrc`, `~/.npmrc`, `~/.secrets`, `~/.docker/config.json`, `~/.kube/config` and

@@ -134,11 +134,11 @@ ok('resuming a session saved with a native profile is refused; a session saved w
 // Writes: what Grok authors stays writable, protection and executable surfaces do not.
 const writable = [join(grok, 'skills/new/SKILL.md'), join(grok, 'agents/a.md'), join(grok, 'workflows/w.js'), join(grok, 'AGENTS.md'),
   join(grok, 'plugins/p/index.js'), join(grok, 'installed-plugins/p'), join(grok, 'marketplace-cache/m'), join(grok, 'memory/m.md'),
-  join(grok, 'memory-v2/m.md'), join(grok, 'sessions/s'), join(grok, 'auth.json'), join(grok, 'logs/l'), join(grok, 'projects/p'),
+  join(grok, 'memory-v2/m.md'), join(grok, 'sessions/s'), join(grok, 'auth.json'), join(grok, 'trusted_folders.toml'), join(grok, 'logs/l'), join(grok, 'projects/p'),
   join(home, '.cache/x'), join(home, '.cache/gh/y'), join(home, '.local/state/gh/z'), join(home, '.npm/n'), join(home, 'Library/Caches/c'),
   join(project, 'src.txt'), join(project, '.env.example')];
 const guarded = [join(grok, 'config.toml'), join(grok, 'sandbox.toml'), join(grok, 'requirements.toml'), join(grok, 'managed_config.toml'),
-  join(grok, 'trusted_folders.toml'), join(grok, 'hooks-paths'), join(grok, 'hooks/h.json'), join(grok, 'bin/other'), join(grok, 'downloads/grok-2.0.0'),
+  join(grok, 'hooks-paths'), join(grok, 'hooks/h.json'), join(grok, 'bin/other'), join(grok, 'downloads/grok-2.0.0'),
   join(grok, 'downloads/grok-1.0.0'), join(grok, 'vendor/rg'), join(grok, 'bundled/skill'), join(grok, 'bundles/skill'), hookTarget,
   join(home, '.local/bin/grok'), join(home, '.config/gh/hosts.yml'), join(home, '.config/gh/config.yml'), join(engine, 'state/grok-executable'), join(engine, 'state/grok-kept/grok'),
   join(release, 'bin/grok'), join(release, 'launch'), join(home, 'Agent Guard/Guard List.txt'), join(home, 'outside'), join(home, '.zshrc')];

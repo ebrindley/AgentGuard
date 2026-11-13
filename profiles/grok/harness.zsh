@@ -12,7 +12,7 @@ check_hook=grok_check
 writable=("$home/.grok" "$home/.cache" "$home/Library/Caches" "$home/.npm" "$home/.local/state/gh")
 protected_paths=("$home/.local/bin/grok"
                  "$home/.grok"/{bin,downloads,vendor,hooks,hooks-paths,bundled,bundles}
-                 "$home/.grok"/{config,sandbox,requirements,managed_config,trusted_folders}.toml
+                 "$home/.grok"/{config,sandbox,requirements,managed_config}.toml
                  "$home/.config/gh")
 protected=($protected_paths)
 credential_paths=("$home"/{.ssh,.gnupg,.aws,.git-credentials,.netrc,.npmrc,.secrets,.docker/config.json,.kube/config,.config/git/credentials})
