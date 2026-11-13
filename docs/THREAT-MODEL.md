@@ -107,6 +107,9 @@ central limitation of this design, and classes 1 and 2 above are where it bites.
 | 4 | The profile, for the assets it names; the exceptions in SECURITY.md are accepted. |
 | 5, 6 | The Seatbelt profile. Enforced. |
 
+Grok sessions run no command checker, so for them classes 1-inside-the-grant and 2
+have no coverage beyond operator review.
+
 Two consequences follow, and they pull in opposite directions.
 
 SECURITY.md's statement that the in-process checker is advisory and "nothing

@@ -236,7 +236,7 @@ Only the two product path names are normalized, and the recorded differences in
 `test/fixtures/differences/` are applied: step 5 adds the rule that protects
 OpenCode Guard's engine folder, and step 7 the rules for OpenCode's package
 stores, `bin` folder and model catalog. The original source commit is
-`9242c1ad45c895efd63e903e1b27d7bab53620ad`; bundled cc-safety-net is 2.4.14.
+`9242c1ad45c895efd63e903e1b27d7bab53620ad`; the bundled cc-safety-net is currently 2.6.0.
 
 `node test/grok.mjs` tests the Grok harness with a stand-in grok under the real
 launcher and Seatbelt in a disposable home: plain, scripted and nested launches,
