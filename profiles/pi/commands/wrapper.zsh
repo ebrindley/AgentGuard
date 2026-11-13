@@ -129,7 +129,7 @@ pi_wrapper_add() {
   for i in {1..$#srcs}; do
     /bin/cp -- "$srcs[i]" "$pi_wrapper_stage/$names[i]" || pi_wrapper_die "cannot copy $srcs[i]"
   done
-  out=$(/usr/bin/env -u PI_SANDBOX_CHECK_DEPLOYED -u PI_SANDBOX_DEPLOYED_ROOT "HOME=$home" \
+  out=$(/usr/bin/env "HOME=$home" \
     "$node" "$release/profiles/pi/scripts/check-launchers.mjs" --sources "$pi_wrapper_stage"/${^names} 2>&1)
   if (( $? )); then
     for i in {1..$#srcs}; do

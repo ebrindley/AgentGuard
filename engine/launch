@@ -38,6 +38,7 @@ fail() {
 }
 
 # Resolve the account before reading any executable profile. No ambient override.
+# Twin: profiles/pi/sandbox/pi-sandbox-preamble.zsh, the HOME binding; change both together.
 account_home() {
   local login record
   login=$(/usr/bin/id -un) || return 1
@@ -162,6 +163,7 @@ find_app() {
 # export would print the environment.
 unset $env_unset
 (( $#env_set )) && export $env_set
+# Twin: profiles/pi/sandbox/pi-sandbox-preamble.zsh, the default CC_SAFETY_NET_LEVEL; change both together.
 [[ $harness != opencode || ${CC_SAFETY_NET_LEVEL:-} == (strict|paranoid) ]] || export CC_SAFETY_NET_LEVEL=standard
 
 # The engine's nesting marker is exported just before exec; OpenCode Guard's
@@ -385,6 +387,8 @@ lexical() {
   done
   REPLY=$resolved
 }
+# Twin: profiles/pi/sandbox/pi-sandbox-preamble.zsh, the boundary refusals from
+# "Refuse dangerous boundaries" through agent_guard_protected; change both together.
 project_refusal() {
   local p e
   local -a agent_dirs
@@ -505,6 +509,8 @@ resolve_project() {
              /usr/bin/git -C "$PWD" rev-parse --show-toplevel 2>/dev/null) && [[ $a == /* && $a != *$'\n'* ]]; then
       # Git configuration is writable; bind discovery to the physical checkout,
       # including .git files used by linked worktrees and separate Git directories.
+      # Twin: profiles/pi/sandbox/pi-sandbox-preamble.zsh, the GIT_* unsets and
+      # the checkout check; change both together.
       checkout=${PWD:P}
       while [[ $checkout != / && ! -d $checkout/.git && ! -f $checkout/.git ]]; do
         checkout=${checkout:h}
@@ -623,6 +629,8 @@ done
 # ~/.gnupg, SSH control sockets in ~/.ssh) and ssh-agent's launchd socket, which
 # sessions can find although they run without SSH_AUTH_SOCK (decision D15).
 # AGENT_GUARD_SSH_AGENT=allow, set outside the guard, leaves the agents reachable.
+# Twin: profiles/pi/sandbox/pi-sandbox-preamble.zsh, AG_SSH_AGENT, and the agent
+# socket rules in pi-sandbox.sb; change both together.
 integer agents=1
 if [[ ${AGENT_GUARD_SSH_AGENT:-} == allow ]]; then agents=0; fi
 typeset -aU credential_targets
@@ -677,6 +685,7 @@ fi
 # hooks folder Git resolves for the launch folder, such as a core.hooksPath, is
 # denied whole. A path broad enough to deny the launch folder or a shared root
 # refuses the launch.
+# Twin: profiles/pi/sandbox/pi-sandbox-preamble.zsh, resolve_active_hooks; change both together.
 typeset -a hooks_rules hooks_dirs
 if (( git_hooks )); then
   hooks_rules=('(deny file-write*
@@ -726,6 +735,8 @@ for p in $projects; do project_names+=("${(@)protected_names/#/$p/}" "${(@)pi_na
 protected=("$engine" "$list_dir" $protected
            $home/Library/LaunchAgents $home/.{zshenv,zprofile,zshrc,zlogin,profile,bash_profile,bash_login,bashrc}
            "${(@)protected_names/#/$PWD/}" "${(@)pi_names/#/$PWD/}" $project_names)
+# Twin: profiles/pi/sandbox/pi-sandbox-preamble.zsh, agent_guard_protected and
+# agent_guard_pin_above; change both together.
 for p in $protected; do
   target=${p:A}
   [[ -e $p && $target != "$p" ]] || continue
@@ -966,6 +977,8 @@ fi
 # tells it to use this release.
 export AGENT_GUARD_SANDBOXED=1 AGENT_GUARD_RELEASE=${release:t}
 unset AGENT_GUARD_OUTER_SANDBOX
+# Twin, with the peer runtime grants added to the profile above:
+# profiles/pi/sandbox/pi-sandbox-preamble.zsh, AG_PEER_RELEASE; change both together.
 export AGENT_GUARD_PEER_PATH=${AGENT_GUARD_PEER_PATH:-$PATH}
 path=("$release/peers" $path)
 # The remembered app projects change only once the launch is certain (just before

@@ -48,6 +48,7 @@ typeset -r HEAD_BIN="/usr/bin/head"
 # repository/config than the directory the operator launched from. Clear only
 # discovery/config selectors; ordinary identity and transport settings remain
 # available to the sandboxed Pi process.
+# Twin: engine/launch, resolve_project's Git toplevel probe; change both together.
 unset GIT_DIR GIT_WORK_TREE GIT_COMMON_DIR
 unset GIT_CEILING_DIRECTORIES GIT_DISCOVERY_ACROSS_FILESYSTEM
 unset GIT_CONFIG GIT_CONFIG_SYSTEM GIT_CONFIG_GLOBAL GIT_CONFIG_NOSYSTEM
@@ -98,6 +99,7 @@ fi
 # Bind HOME to the login user's real macOS home before deriving config/profile
 # paths. A repo-local env or wrapper must not make Seatbelt params point at a
 # fake home and thereby miss real credential/config paths.
+# Twin: engine/launch, account_home; change both together.
 if [ -z "$LOGIN_USER" ] || ! REAL_HOME="$("$DSCL_BIN" /Search -read "/Users/$LOGIN_USER" NFSHomeDirectory 2>/dev/null)"; then
   emit "cannot resolve login user's home; refusing ambient HOME."
   exit 1
@@ -323,6 +325,7 @@ resolve_runtime_state() {
   fi
 }
 
+# Twin: engine/launch, the Git hooks section's active hooks folder; change both together.
 resolve_active_hooks() {
   local project="$1"
   local raw="" resolved=""
@@ -995,6 +998,7 @@ PROJECT="$(cd -P "$PROJECT" 2>/dev/null && pwd -P)" || {
 # .git/config is writable in a session. Anchor Git's selected work tree to the
 # physical checkout entry so core.worktree cannot grant a sibling or ancestor.
 # A .git file covers linked worktrees and separate-git-dir checkouts too.
+# Twin: engine/launch, resolve_project's checkout check; change both together.
 if [ "$PROJECT_VIA" = "git-toplevel" ]; then
   _pi_checkout="${PWD:P}"
   while [[ "$_pi_checkout" != / && ! -d "$_pi_checkout/.git" && ! -f "$_pi_checkout/.git" ]]; do
@@ -1019,6 +1023,8 @@ fi
 #   - sensitive home subtrees (~/.ssh, ~/.aws, ~/.config, ~/.docker, ~/.gnupg,
 #     ~/.kube, ~/Desktop, ~/Documents, ~/Downloads, ~/Library)
 # Canonicalize HOME for an accurate comparison (handles symlinked home).
+# Twin, with the refusals below through agent_guard_protected: engine/launch,
+# project_refusal; change both together.
 HOME_CANON="$(cd -P "$HOME" 2>/dev/null && pwd -P || echo "$HOME")"
 INSTALL_DIR_CANON="$(cd -P "$PI_SANDBOX_INSTALL_DIR" 2>/dev/null && pwd -P || echo "$PI_SANDBOX_INSTALL_DIR")"
 case "$INSTALL_DIR_CANON" in
@@ -1085,6 +1091,8 @@ esac
 # PROJECT that is, contains or is inside one of the folders, or is or is inside a
 # folder's link target, would launch partly or wholly read-only, so refuse it. A
 # PROJECT that contains a link target launches with the target denied.
+# Twin: engine/launch, the protected list's link targets and the pinned folders
+# above them; change both together.
 typeset -ga AG_SANDBOX_PARAMS
 AG_SANDBOX_PARAMS=()
 typeset -gaU AG_PINS
@@ -1338,6 +1346,8 @@ fi
 export PI_SANDBOX_PROFILE_DIGEST PI_SANDBOX_PROJECT_BOUNDARY
 export PI_SANDBOX_ACTIVE_HOOKS_BOUNDARY PI_SANDBOX_AGENT_STATE_BOUNDARY
 
+# Twin: engine/launch, the peer runtime grants in the profile and the peers folder
+# put first on PATH before exec; change both together.
 AG_PEER_RELEASE="$HOME_CANON/Library/Application Support/AgentGuard/current"
 AG_PEER_PROFILE="$(<"$PROFILE")"
 if [[ -f "$AG_PEER_RELEASE/peer-runtime.sb" && -d "$AG_PEER_RELEASE/peers" ]]; then
@@ -1355,6 +1365,7 @@ fi
 # variable unset, and the extension then blocks every tool call and says why.
 unset CC_SAFETY_NET_HOME CC_SAFETY_NET_WORKTREE SAFETY_NET_WORKTREE CC_SAFETY_NET_AUDIT_HOME AGENT_GUARD_RELEASE
 export CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY=1
+# Twin: engine/launch, the default CC_SAFETY_NET_LEVEL; change both together.
 [[ ${CC_SAFETY_NET_LEVEL:-} == (strict|paranoid) ]] || export CC_SAFETY_NET_LEVEL=standard
 AG_ENGINE_STATE="$HOME_CANON/Library/Application Support/AgentGuard/state"
 AG_RELEASE_DIR="${AG_PEER_RELEASE:A}"
@@ -1380,6 +1391,7 @@ fi
 
 # Agent Guard difference 16: the SSH agent's socket is denied unless the operator
 # set AGENT_GUARD_SSH_AGENT=allow outside the guard.
+# Twin: engine/launch, the credentials section's agent sockets; change both together.
 AG_SSH_AGENT=deny
 [[ ${AGENT_GUARD_SSH_AGENT:-} == allow ]] && AG_SSH_AGENT=allow
 PI_SANDBOX_CMD=(
