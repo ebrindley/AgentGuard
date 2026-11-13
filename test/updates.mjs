@@ -207,6 +207,13 @@ try {
     }
     stamp('v2026.11.01');
   });
+  await check('the window helper runs the real script until the launcher process ends', async () => {
+    // A call that throws ends the helper at once with a nonzero status.
+    const began = Date.now();
+    const r = await run(`source ${quote(join(root, 'engine/updates.zsh'))}; ag_update_window_source; /bin/sleep 2 & /usr/bin/osascript -l JavaScript -e "$REPLY" ${quote(join(temp, 'window.log'))} $!; exit $?`);
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(Date.now() - began >= 1500, 'the helper ended before the process it watches');
+  });
   console.log(`${checks} update checks passed; fixtures: ${temp}`);
 } finally {
   server.closeAllConnections(); await new Promise((done) => server.close(done));
