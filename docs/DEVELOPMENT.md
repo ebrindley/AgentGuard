@@ -122,6 +122,15 @@ and merges at the reviewed head with an empty body. The `tests` check runs the
 same subject check on the pull request title. Local gate execution is useful for
 focused development, but is not required in addition to the hosted gate.
 
+The gate starts with `script/check-duplicates.mjs`, which fails when 8 or more
+consecutive lines, ignoring blank lines, comments and bare closers such as `}`,
+`fi` and `done`, appear in two places in the tracked shell and JavaScript files
+under `engine/`, `installer/`, `profiles/`, `scripts/`, `script/` and `test/`. It
+prints both places. `engine/vendor/` and `test/fixtures/` are not scanned. Move a
+repeated block into a shared helper such as `test/lib.zsh`; when two files must
+keep separate copies, add the pair with its reason to the script's allowlist. It
+needs only Node and runs in an agent sandbox: `node script/check-duplicates.mjs`.
+
 `script/test` lists the files the gate runs, in order. `test/project.mjs` checks
 `@project`, including the app's remembered projects, on a disposable home under
 the real `sandbox-exec`. Run a failing file by itself during development. The
