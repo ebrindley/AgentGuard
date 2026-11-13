@@ -1,5 +1,5 @@
 // Test adapter for the zsh engine. Import it from Node, or run it as
-// `node zsh.mjs name|stage|launcher|identity|release ...` from zsh.
+// `node zsh.mjs name|stage|isolate|launcher|release ...` from zsh.
 import assert from 'node:assert/strict';
 import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -179,11 +179,8 @@ if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.me
   else if (command === 'stage' && args.length === 3) stage(...args);
   else if (command === 'isolate' && args.length === 1) isolateHarness(args[0]);
   else if (command === 'launcher' && (args.length === 1 || args.length === 2)) console.log(launcher(...args).join('\n'));
-  else if (command === 'identity' && args.length === 3) {
-    const found = identity(args[0], { HOME: args[1], USER: args[2] });
-    console.log(`${found.home}\n${found.engine}`);
-  } else {
-    console.error('usage: zsh.mjs name | stage SOURCE DEST HOME | isolate TREE | launcher ENGINE [RID] | identity SOURCE HOME USER | release SOURCE OUT HOME TAG VERSION URL');
+  else {
+    console.error('usage: zsh.mjs name | stage SOURCE DEST HOME | isolate TREE | launcher ENGINE [RID] | release SOURCE OUT HOME TAG VERSION URL');
     process.exit(2);
   }
 }
