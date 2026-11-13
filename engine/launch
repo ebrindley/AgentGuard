@@ -883,12 +883,14 @@ case $mode in
         [[ $arg == -- ]] && break
         [[ $arg == --attach || $arg == --attach=* ]] && attached=1
       done
-      (( attached )) && note "attached client is sandboxed; the server executes tools under its own permissions"
       opencode_major "$cli"
       if [[ $REPLY == 2 ]]; then
+        # This notes an attached client itself.
         opencode_cli_args "$@"
         set -- "${reply[@]}"
         (( ! managed )) || managed_cli=$cli
+      elif (( attached )); then
+        note "attached client is sandboxed; the server executes tools under its own permissions"
       fi
       set -- -D GUI=0 "$cli" "$@"
     else
