@@ -159,6 +159,13 @@ text, raw logs and file contents. Cached snapshots and failures include availabl
 timestamps; advisory session-written events are not trusted audit evidence.
 Absent or unobservable runtime evidence is labeled rather than counted as healthy.
 
+A shell command that cc-safety-net refuses under a rule is recorded as
+`command-denied`. A checker error that names no rule, or names
+`analysis.failed-closed`, is recorded as `safety-net-failed` with the error
+code when it is a known one. The command is refused either way; for an error
+without a rule the session shows Agent Guard's analysis-failure message in
+place of the error text.
+
 Distinguish host permission ASK/DENY from a Guard rejection and a filesystem
 error. A recorded protected-path rejection can identify expected configuration
 protection; a fixed preparation or initialization stage can identify bootstrap

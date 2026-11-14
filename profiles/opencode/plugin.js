@@ -20,7 +20,7 @@ const tilde = p => p === HOME || p.startsWith(HOME + "/") ? "~" + p.slice(HOME.l
 const UNSAFE_NET_ENV = ["CC_SAFETY_NET_HOME", "CC_SAFETY_NET_WORKTREE", "SAFETY_NET_WORKTREE", "CC_SAFETY_NET_AUDIT_HOME"]
 const releaseID = value => typeof value === "string" && value.length <= 100 && /^[0-9A-Za-z.+-]+$/.test(value) && value !== "." && value !== ".." ? value : null
 const publicReleaseID = value => typeof value === "string" && /^(?:dev|\d+\.\d+\.\d+(?:\.\d+)?(?:-(?:rc|beta|alpha|pre)[.-]?\d+)?)-(?:\d{8}T\d{6}Z|fixture)$/.test(value) ? value : null
-const ERRNOS = new Set(["EPERM", "EACCES", "ENOENT", "ENOTDIR", "ELOOP"])
+const ERRNOS = new Set(["EPERM", "EACCES", "ENOENT", "ENOTDIR", "ELOOP", "ENAMETOOLONG"])
 const RULE_IDS = new Set(["guard.path.deny", "guard.path.protected", "guard.path.readonly", "guard.path.unlisted", "guard.path.invalid", "unattributed", "custom", "secret.basename.env", "git.reset-hard", "rm.recursive-force-root-or-home", "rm.recursive-force-outside-cwd"])
 const EVENT_FIELDS = {
   layer: new Set(["guard", "filesystem", "sandbox", "opencode", "unknown"]),
@@ -382,10 +382,18 @@ async function guard(input) {
       }
     }
     try { if (tool === "bash") await net["tool.execute.before"](info, output) } catch (error) {
-      const matched = typeof error.message === "string" ? error.message.slice(0, 8192).match(/^Rule: ([a-z0-9._/-]{1,100})$/m)?.[1] : null
-      const ruleId = matched ? RULE_IDS.has(matched) ? matched : "custom" : "unattributed"
-      recordEvent({ layer: "guard", stage: "safety-net", code: "safety-net-failed", remediation: "review-policy", ruleId, tool: toolClass(tool), errno: ERRNOS.has(error.code) ? error.code : "unknown" })
-      throw error
+      const matched = typeof error?.message === "string" ? error.message.slice(0, 8192).match(/^Rule: ([a-z0-9._/-]{1,100})$/m)?.[1] : null
+      // A refusal names its rule. An error without one, or cc-safety-net's own
+      // fail-closed rule, is the analysis failing, not policy.
+      if (matched && matched !== "analysis.failed-closed") {
+        recordEvent({ layer: "guard", stage: "safety-net", code: "command-denied", remediation: "review-policy", ruleId: RULE_IDS.has(matched) ? matched : "custom", tool: toolClass(tool) })
+        throw error
+      }
+      const errno = ERRNOS.has(error?.code) ? error.code : "unknown"
+      recordEvent({ layer: "guard", stage: "safety-net", code: "safety-net-failed", remediation: "none", tool: toolClass(tool), errno })
+      if (matched) throw error
+      // The raw error repeats the command text and names no remedy.
+      throw new Error(`Agent Guard: cc-safety-net could not analyze this command${errno === "unknown" ? "" : ` (${errno})`}, so it was not run. This is an analysis failure, not a policy denial. Simplify or restructure the command, for example by moving long text into a file, or report this to the user.`)
     }
     if (tool === "bash") peerPath(args)
   }
