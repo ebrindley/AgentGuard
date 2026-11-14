@@ -13,7 +13,7 @@
 #  - Trusted ABSOLUTE binary paths (no PATH lookup for security-critical tools).
 #  - PI_SANDBOX_CMD is an ARRAY so project paths with spaces are passed as one argv item.
 
-emit() { print -u2 -- "[pi-sandbox-guard] $*"; }
+emit() { print -u2 -- "Agent Guard: $*"; }
 
 # How to run without the guard. The shim on PATH adds the guard extension, so the
 # advice names the real executable; a direct Pi start without -ne loads the

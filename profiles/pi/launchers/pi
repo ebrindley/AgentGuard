@@ -13,7 +13,7 @@ typeset -r PI_SANDBOX_RUNTIME="${0:A:t}"
 case "$PI_SANDBOX_RUNTIME" in
   pi|omp) ;;
   *)
-    print -u2 -- "[pi-sandbox-guard] unsupported launcher name '$PI_SANDBOX_RUNTIME'; expected pi or omp."
+    print -u2 -- "Agent Guard: unsupported launcher name '$PI_SANDBOX_RUNTIME'; expected pi or omp."
     exit 1
     ;;
 esac
@@ -37,7 +37,7 @@ if [ "$PI_SANDBOX_RUNTIME" = "omp" ]; then
         if [ "${#_pi_sandbox_args}" -lt 2 ] \
           || [ -z "${_pi_sandbox_args[2]}" ] \
           || [[ "${_pi_sandbox_args[2]}" = -* ]]; then
-          print -u2 -- "[pi-sandbox-guard] --profile requires a non-flag value."
+          print -u2 -- "Agent Guard: --profile requires a non-flag value."
           exit 2
         fi
         _pi_sandbox_profile="${_pi_sandbox_args[2]}"
@@ -46,7 +46,7 @@ if [ "$PI_SANDBOX_RUNTIME" = "omp" ]; then
       --profile=*)
         _pi_sandbox_profile="${_pi_sandbox_args[1]#--profile=}"
         if [ -z "$_pi_sandbox_profile" ]; then
-          print -u2 -- "[pi-sandbox-guard] --profile requires a value."
+          print -u2 -- "Agent Guard: --profile requires a value."
           exit 2
         fi
         _pi_sandbox_profile_args=1
@@ -57,8 +57,8 @@ if [ "$PI_SANDBOX_RUNTIME" = "omp" ]; then
   while [ "$_pi_sandbox_i" -le "${#_pi_sandbox_args}" ]; do
     case "${_pi_sandbox_args[$_pi_sandbox_i]}" in
       --profile|--profile=*)
-        print -u2 -- "[pi-sandbox-guard] protected OMP requires --profile to be the first argument and specified once."
-        print -u2 -- "[pi-sandbox-guard] place it first or use OMP_PROFILE."
+        print -u2 -- "Agent Guard: protected OMP requires --profile to be the first argument and specified once."
+        print -u2 -- "Agent Guard: place it first or use OMP_PROFILE."
         exit 2
         ;;
     esac
@@ -119,7 +119,7 @@ PI_SANDBOX_COMMAND_KIND=0
 is_runtime_command "$PI_SANDBOX_RUNTIME" "$@" || PI_SANDBOX_COMMAND_KIND=$?
 
 if [ ! -f "$PREAMBLE" ]; then
-  print -u2 -- "[pi-sandbox-guard] sandbox preamble missing ($PREAMBLE); refusing to launch."
+  print -u2 -- "Agent Guard: sandbox preamble missing ($PREAMBLE); refusing to launch."
   exit 1
 fi
 
@@ -139,8 +139,8 @@ if [ "$PI_SANDBOX_COMMAND_KIND" -eq 0 ]; then
   exec "${PI_SANDBOX_CMD[@]}" "${PI_LAUNCH_VECTOR[@]}" "$@"
 else
   if [ "$PI_SANDBOX_COMMAND_KIND" -eq 2 ]; then
-    print -u2 -- "[pi-sandbox-guard] this OMP agent command does not accept the required guard extension; refusing protected launch."
-    print -u2 -- "[pi-sandbox-guard] $(direct_run_hint "$PI_EXECUTABLE")"
+    print -u2 -- "Agent Guard: this OMP agent command does not accept the required guard extension; refusing protected launch."
+    print -u2 -- "Agent Guard: $(direct_run_hint "$PI_EXECUTABLE")"
     exit 1
   fi
   unset PI_SANDBOX_COMMAND_KIND
@@ -152,7 +152,7 @@ if [ ! -f "$PI_SANDBOX_GUARD_EXTENSION" ]; then
 fi
 typeset -r PI_SANDBOX_GUARD_EXTENSION
 if [ ! -f "$PI_SANDBOX_GUARD_EXTENSION" ]; then
-  print -u2 -- "[pi-sandbox-guard] shared guard extension missing ($PI_SANDBOX_GUARD_EXTENSION); refusing to launch."
+  print -u2 -- "Agent Guard: shared guard extension missing ($PI_SANDBOX_GUARD_EXTENSION); refusing to launch."
   exit 1
 fi
 

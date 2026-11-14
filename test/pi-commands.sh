@@ -517,11 +517,11 @@ doctor_fails 'a checker configuration that cannot be copied' "the checker's sess
 [[ -z $(print -l "$engine/state/pi"/doctor.*(DN)) ]] && pass 'its session folder is removed' || fail 'its session folder is left'
 /bin/cp "$run/rule.json" "$home/.cc-safety-net/rules/rule.json"
 /bin/mv "$rel/vendor" "$run/vendor"
-doctor_fails 'a release without cc-safety-net' 'the installed extension blocks ls -la: [pi-sandbox-guard] Guard unavailable: cc-safety-net failed to load*'
+doctor_fails 'a release without cc-safety-net' 'the installed extension blocks ls -la: Agent Guard: Guard unavailable: cc-safety-net failed to load*'
 /bin/mv "$run/vendor" "$rel/vendor"
 /bin/cp "$rel/checker/agent-guard-git/rulebook.json" "$run/rulebook.json"
 /usr/bin/jq '.rules = []' "$run/rulebook.json" > "$rel/checker/agent-guard-git/rulebook.json"
-doctor_fails "a release without Agent Guard's Git rules" 'the installed extension blocks ls -la: [pi-sandbox-guard] Guard unavailable: cc-safety-net did not load Agent Guard*'
+doctor_fails "a release without Agent Guard's Git rules" 'the installed extension blocks ls -la: Agent Guard: Guard unavailable: cc-safety-net did not load Agent Guard*'
 /bin/cp "$run/rulebook.json" "$rel/checker/agent-guard-git/rulebook.json"
 doctor_fails 'the checker passes again'
 
