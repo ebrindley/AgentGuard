@@ -289,7 +289,10 @@ Revised 2026-11-02: the checker runs at cc-safety-net's `standard` level, with
 the session copy keeping `rm.recursive-force-dynamic-target` on; heredoc
 interpreters and shell setup lines such as `eval "$(pyenv init -)"` are allowed;
 and OpenCode, like Pi and OMP, checks shell commands only, so cc-safety-net's
-secret-name checks on file tools no longer run.
+secret-name checks on file tools no longer run. Revised 2026-11-14: the session
+copy switches off cc-safety-net's two `.env` rules, since Seatbelt denies those
+reads in every session that uses the copy and the rules refused commands whose
+text only named such a file.
 Revised 2026-11-13, accepted by the operator: with cc-safety-net 2.7.12 a script
 sourced from a `$HOME` path is allowed.
 

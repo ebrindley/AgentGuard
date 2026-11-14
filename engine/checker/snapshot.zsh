@@ -80,7 +80,10 @@ ag_checker_snapshot() {
   # Built-in rules decision D13 allows (docs/DESIGN.md section 15), unless the
   # user chose the paranoid level; a rule the user's policy names keeps the
   # user's setting. The standard level allows a recursive force delete of a
-  # variable or glob target; the copy keeps that rule on.
+  # variable or glob target; the copy keeps that rule on. The two .env rules are
+  # off under the same conditions: every session that uses the copy runs under a
+  # Seatbelt profile that denies reads of .env files, and the rules also refuse
+  # commands whose text only names one.
   local allowed=$(/usr/bin/jq -cn '$ARGS.positional' --args git.push-delete git.stash-drop git.branch-force-delete git.tag-delete \
     git.merge-abort git.rebase-abort git.checkout-double-dash git.checkout-ref-path git.restore-unstaged git.restore-worktree)
   /usr/bin/jq --arg level "$level" --arg legacy "${legacy:l}" --arg paranoid "${paranoid:l}" --argjson roots "$roots" --argjson allowed "$allowed" '
@@ -92,6 +95,9 @@ ag_checker_snapshot() {
       end
     | if (.safety.level == "paranoid") or ($level == "paranoid") then . else
         .destructive_command_protection.overrides = ((($allowed | map({(.): "off"}) | add) + {"rm.recursive-force-dynamic-target": "on"}) + (.destructive_command_protection.overrides // {}))
+        | if ((.secret_protection // {}) | type) == "object" and ((.secret_protection.overrides // {}) | type) == "object" then
+            .secret_protection.overrides = ({"secret.basename.env": "off", "secret.pattern.env-variant": "off"} + (.secret_protection.overrides // {}))
+          else . end
       end' "$dest/policy.json" > "$dest/.policy" && /bin/mv "$dest/.policy" "$dest/policy.json" || return 1
 }
 
