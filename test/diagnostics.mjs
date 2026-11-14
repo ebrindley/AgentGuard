@@ -56,7 +56,8 @@ function fixture(name, rid = defaultRid, version = "0.3.0") {
   json(join(engine, "state/opencode-preferences.json"), { schemaVersion: 1, approvalPreference: "auto", private: marker })
   json(events, { schemaVersion: 1, advisory: true, events: [
     { timestamp: Date.now() - 1000, layer: "filesystem", stage: "path-resolve", code: "filesystem-error", tool: "read", ruleId: "unattributed", errno: "EPERM", remediation: "review-path", release: rid, command: marker, path: marker, error: marker },
-    { timestamp: marker, layer: marker, stage: marker, code: marker, tool: marker, ruleId: marker, errno: marker, remediation: marker, release: marker }
+    { timestamp: marker, layer: marker, stage: marker, code: marker, tool: marker, ruleId: marker, errno: marker, remediation: marker, release: marker },
+    { timestamp: Date.now() - 500, layer: "guard", stage: "safety-net", code: "safety-net-failed", tool: "bash", ruleId: "unattributed", errno: "ENAMETOOLONG", remediation: "none", release: rid }
   ] })
   const files = Object.fromEntries(Object.entries(tree(release)).map(([p, hash]) => [p, hash]))
   json(stamp, { version, tag: `v${version}`, commit: marker, release: rid, installed_at: 123, files, links: { [join(engine, "current")]: `releases/${rid}`, [join(engine, "bin")]: "current/bin" } })
@@ -94,6 +95,7 @@ test("consistent release, safe classifications, ownership and cached evidence", 
   assert.equal(report.recentFailures.events[0].layer, "filesystem", "EPERM must not become sandbox attribution")
   assert.equal(report.recentFailures.events[1].ruleId, "unknown")
   assert.equal(report.recentFailures.events[1].timestamp, null)
+  assert.equal(report.recentFailures.events[2].errno, "ENAMETOOLONG")
   const text = collect(f, "text", ["diagnose"])
   assert.equal(text.status, 0)
   assert.ok(text.stdout.includes("read-only"))
