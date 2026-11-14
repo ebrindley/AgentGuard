@@ -100,7 +100,7 @@ function warnIfUnverifiedSandbox() {
   if (process.env.PI_SANDBOX_PROFILE_DIGEST) return;
   // eslint-disable-next-line no-console
   console.error(
-    '[pi-sandbox-guard] FILTER-ONLY: could not verify launch through the protected ' +
+    'Agent Guard: FILTER-ONLY: could not verify launch through the protected ' +
       'Pi/OMP Seatbelt shim. The command checker is active; this guard is not applying an OS ' +
       'sandbox, so assume out-of-project writes are uncontained unless you know one ' +
       'is in place by other means. For the full guard, launch via the `pi` or `omp` shim on PATH ' +
@@ -225,6 +225,10 @@ function checkerContext(ctx, cwd) {
 
 const block = (reason) => ({ block: true, reason });
 
+// cc-safety-net's denial text reaches the agent under Agent Guard's name. The Rule
+// line keeps cc-safety-net's rule ID.
+const renamed = (text) => text.replace(/^BLOCKED by CC Safety Net/, 'Blocked by Agent Guard').replaceAll('CC Safety Net', 'Agent Guard');
+
 /**
  * Pi extension default export.
  * @param {import('./pi-types').ExtensionAPI} pi
@@ -240,7 +244,7 @@ export default function (pi) {
       checker = c;
       if (c.failure) {
         // eslint-disable-next-line no-console
-        console.error(`[pi-sandbox-guard] DEGRADED: ${c.failure}. All tool calls will be BLOCKED until fixed.`);
+        console.error(`Agent Guard: DEGRADED: ${c.failure}. All tool calls will be BLOCKED until fixed.`);
       }
     })
     .catch(() => {
@@ -254,13 +258,13 @@ export default function (pi) {
     // Guard's rules not in force): BLOCK EVERY tool call. A bricked agent is
     // visible and recoverable; a silently allowed destructive command is not.
     if (!checker.handler) {
-      return block(`[pi-sandbox-guard] Guard unavailable: ${checker.failure}. All tool calls are blocked until the guard is restored.`);
+      return block(`Agent Guard: Guard unavailable: ${checker.failure}. All tool calls are blocked until the guard is restored.`);
     }
 
     // The session copy can disappear after startup; the checker would then go on
     // from what it loaded. Two stats per call keep that visible.
     if (!existsSync(join(checker.copy, 'rules/rule.json')) || !existsSync(join(checker.copy, 'rules/agent-guard-git/rulebook.json'))) {
-      return block('[pi-sandbox-guard] Guard unavailable: the checker\'s session copy is gone. All tool calls are blocked until the guard is restored; relaunch Pi or OMP.');
+      return block('Agent Guard: Guard unavailable: the checker\'s session copy is gone. All tool calls are blocked until the guard is restored; relaunch Pi or OMP.');
     }
 
     // Only shell tools go to the checker, as in OpenCode's plugin. File tools and
@@ -290,9 +294,9 @@ export default function (pi) {
         }
       }
     } catch {
-      return block('[pi-sandbox-guard] Guard errored; blocked as fail-safe.');
+      return block('Agent Guard: Guard errored; blocked as fail-safe.');
     }
-    return worst ? block(typeof worst.reason === 'string' ? worst.reason : '[pi-sandbox-guard] Blocked by cc-safety-net.') : undefined;
+    return worst ? block(typeof worst.reason === 'string' ? renamed(worst.reason) : 'Blocked by Agent Guard.') : undefined;
   };
 
   pi.on('tool_call', (event, ctx) => {

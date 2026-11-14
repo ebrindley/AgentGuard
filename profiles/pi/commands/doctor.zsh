@@ -231,7 +231,7 @@ pi_doctor() {
       elif [[ $err == *'no longer usable'* ]]; then
         lines=(${(M)${(f)err}:#*no longer usable*})
         err=$lines[1]
-        pi_doctor_say "FAIL $rt --version: ${err#\[pi-sandbox-guard\] }; re-record it with agent-guard bind"
+        pi_doctor_say "FAIL $rt --version: ${err#Agent Guard: }; re-record it with agent-guard bind"
       else
         pi_doctor_say "FAIL $rt --version through ~/.local/bin/$rt exited $rc: $(pi_doctor_reason "$err" $rc 20)"
       fi
@@ -284,10 +284,10 @@ pi_doctor_resolves() {
 pi_doctor_reason() {
   local -a l=(${(f)1}) e
   e=(${(M)l:#Error: *})
-  l=(${l:#\[pi-sandbox-guard\]  *})
+  l=(${l:#Agent Guard:  *})
   if (( $2 == 124 )); then print -r -- "did not finish within $3 seconds"
   elif (( $#e )); then print -r -- "${e[-1]#Error: }"
-  elif (( $#l )); then print -r -- "${l[-1]#\[pi-sandbox-guard\] }"
+  elif (( $#l )); then print -r -- "${l[-1]#Agent Guard: }"
   else print -r -- "exit $2"
   fi
 }

@@ -17,6 +17,9 @@ const CONFIG = /\/\.cc-safety-net(\/|$)/
 const ENV_FILE = /\/\.env($|\.)/i
 const ENV_TEMPLATE = /\/\.env\.(example|sample|template)$/i
 const tilde = p => p === HOME || p.startsWith(HOME + "/") ? "~" + p.slice(HOME.length) : p
+// cc-safety-net's denial text reaches the agent under Agent Guard's name. The Rule
+// line keeps cc-safety-net's rule ID.
+const renamed = text => text.replace(/^BLOCKED by CC Safety Net/, "Blocked by Agent Guard").replaceAll("CC Safety Net", "Agent Guard")
 const UNSAFE_NET_ENV = ["CC_SAFETY_NET_HOME", "CC_SAFETY_NET_WORKTREE", "SAFETY_NET_WORKTREE", "CC_SAFETY_NET_AUDIT_HOME"]
 const releaseID = value => typeof value === "string" && value.length <= 100 && /^[0-9A-Za-z.+-]+$/.test(value) && value !== "." && value !== ".." ? value : null
 const publicReleaseID = value => typeof value === "string" && /^(?:dev|\d+\.\d+\.\d+(?:\.\d+)?(?:-(?:rc|beta|alpha|pre)[.-]?\d+)?)-(?:\d{8}T\d{6}Z|fixture)$/.test(value) ? value : null
@@ -377,12 +380,13 @@ async function guard(input) {
         const decision = checkCommand({ command: `cd ${shellQuote(workdir)} && ${args.command}`, cwd: directory })
         if (decision.kind === "deny") {
           const ruleId = RULE_IDS.has(decision.ruleId) ? decision.ruleId : "custom"
-          refuse(tool, `Agent Guard: ${decision.reason}`, "workdir", "command-denied", "review-policy", ruleId)
+          refuse(tool, `Agent Guard: ${renamed(decision.reason)}`, "workdir", "command-denied", "review-policy", ruleId)
         }
       }
     }
     try { if (tool === "bash") await net["tool.execute.before"](info, output) } catch (error) {
       const matched = typeof error?.message === "string" ? error.message.slice(0, 8192).match(/^Rule: ([a-z0-9._/-]{1,100})$/m)?.[1] : null
+      if (matched) error.message = renamed(error.message)
       // A refusal names its rule. An error without one, or cc-safety-net's own
       // fail-closed rule, is the analysis failing, not policy.
       if (matched && matched !== "analysis.failed-closed") {

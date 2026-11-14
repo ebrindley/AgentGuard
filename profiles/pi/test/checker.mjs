@@ -97,6 +97,8 @@ async function main() {
   const blocked = (r, rule) => {
     assert.ok(r && r.block === true, `expected block, got ${JSON.stringify(r)}`);
     if (rule) assert.match(r.reason, new RegExp(`Rule: ${rule.replaceAll('.', '\\.')}`), r.reason);
+    if (rule) assert.match(r.reason, /^Blocked by Agent Guard\n/, r.reason);
+    if (rule) assert.doesNotMatch(r.reason, /CC Safety Net/, r.reason);
   };
 
   for (const command of [
