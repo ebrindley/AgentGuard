@@ -42,6 +42,18 @@ export async function setup(context, guard) {
       ...(typeof args.workdir === "string" ? { workdir: args.workdir } : {}),
     }
   })
+  // The sandbox note (plugin.js) on a finished shell command. The note is advice:
+  // a host without this hook, or a result in another shape, goes without it.
+  try {
+    await context.tool.hook("execute.after", async event => {
+      if (event?.tool !== "shell" || event.status !== "completed" || !Array.isArray(event.result?.content)) return
+      const text = event.result.content.map(part => typeof part?.text === "string" ? part.text : "").join("\n")
+      const output = { output: text }
+      await hooks["tool.execute.after"]({ ...event, tool: "bash" }, output)
+      if (output.output !== text && output.output.startsWith(text))
+        event.result.content = [...event.result.content, { type: "text", text: `\n${output.output.slice(text.length).trimStart()}` }]
+    })
+  } catch {}
   await context.tool.transform(editor => {
     for (const [name, tool] of Object.entries(hooks.tool ?? {})) {
       editor.add({

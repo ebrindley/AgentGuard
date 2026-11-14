@@ -95,12 +95,12 @@ const { AgentGuard, default: definition } = await import(pathToFileURL(join(rele
 let hooks;
 if (host === 'v2') {
   const tools = {}, rpc = {};
-  let execute;
+  let execute, finished;
   await definition.setup({
     location: { directory, project: { directory, canonical: directory } },
     agent: { list: async () => ({ data: [{ id: 'build', permissions: [{ action: 'shell', resource: '*', effect: 'allow' }] }] }) },
     tool: {
-      hook: async (name, callback) => { assert.equal(name, 'execute.before'); execute = callback; },
+      hook: async (name, callback) => { assert.ok(['execute.before', 'execute.after'].includes(name)); if (name === 'execute.before') execute = callback; else finished = callback; },
       transform: async callback => callback({ add: tool => { tools[tool.name] = tool; } }),
     },
     rpc: { register: async (_definition, handlers) => Object.assign(rpc, handlers) },
@@ -114,6 +114,12 @@ if (host === 'v2') {
       const event = { ...info, tool, input };
       await execute(event);
       if (tool === 'shell') output.args.command = event.input.command;
+    },
+    // The host's finished-call event, with the result as OpenCode 2 holds it.
+    'tool.execute.after': async (info, output) => {
+      const event = { ...info, tool: ({ bash: 'shell' })[info.tool] ?? info.tool, status: 'completed', result: { content: [{ type: 'text', text: output.output }] } };
+      await finished(event);
+      output.output = event.result.content.map(part => part.text).join('\n');
     },
   };
   assert.equal((await rpc.status()).state, name === 'outer-sandbox' ? 'inactive' : ['healthy', 'updated', 'unsafe-version'].includes(name) ? 'active' : 'degraded');
@@ -140,7 +146,10 @@ if (name === 'outer-sandbox') {
   assert.equal(health.state, 'inactive');
   assert.equal(health.rules.loaded, false);
   for (const [tool, args] of [['bash', { command: 'pwd' }], ['read', { filePath: join(directory, 'README.md') }], ['write', { filePath: join(directory, 'allowed.txt') }]])
-    await assert.rejects(before({ tool }, { args }), /started without the guard/);
+    await assert.rejects(before({ tool }, { args }), /Agent Guard protects this computer.*OpenCode was started without it, so tools are disabled/);
+  const unguarded = { output: 'zsh:1: operation not permitted: ps' };
+  await hooks['tool.execute.after']({ tool: 'bash' }, unguarded);
+  assert.equal(unguarded.output, 'zsh:1: operation not permitted: ps', 'no sandbox note outside the guard');
   await before({ tool: 'todowrite' }, { args: {} });
   console.log(`ok plugin health ${host} ${name}: the outer-sandbox variable overrides the probe and refuses as unguarded`);
   process.exit(0);
@@ -156,6 +165,17 @@ if (name === 'updated') {
 if (name === 'unsafe-version') assert.equal(health.releases.version, null);
 if (ready) {
   await before({ tool: 'bash' }, { args: { command: 'pwd' } });
+  // A Seatbelt denial in a shell command's output gets the sandbox note, once.
+  const after = hooks['tool.execute.after'];
+  const denial = { output: 'touch: /x: Operation not permitted' };
+  await after({ tool: 'bash' }, denial);
+  assert.match(denial.output, /^touch: \/x: Operation not permitted\n\nAgent Guard: this session runs in Agent Guard's sandbox.*ps, open, launchctl and codesign.*outside Agent Guard\.$/s);
+  const plain = { output: 'done' };
+  await after({ tool: 'bash' }, plain);
+  assert.equal(plain.output, 'done');
+  const read = { output: 'Operation not permitted' };
+  await after({ tool: 'read' }, read);
+  assert.equal(read.output, 'Operation not permitted');
   await assert.rejects(before({ tool: 'read' }, { args: { filePath: denied } }), /DENY list/);
   fs.mkdirSync(deniedRoot, { recursive: true });
   fs.writeFileSync(join(deniedRoot, 'plain.txt'), 'x');

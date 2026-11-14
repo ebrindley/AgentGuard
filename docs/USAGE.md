@@ -448,7 +448,10 @@ download piped to a shell, or a variable or sourced script run as shell (`sh -c
 program from a heredoc (`python3 - <<'PY'`) and shell setup such as
 `eval "$(pyenv init -)"`. The checker does not refuse a command for naming a `.env`
 file; Seatbelt denies the read, and the command fails with `Operation not
-permitted`. Run a refused command in a terminal outside the guard.
+permitted`. When a shell command's output holds that phrase, the guard adds a
+note below it for the agent: the session runs in Agent Guard's sandbox, what the
+sandbox blocks, and that you can run the command outside the guard. OpenCode
+sessions get the same note. Run a refused command in a terminal outside the guard.
 The refusal names the rule.
 
 Only shell commands are checked. The file tools `read`, `write`, `edit` and

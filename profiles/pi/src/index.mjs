@@ -148,6 +148,7 @@ function locate() {
   }
   if (!copy) {
     return {
+      unguarded: true,
       failure:
         'the checker\'s session copy is missing; start Pi or OMP through the protected shim (the `pi` or `omp` on PATH), which builds it at launch',
     };
@@ -163,7 +164,7 @@ function locate() {
  */
 async function loadChecker() {
   const found = locate();
-  if (found.failure) return { failure: found.failure };
+  if (found.failure) return { failure: found.failure, unguarded: found.unguarded === true };
   for (const name of UNSAFE_NET_ENV) delete process.env[name];
   if (!['strict', 'paranoid'].includes(process.env.CC_SAFETY_NET_LEVEL)) process.env.CC_SAFETY_NET_LEVEL = 'standard';
   process.env.CC_SAFETY_NET_PROJECT_TIGHTEN_ONLY = '1';
@@ -225,6 +226,22 @@ function checkerContext(ctx, cwd) {
 
 const block = (reason) => ({ block: true, reason });
 
+// A start without the shim has no session copy; the agent is told what that means.
+const UNGUARDED =
+  'Agent Guard protects this computer from agent mistakes. Pi or OMP was started without it ' +
+  '(the checker\'s session copy is missing), so tools are disabled. Restart it through Agent Guard ' +
+  'to use it with protection: quit it and run pi or omp from a new terminal.';
+
+// Added below a shell command's output that holds a Seatbelt denial, which names no
+// guard. The same text as OpenCode's plugin; ps is setuid, and Seatbelt refuses such
+// programs under any profile.
+const SANDBOX_DENIAL = /operation not permitted/i;
+const SANDBOX_NOTE =
+  'Agent Guard: this session runs in Agent Guard\'s sandbox, which protects against agent mistakes. ' +
+  'It blocks writes outside the allowed folders, reads of credentials and .env files, and the programs ' +
+  'ps, open, launchctl and codesign. Do not work around it. The user can run the command in a terminal ' +
+  'outside Agent Guard.';
+
 // cc-safety-net's denial text reaches the agent under Agent Guard's name. The Rule
 // line keeps cc-safety-net's rule ID.
 const renamed = (text) => text.replace(/^BLOCKED by CC Safety Net/, 'Blocked by Agent Guard').replaceAll('CC Safety Net', 'Agent Guard');
@@ -258,6 +275,7 @@ export default function (pi) {
     // Guard's rules not in force): BLOCK EVERY tool call. A bricked agent is
     // visible and recoverable; a silently allowed destructive command is not.
     if (!checker.handler) {
+      if (checker.unguarded) return block(UNGUARDED);
       return block(`Agent Guard: Guard unavailable: ${checker.failure}. All tool calls are blocked until the guard is restored.`);
     }
 
@@ -298,6 +316,17 @@ export default function (pi) {
     }
     return worst ? block(typeof worst.reason === 'string' ? renamed(worst.reason) : 'Blocked by Agent Guard.') : undefined;
   };
+
+  // The sandbox note, when the launch applied Seatbelt and the checker is healthy.
+  pi.on('tool_result', (event) => {
+    if (!process.env.PI_SANDBOX_PROFILE_DIGEST || !checker.handler) return;
+    if (!event || typeof event !== 'object' || !SHELL_TOOLS.has(event.toolName) || !Array.isArray(event.content)) return;
+    const text = event.content.map((part) => (typeof part?.text === 'string' ? part.text : '')).join('\n');
+    if (!SANDBOX_DENIAL.test(text) || text.includes(SANDBOX_NOTE)) return;
+    const content = [...event.content, { type: 'text', text: `\n${SANDBOX_NOTE}` }];
+    // Pi drops structured content when content is replaced without it.
+    return event.structuredContent === undefined ? { content } : { content, structuredContent: event.structuredContent };
+  });
 
   pi.on('tool_call', (event, ctx) => {
     if (!event || typeof event !== 'object') return handleToolCall(event, ctx);
