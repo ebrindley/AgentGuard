@@ -277,8 +277,15 @@ touch.
 ## 8. Checker severity
 
 The baseline's decision rule puts literal force-pushes and pipe-to-shell installs
-at ASK. This repository uses no ASK tier; each verdict is deny or allow
-(DESIGN.md section 15, D13). Approved by the operator on 2026-10-29; revised on
+at ASK. This repository uses no ASK tier for them; each checker verdict is deny
+or allow (DESIGN.md section 15, D13). One operation asks: deleting a whole Git
+repository below the folder a command runs in (D18, approved by the operator on
+2026-11-14). It has a routine valid use and an outcome that cannot be undone,
+which is the baseline's ASK. The baseline's admission rule asks for a recorded
+failure; the records hold one deliberate delete of this kind and no accidental
+one, and the exposure was shown by a probe. The operator admitted it on that
+basis, as an exception to the rule, because the loss is a whole repository's
+unpushed work and the question is expected about once a year. Approved by the operator on 2026-10-29; revised on
 2026-10-30 so that routine work is never denied. The rule applies to every
 harness with a command checker. Pi and OMP ran pi-sandbox-guard's analyzer, which
 asked, until the switch to cc-safety-net (step 10d); their confirmations ended

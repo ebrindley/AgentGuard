@@ -433,8 +433,14 @@ denies reads of specified credential paths and `.env` files. The complete
 policy and exceptions are in [SECURITY.md](../SECURITY.md#pi-and-omp).
 
 Pi and OMP check shell commands with cc-safety-net, under the same policy as
-OpenCode (DESIGN.md decision D13). Each verdict is allow or refuse: there are no
-confirmation prompts. At launch the guard copies `~/.cc-safety-net` into the
+OpenCode (DESIGN.md decision D13). Each verdict is allow or refuse, with one
+confirmation: a command that would delete a whole Git repository below the
+folder it runs in, or that repository's `.git`, asks you first (DESIGN.md
+decision D18). OpenCode 2 shows its permission prompt and Pi its confirm dialog.
+The command is refused, with a message that you can run it outside the guard,
+where no one can be asked: OpenCode 1, a session with no user interface, and an
+approval that comes back within a second and a half, as `opencode run --auto`
+gives. Repositories in temp folders are not asked about. At launch the guard copies `~/.cc-safety-net` into the
 session and adds Agent Guard's Git rules; `~/.cc-safety-net` itself is not
 changed. Routine work is allowed: `git status`, `commit`, `rebase`, `pull`,
 `push` (also `--force-with-lease` and `--delete`), `stash drop`, `branch -D`,
