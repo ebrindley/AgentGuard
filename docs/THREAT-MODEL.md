@@ -290,6 +290,8 @@ the session copy keeping `rm.recursive-force-dynamic-target` on; heredoc
 interpreters and shell setup lines such as `eval "$(pyenv init -)"` are allowed;
 and OpenCode, like Pi and OMP, checks shell commands only, so cc-safety-net's
 secret-name checks on file tools no longer run.
+Revised 2026-11-13, accepted by the operator: with cc-safety-net 2.7.12 a script
+sourced from a `$HOME` path is allowed.
 
 - **Tightened to DENY:** plain force pushes (`--force`, `-f`, a `+` refspec),
   mirror pushes and force-pushed tags, setting `core.hooksPath`, whole-tree
@@ -299,8 +301,11 @@ secret-name checks on file tools no longer run.
   deliberate force or mirror pushes in five and a half months, and no
   `core.hooksPath` writes. The operator runs these outside the guard.
 - **Kept at DENY:** a download piped to a shell, and a variable or sourced
-  script run as shell (`sh -c "$CMD"`, `. "$HOME/.nvm/nvm.sh"`). Repository
-  fact: these are fixed denials in cc-safety-net 2.6.0, which no setting can lift.
+  script run as shell (`sh -c "$CMD"`, `. "$FILE"`). Repository
+  fact: these were fixed denials in cc-safety-net 2.6.0, which no setting could
+  lift, and 2.7.12 still denies them on the session copy (observed 2026-11-13).
+  2.6.0 also denied a script sourced from a `$HOME` path, such as
+  `. "$HOME/.nvm/nvm.sh"`; 2.7.12 allows it, like the `~` spelling.
   Every guarded session runs inside Seatbelt, so allowing them would have been an
   accepted risk; keeping them costs an agent one retry with the tool's direct
   form. Shell setup such as `eval "$(pyenv init -)"` was denied at the strict

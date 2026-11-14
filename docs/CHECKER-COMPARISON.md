@@ -6,10 +6,14 @@ section 12). Decision D13 (DESIGN.md section 15) settles the verdicts the first
 version of this record left open: no confirmations, routine Git work allowed,
 whole-tree discards and remote-history rewrites denied. The generated fixtures
 compare the analyzer as it was before the switch (the baseline) with the
-extension that ships, which runs cc-safety-net 2.6.0 on the session copy of the
+extension that ships, which runs cc-safety-net 2.7.12 on the session copy of the
 D13 policy. The first version of this record measured cc-safety-net's `strict`
 level; on 2026-11-02 the level became `standard`, with the dynamic-target delete
-rule kept on, and the fixtures and counts below were regenerated.
+rule kept on, and the fixtures and counts below were regenerated. They were
+regenerated again on 2026-11-13 for cc-safety-net 2.7.12, which changed four
+verdicts from 2.6.0, all from allow to block: `wipefs -a /dev/sda` and three
+`node -e` programs that delete `/` recursively (`corpus-93`, `corpus-353`,
+`corpus-356`, `corpus-361`).
 
 ## Observations and reproduction
 
@@ -65,14 +69,14 @@ baseline analyzer, the extension and the bundled entry.
 ## Measurements
 
 Per call, over the 473 cases in interactive and headless mode (946 calls per
-checker in each of two runs, on one developer Mac with Node 24.22.2; each cell
+checker in each of two runs, on one developer Mac with Node 24.22.3; each cell
 gives the two runs' range):
 
 | Checker | p50 | p95 | Calls over 2 seconds | Timeouts |
 | --- | --- | --- | --- | --- |
-| Pi extension on cc-safety-net 2.6.0 | 1.6 to 1.8 ms | 2.0 to 3.3 ms | 0 | 0 |
-| Bundled entry alone | 1.2 to 1.3 ms | 1.6 to 2.8 ms | 0 | 0 |
-| Analyzer before the switch | 156 to 206 ms | 319 to 374 ms | 0 | 0 |
+| Pi extension on cc-safety-net 2.7.12 | 1.6 to 1.7 ms | 2.0 to 2.5 ms | 0 | 0 |
+| Bundled entry alone | 1.2 to 1.3 ms | 1.6 to 2.1 ms | 0 | 0 |
+| Analyzer before the switch | 142 to 149 ms | 297 to 322 ms | 0 | 0 |
 
 The extension has no subprocess and no time limit of its own: cc-safety-net's
 checks run in process and synchronously, and no call came near the analyzer's
@@ -84,14 +88,14 @@ preamble's session copy takes about 45 ms.
 
 ## Verdict changes
 
-Of the 473 cases, 227 keep their verdict and 246 change. `baseline` is the
+Of the 473 cases, 231 keep their verdict and 242 change. `baseline` is the
 analyzer's interactive verdict; the extension returns only allow or block. The
 three file-tool rows keep their verdict, because the extension forwards shell
 commands only.
 
 | Group | Same | Ask, now allowed | Ask, now blocked | Block, now allowed | Allow, now blocked |
 | --- | --- | --- | --- | --- | --- |
-| Characterization (414) | 199 | 43 | 31 | 136 | 5 |
+| Characterization (414) | 203 | 43 | 31 | 132 | 5 |
 | In scope (34) | 13 | 3 | 7 | 1 | 10 |
 | Benign (25) | 15 | 6 | 0 | 2 | 2 |
 
@@ -108,7 +112,7 @@ commands only.
   `awk`) including ones that delete under the project, `xargs rm` and `parallel
   rm` forms, `git -c core.hooksPath=... status`, and the benign cases the analyzer
   asked about (`git commit -m "...reset --hard..."`, `export PYTHONPATH`).
-- **Block, now allowed (139):** writes to `/etc`, `/System`, `/Library`, `/usr/local`
+- **Block, now allowed (135):** writes to `/etc`, `/System`, `/Library`, `/usr/local`
   and `/dev` by redirects, `truncate`, `chmod -R`, `chown -R`, `time -o`, `mv`,
   `cp`, interpreters, `wipefs` and `mkfs`, `rm -rf {REPO}/build`, and the dynamic
   interpreter forms `python3 -c "$CODE"` and `node -e "$(...)"`, which the standard
@@ -127,7 +131,9 @@ Not in the corpus, found by hand: `python3 - <<'PY' ... PY` and `node <<'JS' ...
 (an interpreter reading its program from a heredoc) and `eval "$(pyenv init -)"`
 are allowed at the standard level; at the strict level they were blocked as
 `analysis.unsupported-heredoc` and `analysis.dynamic-shell-source`. Still blocked
-at both levels: `sh -c "$CMD"`, `curl ... | sh`, `. "$HOME/.nvm/nvm.sh"`. A
+at both levels: `sh -c "$CMD"`, `curl ... | sh`, `. "$FILE"`. A script sourced
+from a `$HOME` path, such as `. "$HOME/.nvm/nvm.sh"`, was blocked by 2.6.0 and is
+allowed by 2.7.12, like the `~` spelling (observed 2026-11-13). A
 heredoc that only writes a file is allowed. `.npmrc`, `.pypirc`, `.netrc`,
 `.git-credentials`, `.env.*` variants, `*.key`, `*.p12`, `*.pfx`, `*.jks`,
 `*.keystore`, `*.kdbx` and `id_rsa`-style names would be refused for file reads and

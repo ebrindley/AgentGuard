@@ -218,7 +218,7 @@ async function main() {
   await unhealthy('a missing release', { ...healthy, AGENT_GUARD_RELEASE: '9.9.9-gone' }, /release folder is missing/);
 
   const broken = session('bbbbbbbb');
-  // 2.6.0 drops every rulebook for an entry it does not accept.
+  // cc-safety-net drops every rulebook for an entry it does not accept.
   writeFileSync(join(broken, 'rules/rule.json'), JSON.stringify({ version: 1, rules: ['agent-guard-git'], overrides: { custom: { x: 1 } } }));
   await unhealthy('rules cc-safety-net did not load (the sentinel)', { CC_SAFETY_NET_HOME: broken, AGENT_GUARD_RELEASE: rid }, /did not load Agent Guard's rules.*rule\.json.*cc-safety-net doctor/s);
   const missingRulebook = session('cccccccc');

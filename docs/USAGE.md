@@ -310,7 +310,7 @@ path-scoped `git clean`. The checker runs at cc-safety-net's `standard` level,
 so an interpreter that reads its program from a heredoc (`python3 - <<'PY'`),
 `eval "$(pyenv init -)"` and `source <(...)` setup lines run; `rm -rf "$DIR"`
 and `rm -rf *` are still refused. Still refused: a download piped to a shell and
-`sh -c "$CMD"`, `. "$HOME/.nvm/nvm.sh"` and similar runs of a variable or sourced
+`sh -c "$CMD"`, `. "$FILE"` and similar runs of a variable or sourced
 script. Only shell commands are checked; the file tools are not. Your own
 `~/.cc-safety-net` settings still apply in sessions, and take effect at the next
 launch; the `paranoid` level, if you set it, stays.
@@ -444,7 +444,7 @@ with `--force`, `-f` or a `+` refspec, and `--mirror`; `git reset --hard`,
 `git checkout .`, `git restore .`, `git clean -f`, `git switch -f`, `git stash clear`; `git config core.hooksPath`; `rm -rf` of the project folder itself, its
 parents, home, `/` or a dynamic path such as `rm -rf "$DIR"` or `rm -rf *`; and a
 download piped to a shell, or a variable or sourced script run as shell (`sh -c
-"$CMD"`, `. "$HOME/.nvm/nvm.sh"`). Allowed too: interpreters that read their
+"$CMD"`, `. "$FILE"`). Allowed too: interpreters that read their
 program from a heredoc (`python3 - <<'PY'`) and shell setup such as
 `eval "$(pyenv init -)"`. Run a refused command in a terminal outside the guard.
 The refusal names the rule.

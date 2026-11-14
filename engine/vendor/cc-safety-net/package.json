@@ -1,6 +1,6 @@
 {
   "name": "cc-safety-net",
-  "version": "2.6.0",
+  "version": "2.7.12",
   "description": "A coding agent CLI hook - block destructive commands and secret file access",
   "keywords": [
     "amp",
@@ -60,6 +60,7 @@
   "scripts": {
     "audit:dependencies": "bun audit --ignore=GHSA-ch52-4w7c-c8xp",
     "build": "bun run clean && bun scripts/project-bun.ts scripts/build.ts",
+    "build:plugin": "bun scripts/project-bun.ts scripts/build-plugin-tree.ts",
     "build:types": "tsc --project tsconfig.build.json --emitDeclarationOnly --declaration",
     "verify:package": "bun run scripts/verify-package.ts",
     "verify:repository-plugin": "bun run scripts/verify-repository-plugin.ts",
@@ -73,15 +74,16 @@
     "typecheck": "tsc --noEmit && tsc -p tsconfig.gui.json --noEmit",
     "knip": "knip-bun --production",
     "check-duplicates": "jscpd src tests --threshold 0 --exit-code 1 --no-tips --reporters ai --ignore '**/*.svg' --ignore-pattern 'import\\s[\\s\\S]*?from\\s[^;]*;'",
-    "test": "bun test",
-    "test:e2e:stability": "bun test tests/e2e --randomize --rerun-each 3",
+    "test": "bun test --timeout 30000",
+    "test:e2e:stability": "bun test tests/e2e --timeout 30000 --randomize --rerun-each 3",
     "test:e2e:live": "CC_SAFETY_NET_E2E_LIVE=1 bun test tests/e2e-live",
-    "test:coverage": "AGENT=1 bun test tests --path-ignore-patterns 'tests/e2e-live/**' --coverage --coverage-reporter=text --coverage-reporter=lcov",
+    "test:coverage": "AGENT=1 bun test tests --timeout 30000 --path-ignore-patterns 'tests/e2e-live/**' --coverage --coverage-reporter=text --coverage-reporter=lcov",
     "cc-safety-net": "bun run src/entries/bin.ts",
+    "gui:dev": "bun scripts/gui-dev.ts",
     "eval": "claude plugin eval . --ablation with-without --judge-model sonnet --allow-tools \"Bash(npx -y cc-safety-net:*)\" \"Bash(npx cc-safety-net:*)\"",
     "lint:fix": "oxlint --fix src tests scripts knip.ts",
-    "format": "oxfmt src tests scripts knip.ts .oxfmtrc.json .oxlintrc.json package.json kimi.plugin.json tsconfig.json tsconfig.build.json tsconfig.gui.json .claude-plugin .codex-plugin assets/cc-safety-net.schema.json docs/residual-risk-registry.json hooks",
-    "format:check": "oxfmt --check src tests scripts knip.ts .oxfmtrc.json .oxlintrc.json package.json kimi.plugin.json tsconfig.json tsconfig.build.json tsconfig.gui.json .claude-plugin .codex-plugin assets/cc-safety-net.schema.json docs/residual-risk-registry.json hooks"
+    "format": "oxfmt src tests scripts knip.ts .oxfmtrc.json .oxlintrc.json package.json kimi.plugin.json tsconfig.json tsconfig.build.json tsconfig.gui.json .claude-plugin .codex-plugin .cursor-plugin assets/cc-safety-net.schema.json docs/residual-risk-registry.json hooks",
+    "format:check": "oxfmt --check src tests scripts knip.ts .oxfmtrc.json .oxlintrc.json package.json kimi.plugin.json tsconfig.json tsconfig.build.json tsconfig.gui.json .claude-plugin .codex-plugin .cursor-plugin assets/cc-safety-net.schema.json docs/residual-risk-registry.json hooks"
   },
   "devDependencies": {
     "@ampcode/plugin": "0.0.0-20260724002649-ga3413e7",
@@ -113,16 +115,24 @@
   },
   "overrides": {
     "@opentelemetry/core": "2.8.0",
+    "effect": "$effect",
+    "glob": "^14.0.3",
+    "ip-address": "^10.7.4",
     "js-yaml": "^4.3.1",
+    "minimatch": "^11.0.3",
     "picomatch@^2.3.1": "2.3.2",
     "picomatch@^4.0.1": "^4.0.5",
-    "smol-toml": "^1.7.0",
-    "yaml": "^2.9.0"
+    "smol-toml": "^1.9.0",
+    "toml": "^5.0.1",
+    "undici@^6": "^6.29.1",
+    "undici@^8": "^8.12.2",
+    "yaml": "^2.9.0",
+    "zod": "^4.6.6"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22"
   },
-  "packageManager": "bun@1.4.2",
+  "packageManager": "bun@1.4.4",
   "dsh": {
     "bundle": {
       "patch": "./dist/deepseek-harness/cordis.patch.yml"
@@ -133,5 +143,5 @@
       "./dist/pi/index.js"
     ]
   },
-  "gitHead": "3793a43e9b1cab3458622c95175103bcf48ef1c6"
+  "gitHead": "e3df63b8ee54bfe01b5063d7f07aeb60d358cf48"
 }
