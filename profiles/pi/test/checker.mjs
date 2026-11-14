@@ -11,7 +11,7 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { userInfo } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -162,13 +162,17 @@ async function main() {
     refused(await ask('rm -rf ./inner/'), /The user did not approve it/);
     refused(await ask('rm -rf inner/.git'), /The user did not approve it/);
     { const r = await ask('rm -rf spaced\\ repo'); assert.ok(r && r.block === true); assert.match(r.reason, /deletes the repository .*\/spaced repo or its Git data\. The user did not approve it/); }
-    assert.equal(asked, 4);
+    // A case-insensitive volume takes another letter case for the same folder.
+    const folded = existsSync(join(project, 'INNER')) ? 1 : 0;
+    if (folded) refused(await ask('rm -rf INNER'), /The user did not approve it/);
+    assert.equal(await ask('rm -rf INNER/build'), undefined);
+    assert.equal(asked, 4 + folded);
     refused(await ask('rm -rf inner', { ui }), /cannot ask the user in this session.*outside Agent Guard\.$/);
     refused(await ask('rm -rf inner', {}), /cannot ask the user in this session/);
-    assert.equal(asked, 4);
+    assert.equal(asked, 4 + folded);
     answer = () => new Promise((resolve) => setTimeout(() => resolve(true), 1600));
     assert.equal(await ask('rm -rf inner'), undefined);
-    assert.equal(asked, 5);
+    assert.equal(asked, 5 + folded);
   });
 
   await check('worst of the candidate folders: input.cwd inside the project cannot hide the session folder', async () => {

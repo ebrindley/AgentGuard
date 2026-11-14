@@ -413,7 +413,7 @@ async function guard(input) {
       }
     }
     try { if (tool === "bash") await net["tool.execute.before"](info, output) } catch (error) {
-      const matched = typeof error?.message === "string" ? error.message.slice(0, 8192).match(/^Rule: ([a-z0-9._/-]{1,100})$/m)?.[1] : null
+      const matched = typeof error?.message === "string" ? error.message.slice(0, 8192).match(/^Rule: ([A-Za-z0-9._/-]{1,100})$/m)?.[1] : null
       if (matched) error.message = renamed(error.message)
       // A refusal names its rule. An error without one, or cc-safety-net's own
       // fail-closed rule, is the analysis failing, not policy.

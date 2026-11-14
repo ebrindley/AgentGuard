@@ -58,7 +58,7 @@ const protectedFile = join(home, '.cc-safety-net', marker);
 if (name !== 'rules-missing') fs.writeFileSync(join(state, 'rules.json'), JSON.stringify({
   allow: [directory], readonly: [], deny: [deniedRoot], skills: [], configs: [], protected: [], credentials: [join(home, '.ssh')], checker, preparationStatus: 'ready',
 }));
-let net = 'export default { server: async () => ({ "tool.execute.before": async (_info, output) => { if(output.args?.command?.includes("FAIL-RULE")) throw new Error("BLOCKED by CC Safety Net\\n\\nReason: CC Safety Net refused\\nRule: custom.agent-guard-git/hooks-path\\n"); if(output.args?.command?.includes("FAIL-CLOSED")) throw new Error("blocked\\nRule: analysis.failed-closed\\n"); if(output.args?.command?.includes("FAIL-NET")) throw Object.assign(new Error("' + marker + '"), { code: "ENAMETOOLONG" }); } }) };';
+let net = 'export default { server: async () => ({ "tool.execute.before": async (_info, output) => { if(output.args?.command?.includes("FAIL-RULE")) throw new Error("BLOCKED by CC Safety Net\\n\\nReason: CC Safety Net refused\\nRule: custom.agent-guard-git/hooks-path\\n"); if(output.args?.command?.includes("FAIL-MIXED")) throw new Error("BLOCKED by CC Safety Net\\n\\nReason: [My_Rules/No_Force] refused\\n\\nRule: custom.My_Rules/No_Force\\n"); if(output.args?.command?.includes("FAIL-CLOSED")) throw new Error("blocked\\nRule: analysis.failed-closed\\n"); if(output.args?.command?.includes("FAIL-NET")) throw Object.assign(new Error("' + marker + '"), { code: "ENAMETOOLONG" }); } }) };';
 if (name === 'engine-import') net = 'throw new Error("' + marker + '");';
 if (name === 'engine-init') net = 'export default { server: async () => { throw new Error("' + marker + '"); } };';
 if (name === 'hooks-missing') net = 'export default { server: async () => ({}) };';
@@ -231,6 +231,9 @@ if (ready) {
   // A denial keeps its rule line and carries Agent Guard's name.
   await assert.rejects(before({ tool: 'bash' }, { args: { command: 'FAIL-RULE' } }), error =>
     /^Blocked by Agent Guard\n\nReason: Agent Guard refused\nRule: custom\.agent-guard-git\/hooks-path$/m.test(error.message) && !error.message.includes('CC Safety Net'));
+  // A custom rule's name may hold capital letters and underscores.
+  await assert.rejects(before({ tool: 'bash' }, { args: { command: 'FAIL-MIXED' } }), error =>
+    /^Blocked by Agent Guard\n/.test(error.message) && /^Rule: custom\.My_Rules\/No_Force$/m.test(error.message) && !/could not analyze/.test(error.message));
   const observedText = fs.readFileSync(join(logs, 'agent-guard-events.json'), 'utf8');
   assert.equal(observedText.includes(marker), false);
   const observed = JSON.parse(observedText).events;
