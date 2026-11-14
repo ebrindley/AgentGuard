@@ -290,6 +290,8 @@ the session copy keeping `rm.recursive-force-dynamic-target` on; heredoc
 interpreters and shell setup lines such as `eval "$(pyenv init -)"` are allowed;
 and OpenCode, like Pi and OMP, checks shell commands only, so cc-safety-net's
 secret-name checks on file tools no longer run.
+Revised 2026-11-13, accepted by the operator: with cc-safety-net 2.7.12 a script
+sourced from a `$HOME` path is allowed.
 
 - **Tightened to DENY:** plain force pushes (`--force`, `-f`, a `+` refspec),
   mirror pushes and force-pushed tags, setting `core.hooksPath`, whole-tree
