@@ -75,17 +75,18 @@ async function load(env) {
   const original = console.error;
   console.error = (...args) => lines.push(args.join(' '));
   const handlers = [];
+  let result;
   try {
     const mod = await import(`${pathToFileURL(srcIndex).href}?load=${n++}`);
     mod.resetEventStateForTests();
-    mod.default({ on: (t, h) => t === 'tool_call' && handlers.push(h) });
+    mod.default({ on: (t, h) => { if (t === 'tool_call') handlers.push(h); else if (t === 'tool_result') result = h; } });
     // Loading is asynchronous; the first call waits for it.
     await handlers[0](bash('true'), ctxFor(project));
   } finally {
     console.error = original;
   }
   assert.equal(handlers.length, 1, 'expected exactly one tool_call handler');
-  return { handler: handlers[0], stderr: lines.join('\n'), mod: undefined };
+  return { handler: handlers[0], result, stderr: lines.join('\n'), mod: undefined };
 }
 
 const copy = session('aaaaaaaa');
@@ -217,7 +218,7 @@ async function main() {
       }
     });
   };
-  await unhealthy('a missing session copy', { CC_SAFETY_NET_HOME: undefined, AGENT_GUARD_RELEASE: rid }, /session copy is missing/);
+  await unhealthy('a missing session copy', { CC_SAFETY_NET_HOME: undefined, AGENT_GUARD_RELEASE: rid }, /^Agent Guard protects this computer.*started without it \(the checker's session copy is missing\), so tools are disabled/);
   await unhealthy('a copy outside the protected state', { CC_SAFETY_NET_HOME: join(home, '.cc-safety-net'), AGENT_GUARD_RELEASE: rid }, /session copy is missing/);
   await unhealthy('a copy that is gone', { CC_SAFETY_NET_HOME: join(engine, 'state/pi/gone/checker'), AGENT_GUARD_RELEASE: rid }, /session copy is missing/);
   await unhealthy('a missing release', { ...healthy, AGENT_GUARD_RELEASE: '9.9.9-gone' }, /release folder is missing/);
@@ -235,6 +236,22 @@ async function main() {
   mkdirSync(join(releases, bare), { recursive: true });
   writeFileSync(join(releases, bare, 'RELEASE'), `${bare}\n`);
   await unhealthy('cc-safety-net failing to load', { ...healthy, AGENT_GUARD_RELEASE: bare }, /cc-safety-net failed to load/);
+
+  await check('a Seatbelt denial in shell output gets the sandbox note, once, in a guarded session only', async () => {
+    const out = (toolName, text) => ({ type: 'tool_result', toolName, content: [{ type: 'text', text }], structuredContent: { kept: true } });
+    const { result } = await load(healthy);
+    const noted = result(out('bash', 'zsh:1: operation not permitted: ps'));
+    assert.equal(noted.content.length, 2);
+    assert.match(noted.content[1].text, /^\nAgent Guard: this session runs in Agent Guard's sandbox.*ps, open, launchctl and codesign.*outside Agent Guard\.$/s);
+    assert.deepEqual(noted.structuredContent, { kept: true });
+    assert.equal(result({ ...out('bash', ''), content: noted.content }), undefined);
+    assert.equal(result(out('bash', 'done')), undefined);
+    assert.equal(result(out('read', 'Operation not permitted')), undefined);
+    const unverified = await load({ ...healthy, PI_SANDBOX_PROFILE_DIGEST: undefined });
+    assert.equal(unverified.result(out('bash', 'touch: /x: Operation not permitted')), undefined);
+    const unguarded = await load({ CC_SAFETY_NET_HOME: undefined, AGENT_GUARD_RELEASE: rid });
+    assert.equal(unguarded.result(out('bash', 'touch: /x: Operation not permitted')), undefined);
+  });
 
   await check('paranoid level and a stricter user policy reach the session copy', async () => {
     const paranoid = session('dddddddd', 'paranoid');

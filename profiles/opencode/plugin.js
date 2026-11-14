@@ -20,6 +20,11 @@ const tilde = p => p === HOME || p.startsWith(HOME + "/") ? "~" + p.slice(HOME.l
 // cc-safety-net's denial text reaches the agent under Agent Guard's name. The Rule
 // line keeps cc-safety-net's rule ID.
 const renamed = text => text.replace(/^BLOCKED by CC Safety Net/, "Blocked by Agent Guard").replaceAll("CC Safety Net", "Agent Guard")
+// Added below a shell command's output that holds a Seatbelt denial, which names no
+// guard. Every sentence holds for any guarded session; ps is setuid, and Seatbelt
+// refuses such programs under any profile.
+const SANDBOX_DENIAL = /operation not permitted/i
+const SANDBOX_NOTE = "Agent Guard: this session runs in Agent Guard's sandbox, which protects against agent mistakes. It blocks writes outside the allowed folders, reads of credentials and .env files, and the programs ps, open, launchctl and codesign. Do not work around it. The user can run the command in a terminal outside Agent Guard."
 const UNSAFE_NET_ENV = ["CC_SAFETY_NET_HOME", "CC_SAFETY_NET_WORKTREE", "SAFETY_NET_WORKTREE", "CC_SAFETY_NET_AUDIT_HOME"]
 const releaseID = value => typeof value === "string" && value.length <= 100 && /^[0-9A-Za-z.+-]+$/.test(value) && value !== "." && value !== ".." ? value : null
 const publicReleaseID = value => typeof value === "string" && /^(?:dev|\d+\.\d+\.\d+(?:\.\d+)?(?:-(?:rc|beta|alpha|pre)[.-]?\d+)?)-(?:\d{8}T\d{6}Z|fixture)$/.test(value) ? value : null
@@ -353,7 +358,7 @@ async function guard(input) {
     if (tool === "agent_guard_status") return
     if (!guarded) {
       if (!bypass && !SAFE_UNGUARDED.has(tool))
-        refuse(tool, "Agent Guard: OpenCode was started without the guard. Quit it and open Agent Guard, or run opencode from a new terminal. To run without the guard on purpose, set AGENT_GUARD_BYPASS=1 in OpenCode's environment.", "tool-hook", "unguarded", "launch-guarded")
+        refuse(tool, "Agent Guard protects this computer from agent mistakes. OpenCode was started without it, so tools are disabled. Restart OpenCode through Agent Guard to use it with protection: quit it and open Agent Guard, or run opencode from a new terminal. To run without the guard on purpose, set AGENT_GUARD_BYPASS=1 in OpenCode's environment.", "tool-hook", "unguarded", "launch-guarded")
       if (tool !== "bash") return
       // A peer of another guarded session keeps that session's peer wrappers first.
       const peer = outer && !!process.env.AGENT_GUARD_PEER_PATH && typeof args.command === "string"
@@ -437,10 +442,17 @@ async function guard(input) {
     },
   }
 
+  const after = async (info, output) => {
+    await net?.["tool.execute.after"]?.(info, output)
+    if (guarded && info?.tool === "bash" && typeof output?.output === "string" && SANDBOX_DENIAL.test(output.output) && !output.output.includes(SANDBOX_NOTE))
+      output.output += `\n\n${SANDBOX_NOTE}`
+  }
+
   return {
     ...(net ?? {}),
     tool: { ...(net?.tool ?? {}), agent_guard_status: status, ...(state === "active" ? { agent_guard_permissions: permissionTool(input) } : {}) },
     "tool.execute.before": before,
+    "tool.execute.after": after,
   }
 }
 

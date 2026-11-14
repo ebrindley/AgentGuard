@@ -48,6 +48,8 @@ for (const mode of selected) {
     ["shell", { command: "git reset --hard", workdir: project }],
     ["agent_guard_status", {}],
     ["agent_guard_permissions", {}],
+    // Seatbelt refuses ps, which is setuid, under any profile.
+    ["shell", { command: "ps -p 1", workdir: project }],
   ]
   let index = 0
   const requests = []
@@ -377,6 +379,7 @@ for (const mode of selected) {
     const messages = requests.at(-1)?.messages
     const responses = JSON.stringify(messages)
     assert.match(messages.find(message => message.tool_call_id === "fixture-4")?.content ?? "", /Agent Guard:.*is under READ ONLY/)
+    assert.match(messages.find(message => message.tool_call_id === "fixture-9")?.content ?? "", /operation not permitted: ps[\s\S]*Agent Guard: this session runs in Agent Guard's sandbox/)
     assert.match(responses, /Remove or narrow that entry/)
     assert.match(responses, /DENY list/)
     assert.match(responses, /git reset --hard/)
