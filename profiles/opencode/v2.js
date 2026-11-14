@@ -58,12 +58,15 @@ export async function setup(context, guard) {
   // a host without this hook, or a result in another shape, goes without it.
   try {
     await context.tool.hook("execute.after", async event => {
-      if (event?.tool !== "shell" || event.status !== "completed" || !Array.isArray(event.result?.content)) return
-      const text = event.result.content.map(part => typeof part?.text === "string" ? part.text : "").join("\n")
-      const output = { output: text }
-      await hooks["tool.execute.after"]({ ...event, tool: "bash" }, output)
-      if (output.output !== text && output.output.startsWith(text))
-        event.result.content = [...event.result.content, { type: "text", text: `\n${output.output.slice(text.length).trimStart()}` }]
+      // An update can pair this adapter with the previous release's guard, which has no after hook.
+      try {
+        if (event?.tool !== "shell" || event.status !== "completed" || !Array.isArray(event.result?.content)) return
+        const text = event.result.content.map(part => typeof part?.text === "string" ? part.text : "").join("\n")
+        const output = { output: text }
+        await hooks["tool.execute.after"]?.({ ...event, tool: "bash" }, output)
+        if (output.output !== text && output.output.startsWith(text))
+          event.result.content = [...event.result.content, { type: "text", text: `\n${output.output.slice(text.length).trimStart()}` }]
+      } catch {}
     })
   } catch {}
   await context.tool.transform(editor => {
