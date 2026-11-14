@@ -118,8 +118,9 @@ required check passes. Set the squash subject to `<PR title> (#<number>)` and
 the body to blank, matching GitHub's `PR_TITLE` and `BLANK` defaults. Inspect the
 exact subject and body before merging. `script/land <pr-number>` applies that
 rule: it builds the subject from the title, checks it with `script/check-subject`
-and merges at the reviewed head with an empty body. The `tests` check runs the
-same subject check on the pull request title. Local gate execution is useful for
+and merges at the reviewed head with an empty body. It refuses when a local
+branch of the pull request's name holds commits the pull request lacks. The
+`tests` check runs the same subject check on the pull request title. Local gate execution is useful for
 focused development, but is not required in addition to the hosted gate.
 
 The gate starts with `script/check-duplicates.mjs`, which fails when 8 or more

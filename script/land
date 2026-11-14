@@ -11,6 +11,15 @@ cd "$root" || exit 1
 title=$(gh pr view "$number" --json title --jq .title) || exit 1
 head=$(gh pr view "$number" --json headRefOid --jq .headRefOid) || exit 1
 script/check-subject "$title" "$number" || exit $?
+# Commits made here and not pushed would be left out of the merge.
+branch=$(gh pr view "$number" --json headRefName --jq .headRefName) || exit 1
+if mine=$(git rev-parse -q --verify "refs/heads/$branch"); then
+  git cat-file -e "$head" 2>/dev/null || git fetch -q origin "$head" 2>/dev/null
+  if [[ $mine != "$head" ]] && ! git merge-base --is-ancestor "$mine" "$head" 2>/dev/null; then
+    print -ru2 -- "land: local $branch (${mine[1,7]}) holds commits that #$number (${head[1,7]}) lacks; push them, or delete the local branch"
+    exit 1
+  fi
+fi
 # The body stays empty: the rule allows no body, so none is composed.
 print -r -- "land: #$number at $head"
 gh pr merge "$number" --squash --subject "$title (#$number)" --body '' \
