@@ -282,7 +282,8 @@ counter for further releases on the same date: `2026.11.21`, then `2026.11.21.1`
 checkout's tags; fetch tags first. `agent-guard update` offers only a higher
 version, so a version dated ahead of the calendar hides the dated versions before
 it. `2026.11.14` to `2026.11.19` were published on 2026-11-13 and withdrawn; a
-release on one of those dates takes a counter of at least 1.
+release on one of those dates takes a counter of at least 1, which the script
+applies.
 
 ```sh
 scripts/release.sh [--dev] [--out DIR] 0.2.0
