@@ -95,7 +95,7 @@ ag_checker_snapshot() {
       end
     | if (.safety.level == "paranoid") or ($level == "paranoid") then . else
         .destructive_command_protection.overrides = ((($allowed | map({(.): "off"}) | add) + {"rm.recursive-force-dynamic-target": "on"}) + (.destructive_command_protection.overrides // {}))
-        | if ((.secret_protection // {}) | type) == "object" and ((.secret_protection.overrides // {}) | type) == "object" then
+        | if (.secret_protection | type) as $t | $t == "null" or ($t == "object" and (.secret_protection.overrides | type | . == "null" or . == "object")) then
             .secret_protection.overrides = ({"secret.basename.env": "off", "secret.pattern.env-variant": "off"} + (.secret_protection.overrides // {}))
           else . end
       end' "$dest/policy.json" > "$dest/.policy" && /bin/mv "$dest/.policy" "$dest/policy.json" || return 1
