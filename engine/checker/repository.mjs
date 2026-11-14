@@ -35,9 +35,10 @@ const sameFile = (a, b) => {
 };
 // A name as a command may spell it: any letter case, which a case-insensitive
 // volume takes for the same folder, and a backslash before any character
-// (`Review\ Repo`). It stands as a whole path part, not inside a longer word.
+// (`Review\ Repo`). It stands as a whole path part, not inside a longer word or a
+// variable's name (`$HOME`, `${HOME}`, `HOME=`).
 const spelled = (name) =>
-  new RegExp(`(?<![\\w.\\\\-])${[...name].map((c) => `\\\\?${c.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}`).join('')}(?![\\w.-])`, 'giu');
+  new RegExp(`(?<![\\w.\\\\\\$\\{-])${[...name].map((c) => `\\\\?${c.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}`).join('')}(?![\\w.=-])`, 'giu');
 
 /**
  * The first repository directly inside one of `folders` that `command`, run from
@@ -82,13 +83,16 @@ export function repositoryDelete(checkCommand, command, folders) {
           return found.replace(/\\?([^\\])/gu, (pair, letter) => pair.slice(0, pair.length - letter.length) + letters[at++]);
         });
       }
-      let result;
-      try {
-        result = checkCommand({ command: `cd ${quote(folder)} && ${asked}`, cwd: repository });
-      } catch {
-        continue;
+      // The command as written is asked about too, so a rewrite can only add a hit.
+      for (const text of new Set([asked, command])) {
+        let result;
+        try {
+          result = checkCommand({ command: `cd ${quote(folder)} && ${text}`, cwd: repository });
+        } catch {
+          continue;
+        }
+        if (result?.kind === 'deny' && result.ruleId === RULE) return repository;
       }
-      if (result?.kind === 'deny' && result.ruleId === RULE) return repository;
     }
   }
   return null;
