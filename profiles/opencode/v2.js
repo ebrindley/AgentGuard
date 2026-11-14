@@ -11,9 +11,21 @@ const legacySession = session => ({ ...session, permission: legacyRules(session.
 export async function setup(context, guard) {
   const directory = context.location.directory
   const worktree = context.location.project.directory
+  // Decision D18: the guard asks before a command deletes a whole repository. The
+  // request is the host's own permission prompt, under an action of Agent Guard's;
+  // the evaluate hook makes it a question whatever the configured rules say.
+  const DELETE_REPOSITORY = "agent-guard.delete-repository"
+  let confirm
+  try {
+    if (typeof context.permission?.assert === "function") {
+      await context.permission.hook("evaluate", event => { if (event?.action === DELETE_REPOSITORY) event.effect = "ask" })
+      confirm = ({ sessionID, repository, message }) => context.permission.assert({ sessionID, action: DELETE_REPOSITORY, resources: [repository], message })
+    }
+  } catch { confirm = undefined }
   const hooks = await guard({
     directory,
     worktree,
+    confirm,
     permissionResources: {
       planningEdit: join(homedir(), ".opencode/plan/probe.md"),
       requested({ directory, full, external }) {

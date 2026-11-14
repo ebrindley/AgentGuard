@@ -211,7 +211,17 @@ async function loadChecker() {
         'cc-safety-net did not load Agent Guard\'s rules. Fix ~/.cc-safety-net/rules/rule.json (`npx cc-safety-net doctor` lists the problem), then relaunch',
     };
   }
-  return { handler, copy: found.copy };
+  // Decision D18's repository check. The API reads the same session copy as the
+  // entry; a release older than this extension has no check, and none is made.
+  let checkCommand = null;
+  let repositoryDelete = null;
+  try {
+    checkCommand = (await import(pathToFileURL(join(found.release, 'vendor/cc-safety-net/dist/api.js')).href)).checkCommand;
+    repositoryDelete = (await import(pathToFileURL(join(found.release, 'checker/repository.mjs')).href)).repositoryDelete;
+  } catch {
+    repositoryDelete = null;
+  }
+  return { handler, copy: found.copy, checkCommand, repositoryDelete };
 }
 
 /** The entry reads ctx.cwd and ctx.sessionManager.getSessionId(). */
@@ -231,6 +241,37 @@ const UNGUARDED =
   'Agent Guard protects this computer from agent mistakes. Pi or OMP was started without it ' +
   '(the checker\'s session copy is missing), so tools are disabled. Restart it through Agent Guard ' +
   'to use it with protection: quit it and run pi or omp from a new terminal.';
+
+// Decision D18: deleting a whole repository needs the user's approval. An answer that
+// comes back sooner than a person can read the question is not the user's.
+const CONFIRM_MIN_MS = 1500;
+
+/** Ask before a command deletes `repository`; a block unless the user approves. */
+async function confirmDelete(ctx, repository) {
+  let home = '';
+  try {
+    home = realpathSync(homedir());
+  } catch {
+    // the full path is shown
+  }
+  const shown = home && repository.startsWith(home + '/') ? `~${repository.slice(home.length)}` : repository;
+  const deny = (text) => block(`Agent Guard: this command deletes the repository ${shown} or its Git data. ${text}`);
+  if (!ctx || ctx.hasUI !== true || typeof ctx.ui?.confirm !== 'function') {
+    return deny('Agent Guard cannot ask the user in this session, so it was not run. The user can run it in a terminal outside Agent Guard.');
+  }
+  const started = Date.now();
+  let approved = false;
+  try {
+    approved = (await ctx.ui.confirm('Agent Guard', `This command deletes the repository ${shown} or its Git data. Approve only if you asked for that.`)) === true;
+  } catch {
+    approved = false;
+  }
+  if (!approved) return deny('The user did not approve it, so it was not run. Do not delete it another way; report this to the user.');
+  if (Date.now() - started < CONFIRM_MIN_MS) {
+    return deny('The approval came back at once, which Agent Guard takes as automatic, so it was not run. It needs the user\'s own approval; the user can also run it in a terminal outside Agent Guard.');
+  }
+  return undefined;
+}
 
 // Added below a shell command's output that holds a Seatbelt denial, which names no
 // guard. The same text as OpenCode's plugin; ps is setuid, and Seatbelt refuses such
@@ -314,7 +355,15 @@ export default function (pi) {
     } catch {
       return block('Agent Guard: Guard errored; blocked as fail-safe.');
     }
-    return worst ? block(typeof worst.reason === 'string' ? renamed(worst.reason) : 'Blocked by Agent Guard.') : undefined;
+    if (worst) return block(typeof worst.reason === 'string' ? renamed(worst.reason) : 'Blocked by Agent Guard.');
+    if (typeof checker.repositoryDelete !== 'function' || typeof event.input?.command !== 'string') return undefined;
+    let repository = null;
+    try {
+      repository = checker.repositoryDelete(checker.checkCommand, event.input.command, cwds);
+    } catch {
+      repository = null;
+    }
+    return repository ? confirmDelete(ctx, repository) : undefined;
   };
 
   // The sandbox note, when the launch applied Seatbelt and the checker is healthy.

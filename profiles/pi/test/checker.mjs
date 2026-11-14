@@ -146,6 +146,29 @@ async function main() {
     assert.equal(asked, 0);
   });
 
+  await check('deleting a repository below the working folder needs the user\'s own approval (decision D18)', async () => {
+    mkdirSync(join(project, 'inner/.git'), { recursive: true });
+    mkdirSync(join(project, 'inner/build'), { recursive: true });
+    let asked = 0, answer = async () => true;
+    const ui = { confirm: async (title, message) => { asked++; assert.equal(title, 'Agent Guard'); assert.match(message, /deletes the repository .*inner or its Git data/); return answer(); } };
+    const ask = (command, extra = { hasUI: true, ui }) => run(bash(command), project, extra);
+    for (const command of ['rm -rf inner/build', 'ls inner', 'mv inner renamed', 'rm inner/.git/index.lock']) assert.equal(await ask(command), undefined, command);
+    assert.equal(asked, 0);
+    const refused = (r, text) => { assert.ok(r && r.block === true); assert.match(r.reason, /^Agent Guard: this command deletes the repository .*\/inner or its Git data\. /); assert.match(r.reason, text); };
+    refused(await ask('rm -rf inner'), /approval came back at once.*automatic/);
+    answer = async () => false;
+    refused(await ask('rm -rf ./inner/'), /The user did not approve it/);
+    refused(await ask('rm -rf inner/.git'), /The user did not approve it/);
+    refused(await ask(`find ${join(project, 'inner').replaceAll(' ', '\\ ')} -delete`), /The user did not approve it/);
+    assert.equal(asked, 4);
+    refused(await ask('rm -rf inner', { ui }), /cannot ask the user in this session.*outside Agent Guard\.$/);
+    refused(await ask('rm -rf inner', {}), /cannot ask the user in this session/);
+    assert.equal(asked, 4);
+    answer = () => new Promise((resolve) => setTimeout(() => resolve(true), 1600));
+    assert.equal(await ask('rm -rf inner'), undefined);
+    assert.equal(asked, 5);
+  });
+
   await check('worst of the candidate folders: input.cwd inside the project cannot hide the session folder', async () => {
     // Below the project, but the working folder itself when run in "sub".
     const command = `rm -rf '${join(project, 'sub')}'`;

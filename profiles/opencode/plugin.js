@@ -25,6 +25,10 @@ const renamed = text => text.replace(/^BLOCKED by CC Safety Net/, "Blocked by Ag
 // refuses such programs under any profile.
 const SANDBOX_DENIAL = /operation not permitted/i
 const SANDBOX_NOTE = "Agent Guard: this session runs in Agent Guard's sandbox, which protects against agent mistakes. It blocks writes outside the allowed folders, reads of credentials and .env files, and the programs ps, open, launchctl and codesign. Do not work around it. The user can run the command in a terminal outside Agent Guard."
+// Decision D18: deleting a whole repository needs the user's approval. An answer
+// that comes back sooner than a person can read the request is a client approving
+// by itself (opencode run --auto), which the plugin cannot otherwise see.
+const CONFIRM_MIN_MS = 1500
 const UNSAFE_NET_ENV = ["CC_SAFETY_NET_HOME", "CC_SAFETY_NET_WORKTREE", "SAFETY_NET_WORKTREE", "CC_SAFETY_NET_AUDIT_HOME"]
 const releaseID = value => typeof value === "string" && value.length <= 100 && /^[0-9A-Za-z.+-]+$/.test(value) && value !== "." && value !== ".." ? value : null
 const publicReleaseID = value => typeof value === "string" && /^(?:dev|\d+\.\d+\.\d+(?:\.\d+)?(?:-(?:rc|beta|alpha|pre)[.-]?\d+)?)-(?:\d{8}T\d{6}Z|fixture)$/.test(value) ? value : null
@@ -227,7 +231,7 @@ async function guard(input) {
     if (rules) process.env.CC_SAFETY_NET_HOME = rules.checker
   }
   const bypass = process.env.AGENT_GUARD_BYPASS === "1"
-  let net = null, checkCommand = null, moduleLoaded = false
+  let net = null, checkCommand = null, moduleLoaded = false, repositoryDelete = null
   if (RELEASE && DELEGATE !== false && (!guarded || rules)) {
     try {
       const module = await import(pathToFileURL(join(RELEASE, "vendor/cc-safety-net/dist/index.js")).href)
@@ -243,6 +247,8 @@ async function guard(input) {
       if (typeof checkCommand !== "function") checkCommand = null
     } catch {}
     if (!checkCommand) failure("api-load", "api-unavailable", "reinstall")
+    // Absent from a release older than this plugin: the confirmation is then skipped.
+    try { repositoryDelete = (await import(pathToFileURL(join(RELEASE, "checker/repository.mjs")).href)).repositoryDelete } catch {}
   }
   // cc-safety-net drops a rule source it cannot load and goes on allowing, so the
   // session copy must prove Agent Guard's Git rules are in force (docs/DESIGN.md
@@ -352,6 +358,23 @@ async function guard(input) {
       : `is not writable. Add it under ALLOW in ${LIST}, then relaunch.`
     refuse(tool, `Agent Guard: ${p} ${advice}`, "path-write", "path-not-writable", "review-guard-list", kind === "readonly" ? "guard.path.readonly" : "guard.path.unlisted")
   }
+  // The command passed the checker and would delete a repository below the folder
+  // it runs in. The host asks the user where it can; anywhere else it is refused.
+  const confirmDelete = async (tool, info, repository) => {
+    const shown = tilde(repository)
+    const deny = text => refuse(tool, `Agent Guard: this command deletes the repository ${shown} or its Git data. ${text}`, "safety-net", "command-denied", "review-policy", "custom")
+    if (typeof input.confirm !== "function")
+      deny("Agent Guard cannot ask the user in this session, so it was not run. The user can run it in a terminal outside Agent Guard.")
+    const started = Date.now()
+    let approved = false
+    try {
+      await input.confirm({ sessionID: info.sessionID, repository, message: `Agent Guard: this command deletes the repository ${shown} or its Git data. Approve only if you asked for that.` })
+      approved = true
+    } catch {}
+    if (!approved) deny("The user did not approve it, so it was not run. Do not delete it another way; report this to the user.")
+    if (Date.now() - started < CONFIRM_MIN_MS)
+      deny("The approval came back at once, which Agent Guard takes as automatic, so it was not run. It needs the user's own approval; the user can also run it in a terminal outside Agent Guard.")
+  }
   const before = async (info, output) => {
     const { tool } = info
     const args = output.args ?? {}
@@ -403,6 +426,12 @@ async function guard(input) {
       if (matched) throw error
       // The raw error repeats the command text and names no remedy.
       throw new Error(`Agent Guard: cc-safety-net could not analyze this command${errno === "unknown" ? "" : ` (${errno})`}, so it was not run. This is an analysis failure, not a policy denial. Simplify or restructure the command, for example by moving long text into a file, or report this to the user.`)
+    }
+    if (tool === "bash" && typeof args.command === "string" && typeof repositoryDelete === "function") {
+      let folder = canonical(directory)
+      try { if (typeof args.workdir === "string") folder = target(args.workdir, tool) } catch {}
+      const repository = repositoryDelete(checkCommand, args.command, [folder])
+      if (repository) await confirmDelete(tool, info, repository)
     }
     if (tool === "bash") peerPath(args)
   }

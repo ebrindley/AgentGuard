@@ -12,7 +12,8 @@ const self = fileURLToPath(import.meta.url);
 const cases = ['healthy', 'rules-missing', 'engine-import', 'engine-init', 'api-import', 'hooks-missing', 'updated', 'unsafe-version', 'outer-sandbox'];
 if (process.argv[2] !== '--case') {
   const source = resolve(process.argv[2] ?? join(dirname(self), '../profiles/opencode/plugin.js'));
-  const root = fs.realpathSync(fs.mkdtempSync(join(os.tmpdir(), 'agentguard-plugin-health-')));
+  // Outside temp: the repository confirmation leaves repositories in temp folders alone.
+  const root = fs.realpathSync(fs.mkdtempSync(join(os.userInfo().homedir, 'Library/Caches', 'agentguard-plugin-health-')));
   let failed = false;
   for (const host of ['v1', 'v2']) for (const name of cases) {
     const result = spawnSync(process.execPath, [self, '--case', root, source, name, host], { encoding: 'utf8' });
@@ -20,7 +21,9 @@ if (process.argv[2] !== '--case') {
     process.stderr.write(result.stderr);
     if (result.status !== 0) failed = true;
   }
-  console.log(`Plugin-health fixtures retained: ${root}`);
+  // The cache folder is not cleared by the system as temp is: keep fixtures only to diagnose a failure.
+  if (failed) console.log(`Plugin-health fixtures retained: ${root}`);
+  else fs.rmSync(root, { recursive: true, force: true });
   process.exit(failed ? 1 : 0);
 }
 
@@ -40,6 +43,10 @@ fs.writeFileSync(join(release, 'RELEASE'), '1.0.0-fixture\n');
 fs.writeFileSync(join(release, 'VERSION'), name === 'unsafe-version' ? marker + '\n' : name === 'updated' ? '1.0.0.1\n' : '1.0.0\n');
 fs.copyFileSync(source, join(release, 'profiles/opencode/plugin.js'));
 for (const file of ['permissions.js', 'permissions.jq', 'v2.js']) fs.copyFileSync(join(dirname(source), file), join(release, 'profiles/opencode', file));
+// The shared repository check, from a source tree or an unpacked release.
+fs.mkdirSync(join(release, 'checker'), { recursive: true });
+fs.copyFileSync(['../../engine/checker', '../../checker'].map(d => join(dirname(source), d, 'repository.mjs')).find(f => fs.existsSync(f)), join(release, 'checker/repository.mjs'));
+fs.mkdirSync(join(directory, 'repo/.git'), { recursive: true });
 fs.mkdirSync(join(checker, 'rules'), { recursive: true });
 fs.writeFileSync(join(checker, 'rules/rule.json'), '{}');
 const deniedRoot = join(directory, 'private');
@@ -56,7 +63,7 @@ if (name === 'engine-import') net = 'throw new Error("' + marker + '");';
 if (name === 'engine-init') net = 'export default { server: async () => { throw new Error("' + marker + '"); } };';
 if (name === 'hooks-missing') net = 'export default { server: async () => ({}) };';
 fs.writeFileSync(join(release, 'vendor/cc-safety-net/dist/index.js'), net);
-fs.writeFileSync(join(release, 'vendor/cc-safety-net/dist/api.js'), name === 'api-import' ? 'throw new Error("' + marker + '");' : 'export const checkCommand = ({command}) => command.includes("API-DENY") ? ({kind:"deny",reason:"' + marker + '",ruleId:"' + marker + '"}) : command.startsWith("git config core.hooksPath ") ? ({kind:"deny",reason:"hooks",ruleId:"custom.agent-guard-git/hooks-path"}) : ({kind:"allow"});');
+fs.writeFileSync(join(release, 'vendor/cc-safety-net/dist/api.js'), name === 'api-import' ? 'throw new Error("' + marker + '");' : 'export const checkCommand = ({command, cwd}) => cwd.endsWith("/repo") ? (command.includes("DELETE-REPO") ? ({kind:"deny",reason:"git",ruleId:"rm.git-metadata"}) : ({kind:"allow"})) : command.includes("API-DENY") ? ({kind:"deny",reason:"' + marker + '",ruleId:"' + marker + '"}) : command.startsWith("git config core.hooksPath ") ? ({kind:"deny",reason:"hooks",ruleId:"custom.agent-guard-git/hooks-path"}) : ({kind:"allow"});');
 let installed = release;
 if (name === 'updated') {
   installed = join(engine, 'releases/2.0.0.1-fixture');
@@ -96,9 +103,14 @@ let hooks;
 if (host === 'v2') {
   const tools = {}, rpc = {};
   let execute, finished;
+  globalThis.permission = { evaluate: null, asked: [], answer: async () => {} };
   await definition.setup({
     location: { directory, project: { directory, canonical: directory } },
     agent: { list: async () => ({ data: [{ id: 'build', permissions: [{ action: 'shell', resource: '*', effect: 'allow' }] }] }) },
+    permission: {
+      hook: async (name, callback) => { assert.equal(name, 'evaluate'); globalThis.permission.evaluate = callback; },
+      assert: async request => { globalThis.permission.asked.push(request); await globalThis.permission.answer(request); },
+    },
     tool: {
       hook: async (name, callback) => { assert.ok(['execute.before', 'execute.after'].includes(name)); if (name === 'execute.before') execute = callback; else finished = callback; },
       transform: async callback => callback({ add: tool => { tools[tool.name] = tool; } }),
@@ -170,6 +182,26 @@ if (ready) {
   const denial = { output: 'touch: /x: Operation not permitted' };
   await after({ tool: 'bash' }, denial);
   assert.match(denial.output, /^touch: \/x: Operation not permitted\n\nAgent Guard: this session runs in Agent Guard's sandbox.*ps, open, launchctl and codesign.*outside Agent Guard\.$/s);
+  // Decision D18: a command that deletes a repository below its folder needs the
+  // user's approval. V1 has no request to raise, so it refuses.
+  const remove = () => before({ tool: 'bash', sessionID: 'ses_fixture' }, { args: { command: 'rm DELETE-REPO repo' } });
+  await before({ tool: 'bash' }, { args: { command: 'rm DELETE-REPO other' } });
+  await before({ tool: 'bash' }, { args: { command: 'ls DELETE-REPO repo' } });
+  if (host === 'v1') await assert.rejects(remove(), /deletes the repository .*\/Projects\/app\/repo or its Git data\. Agent Guard cannot ask the user in this session.*outside Agent Guard\.$/);
+  else {
+    const { permission } = globalThis;
+    const question = { action: 'agent-guard.delete-repository', effect: 'allow' }, other = { action: 'shell', effect: 'allow' };
+    await permission.evaluate(question); await permission.evaluate(other);
+    assert.deepEqual([question.effect, other.effect], ['ask', 'allow']);
+    await assert.rejects(remove(), /approval came back at once.*automatic/);
+    assert.deepEqual(permission.asked.at(-1).resources, [join(directory, 'repo')]);
+    assert.equal(permission.asked.at(-1).sessionID, 'ses_fixture');
+    permission.answer = async () => { throw new Error('rejected'); };
+    await assert.rejects(remove(), /The user did not approve it/);
+    permission.answer = () => new Promise(resolve => setTimeout(resolve, 1600));
+    await remove();
+    assert.equal(permission.asked.length, 3);
+  }
   const plain = { output: 'done' };
   await after({ tool: 'bash' }, plain);
   assert.equal(plain.output, 'done');
