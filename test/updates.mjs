@@ -348,10 +348,10 @@ try {
     assert.equal(requests.slice(start).filter((u) => u.startsWith('/files/')).length, 0);
     unchanged(before);
   });
-  await check('update-check off, a nested launch and a restart handoff make no desktop lookup', async () => {
+  await check('update-check off, a nested launch and --version make no desktop lookup', async () => {
     publish('2.4.0'); installApp(); const before = requests.length;
     preference('off'); assert.equal((await desktop()).stdout, 'status 0\n'); preference('on');
-    for (const extra of ['export AGENT_GUARD_GATE=1', 'export AGENT_GUARD_UPDATE_RESTART=1']) assert.equal((await desktop(extra)).stdout, 'status 0\n');
+    assert.equal((await desktop('export AGENT_GUARD_GATE=1')).stdout, 'status 0\n');
     assert.equal((await desktop('', '--version')).stdout, 'status 0\n');
     assert.deepEqual(desktopRequests(before), []);
   });

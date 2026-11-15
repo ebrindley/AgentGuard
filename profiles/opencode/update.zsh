@@ -178,15 +178,16 @@ opencode_desktop_download() {
   [[ ${(L)sum} == "$sha" ]] || opencode_desktop_stop 'the download does not match the SHA-256 the update service gave'
 }
 
-# STAGING: extracts the archive into STAGING/new, which must hold exactly the
-# app's folder name.
+# STAGING: extracts the archive into STAGING/new, which must hold exactly
+# OpenCode.app, the name the update service gives the app whatever the installed
+# one is called.
 opencode_desktop_unpack() {
   local -a top
   /bin/mkdir -m 700 -- "$1/new" && /usr/bin/ditto -x -k "$1/update.zip" "$1/new" 2>/dev/null ||
     { opencode_desktop_stop 'the download is not a readable archive'; return }
   top=("$1/new"/*(DN))
-  [[ $#top == 1 && ${top[1]:t} == ${app:t} && -d ${top[1]} && ! -L ${top[1]} ]] ||
-    opencode_desktop_stop "the archive does not hold exactly ${app:t}"
+  [[ $#top == 1 && ${top[1]:t} == OpenCode.app && -d ${top[1]} && ! -L ${top[1]} ]] ||
+    opencode_desktop_stop 'the archive does not hold exactly OpenCode.app'
 }
 
 # OFFERED NEW: checks the extracted app before it replaces anything: the
@@ -234,8 +235,8 @@ opencode_desktop_run() {
   {
     opencode_desktop_download "$staging" &&
       opencode_desktop_unpack "$staging" &&
-      opencode_desktop_verify "$1" "$staging/new/${app:t}" &&
-      opencode_desktop_swap "$staging" "$staging/new/${app:t}" || rc=$?
+      opencode_desktop_verify "$1" "$staging/new/OpenCode.app" &&
+      opencode_desktop_swap "$staging" "$staging/new/OpenCode.app" || rc=$?
   } always {
     if [[ ! -d $app && -d $staging/old ]]; then
       /bin/mv -- "$staging/old" "$app" 2>/dev/null ||

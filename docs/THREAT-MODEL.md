@@ -215,7 +215,7 @@ D21) lets Agent Guard itself replace `OpenCode.app` outside the profile. This is
 a second unconfined maintenance route, with one entry. Repository fact:
 `engine/launch` reaches it only in `gui` mode for the OpenCode harness and only
 when its `sandbox-exec` probe exited 0, after the operator accepted a dialog;
-`update-check off` and the restart handoff suppress it. Inputs: the update
+`update-check off` suppresses it. Inputs: the update
 service's JSON reply, of which the version, an archive address that must start
 with `https://opencode.ai/` and a SHA-256 are used, and the archive, which
 `ditto` unpacks into a private folder inside the app's parent folder. Checks

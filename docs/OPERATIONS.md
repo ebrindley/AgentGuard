@@ -575,9 +575,9 @@ prints the first two lines on stderr, installs nothing and starts the session.
 
 The desktop launch (Agent Guard.app) offers an OpenCode app update as a third
 product of the same offer, after Agent Guard's own offer and before the app's
-command line is built, under the same gate: `agent-guard update-check off`, a
-restart handoff and a nested launch suppress it, and it needs the nesting probe
-to have succeeded. The launcher has already refused when OpenCode is open. The
+command line is built, under the same gate: `agent-guard update-check off` and a
+nested launch suppress it, and it needs the nesting probe to have succeeded. A
+launch that restarted after Agent Guard's own update makes this offer too. The launcher has already refused when OpenCode is open. The
 installation must be a stable `N.N.N` app in a real folder, not a link, whose
 parent folder the operator can write, with a valid signature that has a Team ID
 and an executable of one architecture (arm64 or x64, read from the installed
