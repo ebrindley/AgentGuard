@@ -40,8 +40,11 @@ once "$tree/engine/agent-guard" "$download_base"
 # updates.zsh keeps the repository and the transport's protocol limits on separate lines.
 once "$tree/engine/updates.zsh" "local repo='https://github.com/ebrindley/AgentGuard'"
 once "$tree/engine/updates.zsh" "local -a curl_proto=(--proto '=https' --proto-redir '=https')"
-# OpenCode's release lookup address, which a test copy points at a local server.
+# OpenCode's release lookup addresses, and the address a desktop archive must
+# start with, which a test copy points at a local server.
 once "$tree/profiles/opencode/update.zsh" "url='https://opencode.ai/update/api/latest/cli/npm'"
+once "$tree/profiles/opencode/update.zsh" "url='https://opencode.ai/update/api/latest/desktop/opencode'"
+once "$tree/profiles/opencode/update.zsh" "origin='https://opencode.ai/'"
 # Where the launcher looks for the CLI and the app.
 once "$tree/profiles/opencode/harness.zsh" 'cli_search=(/opt/homebrew/bin/opencode /usr/local/bin/opencode "$home/.opencode/bin/opencode")'
 once "$tree/profiles/opencode/harness.zsh" 'app_paths=(/Applications/OpenCode.app "$home/Applications/OpenCode.app")'

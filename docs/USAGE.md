@@ -158,10 +158,47 @@ In this release only OpenCode 2, installed by the opencode.ai installer or as an
 npm global install that Volta and mise do not own, gets the offer. Other
 installations, prereleases and other majors do not; `opencode upgrade` still
 works for them. Subcommands (`run`, `serve`, `auth` and the rest), help and
-version requests, attached clients (`--attach`, `--server`), nested launches
-and the desktop app make no lookup. A launch without a terminal prints the
-availability lines and installs nothing. `agent-guard update-check off` turns
-off this offer and Agent Guard's own.
+version requests, attached clients (`--attach`, `--server`) and nested launches
+make no lookup, and the desktop app has its own offer, below. A launch without a
+terminal prints the availability lines and installs nothing. `agent-guard
+update-check off` turns off this offer, the desktop app's and Agent Guard's own.
+
+#### Update offer for the desktop app
+
+Inside the guard the desktop app's own updater cannot replace the app, so the
+app never updates there. Agent Guard makes the offer instead. When you open
+OpenCode through Agent Guard.app, after Agent Guard's own offer and before
+OpenCode starts, the launcher asks OpenCode's update service for the latest
+desktop version. When that is a stable version newer than yours with the same
+major, a dialog shows the offered and installed versions and `The update runs
+without Agent Guard's protection.`, with the buttons Later and Update. Later,
+or a lookup that fails or takes longer than two seconds, opens the installed
+app and asks again next time.
+
+Update runs outside the guard, with a progress window, and writes its output to
+`~/Agent Guard/last-opencode-update.log`. Agent Guard downloads the macOS build
+for the app's architecture from opencode.ai over HTTPS into a hidden folder
+inside the folder that holds `OpenCode.app`. It checks the download against the
+SHA-256 the update service gave, unpacks it and checks the new app before it
+replaces anything: the bundle ID and executable name match the installed app,
+the version is the offered one, the signature satisfies the installed app's
+designated requirement and comes from the same Team ID, and Gatekeeper accepts
+it. It then swaps the new app in for the old one and removes the hidden folder.
+OpenCode starts from the new app, under the guard. If any step fails, the
+installed app is left as it was, the launch stops with a message that names the
+log, and the log holds a one-line reason. Choose Later to open the installed
+app meanwhile.
+
+The offer covers an `OpenCode.app` at a stable version `N.N.N` that is a real
+folder (not a link), in a folder you can write (`~/Applications`, or
+`/Applications` when your account can write it), with a valid signature that has
+a Team ID and an executable for one architecture, arm64 or x64. For any other
+installation the launcher makes no lookup; update it by quitting OpenCode, then
+installing the download from opencode.ai or running `brew upgrade --cask
+opencode-desktop`. Terminal launches never offer it, and `agent-guard
+update-check off` turns it off. Homebrew's record of the cask keeps the older
+version after Agent Guard replaces the app. That is the usual state for this
+cask, which declares `auto_updates` and expects the app to replace itself.
 
 ## OpenCode Desktop behavior
 
@@ -176,8 +213,10 @@ OpenCode's code come from reading its bundle, not from running it.
   it cannot replace the app. On 2026-10-24, 2.1.1 staging 2.1.4 raised an
   administrator prompt; cancelling it was logged as `OSStatus error -60006`.
   Since 2026.10.25 the guard denies `com.apple.authd` to the desktop, so the
-  in-app update now fails without a prompt. Quit OpenCode, update it outside the
-  guard, then reopen it through Agent Guard. For the Homebrew cask, run
+  in-app update now fails without a prompt. Agent Guard offers the update when
+  you open the app (see [Update offer for the desktop
+  app](#update-offer-for-the-desktop-app)). To update by hand, quit OpenCode,
+  update it outside the guard, then reopen it through Agent Guard. For the Homebrew cask, run
   `brew upgrade --cask opencode-desktop`. The cask declares `auto_updates`, but
   Homebrew 7.0.10 also upgrades it with plain `brew upgrade` once the installed
   app is older than the tap's version (`Cask#outdated_version`), unless

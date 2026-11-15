@@ -43,7 +43,12 @@ not a required CI gate and does not qualify a checker replacement.
 The V1 native suites remain pinned to 1.18.33. V2 uses `@opencode/cli@2.0.32`.
 `test/plugin-health.mjs` runs the same eight readiness/refusal cases through both
 APIs. `test/opencode-runtime.mjs` covers command routing, the classification of
-`service status` output and terminal launches inside another sandbox. For native
+`service status` output and terminal launches inside another sandbox. Its
+desktop update cases and `test/updates.mjs` use the stand-in bundles of
+`test/desktop-fixture.mjs`: a test copy replaces the absolute paths of
+`codesign`, `spctl` and, where the stand-in executable is a script, `od`, with
+stand-ins that read the facts the bundle holds; no real application is
+downloaded or opened. For native
 V2 checks,
 set `AG_TEST_OPENCODE` to its executable and `AG_TEST_OPENCODE_V1` to the pinned
 V1 executable, then run

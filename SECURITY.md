@@ -274,6 +274,32 @@ behind linked ancestors. These changes follow the 0.2.0 prerelease.
   write (`~/.npm`, `~/.cache`, OpenCode's configuration), the exposure this
   document already accepts for maintenance run outside the guard
   ([Update the OpenCode CLI](docs/USAGE.md#update-the-opencode-cli)).
+- The desktop app's update, when you accept the offer the launcher makes as
+  Agent Guard.app opens OpenCode. Agent Guard itself, without its profile and
+  only when its `sandbox-exec` probe succeeded, downloads a build from
+  `https://opencode.ai/` over HTTPS and replaces the app bundle (`OpenCode.app`
+  in a folder you can write, such as `~/Applications`). Its inputs are the
+  update service's JSON reply (a version, an archive address that must start
+  with `https://opencode.ai/`, and a SHA-256) and the archive. Before the
+  replacement it checks the SHA-256, the bundle ID, the executable name, the
+  version, that the new app's signature satisfies the installed app's
+  designated requirement with the same Team ID, and that Gatekeeper accepts it
+  ([Update offer for the desktop
+  app](docs/USAGE.md#update-offer-for-the-desktop-app)). The checks leave
+  gaps. The SHA-256 comes from the same service as the archive, so it catches a
+  damaged download and does not authenticate a service that serves another
+  archive. The designated requirement is read from the installed app, which a
+  guarded session cannot write unless you allow it: the profile denies writes
+  by default, `/Applications` and `~/Applications` are in no writable list, and
+  a session cannot rename or remove the `~/Applications` folder; a Guard List
+  ALLOW entry that is or contains the bundle, such as `~/Applications`, makes
+  it writable, and the update would then compare against whatever app a
+  session left there. The archive is unpacked before its signature is checked.
+  Accepted risk: a build that is signed by the installed app's developer and
+  accepted by Gatekeeper is installed whatever the service intended, as with
+  the vendor's own updater, since the harness vendor's released code is
+  trusted ([threat model](docs/THREAT-MODEL.md#2-trust-boundaries)). The offer
+  is a dialog you answer.
 - Work a shared Grok leader runs. Agent Guard covers the Grok process its
   launcher starts, interactive or headless (`grok -p`), with Grok's tools running
   in that process. `grok workspace start` and `grok worker start` run a leader

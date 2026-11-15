@@ -1,12 +1,15 @@
 // Offline release lookup, consent and restart checks. Only disposable copies
 // replace the network base, dialogs and installation transaction.
 import assert from 'node:assert/strict';
+import { createHash, randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fixtureAccount } from './fixture-home.mjs';
+import { opencodeUpdateSeams } from './engines/zsh.mjs';
+import { archive, bundle, feed, requirement, seams as desktopSeams, snapshot, tools } from './desktop-fixture.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const temp = realpathSync(mkdtempSync('/tmp/agentguard-updates.'));
@@ -22,9 +25,15 @@ const quote = (s) => `'${s.replaceAll("'", "'\\''")}'`;
 const requests = [];
 let tag = 'v2026.11.05', response = 'redirect', answer = 'Later', updateStatus = 0;
 let opencodeReply = '2.4.0';
+// The desktop update service's reply (a status code for a failure), the archive it serves and the delay before it does.
+let desktopReply = {}, desktopZip = Buffer.alloc(0), desktopDelay = 0;
 const server = createServer((req, res) => {
   requests.push(req.url);
-  if (req.url.startsWith('/opencode-update?')) {
+  if (req.url.startsWith('/opencode-desktop-update?')) {
+    if (typeof desktopReply === 'number') res.writeHead(desktopReply).end(); else res.end(JSON.stringify(desktopReply));
+  } else if (req.url.startsWith('/files/')) {
+    setTimeout(() => res.end(desktopZip), desktopDelay);
+  } else if (req.url.startsWith('/opencode-update?')) {
     if (opencodeReply === 'failure') res.writeHead(503).end();
     else if (opencodeReply === 'malformed') res.end('not json');
     else res.end(opencodeReply.startsWith('{') ? opencodeReply : JSON.stringify({ channel: 'latest', name: 'cli', version: opencodeReply, metadata: { package: '@opencode/cli' } }));
@@ -47,8 +56,9 @@ source = replaceOnce(source, "local -a curl_proto=(--proto '=https' --proto-redi
 source = source.replaceAll('/usr/bin/osascript', quote(join(temp, 'dialog')));
 writeFileSync(module, source);
 const opencodeModule = join(release, 'update.zsh');
-writeFileSync(opencodeModule, replaceOnce(readFileSync(join(root, 'profiles/opencode/update.zsh'), 'utf8'),
-  "url='https://opencode.ai/update/api/latest/cli/npm'", `url=${quote(`${base}/opencode-update`)}`));
+const standIns = tools(temp);
+writeFileSync(opencodeModule, desktopSeams(readFileSync(join(root, 'profiles/opencode/update.zsh'), 'utf8'), standIns));
+opencodeUpdateSeams(opencodeModule, base);
 const stamp = (value) => writeFileSync(join(engine, 'state/stamp.json'), JSON.stringify({ tag: value }));
 const preference = (value) => writeFileSync(join(engine, 'state/update-check'), value);
 const run = (body, input = '') => new Promise((done, reject) => {
@@ -267,6 +277,173 @@ try {
     for (const output of ['garbage', '0.0.0-dev-123', '3.0.0']) {
       const r = await probe(output); assert.equal(r.status, 3, output); assert.match(r.stdout, /^fail: /);
     }
+  });
+
+  // OpenCode.app as a product. The installed app is a stand-in bundle in the disposable
+  // home; codesign and spctl are stand-ins that read the facts the bundle holds.
+  const appPath = join(home, 'Applications/OpenCode.app');
+  const appParent = dirname(appPath);
+  const appLog = join(home, 'Agent Guard/last-opencode-update.log');
+  mkdirSync(join(temp, 'build'), { recursive: true });
+  const installApp = (options = {}) => {
+    mkdirSync(appParent, { recursive: true });
+    chmodSync(appParent, 0o755);
+    rmSync(appPath, { recursive: true, force: true });
+    bundle(appPath, { files: { 'Contents/Resources/payload': 'old' }, ...options });
+    return snapshot(appPath);
+  };
+  // The archive and the service's reply for a build; feedOptions overrides what the reply says of it.
+  const publish = (version, options = {}, feedOptions = {}, name) => {
+    const built = archive(join(temp, 'build'), { version, files: { 'Contents/Resources/payload': 'new' }, ...options }, name);
+    desktopZip = built.body;
+    desktopReply = feed(base, version, { ...built, ...feedOptions });
+  };
+  const desktop = (extra = '', args = '') => run(`app=${quote(appPath)}; ${extra}; opencode_desktop_offer gui ${args}; print -r -- "status $?"`);
+  const desktopRequests = (before) => requests.slice(before);
+  const unchanged = (before, why) => { assert.deepEqual(snapshot(appPath), before, why); assert.deepEqual(readdirSync(appParent), ['OpenCode.app'], why); };
+  await check('the desktop build is named from the executable\'s Mach-O header', async () => {
+    const exe = join(temp, 'exe');
+    for (const [header, want] of [['cffaedfe0c000001', 'arm64'], ['cffaedfe0c00000100000000', 'arm64'], ['cffaedfe07000001', 'x64'], ['cffaedfe0c000002', ''], ['cafebabe00000002', ''], ['2321202f62696e2f', ''], ['', '']]) {
+      writeFileSync(exe, Buffer.from(header, 'hex'));
+      assert.equal((await run(`opencode_desktop_arch ${quote(exe)} && print -r -- "$REPLY"`)).stdout.trim(), want, header);
+    }
+    assert.equal((await run(`opencode_desktop_arch ${quote(join(temp, 'missing'))}; print -r -- $?`)).stdout, '1\n');
+  });
+  await check('an app that is a link, in a folder the operator cannot write, a prerelease, universal or badly signed gets no desktop lookup', async () => {
+    publish('2.4.0'); answer = 'Update'; ui();
+    const cases = [
+      ['a link', () => { installApp(); renameSync(appPath, join(temp, 'real.app')); symlinkSync(join(temp, 'real.app'), appPath); }],
+      ['an unwritable folder', () => { installApp(); chmodSync(appParent, 0o555); }],
+      ['a prerelease', () => installApp({ version: '2.3.0-rc.1' })],
+      ['a version of two parts', () => installApp({ version: '2.3' })],
+      ['a universal executable', () => { installApp(); writeFileSync(join(appPath, 'Contents/MacOS/AgFakeApp'), Buffer.from('cafebabe00000002', 'hex')); }],
+      ['a bad signature', () => installApp({ files: { 'Contents/badsig': '' } })],
+      ['no Team Identifier', () => installApp({ who: 'not set' })],
+    ];
+    for (const [name, setup] of cases) {
+      setup(); const before = requests.length;
+      const r = await desktop();
+      chmodSync(appParent, 0o755); rmSync(join(temp, 'real.app'), { recursive: true, force: true });
+      assert.equal(r.stdout, 'status 0\n', name); assert.deepEqual(desktopRequests(before), [], name);
+    }
+  });
+  await check('an unusable desktop reply, an archive outside the update service or a version that is not newer within the major makes no offer', async () => {
+    const before = installApp(); const start = requests.length;
+    const foreign = ['http://localhost:' + base.split(':')[2] + '/files/a.zip', base + '.example/files/a.zip', base + '@example.test/files/a.zip', '/files/a.zip', ''];
+    const cases = [
+      ...foreign.map((url) => [`the address ${url}`, '2.4.0', { url }]),
+      ['a malformed hash', '2.4.0', { sha256: 'abc' }], ['a hash that is not hexadecimal', '2.4.0', { sha256: 'g'.repeat(64) }],
+      ['a size that is not a number', '2.4.0', { size: '1e9' }], ['no size', '2.4.0', { size: undefined }],
+      ['the next major', '3.0.0', {}], ['the installed version', '2.3.0', {}], ['an older version', '2.2.9', {}],
+    ];
+    for (const [name, version, options] of cases) {
+      publish(version, {}, options);
+      const r = await desktop(); assert.equal(r.stdout, 'status 0\n', name);
+      assert.equal(requests.slice(start).filter((u) => u.startsWith('/files/')).length, 0, name);
+      assert.equal(r.stderr, '', name);
+    }
+    publish('2.4.0'); desktopReply = { ...desktopReply, metadata: { files: {} } };
+    assert.equal((await desktop()).stdout, 'status 0\n');
+    for (const reply of [503, { channel: 'latest' }, { version: '2.4.0-rc.1' }]) { desktopReply = reply; assert.equal((await desktop()).stdout, 'status 0\n'); }
+    assert.equal(requests.slice(start).filter((u) => u.startsWith('/files/')).length, 0);
+    unchanged(before);
+  });
+  await check('update-check off, a nested launch and --version make no desktop lookup', async () => {
+    publish('2.4.0'); installApp(); const before = requests.length;
+    preference('off'); assert.equal((await desktop()).stdout, 'status 0\n'); preference('on');
+    assert.equal((await desktop('export AGENT_GUARD_GATE=1')).stdout, 'status 0\n');
+    assert.equal((await desktop('', '--version')).stdout, 'status 0\n');
+    assert.deepEqual(desktopRequests(before), []);
+  });
+  await check('declining the desktop update changes nothing and downloads nothing', async () => {
+    answer = 'Later'; ui(); const before = installApp(); const start = requests.length;
+    const r = await desktop();
+    assert.equal(r.stdout, 'status 0\n'); assert.deepEqual(desktopRequests(start), ['/opencode-desktop-update?current=2.3.0']);
+    unchanged(before);
+  });
+  await check('an accepted desktop update replaces the app, shows the dialog and window, logs and cleans up', async () => {
+    publish('2.4.0'); answer = 'Update'; ui(); installApp(); rmSync(helperPid, { force: true }); desktopDelay = 300; const start = requests.length;
+    const r = await desktop();
+    assert.equal(r.stdout, 'status 2\n', r.stderr);
+    const alert = readFileSync(alertArgs, 'utf8');
+    assert.ok(alert.includes('with title "OpenCode"'));
+    assert.ok(alert.endsWith("An update is available: 2.4.0.\nYou have 2.3.0.\nThe update runs without Agent Guard's protection.\n"));
+    assert.ok(readFileSync(noticeArgs, 'utf8').endsWith('OpenCode updated to 2.4.0.\n'));
+    assert.deepEqual(desktopRequests(start), ['/opencode-desktop-update?current=2.3.0', '/files/opencode-desktop-mac-arm64.zip']);
+    assert.match(readFileSync(join(appPath, 'Contents/Info.plist'), 'utf8'), /<string>2\.4\.0<\/string>/);
+    assert.equal(readFileSync(join(appPath, 'Contents/Resources/payload'), 'utf8'), 'new');
+    assert.deepEqual(readdirSync(appParent), ['OpenCode.app']);
+    assert.equal(readFileSync(appLog, 'utf8'), '');
+    assert.ok(helperStopped());
+    desktopDelay = 0;
+  });
+  await check('a download slower than the lookup limit still completes', async () => {
+    publish('2.4.0'); installApp(); desktopDelay = 2500;
+    const r = await desktop(); desktopDelay = 0;
+    assert.equal(r.stdout, 'status 2\n', r.stderr);
+  });
+  await check('every failed check leaves the installed app as it was and says why in the log', async () => {
+    const cases = [
+      ['a wrong SHA-256', () => publish('2.4.0', {}, { sha256: '0'.repeat(64) }), /does not match the SHA-256/],
+      ['a download larger than announced', () => publish('2.4.0', { files: { 'Contents/Resources/payload': randomBytes(2 << 20) } }, { size: 10 }), /the download failed/],
+      ['an address the server does not have', () => publish('2.4.0', {}, { url: base + '/missing.zip' }), /the download failed/],
+      ['something that is not an archive', () => { publish('2.4.0'); desktopZip = Buffer.from('not a zip'); desktopReply.metadata.files['opencode-desktop-mac-arm64.zip'] = { url: base + '/files/a.zip', sha256: createHash('sha256').update(desktopZip).digest('hex'), size: 9 }; }, /not a readable archive/],
+      ['an archive holding another folder', () => publish('2.4.0', {}, {}, 'Other.app'), /does not hold exactly OpenCode\.app/],
+      ['another bundle ID', () => publish('2.4.0', { id: 'ai.example.other' }), /CFBundleIdentifier is ai\.example\.other/],
+      ['another executable name', () => publish('2.4.0', { exec: 'Other' }), /CFBundleExecutable is Other/],
+      ['another version than offered', () => publish('2.4.0', { version: '2.4.1' }), /new app is version 2\.4\.1, not 2\.4\.0/],
+      ['another developer', () => publish('2.4.0', { who: 'OTHER00000', dr: requirement(undefined, 'OTHER00000') }), /not signed by team TEAM123456/],
+      ['another designated requirement', () => publish('2.4.0', { dr: requirement('ai.example.other') }), /does not satisfy the installed app's designated requirement/],
+      ['a signature that does not verify', () => publish('2.4.0', { files: { 'Contents/badsig': '' } }), /does not satisfy the installed app's designated requirement/],
+      ['a Gatekeeper refusal', () => publish('2.4.0', { files: { 'Contents/rejected': '' } }), /Gatekeeper does not accept the new app/],
+    ];
+    for (const [name, setup, reason] of cases) {
+      const before = installApp(); setup();
+      const r = await desktop();
+      assert.equal(r.stdout, 'status 1\n', name); assert.doesNotMatch(r.stderr, /updated to/, name);
+      assert.match(readFileSync(appLog, 'utf8'), new RegExp(`^OpenCode update stopped: .*${reason.source}`), name);
+      unchanged(before, name);
+    }
+  });
+  const moves = (failing) => { // a mv that fails on the calls numbered in failing
+    const counter = join(temp, 'mv-count'); writeFileSync(counter, '0');
+    executable(join(temp, 'mv'), `n=$(( $(<${quote(counter)}) + 1 )); print -r -- $n > ${quote(counter)}\n[[ ",${failing}," == *",$n,"* ]] && exit 1\nexec /bin/mv "$@"\n`);
+    writeFileSync(join(temp, 'update-mv.zsh'), readFileSync(opencodeModule, 'utf8').replaceAll('/bin/mv', quote(join(temp, 'mv'))));
+    return `source ${quote(join(temp, 'update-mv.zsh'))}`;
+  };
+  await check('a failed second move puts the old app back, and an old app that cannot be put back is kept', async () => {
+    publish('2.4.0'); let before = installApp();
+    const r = await desktop(moves('2'));
+    assert.equal(r.stdout, 'status 1\n'); assert.match(readFileSync(appLog, 'utf8'), /^OpenCode update stopped: cannot move the new OpenCode\.app into place/);
+    unchanged(before);
+    installApp();
+    const kept = await desktop(moves('2,3,4'));
+    assert.equal(kept.stdout, 'status 1\n'); assert.equal(existsSync(appPath), false);
+    const [staging] = readdirSync(appParent); assert.match(staging, /^\.opencode-update\./);
+    assert.match(readFileSync(appLog, 'utf8'), /the previous OpenCode\.app is kept in /);
+    assert.equal(readFileSync(join(appParent, staging, 'old/Contents/Resources/payload'), 'utf8'), 'old');
+    rmSync(join(appParent, staging), { recursive: true });
+  });
+  await check('an old app that cannot be removed after the swap is not a failed update', async () => {
+    installApp({ files: { 'Contents/locked/file': 'x' } }); chmodSync(join(appPath, 'Contents/locked'), 0o500);
+    const r = await desktop();
+    assert.equal(r.stdout, 'status 2\n', r.stderr);
+    assert.match(readFileSync(join(appPath, 'Contents/Info.plist'), 'utf8'), /<string>2\.4\.0<\/string>/);
+    const left = readdirSync(appParent).filter((n) => n !== 'OpenCode.app');
+    assert.equal(left.length, 1);
+    chmodSync(join(appParent, left[0], 'old/Contents/locked'), 0o700); rmSync(join(appParent, left[0]), { recursive: true });
+  });
+  await check('the launcher\'s desktop offer stops on a failed update or another version and reads the executable again after an update', async () => {
+    publish('2.4.0'); installApp();
+    const launch = (extra) => run(`app=${quote(appPath)}; mode=gui; main=before; fail() { print -r -- "fail: $*"; exit 3 }; ${extra}; opencode_desktop_launch_offer; print -r -- "main=$main"`);
+    let r = await launch('opencode_desktop_run() { return 1 }');
+    assert.equal(r.status, 3); assert.equal(r.stdout, `fail: the OpenCode update failed and the app was not changed. Details: ${appLog}\n`);
+    r = await launch('opencode_desktop_run() { :; }');
+    assert.equal(r.status, 3); assert.equal(r.stdout, 'fail: the OpenCode update did not install the version offered: expected 2.4.0, found 2.3.0.\n');
+    r = await launch('');
+    assert.equal(r.status, 0, r.stderr); assert.equal(r.stdout, 'main=AgFakeApp\n');
+    answer = 'Later'; ui(); installApp();
+    assert.equal((await launch('')).stdout, 'main=before\n');
   });
 
   await check('Pi and OMP restart through their shim with the saved peer PATH, cwd and arguments', async () => {
