@@ -134,8 +134,32 @@ for (const parent of ['opencode', 'pi', 'omp']) {
 }
 const opencodeFile = join(bin, 'opencode');
 const v1Stub = readFileSync(opencodeFile, 'utf8');
+// OpenCode's updater cannot run inside a session: upgrade on 1 and 2, update on 2 only.
+const refusal = /(^|\n)agent-guard: Updates cannot run from an agent session\. Quit the session, then run opencode upgrade in Terminal\. Agent Guard may also offer the update at your next launch\.\n$/;
+for (const parent of ['opencode', 'pi', 'omp']) {
+  for (const command of ['opencode upgrade', 'opencode --print-logs upgrade 1.2.3']) {
+    const r = launch(parent, command);
+    assert.equal(r.status, 2, `${parent}: ${command}\n${r.stderr}`);
+    assert.match(r.stderr, refusal);
+    assert.equal(r.stdout, '');
+  }
+  for (const command of ['opencode update', 'opencode upgrade --help', 'opencode run upgrade']) {
+    const r = launch(parent, command);
+    assert.equal(r.status, 0, `${parent}: ${command}\n${r.stderr}`);
+    assert.equal(r.stdout.trim().split('\n').pop(), command.split(' ').pop());
+  }
+}
+console.log('ok V1 peer commands refuse opencode upgrade and run opencode update');
 writeFileSync(opencodeFile, v1Stub.replace('print 1.19.3', 'print 2.0.32').replace('if [[ ${1:-} == /* ]]', '[[ ${1:-} == --standalone ]] && shift\nif [[ ${1:-} == /* ]]'));
 for (const parent of ['opencode', 'pi', 'omp']) {
+  for (const command of ['opencode upgrade', 'opencode update', 'opencode --pure update 1.2.3']) {
+    const r = launch(parent, command);
+    assert.equal(r.status, 2, `${parent}: ${command}\n${r.stderr}`);
+    assert.match(r.stderr, refusal);
+  }
+  const help = launch(parent, 'opencode update --help');
+  assert.equal(help.status, 0, help.stderr);
+  assert.deepEqual(help.stdout.trim().split('\n'), ['update', '--help']);
   const result = launch(parent, 'opencode run --model fixture hello');
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(result.stdout.trim().split('\n'), ['run', '--standalone', '--model', 'fixture', 'hello']);

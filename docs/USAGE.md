@@ -83,6 +83,41 @@ operations to run outside the guard; use `opencode serve` to start a foreground
 guarded server. `doctor` uses a private probe, not the service attached to an
 existing desktop window, and does not call a model.
 
+### Update the OpenCode CLI
+
+Run `opencode upgrade` from Terminal, outside any agent session. On OpenCode 2,
+`opencode update` is the same command; on OpenCode 1 it is not a command, and
+`opencode update` opens a project named `update` as before. The command is the
+first word after OpenCode's global options, so `opencode --print-logs upgrade`
+counts and words after `--` do not.
+
+The launcher prints `Updating OpenCode. The update runs without Agent Guard's
+protection; your next session will be protected as usual.` and runs OpenCode's
+own updater without Agent Guard's profile, with your arguments unchanged and
+the environment you started with, not the one a session gets (for example, your
+`NPM_CONFIG_USERCONFIG` and `SSH_AUTH_SOCK`, and your PATH without Agent
+Guard's peer folder). It exits with the updater's status and starts no session.
+The updater runs your package manager or OpenCode's installer with your
+account's authority. The launcher does this only when its probe for an
+enclosing sandbox succeeded; if the probe fails for another reason, the command
+stays guarded and fails as it did before.
+
+`opencode upgrade --help` (or `-h`) stays guarded and shows OpenCode's help.
+
+Inside an Agent Guard session, the nested `opencode` and the peer `opencode`
+refuse the command with status 2: `Updates cannot run from an agent session.
+Quit the session, then run opencode upgrade in Terminal. Agent Guard may also
+offer the update at your next launch.` Inside another tool's sandbox the
+launcher steps aside as above and runs the command under that sandbox. OpenCode's own automatic
+update policy, and `/update` from inside a session, run under the guard and
+cannot write the install location, so neither installs anything there.
+
+When the OpenCode the launcher finds is the CLI bundled in OpenCode.app
+(`Contents/Resources/opencode-cli`), it runs nothing and says that this
+OpenCode is updated with the app: quit OpenCode, then run
+`brew upgrade --cask opencode-desktop`, or install the download from
+opencode.ai.
+
 ## OpenCode Desktop behavior
 
 Observed with OpenCode Desktop 2.1.4 on macOS unless noted. Statements about

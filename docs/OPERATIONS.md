@@ -532,6 +532,11 @@ output in `~/Agent Guard/last-update.log`; the window follows the stage lines th
 installer prints and has no effect on the update. An accepted upgrade that fails stops that launch;
 run `agent-guard update` from Terminal to finish recovery before reopening.
 
+`opencode upgrade` (and `opencode update` on OpenCode 2) is separate from these
+offers: from Terminal it runs OpenCode's own updater unconfined, prints one
+notice and exits with the updater's status, and from an agent session it is
+refused with status 2 ([Update the OpenCode CLI](USAGE.md#update-the-opencode-cli)).
+
 `agent-guard update-check` shows `on` or `off`; adding `on` or `off` changes the
 preference in `state/update-check`, outside release folders. Missing preference
 means `on`. `agent-guard update --check` checks explicitly regardless of that
@@ -812,6 +817,10 @@ its cached catalog. Language servers may also need toolchain-specific paths,
 such as `~/go` or `~/.cargo`, under ALLOW. Their locations are not automatically
 granted. Ordinary plugin configuration is writable; Guard bootstrap entries remain
 protected.
+
+`opencode upgrade` is the one maintenance command the launcher runs outside the
+profile, at your request: OpenCode's updater runs your package manager or
+OpenCode's installer, and reads the caches and configuration a session can write.
 
 Cache contents can affect later independently unguarded starts. Install only
 packages you trust and inspect changes before running them outside Guard.

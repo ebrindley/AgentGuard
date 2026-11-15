@@ -140,6 +140,78 @@ for (const args of [["mcp"], ["mcp", "--help"], ["plugin", "-h"], ["debug"], ["p
 }
 console.log("ok OpenCode V2 command routing: private servers, managed clients, explicit attachments and maintenance")
 
+// The maintenance command: upgrade on OpenCode 1 and 2, update on 2 only, as the
+// first word after the global options; a help request or words after -- change
+// nothing. The caller's REPLY survives.
+function maintenance(major, args) {
+  const result = spawnSync("/bin/zsh", ["-fc", `
+    setopt err_exit no_unset pipe_fail extended_glob
+    source "$1"
+    REPLY=kept
+    major=$2
+    shift 2
+    if opencode_maintenance $major "$@"; then print yes; else print no; fi
+    print -r -- $REPLY
+  `, "runtime", join(root, "profiles/opencode/runtime.zsh"), String(major), ...args], { encoding: "utf8" })
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(result.stdout.split("\n")[1], "kept")
+  return result.stdout.startsWith("yes")
+}
+for (const [major, args, expected] of [
+  [1, ["upgrade"], true], [2, ["upgrade"], true], [2, ["update"], true], [1, ["update"], false],
+  [1, ["upgrade", "1.2.3", "--method", "npm"], true], [2, ["update", "--method=npm"], true],
+  [1, ["--print-logs", "upgrade"], true], [1, ["--log-level", "debug", "--pure", "upgrade", "1.2.3"], true], [2, ["--log-level=info", "update"], true],
+  [1, ["upgrade", "--help"], false], [2, ["update", "-h"], false], [2, ["upgrade", "1.2.3", "--help"], false],
+  [1, ["upgrade", "--", "--help"], true], [1, ["upgrade", "--", "-h"], true],
+  [1, ["--", "upgrade"], false], [1, ["--help", "upgrade"], false], [1, ["run", "upgrade"], false], [2, ["project", "update"], false],
+  [1, ["upgrades"], false], [1, ["Upgrade"], false], [1, [], false], [2, ["--log-level"], false],
+]) assert.equal(maintenance(major, args), expected, `${major} ${args.join(" ")}`)
+
+{
+  // The updater gets the operator's values of what the launcher changes for a
+  // session, the way opencode_upgrade runs it; nothing set afterwards leaks in.
+  const dir = mkdtempSync(join(tmpdir(), "agentguard-runtime-"))
+  try {
+    const cli = join(dir, "opencode")
+    writeFileSync(cli, `#!/bin/sh\nprintf '%s\\n' "\${FIXTURE_SET:--}" "\${FIXTURE_UNSET:--}" "\${FIXTURE_SSH:--}" "\${AGENT_GUARD_CONTEXT:--}" "$PATH" "$HOME" "$@"\nexit 3\n`)
+    chmodSync(cli, 0o755)
+    const result = spawnSync("/bin/zsh", ["-fc", `
+      setopt err_exit no_unset pipe_fail extended_glob
+      source "$1"
+      cli=$2
+      env_unset=(FIXTURE_UNSET FIXTURE_SSH)
+      env_set=(FIXTURE_SET=session)
+      export FIXTURE_SET=operator FIXTURE_UNSET=operator
+      opencode_capture_env
+      unset $env_unset
+      export $env_set AGENT_GUARD_CONTEXT=session HOME=/session
+      path=(/session/peers $path)
+      rc=0
+      opencode_upgrade 1.2.3 || rc=$?
+      print -r -- "status $rc"
+    `, "runtime", join(root, "profiles/opencode/runtime.zsh"), cli], { encoding: "utf8", env: { PATH: "/usr/bin:/bin", HOME: "/operator-home" } })
+    assert.equal(result.status, 0, result.stderr)
+    assert.deepEqual(result.stdout.trimEnd().split("\n"), ["operator", "operator", "-", "-", "/usr/bin:/bin", "/operator-home", "upgrade", "1.2.3", "status 3"])
+  } finally { rmSync(dir, { recursive: true, force: true }) }
+}
+
+{
+  // The CLI bundled in OpenCode.app is updated with the app; nothing runs.
+  const result = spawnSync("/bin/zsh", ["-fc", `
+    setopt err_exit no_unset pipe_fail extended_glob
+    source "$1"
+    fail() { print -ru2 -- "agent-guard: $*"; exit 1; }
+    cli=$2
+    mode=cli
+    ag_update_run() { print ran; }
+    opencode_maintain upgrade
+  `, "runtime", join(root, "profiles/opencode/runtime.zsh"), "/Applications/OpenCode.app/Contents/Resources/opencode-cli"], { encoding: "utf8" })
+  assert.equal(result.status, 1)
+  assert.equal(result.stdout, "")
+  assert.equal(result.stderr, "agent-guard: this OpenCode belongs to the OpenCode app and is updated with the app; quit OpenCode, then run brew upgrade --cask opencode-desktop or install the download from opencode.ai\n")
+}
+console.log("ok OpenCode maintenance command: detection, the operator's environment and the app-bundled CLI")
+
 // Each `service status` probe consumes the next response, "<exit status>:<output>";
 // the last one repeats. The server is a sleeping process and the client exits at once.
 function managed(responses, script, tty = "") {
@@ -247,9 +319,16 @@ try {
   const engine = join(home, "Library/Application Support/AgentGuard")
   layout(source, engine)
   writeFileSync(join(home, "Agent Guard/Guard List.txt"), `ALLOW\n${join(home, "Projects")}\nREAD ONLY\nDENY\n`)
-  // A V2 CLI that records the marker, the outer-sandbox variable and its
-  // arguments, and exits 7.
-  writeFileSync(join(bin, "opencode"), `#!/bin/sh\n[ "$1" = --version ] && { echo 2.1.4; exit 0; }\nprintf '%s\\n' "\${AGENT_GUARD_SANDBOXED:--}" "\${AGENT_GUARD_OUTER_SANDBOX:--}" "$@" > ${JSON.stringify(record)}\nexit 7\n`)
+  // A CLI that records the marker, the outer-sandbox variable and its
+  // arguments, and exits 7. Its version is the content of the file next to it
+  // (V2 unless a test writes another). A second record holds what a maintenance
+  // command checks: the NPM and SSH variables, PATH, and whether it could write
+  // to the engine's protected state folder.
+  const versionFile = join(bin, "version")
+  const envRecord = join(scratch, "env")
+  writeFileSync(versionFile, "2.1.4\n")
+  const proof = join(home, "Library/Application Support/AgentGuard/state/.upgrade-proof")
+  writeFileSync(join(bin, "opencode"), `#!/bin/sh\n[ "$1" = --version ] && { cat "\${0%/*}/version"; exit 0; }\n{ printf '%s\\n' "\${NPM_CONFIG_USERCONFIG:--}" "\${SSH_AUTH_SOCK:--}" "$PATH"; ( : > ${JSON.stringify(proof)} ) 2>/dev/null && echo written || echo denied; } > ${JSON.stringify(envRecord)}\nprintf '%s\\n' "\${AGENT_GUARD_SANDBOXED:--}" "\${AGENT_GUARD_OUTER_SANDBOX:--}" "$@" > ${JSON.stringify(record)}\nexit 7\n`)
   chmodSync(join(bin, "opencode"), 0o755)
   const log = join(home, "Agent Guard/last-launch-opencode.log")
   const launch = (outer, args, env = {}) => {
@@ -354,6 +433,86 @@ try {
     } finally { live.kill() }
     rmSync(join(engine, "state"), { recursive: true, force: true })
     rmSync(log, { force: true })
+  }
+  {
+    // OpenCode's updater (the maintenance command) runs unconfined, with the
+    // operator's environment, only outside any sandbox; the launcher exits with its
+    // status and starts no session. Help requests and `update` on OpenCode 1 stay
+    // confined. Inside a guarded session the command is refused; inside another
+    // sandbox the launcher steps aside as before.
+    const notice = "Updating OpenCode. The update runs without Agent Guard's protection; your next session will be protected as usual."
+    const refusal = "agent-guard: Updates cannot run from an agent session. Quit the session, then run opencode upgrade in Terminal. Agent Guard may also offer the update at your next launch."
+    const operator = { NPM_CONFIG_USERCONFIG: "/operator/npmrc", SSH_AUTH_SOCK: "/operator/agent.sock" }
+    const operatorPath = `${bin}:/usr/bin:/bin:/usr/sbin:/sbin`
+    const checked = () => existsSync(envRecord) ? readFileSync(envRecord, "utf8").trimEnd().split("\n") : null
+    const count = (text, line) => text.split("\n").filter(l => l === line).length
+    const version = v => writeFileSync(versionFile, `${v}\n`)
+    const reset = () => { rmSync(envRecord, { force: true }); rmSync(proof, { force: true }) }
+    try {
+      for (const [v, args] of [["2.1.4", ["upgrade", "1.2.3"]], ["2.1.4", ["update", "--method", "npm"]], ["2.1.4", ["--print-logs", "update"]],
+                               ["1.4.0", ["upgrade"]], ["1.4.0", ["--log-level", "debug", "upgrade", "1.2.3", "--", "--help"]]]) {
+        version(v); reset()
+        const r = launch(null, ["cli", ...args], operator)
+        const name = `${v} ${args.join(" ")}`
+        assert.equal(r.status, 7, `${name}: ${r.stderr}`)
+        assert.equal(count(r.stderr, notice), 1, `${name}: ${r.stderr}`)
+        assert.deepEqual(recorded(), ["-", "-", ...args], name)
+        assert.deepEqual(checked(), ["/operator/npmrc", "/operator/agent.sock", operatorPath, "written"], name)
+      }
+      console.log("ok launch cli runs OpenCode's updater unconfined with the operator's environment, prints the notice and exits with its status")
+      for (const [v, args] of [["1.4.0", ["update"]], ["2.1.4", ["upgrade", "--help"]], ["1.4.0", ["upgrade", "-h"]], ["2.1.4", ["update", "1.2.3", "--help"]]]) {
+        version(v); reset()
+        const r = launch(null, ["cli", ...args], operator)
+        const name = `${v} ${args.join(" ")}`
+        assert.equal(r.status, 7, `${name}: ${r.stderr}`)
+        assert.equal(r.stderr.includes(notice), false, name)
+        assert.deepEqual(recorded().slice(0, 2), ["1", "-"], name)
+        assert.equal(recorded().at(-1), args.at(-1), name)
+        const [npm, ssh, path, write] = checked()
+        assert.deepEqual([npm, ssh, write], ["/dev/null", "-", "denied"], name)
+        assert.match(path, /\/releases\/[^/]+\/peers:/, name)
+      }
+      console.log("ok launch cli keeps update on OpenCode 1 and help requests confined")
+      reset(); version("2.1.4")
+      for (const [v, args] of [["2.1.4", ["upgrade"]], ["2.1.4", ["update", "1.2.3"]], ["1.4.0", ["upgrade"]]]) {
+        version(v)
+        const r = launch(denyList, ["cli", ...args], { AGENT_GUARD_SANDBOXED: "1" })
+        assert.equal(r.status, 2, `${v} ${args}: ${r.stderr}`)
+        assert.equal(r.stderr, refusal + "\n")
+        assert.equal(recorded(), null, `${v} ${args}: the CLI ran`)
+      }
+      version("1.4.0")
+      {
+        const r = launch(denyList, ["cli", "update"], { AGENT_GUARD_SANDBOXED: "1" })
+        assert.equal(r.status, 7, r.stderr)
+        assert.deepEqual(recorded(), ["1", "-", "update"])
+      }
+      console.log("ok launch cli inside a guarded session refuses the maintenance command with status 2")
+      // Another tool's sandbox owns its policy: the launcher steps aside as before.
+      version("2.1.4")
+      {
+        const r = launch(denyList, ["cli", "upgrade"])
+        assert.equal(r.status, 7, r.stderr)
+        assert.deepEqual(recorded(), ["-", "1", "upgrade"])
+        assert.equal(r.stderr.includes("Updates cannot run"), false)
+        assert.equal(r.stderr.includes(notice), false)
+      }
+      console.log("ok launch cli inside another sandbox runs the maintenance command as any other")
+      // A nesting probe that fails for any other reason leaves the command confined,
+      // and here the confined launch cannot start at all.
+      {
+        const r = launch(`(version 1)(allow default)(deny process-exec (literal "/usr/bin/sandbox-exec"))`, ["cli", "upgrade"], operator)
+        assert.notEqual(r.status, 0)
+        assert.equal(recorded(), null, "the CLI ran")
+        assert.equal(r.stderr.includes(notice), false)
+        console.log("ok a probe failure does not turn the maintenance command into an unconfined run")
+      }
+    } finally {
+      version("2.1.4")
+      rmSync(join(engine, "state"), { recursive: true, force: true })
+      rmSync(log, { force: true })
+      rmSync(envRecord, { force: true })
+    }
   }
   {
     // The probe fails, but not with sandbox_apply: no step-aside.

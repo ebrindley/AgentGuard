@@ -185,6 +185,21 @@ fewer of the classes in section 1 than Agent Guard's profile; the tool that
 applied that sandbox owns its policy. Any other probe failure keeps the normal
 path, which fails before OpenCode runs.
 
+**OpenCode's updater, run at the operator's request.** `opencode upgrade`
+(`opencode update` on OpenCode 2) from Terminal runs OpenCode's own updater
+outside the profile (DESIGN.md section 15, D19). Repository fact: `engine/launch`
+takes this path only for that command, in `cli` mode for the OpenCode harness,
+and only when its `sandbox-exec` probe exited 0; a failed probe of any kind
+keeps the command confined. A guarded session cannot reach it: its processes
+inherit Seatbelt, so the probe fails there, and the nested launcher and the peer
+wrapper refuse the command with status 2. The updater runs the operator's
+package manager or OpenCode's installer and reads caches and configuration a
+session can write (`~/.npm`, `~/.cache`, OpenCode's configuration). Accepted
+risk: that is the exposure SECURITY.md already accepts for maintenance run
+outside the guard, and here the operator starts it. Totals: guard-provided
+unconfined OpenCode maintenance routes go from 0 to 1; no write grant or denial
+changes.
+
 **A VM, container or separate identity.** Agent Guard is a profile over one
 account and is not an isolation substitute.
 
