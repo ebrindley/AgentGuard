@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { execFileSync, spawn, spawnSync } from "node:child_process"
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir, userInfo } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -196,7 +196,13 @@ for (const [major, args, expected] of [
 }
 
 {
-  // The CLI bundled in OpenCode.app is updated with the app; nothing runs.
+  // The CLI bundled in OpenCode.app is updated with the app; nothing runs. A
+  // link to it is refused like its own path.
+  const bundle = mkdtempSync(join(tmpdir(), "agentguard-bundled-"))
+  mkdirSync(join(bundle, "OpenCode.app/Contents/Resources"), { recursive: true })
+  writeFileSync(join(bundle, "OpenCode.app/Contents/Resources/opencode-cli"), "")
+  symlinkSync(join(bundle, "OpenCode.app/Contents/Resources/opencode-cli"), join(bundle, "opencode"))
+  for (const bundled of ["/Applications/OpenCode.app/Contents/Resources/opencode-cli", join(bundle, "opencode")]) {
   const result = spawnSync("/bin/zsh", ["-fc", `
     setopt err_exit no_unset pipe_fail extended_glob
     source "$1"
@@ -205,10 +211,12 @@ for (const [major, args, expected] of [
     mode=cli
     ag_update_run() { print ran; }
     opencode_maintain upgrade
-  `, "runtime", join(root, "profiles/opencode/runtime.zsh"), "/Applications/OpenCode.app/Contents/Resources/opencode-cli"], { encoding: "utf8" })
+  `, "runtime", join(root, "profiles/opencode/runtime.zsh"), bundled], { encoding: "utf8" })
   assert.equal(result.status, 1)
   assert.equal(result.stdout, "")
   assert.equal(result.stderr, "agent-guard: this OpenCode belongs to the OpenCode app and is updated with the app; quit OpenCode, then run brew upgrade --cask opencode-desktop or install the download from opencode.ai\n")
+  }
+  rmSync(bundle, { recursive: true, force: true })
 }
 console.log("ok OpenCode maintenance command: detection, the operator's environment and the app-bundled CLI")
 

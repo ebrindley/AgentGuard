@@ -271,7 +271,8 @@ opencode_maintenance_run() {
 # it through the shared runner and exits with its status; no session starts.
 opencode_maintain() {
   local rc=0
-  if [[ $cli == */Contents/Resources/opencode-cli ]]; then
+  # A link on PATH can point into the app.
+  if [[ ${cli:A} == */Contents/Resources/opencode-cli ]]; then
     fail 'this OpenCode belongs to the OpenCode app and is updated with the app; quit OpenCode, then run brew upgrade --cask opencode-desktop or install the download from opencode.ai'
   fi
   opencode_maintenance_args=("$@")
