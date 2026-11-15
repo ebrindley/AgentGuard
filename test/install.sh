@@ -339,8 +339,11 @@ rc=$?
   /usr/bin/grep -qFx 'export PATH="$HOME/.opencode/bin:$PATH"' "$zshrc" && pass 'update on the current release moves the block after the added line' || { fail "update with a shadow (exit $rc)"; show }
 [[ -L $home/.zshrc && $(/usr/bin/stat -f %Lp "$zshrc") == 600 ]] && pass 'the link and the mode stay' || fail 'the link and the mode stay'
 [[ $(opencode_path) == "$engine/bin/opencode" ]] && pass 'a new terminal finds the guarded opencode again' || fail 'a new terminal finds the guarded opencode again'
+# A logout file that prints does not change what the lookup reports.
+print -r -- 'print Goodbye' > "$home/.zlogout"
 point= ag doctor
 rc=$?
+/bin/rm -f "$home/.zlogout"
 (( rc == 0 )) && /usr/bin/grep -q "^ok   opencode in a new terminal window resolves to .*, Agent Guard's launcher" "$out" && pass 'doctor passes' || { fail "doctor after the repair (exit $rc)"; show }
 # Not shadowed: nothing is rewritten.
 repaired=$(sha "$zshrc")$(sha "$home/.zprofile")

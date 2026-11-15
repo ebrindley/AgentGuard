@@ -1195,10 +1195,11 @@ do_rc() {
     ag_rc_line "$rc"
     line=$REPLY
     # A migration also removes the older guard's block, in the same rewrite, and an
-    # update moves a block that another opencode shadows to the end, once: a file
-    # this run already began is not judged again.
+    # update moves a block that another opencode shadows to the end. A run stopped
+    # before that rewrite finds the block still mid-file and moves it; after the
+    # rewrite the block is last, so the file is not rewritten again.
     if [[ -e $rc ]] && ag_rc_has "$rc" "$line" && ! ag_rc_has_old "$rc" &&
-        { [[ $st == begun ]] || (( ! ${ag_harnesses[(Ie)opencode]} )) || ! ag_rc_misplaced "$rc" "$line"; }; then
+        { (( ! ${ag_harnesses[(Ie)opencode]} )) || ! ag_rc_misplaced "$rc" "$line"; }; then
       if [[ $st == begun ]]; then ag_sha "$rc" && ag_jnl rc done "$name $REPLY" || return 1; fi
       continue
     fi
@@ -1278,14 +1279,15 @@ ag_bounded() {
 # a clean environment with this account's home, as a new terminal window would
 # (-l -i). REPLY = its path. Returns 0 when that is Agent Guard's launcher (a
 # release's bin/NAME, reached through the current link), 1 when it is another
-# file, and 2 when there is none.
+# file, and 2 when there is none. The answer is read from a tagged line, because
+# startup and logout files may print lines of their own.
 ag_shell_resolve() {
-  local name=$1 p
+  local name=$1 p tag='agent-guard-lookup:'
   local -a found
   shift
-  p=$(ag_bounded 20 /usr/bin/env -i "HOME=$home" "PATH=/usr/bin:/bin:/usr/sbin:/sbin" /bin/zsh "$@" -c "whence -p ${(q)name}" 2>/dev/null </dev/null)
-  found=("${(@f)p}")
-  REPLY=${found[-1]:-}
+  p=$(ag_bounded 20 /usr/bin/env -i "HOME=$home" "PATH=/usr/bin:/bin:/usr/sbin:/sbin" /bin/zsh "$@" -c "print -r -- $tag\$(whence -p ${(q)name})" 2>/dev/null </dev/null)
+  found=(${(M)${(@f)p}:#$tag*})
+  REPLY=${${found[-1]:-}#$tag}
   [[ -n $REPLY ]] || return 2
   [[ ${REPLY:A} == "$engine"/releases/*/bin/$name ]]
 }
