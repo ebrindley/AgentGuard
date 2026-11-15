@@ -573,6 +573,16 @@ stops and names the expected and the found version. In both cases run
 `opencode upgrade` from Terminal and start again. A launch without a terminal
 prints the first two lines on stderr, installs nothing and starts the session.
 
+After either run of OpenCode's updater, the explicit command or an accepted
+offer, whatever its status, the launcher resolves `opencode` the way `agent-guard
+doctor` does for a new terminal window (`engine/lookup.zsh`, one `zsh -l -i`
+start of at most 20 seconds, only after an upgrade). When that finds a file other
+than Agent Guard's launcher, which OpenCode's installer causes by adding
+`~/.opencode/bin` to the end of `.zshrc`, it prints one warning on stderr that
+names the path and says to run `agent-guard update`. The warning changes no exit
+status and does not stop the session that follows an accepted offer. It is
+skipped when `ZDOTDIR` points outside the home.
+
 `agent-guard update-check` shows `on` or `off`; adding `on` or `off` changes the
 preference in `state/update-check`, outside release folders. Missing preference
 means `on`. It covers the startup offers of both Agent Guard and OpenCode.

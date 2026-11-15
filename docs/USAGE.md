@@ -112,6 +112,17 @@ account's authority. The launcher does this only when its probe for an
 enclosing sandbox succeeded; if the probe fails for another reason, the command
 stays guarded and fails as it did before.
 
+After the updater returns, whatever its status, the launcher asks a clean `zsh -l
+-i` which `opencode` a new terminal window finds. OpenCode's own installer can
+add `~/.opencode/bin` to the end of `.zshrc`, ahead of Agent Guard's PATH entry.
+When another file is found, the launcher prints `agent-guard: new terminal
+windows will start <path>, not Agent Guard's opencode, so OpenCode runs there
+without protection. Run agent-guard update to fix it.` and still exits with the
+updater's status. Run `agent-guard update`; it moves Agent Guard's entry back to
+the end of the file. Nothing is printed when the lookup finds Agent Guard's
+launcher or no `opencode`, or when `ZDOTDIR` points outside your home, which
+`agent-guard doctor` reports separately.
+
 `opencode upgrade --help` (or `-h`) stays guarded and shows OpenCode's help.
 
 Inside an Agent Guard session, the nested `opencode` and the peer `opencode`

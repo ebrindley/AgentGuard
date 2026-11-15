@@ -16,13 +16,15 @@ ag_hook() { local ag_fn="ag_${1}_${2//-/_}_$3"; shift 3; "$ag_fn" "$@" }
 ag_hook_opt() { local ag_fn="ag_${1}_${2//-/_}_$3"; shift 3; (( $+functions[$ag_fn] )) || return 0; "$ag_fn" "$@" }
 
 # Paths every entry uses. Home comes only from account_home, in account.zsh next
-# to the entry install.sh (a release folder or state/txn) or in the tree's engine/.
+# to the entry install.sh (a release folder or state/txn) or in the tree's engine/;
+# lookup.zsh is found the same way.
 # install.sh's main sets ag_self to that file before anything calls this.
 ag_init() {
-  local account h m
-  account="${ag_self:h}/account.zsh"
-  [[ -f $account ]] || account="${ag_self:h:h:h}/engine/account.zsh"
+  local account lookup h m
+  account="${ag_self:h}/account.zsh" lookup="${ag_self:h}/lookup.zsh"
+  [[ -f $account ]] || account="${ag_self:h:h:h}/engine/account.zsh" lookup="${ag_self:h:h:h}/engine/lookup.zsh"
   source "$account" || { ag_err "cannot load $account"; return 1 }
+  source "$lookup" || { ag_err "cannot load $lookup"; return 1 }
   account_home || { ag_err 'cannot resolve account home'; return 1 }
   { zmodload zsh/system zsh/datetime && zmodload -F zsh/stat b:zstat } 2>/dev/null ||
     { ag_err 'zsh/system, zsh/datetime or zsh/stat not available'; return 1 }
@@ -453,8 +455,8 @@ ag_txn_load() {
 }
 
 # Opens the transaction with the frozen copies recovery runs: install.sh, every
-# installer module, account.zsh, uninstall.sh and each harness's bundle files, so
-# recovery never reads the new release folder's code. Refuses while a transaction
+# installer module, account.zsh, lookup.zsh, uninstall.sh and each harness's
+# bundle files, so recovery never reads the new release folder's code. Refuses while a transaction
 # is open: mv would put the new one inside it, and recovery would read the old
 # journal and backups for the new transaction.
 ag_txn_open() {
@@ -470,6 +472,7 @@ ag_txn_open() {
     /bin/cp -p -- "$ag_self" "$n/install.sh" &&
     /bin/cp -Rp -- "$ag_tree/installer" "$n/installer" &&
     /bin/cp -p -- "$ag_tree/engine/account.zsh" "$n/account.zsh" &&
+    /bin/cp -p -- "$ag_tree/engine/lookup.zsh" "$n/lookup.zsh" &&
     /bin/cp -p -- "$ag_tree/profiles/opencode/uninstall.sh" "$n/uninstall.sh" || return 1
   for f in $extra; do
     /bin/mkdir -p -- "$n/${f:h}" && /bin/cp -p -- "$ag_tree/$f" "$n/$f" || return 1
@@ -852,11 +855,11 @@ ag_new_rid() {
 # P4: the release folder, in the runtime layout, then renamed into releases/<rid>.
 ag_assemble() {
   local r="$ag_stage/release" t=$ag_tree p="$ag_tree/profiles/opencode" f
-  local -a zsh_files=(launch account.zsh updates.zsh install.sh uninstall.sh bin/opencode bin/opencode-gui bin/agent-guard
+  local -a zsh_files=(launch account.zsh lookup.zsh updates.zsh install.sh uninstall.sh bin/opencode bin/opencode-gui bin/agent-guard
                       profiles/opencode/harness.zsh profiles/opencode/hooks.zsh profiles/opencode/runtime.zsh)
   /bin/rm -rf -- "$r"
   /bin/mkdir -p -- "$r/bin" "$r/profiles/opencode/check-config/opencode/plugins" "$engine/releases" || return 1
-  /bin/cp -- "$t/engine/launch" "$t/engine/profile.sb" "$t/engine/account.zsh" "$t/engine/updates.zsh" "$p/install.sh" "$p/uninstall.sh" \
+  /bin/cp -- "$t/engine/launch" "$t/engine/profile.sb" "$t/engine/account.zsh" "$t/engine/lookup.zsh" "$t/engine/updates.zsh" "$p/install.sh" "$p/uninstall.sh" \
     "$t/LICENSE" "$t/VERSION" "$r/" || return 1
   print -r -- "$ag_commit" > "$r/COMMIT" && print -r -- "$ag_rid_new" > "$r/RELEASE" || return 1
   /bin/cp -- "$p/opencode" "$p/opencode-gui" "$t/engine/agent-guard" "$r/bin/" || return 1
@@ -1251,45 +1254,6 @@ undo_rc() {
 ag_switch() {
   ag_say "switching to release $ag_rid_new"
   ag_do_actions switch
-}
-
-# ag_bounded SECONDS CMD...: CMD's status, or 124 when it runs longer. The limit
-# is measured on the clock: on a loaded Mac each poll takes longer than its sleep,
-# so a count of polls would allow far more than SECONDS.
-ag_bounded() {
-  zmodload zsh/datetime || return 1
-  float end=$(( EPOCHREALTIME + $1 ))
-  integer pid
-  shift
-  "$@" </dev/null &
-  pid=$!
-  while kill -0 $pid 2>/dev/null; do
-    if (( EPOCHREALTIME > end )); then
-      /usr/bin/pkill -KILL -P $pid 2>/dev/null
-      kill -KILL $pid 2>/dev/null
-      wait $pid 2>/dev/null
-      return 124
-    fi
-    /bin/sleep 0.1
-  done
-  wait $pid
-}
-
-# ag_shell_resolve NAME [SHELL-OPTIONS...]: which executable zsh finds for NAME in
-# a clean environment with this account's home, as a new terminal window would
-# (-l -i). REPLY = its path. Returns 0 when that is Agent Guard's launcher (a
-# release's bin/NAME, reached through the current link), 1 when it is another
-# file, and 2 when there is none. The answer is read from a tagged line, because
-# startup and logout files may print lines of their own.
-ag_shell_resolve() {
-  local name=$1 p tag='agent-guard-lookup:'
-  local -a found
-  shift
-  p=$(ag_bounded 20 /usr/bin/env -i "HOME=$home" "PATH=/usr/bin:/bin:/usr/sbin:/sbin" /bin/zsh "$@" -c "print -r -- \"$tag\$(whence -p ${(q)name})\"" 2>/dev/null </dev/null)
-  found=(${(M)${(@f)p}:#$tag*})
-  REPLY=${${found[-1]:-}#$tag}
-  [[ -n $REPLY ]] || return 2
-  [[ ${REPLY:A} == "$engine"/releases/*/bin/$name ]]
 }
 
 # ag_shell_lookup NAME LABEL REMEDY [SHELL-OPTIONS...]: the doctor line for
