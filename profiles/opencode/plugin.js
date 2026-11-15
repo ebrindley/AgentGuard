@@ -381,7 +381,7 @@ async function guard(input) {
     if (tool === "agent_guard_status") return
     if (!guarded) {
       if (!bypass && !SAFE_UNGUARDED.has(tool))
-        refuse(tool, "Agent Guard protects this computer from agent mistakes. OpenCode was started without it, so tools are disabled. Restart OpenCode through Agent Guard to use it with protection: quit it and open Agent Guard, or run opencode from a new terminal.", "tool-hook", "unguarded", "launch-guarded")
+        refuse(tool, "Agent Guard protects this computer from agent mistakes. OpenCode was started without it, so tools are disabled. Restart OpenCode through Agent Guard to use it with protection: quit it and open Agent Guard, or run opencode from a new terminal. If a new terminal still starts OpenCode without Agent Guard, run agent-guard doctor.", "tool-hook", "unguarded", "launch-guarded")
       if (tool !== "bash") return
       // A peer of another guarded session keeps that session's peer wrappers first.
       const peer = outer && !!process.env.AGENT_GUARD_PEER_PATH && typeof args.command === "string"

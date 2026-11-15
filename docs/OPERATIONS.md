@@ -256,6 +256,18 @@ load is a warning in these checks, not a failure
 stamp and remove release folders older than the previous one, which stays for
 OpenCode sessions started from it.
 
+An install or update that finds Agent Guard's block in `.zprofile` or `.zshrc`
+but a new terminal window starting another `opencode` rewrites that file with the
+block moved to the end, once per file and through the same journaled rewrite as
+a first install, so a rollback or uninstall restores the file as before. It
+rewrites nothing when a new terminal already finds Agent Guard's launcher, when
+the block is already the last thing in the file, and for `.bash_profile`. A
+shadow it cannot repair, for example a line in `.zlogin` or in another file
+after the block, does not fail or roll back the install: in the gate `doctor`
+prints it as a `warn` line, and the report ends with a warning that names the
+path. Run `agent-guard doctor` afterwards, where it fails until the other line is
+removed or moved.
+
 `Agent Guard.app` is rebuilt only when its script, bundle ID, icon or privacy text
 changes, or when it is missing. macOS treats the app as the responsible process
 for OpenCode's privacy requests and shows the app's usage strings in them, so all
@@ -577,7 +589,7 @@ loaded; `/reload` loads the extension now on disk.
 ## Commands
 
 - `agent-guard doctor` runs each installed harness's checks: OpenCode's installed
-  self-test, with Grok installed the launcher's Grok check and which `grok` a new
+  self-test and which `opencode` a new terminal window finds first (below), with Grok installed the launcher's Grok check and which `grok` a new
   terminal and `zsh -c` find first, and, with Pi's guard installed, Pi's checks:
   - everything pi-sandbox-guard's `npm run status` and `npm run check:path`
     checked, comparing the installed Pi files with the stamp's hashes;
@@ -599,6 +611,18 @@ loaded; `/reload` loads the extension now on disk.
     folder, because Pi refuses home as a project. A runtime that is not
     installed is skipped and named.
 
+  The OpenCode lookup starts `zsh -l -i` with a clean environment and your home
+  and asks which `opencode` it finds. It passes when that is Agent Guard's
+  launcher (`bin/opencode`, reached through `current`), is skipped when none is
+  found, and otherwise fails, naming the path it found and telling you to run
+  `agent-guard update`. It is not run when `ZDOTDIR` points outside your home,
+  which `doctor` reports as a warning that the PATH line must be added to that
+  folder's files. The opencode.ai installer appends
+  `export PATH=$HOME/.opencode/bin:$PATH` to the end of `.zshrc`, after Agent
+  Guard's block, so a new terminal then starts OpenCode without the guard; this
+  happened on 2026-11-15. `agent-guard update` repairs it: see
+  [Installation](#installation).
+
   Without the `opencode` CLI, the OpenCode plugin check is skipped and named.
   A passing `doctor` with that skip does not verify that the desktop app loads
   the guard plugin. The CLI is not required to launch the guarded desktop app.
@@ -618,8 +642,9 @@ loaded; `/reload` loads the extension now on disk.
 - `agent-guard update` installs the latest stable release the same way as the
   one-liner, with the same checks and rollback. When the installed release is
   the latest, it installs it again only to finish a migration or retirement that
-  is still pending or to add a harness found on this Mac that the install does
-  not include yet, for example Pi installed after Agent Guard. Otherwise, and
+  is still pending, to add a harness found on this Mac that the install does
+  not include yet, for example Pi installed after Agent Guard, or to move the
+  PATH block to the end of a startup file when another `opencode` shadows it. Otherwise, and
   when the installed release is newer, it does nothing apart from removing the
   forwarders at OpenCode Guard's old command paths once the Mac has restarted
   since the migration.

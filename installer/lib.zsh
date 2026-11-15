@@ -625,6 +625,15 @@ ag_pending() {
     ag_hook_opt h $h title
     what+=("$REPLY")
   done
+  if (( ${stamped[(Ie)opencode]} )); then
+    ag_rc_files
+    for f in $reply; do
+      ag_rc_line "$f"
+      ag_rc_misplaced "$f" "$REPLY" || continue
+      what+=('the PATH block order')
+      break
+    done
+  fi
   if [[ -f $record ]]; then
     edit_files=(${(f)"$(/usr/bin/jq -r 'to_entries[] | select(.value.edit // {} | has("wrote")) | .key' "$record" 2>/dev/null)"})
     for f in $edit_files; do
@@ -1150,6 +1159,17 @@ ag_rc_has() {  # FILE LINE: FILE holds the complete block with LINE
     END { for (i = 1; i + 2 <= NR; i++) if (a[i] == s && a[i + 1] == l && a[i + 2] == e) f = 1; exit !f }' "$1"
 }
 
+ag_rc_ends() {  # FILE LINE: the complete block with LINE is the last thing in FILE
+  [[ $(/usr/bin/tail -n 3 -- "$1") == "$marker_start"$'\n'"$2"$'\n'"$marker_end" ]]
+}
+
+# True when zsh startup file FILE holds the complete block somewhere before its
+# end and a new terminal does not run the guarded opencode (ag_opencode_shadowed):
+# something added after the block put another opencode ahead of it.
+ag_rc_misplaced() {  # FILE LINE
+  [[ $1 != *bash_profile && -f $1 ]] && ag_rc_has "$1" "$2" && ! ag_rc_ends "$1" "$2" && ag_opencode_shadowed
+}
+
 # True when FILE holds an older guard's start marker.
 ag_rc_has_old() {
   local s e
@@ -1174,8 +1194,11 @@ do_rc() {
     fi
     ag_rc_line "$rc"
     line=$REPLY
-    # A migration also removes the older guard's block, in the same rewrite.
-    if [[ -e $rc ]] && ag_rc_has "$rc" "$line" && ! ag_rc_has_old "$rc"; then
+    # A migration also removes the older guard's block, in the same rewrite, and an
+    # update moves a block that another opencode shadows to the end, once: a file
+    # this run already began is not judged again.
+    if [[ -e $rc ]] && ag_rc_has "$rc" "$line" && ! ag_rc_has_old "$rc" &&
+        { [[ $st == begun ]] || (( ! ${ag_harnesses[(Ie)opencode]} )) || ! ag_rc_misplaced "$rc" "$line"; }; then
       if [[ $st == begun ]]; then ag_sha "$rc" && ag_jnl rc done "$name $REPLY" || return 1; fi
       continue
     fi
@@ -1249,6 +1272,35 @@ ag_bounded() {
     /bin/sleep 0.1
   done
   wait $pid
+}
+
+# ag_shell_resolve NAME [SHELL-OPTIONS...]: which executable zsh finds for NAME in
+# a clean environment with this account's home, as a new terminal window would
+# (-l -i). REPLY = its path. Returns 0 when that is Agent Guard's launcher (a
+# release's bin/NAME, reached through the current link), 1 when it is another
+# file, and 2 when there is none.
+ag_shell_resolve() {
+  local name=$1 p
+  local -a found
+  shift
+  p=$(ag_bounded 20 /usr/bin/env -i "HOME=$home" "PATH=/usr/bin:/bin:/usr/sbin:/sbin" /bin/zsh "$@" -c "whence -p ${(q)name}" 2>/dev/null </dev/null)
+  found=("${(@f)p}")
+  REPLY=${found[-1]:-}
+  [[ -n $REPLY ]] || return 2
+  [[ ${REPLY:A} == "$engine"/releases/*/bin/$name ]]
+}
+
+# ag_shell_lookup NAME LABEL REMEDY [SHELL-OPTIONS...]: the doctor line for
+# ag_shell_resolve. Returns 1 for a FAIL line, which ends with REMEDY.
+ag_shell_lookup() {
+  local name=$1 label=$2 remedy=$3
+  shift 3
+  ag_shell_resolve "$name" "$@"
+  case $? in
+    (0) print -r -- "ok   $name in $label resolves to ${REPLY/#$home/~}, Agent Guard's launcher" ;;
+    (1) print -r -- "FAIL $name in $label resolves to ${REPLY/#$home/~}, not Agent Guard's launcher; $remedy"; return 1 ;;
+    (*) print -r -- "skip $name in $label: not found" ;;
+  esac
 }
 
 # ag_run_check LABEL CMD...: runs a release's check and prints its output. When it

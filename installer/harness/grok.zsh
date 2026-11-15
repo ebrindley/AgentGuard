@@ -173,35 +173,17 @@ ag_h_grok_report() {
   return 0
 }
 
-# Which grok each kind of shell finds first. The lookup runs in a clean
-# environment with this account's home, as a new terminal window would.
-ag_grok_lookup() {  # LABEL SHELL-OPTIONS...
-  local label=$1 p
-  local -a found
-  shift
-  p=$(ag_bounded 20 /usr/bin/env -i "HOME=$home" "PATH=/usr/bin:/bin:/usr/sbin:/sbin" /bin/zsh "$@" -c 'whence -p grok' 2>/dev/null </dev/null)
-  found=("${(@f)p}")
-  p=${found[-1]:-}
-  if [[ -z $p ]]; then
-    print -r -- "skip grok in $label: not found"
-  elif [[ ${p:A} == "$engine"/releases/*/bin/grok ]]; then
-    print -r -- "ok   grok in $label resolves to ${p/#$home/~}, Agent Guard's launcher"
-  else
-    print -r -- "FAIL grok in $label resolves to ${p/#$home/~}, not Agent Guard's launcher; run the installer again to put the link back"
-    return 1
-  fi
-}
-
-# Grok's part of agent-guard doctor: the release's launch check, then the lookups.
+# Grok's part of agent-guard doctor: the release's launch check, then which grok
+# each kind of shell finds first (ag_shell_lookup).
 ag_h_grok_doctor() {  # RELEASE [--json]
-  local out
+  local out remedy='run the installer again to put the link back'
   local -a lines
   integer rc=0
   out=$("$1/launch" --harness grok check 2>&1) || rc=1
   lines=("${(@f)out}")
-  out=$(ag_grok_lookup 'a new terminal window' -l -i) || rc=1
+  out=$(ag_shell_lookup grok 'a new terminal window' "$remedy" -l -i) || rc=1
   lines+=("${(@f)out}")
-  out=$(ag_grok_lookup 'zsh -c') || rc=1
+  out=$(ag_shell_lookup grok 'zsh -c' "$remedy") || rc=1
   lines+=("${(@f)out}")
   if [[ ${2:-} == --json ]]; then reply=("${lines[@]}") REPLY='{}'; else print -rl -- "${lines[@]}"; fi
   return $rc

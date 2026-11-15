@@ -331,8 +331,15 @@ assert.equal(serviceRecord(serviceChanged), undefined)
 
 const assembled = fixture("assembled-runtime")
 const activation = fixture("activation-report")
-mkdirSync(join(activation.engine, 'current'))
-writeFileSync(join(activation.engine, 'current/launch'), '#!/bin/sh\nprintf "ok fixture check\\n"\n', { mode: 0o755 })
+// A release whose bin/opencode a new terminal finds through the block in .zshrc.
+const release = join(activation.engine, 'releases/r1')
+mkdirSync(join(release, 'bin'), { recursive: true })
+symlinkSync('releases/r1', join(activation.engine, 'current'))
+symlinkSync('current/bin', join(activation.engine, 'bin'))
+writeFileSync(join(release, 'launch'), '#!/bin/sh\nprintf "ok fixture check\\n"\n', { mode: 0o755 })
+writeFileSync(join(release, 'bin/opencode'), '#!/bin/sh\n', { mode: 0o755 })
+const block = '# >>> agent-guard >>>\npath=("$HOME/Library/Application Support/AgentGuard/bin" ${path:#"$HOME/Library/Application Support/AgentGuard/bin"})\n# <<< agent-guard <<<\n'
+writeFileSync(join(activation.home, '.zshrc'), block)
 for (const setting of ['unset ZDOTDIR', 'ZDOTDIR=$home', 'ZDOTDIR="$home/.config/zsh"']) {
   const output = shell(activation, `
     ${setting}
@@ -351,8 +358,26 @@ for (const setting of ['unset ZDOTDIR', 'ZDOTDIR=$home', 'ZDOTDIR="$home/.config
   } else {
     assert.match(output, /new terminal windows run opencode inside the guard/)
     assert.doesNotMatch(output, /warn ZDOTDIR/)
+    assert.match(output, /^ok   opencode in a new terminal window resolves to .*, Agent Guard's launcher$/m)
   }
 }
+// Another opencode first: the report warns, doctor fails, and the install's gate
+// (AGENT_GUARD_GATE) downgrades the doctor line to a warning.
+mkdirSync(join(activation.home, '.opencode/bin'), { recursive: true })
+writeFileSync(join(activation.home, '.opencode/bin/opencode'), '#!/bin/sh\n', { mode: 0o755 })
+writeFileSync(join(activation.home, '.zshrc'), block + 'export PATH="$HOME/.opencode/bin:$PATH"\n')
+const shadowed = shell(activation, `
+  unset ZDOTDIR
+  app="$home/Applications/Agent Guard.app"
+  ag_h_opencode_report
+  print -rl -- "\${ag_warnings[@]}"
+  ag_h_opencode_doctor "$engine/current"; print "status $?"
+  AGENT_GUARD_GATE=1 ag_h_opencode_doctor "$engine/current"; print "gate status $?"
+`).stdout
+assert.match(shadowed, /another opencode comes first in a new terminal window/)
+assert.match(shadowed, /a new terminal window starts .*\/\.opencode\/bin\/opencode, not Agent Guard's opencode/)
+assert.match(shadowed, /^FAIL opencode in a new terminal window resolves to .*\/\.opencode\/bin\/opencode, not Agent Guard's launcher; run agent-guard update$\n^status 1$/m)
+assert.match(shadowed, /^warn opencode in a new terminal window resolves to .*\/\.opencode\/bin\/opencode, not Agent Guard's launcher; run agent-guard update$\n^gate status 0$/m)
 const tree = join(assembled.home, "tree")
 mkdirSync(tree)
 for (const name of ["engine", "profiles", "installer", "LICENSE", "install.sh"]) cpSync(join(root, name), join(tree, name), { recursive: true })
