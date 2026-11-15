@@ -1,10 +1,12 @@
 import assert from "node:assert/strict"
 import { execFileSync, spawn, spawnSync } from "node:child_process"
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir, userInfo } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { layout, opencodeOfferSeams, stage } from "./engines/zsh.mjs"
+import { isolateHarness, layout, opencodeOfferSeams, stage } from "./engines/zsh.mjs"
+import { archive, bundle, feed, seams as desktopSeams, snapshot, tools } from "./desktop-fixture.mjs"
+import { quote } from "./fixture-home.mjs"
 import { groupExists, groupMembers, signalGroup } from "./process-group.mjs"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
@@ -561,14 +563,18 @@ try {
     const eligible = join(home, ".opencode/bin")
     const stateFolder = join(engine, "state")
     const updates = join(engine, "current/updates.zsh")
+    const desktopFeed = join(scratch, "desktop-feed")
+    const desktopZip = join(scratch, "desktop-zip")
     const server = spawn(process.execPath, ["-e", `
       const http = require("node:http"), fs = require("node:fs")
-      const [lookups, reply] = process.argv.slice(1)
+      const [lookups, reply, desktopFeed, desktopZip] = process.argv.slice(1)
       http.createServer((req, res) => {
         fs.appendFileSync(lookups, req.url + "\\n")
-        res.end(JSON.stringify({ channel: "latest", name: "cli", version: fs.readFileSync(reply, "utf8").trim() }))
+        if (req.url.startsWith("/opencode-desktop-update")) res.end(fs.readFileSync(desktopFeed))
+        else if (req.url.startsWith("/files/")) res.end(fs.readFileSync(desktopZip))
+        else res.end(JSON.stringify({ channel: "latest", name: "cli", version: fs.readFileSync(reply, "utf8").trim() }))
       }).listen(0, "127.0.0.1", function () { console.log(this.address().port) })
-    `, lookups, reply], { stdio: ["ignore", "pipe", "inherit"] })
+    `, lookups, reply, desktopFeed, desktopZip], { stdio: ["ignore", "pipe", "inherit"] })
     try {
       const port = Number(await new Promise(resolve => server.stdout.once("data", resolve)))
       opencodeOfferSeams(join(engine, "current"), `http://127.0.0.1:${port}`)
@@ -699,6 +705,143 @@ exit 7
       assert.equal(upgrade(), null)
       assert.deepEqual(session(), ["2.3.0", "1", "--standalone"])
       console.log("ok a launch without a terminal reports the OpenCode update and installs nothing")
+
+      // The desktop app in gui mode: offered after Agent Guard's own offer and outside the
+      // profile. The dialog is a stand-in, and so are codesign, spctl and od, which read the
+      // facts each stand-in bundle holds (test/desktop-fixture.mjs).
+      isolateHarness(join(engine, "current"))
+      const stand = tools(scratch)
+      const dialog = join(scratch, "dialog")
+      const answerFile = join(scratch, "answer")
+      const shown = join(scratch, "dialog-args")
+      writeFileSync(dialog, `#!/bin/zsh -f\n[[ $1 == -l ]] && exec /bin/sleep 30\n[[ "$*" == *'display dialog'* ]] && print -rl -- "$@" > ${quote(shown)}\ncat ${quote(answerFile)}\n`, { mode: 0o755 })
+      const profileUpdate = join(engine, "current/profiles/opencode/update.zsh")
+      writeFileSync(profileUpdate, desktopSeams(readFileSync(profileUpdate, "utf8"), stand, true))
+      for (const file of [updates, join(engine, "current/launch")]) writeFileSync(file, readFileSync(file, "utf8").replaceAll("/usr/bin/osascript", quote(dialog)))
+      const base = `http://127.0.0.1:${port}`
+      const app = join(home, "Applications/OpenCode.app")
+      const probes = join(scratch, "cli-probes")
+      // The app records which build ran and the bundled CLI which build probed it.
+      // It also tries to change its own bundle, the way a guarded session could.
+      const writes = join(scratch, "app-writes")
+      const script = `#!/bin/sh
+printf '%s\\n' "$(cat "\${0%/*}/../build")" "\${AGENT_GUARD_SANDBOXED:--}" > ${JSON.stringify(record)}
+app=\${0%/*/*/*}
+{
+  ( : > "$app/Contents/probe" ) 2>/dev/null && echo create-written || echo create-denied
+  ( echo x >> "$app/Contents/Info.plist" ) 2>/dev/null && echo modify-written || echo modify-denied
+  ( : > "$app/../probe" ) 2>/dev/null && echo sibling-written || echo sibling-denied
+  mv "$app" "$app.moved" 2>/dev/null && { mv "$app.moved" "$app"; echo rename-written; } || echo rename-denied
+} > ${JSON.stringify(writes)}
+`
+      const cli = `#!/bin/sh\ncat "\${0%/*}/../build" >> ${JSON.stringify(probes)}\necho 1.18.33\n`
+      mkdirSync(join(scratch, "desktop-build"), { recursive: true })
+      const install = (options = {}) => {
+        mkdirSync(dirname(app), { recursive: true })
+        chmodSync(dirname(app), 0o755)
+        rmSync(app, { recursive: true, force: true })
+        bundle(app, { script, cli, files: { "Contents/build": "old\n" }, ...options })
+        return snapshot(app)
+      }
+      const publish = (version, options = {}, feedOptions = {}) => {
+        const built = archive(join(scratch, "desktop-build"), { version, script, cli, files: { "Contents/build": "new\n" }, ...options })
+        writeFileSync(desktopZip, built.body)
+        writeFileSync(desktopFeed, JSON.stringify(feed(base, version, { ...built, ...feedOptions })))
+      }
+      const arrange = (answer, preference) => {
+        for (const f of [lookups, probes, shown]) rmSync(f, { force: true })
+        writeFileSync(lookups, "")
+        writeFileSync(answerFile, answer)
+        mkdirSync(stateFolder, { recursive: true })
+        if (preference) writeFileSync(join(stateFolder, "update-check"), preference)
+        else rmSync(join(stateFolder, "update-check"), { force: true })
+      }
+      const desktopRequests = () => requests().filter(u => u.startsWith("/opencode-desktop") || u.startsWith("/files/"))
+      const built = () => existsSync(probes) ? readFileSync(probes, "utf8").trimEnd().split("\n") : []
+      try {
+        let before = install(); publish("2.4.0")
+        arrange("Update")
+        r = launch(null, ["gui"])
+        assert.equal(r.status, 0, r.stderr)
+        assert.deepEqual(desktopRequests(), ["/opencode-desktop-update?current=2.3.0", "/files/opencode-desktop-mac-arm64.zip"])
+        assert.ok(readFileSync(shown, "utf8").endsWith("An update is available: 2.4.0.\nYou have 2.3.0.\nThe update runs without Agent Guard's protection.\n"))
+        // The app that starts, and the CLI bundled in it that the launcher probes, are the new ones.
+        assert.deepEqual(recorded(), ["new", "1"])
+        assert.deepEqual(built(), ["new"])
+        assert.match(readFileSync(join(app, "Contents/Info.plist"), "utf8"), /<string>2\.4\.0<\/string>/)
+        assert.deepEqual(readdirSync(dirname(app)), ["OpenCode.app"])
+        console.log("ok launch gui offers an OpenCode app update, replaces the app outside the profile and starts the new one")
+
+        install(); arrange("Later")
+        r = launch(null, ["gui"])
+        assert.equal(r.status, 0, r.stderr)
+        assert.deepEqual(desktopRequests(), ["/opencode-desktop-update?current=2.3.0"])
+        assert.deepEqual(recorded(), ["old", "1"])
+        assert.deepEqual(built(), ["old"])
+        console.log("ok launch gui starts the installed app unchanged when the update is declined")
+
+        // Whether a session can write the app bundle: not by default, and yes under an ALLOW entry that contains it.
+        const expected = verdict => ["create", "modify", "sibling", "rename"].map(name => `${name}-${verdict}`)
+        assert.deepEqual(readFileSync(writes, "utf8").trimEnd().split("\n"), expected("denied"))
+        const guardList = join(home, "Agent Guard/Guard List.txt")
+        const original = readFileSync(guardList, "utf8")
+        writeFileSync(guardList, `ALLOW\n${dirname(app)}\n`)
+        try {
+          install(); arrange("Later")
+          r = launch(null, ["gui"])
+          assert.equal(r.status, 0, r.stderr)
+          assert.deepEqual(readFileSync(writes, "utf8").trimEnd().split("\n"), expected("written"))
+        } finally {
+          writeFileSync(guardList, original)
+          rmSync(join(dirname(app), "probe"), { force: true })
+        }
+        console.log("ok a session cannot write OpenCode.app in ~/Applications by default, and can under an ALLOW entry that contains it")
+
+        // A check that fails leaves the app as it was and ends the launch.
+        before = install(); publish("2.4.0", {}, { sha256: "0".repeat(64) })
+        arrange("Update")
+        r = launch(null, ["gui"])
+        assert.equal(r.status, 1, r.stderr)
+        assert.match(r.stderr, new RegExp(`agent-guard: the OpenCode update failed and the app was not changed\\. Details: ${join(home, "Agent Guard/last-opencode-update.log").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\n`))
+        assert.match(readFileSync(join(home, "Agent Guard/last-opencode-update.log"), "utf8"), /^OpenCode update stopped: the download does not match the SHA-256/)
+        assert.equal(recorded(), null)
+        assert.deepEqual(snapshot(app), before)
+        assert.deepEqual(readdirSync(dirname(app)), ["OpenCode.app"])
+        console.log("ok launch gui stops, naming the log, when the app update fails a check, and leaves the app as it was")
+
+        publish("2.4.0"); before = install()
+        for (const [name, go] of [
+          ["update-check off", () => { arrange("Update", "off"); return launch(null, ["gui"]) }],
+          ["a terminal launch", () => { arrange("Update"); return launch(null, ["cli", "hello"], onPath) }],
+          ["a nested launch", () => { arrange("Update"); return launch(denyList, ["gui"]) }],
+          ["a guarded session", () => { arrange("Update"); return launch(denyList, ["gui"], { AGENT_GUARD_SANDBOXED: "1" }) }],
+        ]) {
+          r = go()
+          assert.deepEqual(desktopRequests(), [], name)
+          assert.deepEqual(snapshot(app), before, name)
+        }
+        console.log("ok launch gui makes no desktop lookup with update-check off, from a terminal launch, nested or from a guarded session")
+
+        // An installation the offer does not cover starts as it is, without a lookup.
+        for (const [name, arrangeApp] of [
+          ["a link", () => { install(); renameSync(app, join(scratch, "real.app")); symlinkSync(join(scratch, "real.app"), app) }],
+          ["an unwritable folder", () => { install(); chmodSync(dirname(app), 0o555) }],
+          ["a prerelease", () => { install({ version: "2.3.0-rc.1" }) }],
+        ]) {
+          arrangeApp(); arrange("Update")
+          r = launch(null, ["gui"])
+          chmodSync(dirname(app), 0o755)
+          rmSync(join(scratch, "real.app"), { recursive: true, force: true })
+          assert.equal(r.status, 0, `${name}: ${r.stderr}`)
+          assert.deepEqual(desktopRequests(), [], name)
+          assert.deepEqual(recorded(), ["old", "1"], name)
+        }
+        console.log("ok launch gui starts an app that is a link, in an unwritable folder or a prerelease without a lookup")
+      } finally {
+        if (existsSync(dirname(app))) chmodSync(dirname(app), 0o755)
+        rmSync(join(home, "Applications"), { recursive: true, force: true })
+        rmSync(join(home, "Library/Application Support/ai.opencode.desktop"), { recursive: true, force: true })
+      }
     } finally {
       server.kill()
       rmSync(stateFolder, { recursive: true, force: true })

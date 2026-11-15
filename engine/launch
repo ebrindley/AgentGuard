@@ -933,6 +933,10 @@ case $mode in
   (gui)
     [[ $harness == opencode ]] || fail "$title has no app to open"
     failure_stage=host-launch
+    # The app's own update offer, after Agent Guard's, on the same evidence as the
+    # terminal's. It leaves app and main describing the bundle that starts, and the
+    # bundled CLI below is read from it.
+    (( ! probe_ok )) || opencode_desktop_launch_offer "$@"
     opencode_gui_environment
     if [[ -x $app/Contents/Resources/opencode-cli ]]; then
       cli="$app/Contents/Resources/opencode-cli"

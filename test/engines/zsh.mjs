@@ -43,11 +43,19 @@ export function layout(tree, engine, rid = '0.0.0-20260101T000000Z') {
   return release;
 }
 
+// Points the lookup addresses in file (profiles/opencode/update.zsh) at the server
+// at url: the CLI feed, the desktop feed and the address its archives must start with.
+export function opencodeUpdateSeams(file, url) {
+  replaceOnce(file, seams.opencodeUpdateUrl, `url=${quote(`${url}/opencode-update`)}`);
+  replaceOnce(file, seams.opencodeDesktopUrl, `url=${quote(`${url}/opencode-desktop-update`)}`);
+  replaceOnce(file, seams.opencodeDesktopOrigin, `origin=${quote(`${url}/`)}`);
+}
+
 // Points a laid-out release's OpenCode update offer at url: plain HTTP and the
-// lookup address, the same seams release() applies to a built release.
+// lookup addresses, the same seams release() applies to a built release.
 export function opencodeOfferSeams(release, url) {
   replaceOnce(join(release, 'updates.zsh'), seams.updateProto, 'local -a curl_proto=()');
-  replaceOnce(join(release, 'profiles/opencode/update.zsh'), seams.opencodeUpdateUrl, `url=${quote(`${url}/opencode-update`)}`);
+  opencodeUpdateSeams(join(release, 'profiles/opencode/update.zsh'), url);
 }
 
 // The argv that runs the launcher of the current release in the engine folder,
@@ -81,6 +89,8 @@ const seams = {
   updateRepo: "local repo='https://github.com/ebrindley/AgentGuard'",
   updateProto: "local -a curl_proto=(--proto '=https' --proto-redir '=https')",
   opencodeUpdateUrl: "url='https://opencode.ai/update/api/latest/cli/npm'",
+  opencodeDesktopUrl: "url='https://opencode.ai/update/api/latest/desktop/opencode'",
+  opencodeDesktopOrigin: "origin='https://opencode.ai/'",
   testPoint: 'test_point() { : }',
   bootstrapHome: "account_home || die 'cannot resolve account home'",
   cliSearch: 'cli_search=(/opt/homebrew/bin/opencode /usr/local/bin/opencode "$home/.opencode/bin/opencode")',
@@ -164,7 +174,7 @@ export function release(source, out, { home, tag, version, url }) {
   replaceOnce(join(tree, 'engine/agent-guard'), seams.downloadBase, `local repo=${quote(url)}; local -a curl_proto=()`);
   replaceOnce(join(tree, 'engine/updates.zsh'), seams.updateRepo, `local repo=${quote(url)}`);
   replaceOnce(join(tree, 'engine/updates.zsh'), seams.updateProto, 'local -a curl_proto=()');
-  replaceOnce(join(tree, 'profiles/opencode/update.zsh'), seams.opencodeUpdateUrl, `url=${quote(`${url}/opencode-update`)}`);
+  opencodeUpdateSeams(join(tree, 'profiles/opencode/update.zsh'), url);
   isolateHarness(tree);
   piSeams(tree, home);
   rmSync(archive);

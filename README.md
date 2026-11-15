@@ -135,8 +135,10 @@ runs the updater, reports “Agent Guard updated to <version>.” and restarts t
 launcher with the same project and arguments. Declining or an unavailable update
 check continues normally. A terminal launch of an OpenCode session also offers
 a newer OpenCode 2 release for installations the offer covers
-([details](docs/USAGE.md#update-the-opencode-cli)). Use
-`agent-guard update-check off` to disable both startup checks; noninteractive
+([details](docs/USAGE.md#update-the-opencode-cli)), and opening OpenCode through
+Agent Guard.app offers a newer desktop app the same way
+([details](docs/USAGE.md#update-offer-for-the-desktop-app)). Use
+`agent-guard update-check off` to disable these startup checks; noninteractive
 launches never prompt or upgrade.
 
 The `--approval-preference auto|host` records your intended

@@ -209,6 +209,39 @@ asked about; what gets installed comes from the updater's own source, as with
 `opencode upgrade <version>` typed by the operator. Totals: guard-provided unconfined OpenCode maintenance routes stay at 1
 and its entry paths go from 1 to 2; no write grant or denial changes.
 
+**The OpenCode desktop app's update, run at the operator's request.** The
+launcher's offer when the Agent Guard app opens OpenCode (DESIGN.md section 15,
+D21) lets Agent Guard itself replace `OpenCode.app` outside the profile. This is
+a second unconfined maintenance route, with one entry. Repository fact:
+`engine/launch` reaches it only in `gui` mode for the OpenCode harness and only
+when its `sandbox-exec` probe exited 0, after the operator accepted a dialog;
+`update-check off` and the restart handoff suppress it. Inputs: the update
+service's JSON reply, of which the version, an archive address that must start
+with `https://opencode.ai/` and a SHA-256 are used, and the archive, which
+`ditto` unpacks into a private folder inside the app's parent folder. Checks
+before the replacement: the SHA-256, the bundle ID, executable name and version,
+the signature against the installed bundle's designated requirement and Team
+ID, and the Gatekeeper assessment; each failure leaves the installed app as it
+was. What the checks do not cover: the SHA-256 comes from the same service as
+the archive, so it catches damage and does not authenticate the service; the
+archive is unpacked before the signature is checked; and the designated
+requirement is read from the installed bundle. Whether a session can write that
+bundle is a repository fact: `engine/profile.sb` denies file writes by default,
+the OpenCode profile's `writable` and `writable_gui` lists and the base
+profile's grants name neither `/Applications` nor `~/Applications`, and the
+profile denies renaming or removing the `~/Applications` folder, so a guarded
+session cannot write `OpenCode.app` in either folder unless the operator allows
+it. A Guard List ALLOW entry that is or contains the bundle, such as
+`~/Applications`, is accepted by the launcher and makes it writable. A guarded
+session cannot reach the route: its processes inherit Seatbelt, so the probe
+fails there. Accepted risk: a build signed by the installed app's developer and
+accepted by Gatekeeper is installed whatever the service intended, as with the
+vendor's own updater (section 2 trusts the harness vendor's released code); and
+the operator who allows sessions to write the bundle accepts that the update
+compares against what they leave. Totals: guard-provided unconfined OpenCode
+maintenance routes go from 1 to 2 (the updater route and this one), and their
+entry paths from 2 to 3; no write grant or denial changes.
+
 **A VM, container or separate identity.** Agent Guard is a profile over one
 account and is not an isolation substitute.
 

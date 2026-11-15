@@ -553,8 +553,8 @@ A terminal launch of an OpenCode session also offers an OpenCode update. It
 applies to `opencode` and `opencode <project>` (not subcommands, help or
 version requests, or an attached client), only in the terminal launcher and
 only when the nesting probe succeeded, so nested launches, peer wrappers and
-another tool's sandbox never reach it. The desktop launch does not offer
-OpenCode updates. In this release the installation must be OpenCode 2 started
+another tool's sandbox never reach it. The desktop launch has its own offer,
+described below. In this release the installation must be OpenCode 2 started
 from the opencode.ai installer's `~/.opencode/bin/opencode` or from an npm
 global install not owned by Volta or mise, at a stable version; the offered
 version is the service's latest stable one and never another major. The offer
@@ -572,6 +572,43 @@ failed`; if the new version is not the offered one or its major changed, it
 stops and names the expected and the found version. In both cases run
 `opencode upgrade` from Terminal and start again. A launch without a terminal
 prints the first two lines on stderr, installs nothing and starts the session.
+
+The desktop launch (Agent Guard.app) offers an OpenCode app update as a third
+product of the same offer, after Agent Guard's own offer and before the app's
+command line is built, under the same gate: `agent-guard update-check off`, a
+restart handoff and a nested launch suppress it, and it needs the nesting probe
+to have succeeded. The launcher has already refused when OpenCode is open. The
+installation must be a stable `N.N.N` app in a real folder, not a link, whose
+parent folder the operator can write, with a valid signature that has a Team ID
+and an executable of one architecture (arm64 or x64, read from the installed
+app); anything else makes no lookup. The lookup is one HTTPS request to
+OpenCode's update service, which must name a stable newer version of the same
+major and, for the app's architecture, an archive address that starts with
+`https://opencode.ai/` and a 64-digit SHA-256. The dialog shows the note above.
+An accepted update runs outside the sandbox, with the progress window and
+output in `~/Agent Guard/last-opencode-update.log`: it downloads the archive
+into a private folder inside the app's parent folder (ten minutes at most),
+checks the SHA-256, unpacks it with `ditto`, requires exactly the app's folder
+name, and verifies the unpacked app (bundle ID, executable name, version,
+Team ID, `codesign --verify --deep --strict` against the installed app's
+designated requirement, `spctl --assess --type execute`). Only then are the old
+app and the new one swapped by two renames on one volume, with the first undone
+if the second fails. After the swap the launcher reads the app's version again
+and requires the offered one, reads the executable's name again, and probes the
+bundled CLI of the new app as for any desktop launch. The old app and the
+private folder are removed; a removal that fails does not fail the update.
+
+Failure and recovery: any failing step stops the launch with `the OpenCode
+update failed and the app was not changed` and the log path. The installed app
+is as it was and the private folder is removed. If the old app could not be put
+back after a failed swap, the log says where it is kept. The log's one-line
+reason names the step. macOS's App Management protection may refuse the swap for
+Agent Guard.app, which starts the launcher; this has not been tested, and the
+update then fails at the first move with the app unchanged. Reopen and choose
+Later to run the installed app, or update it by hand: quit OpenCode, then install
+the download from opencode.ai or run `brew upgrade --cask opencode-desktop`.
+Homebrew's record of the cask keeps the older version after an update by this
+route.
 
 After either run of OpenCode's updater, the explicit command or an accepted
 offer, whatever its status, the launcher resolves `opencode` the way `agent-guard
