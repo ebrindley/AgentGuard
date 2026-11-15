@@ -537,11 +537,37 @@ offers: from Terminal it runs OpenCode's own updater unconfined, prints one
 notice and exits with the updater's status, and from an agent session it is
 refused with status 2 ([Update the OpenCode CLI](USAGE.md#update-the-opencode-cli)).
 
+A terminal launch of an OpenCode session also offers an OpenCode update. It
+applies to `opencode` and `opencode <project>` (not subcommands, help or
+version requests, or an attached client), only in the terminal launcher and
+only when the nesting probe succeeded, so nested launches, peer wrappers and
+another tool's sandbox never reach it. The desktop launch does not offer
+OpenCode updates. In this release the installation must be OpenCode 2 started
+from the opencode.ai installer's `~/.opencode/bin/opencode` or from an npm
+global install not owned by Volta or mise, at a stable version; the offered
+version is the service's latest stable one and never another major. The offer
+comes after Agent Guard's own; the two prompts are separate. Each lookup has its
+own two-second limit, so a launch can wait up to about four seconds when both
+are slow; nothing is stored, and every eligible launch looks again.
+
+The prompt reads `OpenCode <offered> is available. You have <installed>.`, then
+the note `The update runs without Agent Guard's protection.`, then `Update now?
+[Y/n]`. Accepting runs `opencode upgrade <offered>` unconfined, as the explicit
+command does, and prints `OpenCode updated to <offered>.`. The launcher then
+finds the executable again, reads its version under the profile and starts the
+session on it. If the update fails, the launch stops with `the OpenCode update
+failed`; if the new version is not the offered one or its major changed, it
+stops and names the expected and the found version. In both cases run
+`opencode upgrade` from Terminal and start again. A launch without a terminal
+prints the first two lines on stderr, installs nothing and starts the session.
+
 `agent-guard update-check` shows `on` or `off`; adding `on` or `off` changes the
 preference in `state/update-check`, outside release folders. Missing preference
-means `on`. `agent-guard update --check` checks explicitly regardless of that
-preference and installs nothing. Automatic offers cover numeric stable versions;
-installations with prerelease tags remain on their chosen version.
+means `on`. It covers the startup offers of both Agent Guard and OpenCode.
+`agent-guard update --check` checks explicitly regardless of that
+preference and installs nothing, and covers Agent Guard only. Automatic offers
+cover numeric stable versions; installations with prerelease tags remain on
+their chosen version.
 
 An installation that updates Pi, including a tagged prerelease install,
 replaces the Pi files by renames and does not wait for Pi or OMP sessions to
@@ -819,8 +845,10 @@ granted. Ordinary plugin configuration is writable; Guard bootstrap entries rema
 protected.
 
 `opencode upgrade` is the one maintenance command the launcher runs outside the
-profile, at your request: OpenCode's updater runs your package manager or
-OpenCode's installer, and reads the caches and configuration a session can write.
+profile, at your request, typed or accepted at the launch-time offer
+([Updates and sessions](#updates-and-sessions)): OpenCode's updater runs your
+package manager or OpenCode's installer, and reads the caches and configuration
+a session can write.
 
 Cache contents can affect later independently unguarded starts. Install only
 packages you trust and inspect changes before running them outside Guard.

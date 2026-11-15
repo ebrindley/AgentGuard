@@ -910,6 +910,12 @@ case $mode in
       if (( probe_ok )) && opencode_maintenance $REPLY "$@"; then
         opencode_maintain "$@"
       fi
+      # OpenCode's own update offer, after Agent Guard's, on the same evidence:
+      # only for a session of its own, and not attached to a server. It leaves
+      # cli, opencode_version and REPLY (the major) describing what starts.
+      if (( probe_ok )) && opencode_session_launch "$@"; then
+        opencode_launch_offer $REPLY "$@"
+      fi
       if [[ $REPLY == 2 ]]; then
         # This notes an attached client itself.
         opencode_cli_args "$@"

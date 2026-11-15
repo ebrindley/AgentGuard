@@ -69,12 +69,14 @@ opencode_major() {
 # --dir of `opencode run`, or empty when the command takes none. A subcommand
 # name is never a project, as in OpenCode. It returns 1 with the reason in
 # REPLY when an option this list does not know is followed by a word that could
-# be its value, because the project could then be misread.
+# be its value, because the project could then be misread. It also sets
+# opencode_subcommand (the subcommand, or empty) and opencode_attached (1 when
+# --attach or --server names a server), which opencode_session_launch reads.
 opencode_project_arg() {
   local arg name next unknown= command dir= letters letter
-  integer i=1 end=0 attached=0
+  integer i=1 end=0
   local -a args=("$@") positional
-  typeset -g opencode_browser_needed=0
+  typeset -g opencode_browser_needed=0 opencode_subcommand= opencode_attached=0
   local -a commands=(completion acp mcp attach run debug providers auth agent upgrade update uninstall serve web
                      models stats export import github pr session plugin plug db service api mini reload pair)
   local -a valued=(--log-level --port --hostname --mdns-domain --model --session --prompt --agent --replay-limit
@@ -92,10 +94,10 @@ opencode_project_arg() {
       name=${arg%%=*}
       if [[ $arg == *=* ]]; then
         [[ $name == --dir ]] && dir=${arg#*=}
-        [[ $name == (--attach|--server) ]] && attached=1
+        [[ $name == (--attach|--server) ]] && opencode_attached=1
       elif (( ${valued[(Ie)$arg]} )); then
         [[ $arg == --dir ]] && dir=$next
-        [[ $arg == (--attach|--server) ]] && attached=1
+        [[ $arg == (--attach|--server) ]] && opencode_attached=1
         (( i++ ))
       elif (( ${listed[(Ie)$arg]} )); then
         (( i++ ))
@@ -123,8 +125,9 @@ opencode_project_arg() {
   command=${positional[1]:-}
   if (( ${commands[(Ie)$command]} )); then
     [[ $command != auth || ${positional[2]:-} != login ]] || opencode_browser_needed=1
+    opencode_subcommand=$command
     REPLY=
-    [[ $command == run && $attached == 0 ]] && REPLY=$dir
+    [[ $command == run && $opencode_attached == 0 ]] && REPLY=$dir
     return 0
   fi
   if [[ -n $unknown ]]; then
@@ -133,6 +136,16 @@ opencode_project_arg() {
   fi
   REPLY=${positional[1]:-}
   opencode_browser_needed=1
+}
+
+# ARG...: succeeds when ARG... starts an interactive session of OpenCode's own,
+# `opencode` or `opencode <project>`: no subcommand and no server to attach to.
+# It reads ARG... as opencode_project_arg does, so the two cannot disagree about
+# what a subcommand is. REPLY is left as it was.
+opencode_session_launch() {
+  local REPLY
+  opencode_project_arg "$@" || true
+  [[ -z $opencode_subcommand && $opencode_attached == 0 ]]
 }
 
 # REPLY is the count of leading words that are OpenCode global options. Of

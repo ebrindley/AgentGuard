@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSy
 import { tmpdir, userInfo } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { layout, stage } from "./engines/zsh.mjs"
+import { layout, opencodeOfferSeams, stage } from "./engines/zsh.mjs"
 import { groupExists, groupMembers, signalGroup } from "./process-group.mjs"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
@@ -339,11 +339,11 @@ try {
   writeFileSync(join(bin, "opencode"), `#!/bin/sh\n[ "$1" = --version ] && { cat "\${0%/*}/version"; exit 0; }\n{ printf '%s\\n' "\${NPM_CONFIG_USERCONFIG:--}" "\${SSH_AUTH_SOCK:--}" "$PATH"; ( : > ${JSON.stringify(proof)} ) 2>/dev/null && echo written || echo denied; } > ${JSON.stringify(envRecord)}\nprintf '%s\\n' "\${AGENT_GUARD_SANDBOXED:--}" "\${AGENT_GUARD_OUTER_SANDBOX:--}" "$@" > ${JSON.stringify(record)}\nexit 7\n`)
   chmodSync(join(bin, "opencode"), 0o755)
   const log = join(home, "Agent Guard/last-launch-opencode.log")
-  const launch = (outer, args, env = {}) => {
+  const launch = (outer, args, env = {}, input) => {
     rmSync(record, { force: true })
     const argv = [...(outer ? ["/usr/bin/sandbox-exec", "-p", outer] : []), "/bin/zsh", join(engine, "current/launch"), ...args]
     return spawnSync(argv[0], argv.slice(1), {
-      cwd: join(home, "Projects/app"), encoding: "utf8",
+      cwd: join(home, "Projects/app"), encoding: "utf8", input,
       env: { PATH: `${bin}:/usr/bin:/bin:/usr/sbin:/sbin`, HOME: home, TMPDIR: temp, ...env },
     })
   }
@@ -520,6 +520,149 @@ try {
       rmSync(join(engine, "state"), { recursive: true, force: true })
       rmSync(log, { force: true })
       rmSync(envRecord, { force: true })
+    }
+  }
+  {
+    // OpenCode's update offer at the start of a session. The lookup goes to a
+    // local server in a child process (the launcher blocks this one), the
+    // updater is a stand-in in the installer's location, and the release's
+    // terminal check is replaced for the runs that answer the prompt on stdin.
+    const lookups = join(scratch, "lookups")
+    const reply = join(scratch, "reply")
+    const upgraded = join(scratch, "upgrade")
+    const eligible = join(home, ".opencode/bin")
+    const stateFolder = join(engine, "state")
+    const updates = join(engine, "current/updates.zsh")
+    const server = spawn(process.execPath, ["-e", `
+      const http = require("node:http"), fs = require("node:fs")
+      const [lookups, reply] = process.argv.slice(1)
+      http.createServer((req, res) => {
+        fs.appendFileSync(lookups, req.url + "\\n")
+        res.end(JSON.stringify({ channel: "latest", name: "cli", version: fs.readFileSync(reply, "utf8").trim() }))
+      }).listen(0, "127.0.0.1", function () { console.log(this.address().port) })
+    `, lookups, reply], { stdio: ["ignore", "pipe", "inherit"] })
+    try {
+      const port = Number(await new Promise(resolve => server.stdout.once("data", resolve)))
+      opencodeOfferSeams(join(engine, "current"), `http://127.0.0.1:${port}`)
+      const production = readFileSync(updates, "utf8")
+      const terminal = on => writeFileSync(updates, on ? production.replace("[[ -t 0 && -t 2 ]]", "true") : production)
+      assert.notEqual(production.replace("[[ -t 0 && -t 2 ]]", "true"), production)
+      // Installed version, then what its updater does: install the offered version,
+      // leave the version alone, install another one, or fail.
+      mkdirSync(eligible, { recursive: true })
+      writeFileSync(join(eligible, "opencode"), `#!/bin/sh
+dir=\${0%/*}
+[ "$1" = --version ] && { cat "$dir/version"; exit 0; }
+if [ "$1" = upgrade ]; then
+  { printf '%s\\n' "$*" "\${AGENT_GUARD_SANDBOXED:--}"; ( : > ${JSON.stringify(proof)} ) 2>/dev/null && echo written || echo denied; } > ${JSON.stringify(upgraded)}
+  case $(cat "$dir/mode") in
+    install) printf '%s\\n' "$2" > "$dir/version" ;;
+    other) echo 2.9.9 > "$dir/version" ;;
+    fail) exit 1 ;;
+  esac
+  exit 0
+fi
+printf '%s\\n' "$(cat "$dir/version")" "\${AGENT_GUARD_SANDBOXED:--}" "$@" > ${JSON.stringify(record)}
+exit 7
+`)
+      chmodSync(join(eligible, "opencode"), 0o755)
+      const prepare = ({ installed = "2.3.0", offered = "2.4.0", mode = "install", preference } = {}) => {
+        for (const f of [lookups, upgraded, proof]) rmSync(f, { force: true })
+        writeFileSync(lookups, "")
+        writeFileSync(reply, offered)
+        writeFileSync(join(eligible, "version"), installed)
+        writeFileSync(join(eligible, "mode"), mode)
+        mkdirSync(stateFolder, { recursive: true })
+        if (preference) writeFileSync(join(stateFolder, "update-check"), preference)
+        else rmSync(join(stateFolder, "update-check"), { force: true })
+      }
+      const requests = () => readFileSync(lookups, "utf8").trimEnd().split("\n").filter(Boolean)
+      const upgrade = () => existsSync(upgraded) ? readFileSync(upgraded, "utf8").trimEnd().split("\n") : null
+      const session = () => recorded()
+      const onPath = { PATH: `${eligible}:/usr/bin:/bin:/usr/sbin:/sbin` }
+      const available = /OpenCode 2\.4\.0 is available\. You have 2\.3\.0\.\nThe update runs without Agent Guard's protection\.\n/
+      terminal(true)
+
+      prepare()
+      let r = launch(null, ["cli", "hello"], onPath, "y\n")
+      assert.equal(r.status, 7, r.stderr)
+      assert.match(r.stderr, available)
+      assert.match(r.stderr, /Update now\? \[Y\/n\] OpenCode updated to 2\.4\.0\.\n/)
+      assert.deepEqual(requests(), ["/opencode-update?current=2.3.0"])
+      assert.deepEqual(upgrade(), ["upgrade 2.4.0", "-", "written"])
+      // The session runs the new version, and --standalone shows the arguments were
+      // prepared for OpenCode 2 after the update.
+      assert.deepEqual(session(), ["2.4.0", "1", "--standalone", "hello"])
+      console.log("ok launch cli offers an OpenCode update, runs the accepted one unconfined and starts the session on the new version")
+
+      prepare()
+      r = launch(null, ["cli"], onPath, "n\n")
+      assert.equal(r.status, 7, r.stderr)
+      assert.match(r.stderr, available)
+      assert.doesNotMatch(r.stderr, /updated to/)
+      assert.equal(upgrade(), null)
+      assert.deepEqual(session(), ["2.3.0", "1", "--standalone"])
+      console.log("ok launch cli starts the session unchanged when the OpenCode update is declined")
+
+      prepare({ mode: "fail" })
+      r = launch(null, ["cli"], onPath, "y\n")
+      assert.equal(r.status, 1, r.stderr)
+      assert.match(r.stderr, /agent-guard: the OpenCode update failed\. Run opencode upgrade in Terminal to finish it, then reopen\./)
+      assert.equal(session(), null)
+      for (const mode of ["none", "other"]) {
+        prepare({ mode })
+        r = launch(null, ["cli"], onPath, "y\n")
+        assert.equal(r.status, 1, r.stderr)
+        assert.match(r.stderr, new RegExp(`the OpenCode update did not install the version offered: expected 2\\.4\\.0, found ${mode === "other" ? "2\\.9\\.9" : "2\\.3\\.0"}\\.`))
+        assert.equal(session(), null, mode)
+      }
+      console.log("ok launch cli stops when the OpenCode update fails or does not install the offered version")
+
+      for (const args of [["run", "hello"], ["--version"], ["--help"], ["serve"], ["auth", "list"], ["--print-logs", "run", "x"], ["--attach", "http://h:1"], ["--server=http://h:1"], ["attach", "http://h:1"]]) {
+        prepare()
+        r = launch(null, ["cli", ...args], onPath, "y\n")
+        assert.deepEqual(requests(), [], args.join(" "))
+        assert.equal(upgrade(), null, args.join(" "))
+        assert.doesNotMatch(r.stderr, /is available/, args.join(" "))
+      }
+      for (const [name, outer, env] of [["a guarded session", denyList, { AGENT_GUARD_SANDBOXED: "1" }], ["another sandbox", denyList, {}]]) {
+        prepare()
+        r = launch(outer, ["cli"], { ...onPath, ...env }, "y\n")
+        assert.equal(r.status, 7, `${name}: ${r.stderr}`)
+        assert.deepEqual(requests(), [], name)
+        assert.equal(upgrade(), null, name)
+      }
+      // The same version in a location the offer does not cover.
+      prepare()
+      writeFileSync(versionFile, "2.3.0\n")
+      r = launch(null, ["cli"], {}, "y\n")
+      writeFileSync(versionFile, "2.1.4\n")
+      assert.equal(r.status, 7, r.stderr)
+      assert.deepEqual(requests(), [])
+      console.log("ok launch cli makes no OpenCode lookup for another subcommand, an attached or nested launch or an uncovered installation")
+
+      prepare({ preference: "off" })
+      r = launch(null, ["cli"], onPath, "y\n")
+      assert.equal(r.status, 7, r.stderr)
+      assert.deepEqual(requests(), [])
+      assert.equal(upgrade(), null)
+      assert.deepEqual(session(), ["2.3.0", "1", "--standalone"])
+      console.log("ok update-check off makes no OpenCode lookup")
+
+      terminal(false)
+      prepare()
+      r = launch(null, ["cli"], onPath, "y\n")
+      assert.equal(r.status, 7, r.stderr)
+      assert.match(r.stderr, available)
+      assert.doesNotMatch(r.stderr, /Update now/)
+      assert.equal(upgrade(), null)
+      assert.deepEqual(session(), ["2.3.0", "1", "--standalone"])
+      console.log("ok a launch without a terminal reports the OpenCode update and installs nothing")
+    } finally {
+      server.kill()
+      rmSync(stateFolder, { recursive: true, force: true })
+      rmSync(log, { force: true })
+      rmSync(eligible, { recursive: true, force: true })
     }
   }
   {

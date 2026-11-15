@@ -43,6 +43,13 @@ export function layout(tree, engine, rid = '0.0.0-20260101T000000Z') {
   return release;
 }
 
+// Points a laid-out release's OpenCode update offer at url: plain HTTP and the
+// lookup address, the same seams release() applies to a built release.
+export function opencodeOfferSeams(release, url) {
+  replaceOnce(join(release, 'updates.zsh'), seams.updateProto, 'local -a curl_proto=()');
+  replaceOnce(join(release, 'profiles/opencode/update.zsh'), seams.opencodeUpdateUrl, `url=${quote(`${url}/opencode-update`)}`);
+}
+
 // The argv that runs the launcher of the current release in the engine folder,
 // or of the release rid when given.
 export function launcher(engine, rid) {

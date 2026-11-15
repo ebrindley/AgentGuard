@@ -198,7 +198,8 @@ ag_update_notify() {
 # ARG... are the launch's arguments, which the gate reads.
 # Returns 0 when nothing was installed (no offer, a failed lookup, a declined or
 # unanswered offer), 1 when an accepted update failed and 2 when it was
-# installed; the caller decides what happens next. A failed check is optional.
+# installed, with the offered version in REPLY; the caller decides what happens
+# next. A failed check is optional.
 ag_update_offer() {
   emulate -L zsh
   setopt no_unset extended_glob
@@ -212,6 +213,8 @@ ag_update_offer() {
   ag_update_ask "$mode" "${p[name]}" "$offered" "$installed" "${p[note]:-}" || return 0
   ag_update_run "$mode" "$offered" "${p[run]}" "${p[log]}" "${p[name]}" "${p[window_label]}" ${(f)p[window_stages]:-} || return 1
   ag_update_notify "$mode" "${p[name]}" "$offered"
+  # The desktop run's window source was the last REPLY.
+  REPLY=$offered
   return 2
 }
 

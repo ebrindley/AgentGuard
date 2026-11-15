@@ -1,7 +1,7 @@
 # OpenCode as a product of the shared update offer in engine/updates.zsh, which
 # owns the gate, the transport, the comparison, the questions and the run. The
 # launcher sets cli (the resolved executable) and opencode_version (from
-# opencode_major) before calling opencode_update_offer, and provides
+# opencode_major) before calling opencode_launch_offer, and provides
 # opencode_upgrade, which installs one version outside the sandbox.
 
 # CLI VERSION: 0 when this installation gets an offer: a stable OpenCode 2
@@ -48,4 +48,29 @@ opencode_update_offer() {
   )
   shift
   ag_update_offer "$mode" opencode_product "$@"
+}
+
+# MAJOR ARG...: the launcher's offer at the start of an OpenCode session, whose
+# executable is $cli and whose major version is MAJOR. The launcher calls it
+# only in cli mode, with the nesting probe passed and ARG... an interactive
+# session. A declined, failed or unanswered check leaves the launch as it was;
+# an accepted update that failed, or that did not install the offered version,
+# ends it. On return cli, opencode_version and REPLY (the major) describe the
+# executable the session starts.
+opencode_launch_offer() {
+  local major=$1 offered rc=0
+  shift
+  opencode_update_offer "$mode" "$@" || rc=$?
+  case $rc in
+    (0) REPLY=$major ;;
+    (1) fail 'the OpenCode update failed. Run opencode upgrade in Terminal to finish it, then reopen.' ;;
+    (2)
+      offered=$REPLY
+      next_cli || fail "${cli_names[1]} not found after the OpenCode update"
+      cli=$REPLY
+      opencode_major "$cli"
+      [[ $opencode_version == "$offered" && $REPLY == "$major" ]] ||
+        fail "the OpenCode update did not install the version offered: expected $offered, found $opencode_version. Run opencode upgrade in Terminal, then reopen."
+      ;;
+  esac
 }

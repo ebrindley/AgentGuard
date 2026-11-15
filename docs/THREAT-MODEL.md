@@ -186,19 +186,28 @@ applied that sandbox owns its policy. Any other probe failure keeps the normal
 path, which fails before OpenCode runs.
 
 **OpenCode's updater, run at the operator's request.** `opencode upgrade`
-(`opencode update` on OpenCode 2) from Terminal runs OpenCode's own updater
-outside the profile (DESIGN.md section 15, D19). Repository fact: `engine/launch`
-takes this path only for that command, in `cli` mode for the OpenCode harness,
-and only when its `sandbox-exec` probe exited 0; a failed probe of any kind
-keeps the command confined. A guarded session cannot reach it: its processes
-inherit Seatbelt, so the probe fails there, and the nested launcher and the peer
-wrapper refuse the command with status 2. The updater runs the operator's
-package manager or OpenCode's installer and reads caches and configuration a
-session can write (`~/.npm`, `~/.cache`, OpenCode's configuration). Accepted
-risk: that is the exposure SECURITY.md already accepts for maintenance run
-outside the guard, and here the operator starts it. Totals: guard-provided
-unconfined OpenCode maintenance routes go from 0 to 1; no write grant or denial
-changes.
+(`opencode update` on OpenCode 2) from Terminal, or an accepted launch-time
+offer, runs OpenCode's own updater outside the profile (DESIGN.md section 15,
+D19, D20). Repository fact: `engine/launch` takes this path only in `cli` mode
+for the OpenCode harness and only when its `sandbox-exec` probe exited 0; a
+failed probe of any kind keeps the command confined. The explicit command is
+the first entry. The second is the offer made when the launch starts an
+interactive session (`opencode` or `opencode <project>`, not attached, no
+subcommand), asked on the operator's terminal before the sandbox is applied and
+run only after the operator answers yes. The offer adds one input: an HTTPS
+request to OpenCode's update service, whose JSON reply is parsed for a version
+of three numeric components that is passed to the updater as one literal
+argument; the reply is never executed. A guarded session cannot reach either
+entry: its processes inherit Seatbelt, so the probe fails there, and the nested
+launcher and the peer wrapper refuse the command with status 2 or never reach
+the offer. The updater runs the operator's package manager or OpenCode's
+installer and reads caches and configuration a session can write (`~/.npm`,
+`~/.cache`, OpenCode's configuration). Accepted risk: that is the exposure
+SECURITY.md already accepts for maintenance run outside the guard, and here the
+operator starts it. The reply only chooses which version number the operator is
+asked about; what gets installed comes from the updater's own source, as with
+`opencode upgrade <version>` typed by the operator. Totals: guard-provided unconfined OpenCode maintenance routes stay at 1
+and its entry paths go from 1 to 2; no write grant or denial changes.
 
 **A VM, container or separate identity.** Agent Guard is a profile over one
 account and is not an isolation substitute.

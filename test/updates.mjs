@@ -242,6 +242,15 @@ try {
     assert.ok(helperStopped());
     answer = 'Later'; ui();
   });
+  await check('an installed update hands the offered version back in REPLY, after a terminal or a desktop run', async () => {
+    opencodeReply = '2.4.0'; answer = 'Update'; ui();
+    // The desktop run leaves the progress window's script in REPLY.
+    for (const mode of ['cli', 'gui']) {
+      const s = await run(`cli=${quote(installerCli)}; opencode_version=2.3.0; opencode_upgrade() { :; }; opencode_update_offer ${mode} >/dev/null 2>&1; print -r -- "$? $REPLY"`, 'y\n');
+      assert.equal(s.stdout, '2 2.4.0\n', `${mode}: ${s.stderr}`);
+    }
+    answer = 'Later'; ui();
+  });
   await check('opencode_major leaves the full version it parsed and keeps its result', async () => {
     const sandbox = join(temp, 'sandbox'); executable(sandbox, 'shift 2\nexec "$@"\n');
     const probe = (output) => { const cli = join(temp, 'fake-opencode'); executable(cli, `print -r -- ${quote(output)}\n`);
