@@ -143,7 +143,12 @@ opencode_project_arg() {
 # It reads ARG... as opencode_project_arg does, so the two cannot disagree about
 # what a subcommand is. REPLY is left as it was.
 opencode_session_launch() {
-  local REPLY
+  local REPLY arg
+  # --completions prints a shell completion script and exits.
+  for arg in "$@"; do
+    [[ $arg != -- ]] || break
+    [[ $arg != (--completions|--completions=*) ]] || return 1
+  done
   opencode_project_arg "$@" || true
   [[ -z $opencode_subcommand && $opencode_attached == 0 ]]
 }
@@ -214,6 +219,10 @@ opencode_cli_args() {
 }
 
 opencode_is_v2() { [[ $1 == (opencode\ v2.*|2.*|v2.*) ]] }
+
+# CLI: succeeds when CLI is the one bundled in OpenCode.app, which is updated
+# with the app. A link on PATH or in the installer's location can point into it.
+opencode_bundled() { [[ ${1:A} == */Contents/Resources/opencode-cli ]] }
 
 # MAJOR ARG...: succeeds when ARG... is OpenCode's own updater: upgrade on 1 and
 # 2, update on 2 only (on 1 it opens a project of that name). The command is the
@@ -286,8 +295,7 @@ opencode_maintenance_run() {
 # it through the shared runner and exits with its status; no session starts.
 opencode_maintain() {
   local rc=0
-  # A link on PATH can point into the app.
-  if [[ ${cli:A} == */Contents/Resources/opencode-cli ]]; then
+  if opencode_bundled "$cli"; then
     fail 'this OpenCode belongs to the OpenCode app and is updated with the app; quit OpenCode, then run brew upgrade --cask opencode-desktop or install the download from opencode.ai'
   fi
   opencode_maintenance_args=("$@")

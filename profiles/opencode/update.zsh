@@ -11,6 +11,7 @@
 opencode_update_eligible() {
   local exe=${1:A} installer=$home/.opencode/bin/opencode
   [[ $2 == 2.<->.<-> ]] || return 1
+  ! opencode_bundled "$exe" || return 1
   installer=${installer:A}
   [[ $exe == $installer ]] && return 0
   [[ ${exe:h:t} == bin && ${exe:h:h} == */lib/node_modules/@opencode/cli ]] || return 1

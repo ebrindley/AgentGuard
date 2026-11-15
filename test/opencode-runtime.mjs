@@ -618,7 +618,7 @@ exit 7
       }
       console.log("ok launch cli stops when the OpenCode update fails or does not install the offered version")
 
-      for (const args of [["run", "hello"], ["--version"], ["--help"], ["serve"], ["auth", "list"], ["--print-logs", "run", "x"], ["--attach", "http://h:1"], ["--server=http://h:1"], ["attach", "http://h:1"]]) {
+      for (const args of [["run", "hello"], ["--version"], ["--help"], ["serve"], ["auth", "list"], ["--print-logs", "run", "x"], ["--completions", "zsh"], ["--completions=zsh"], ["--attach", "http://h:1"], ["--server=http://h:1"], ["attach", "http://h:1"]]) {
         prepare()
         r = launch(null, ["cli", ...args], onPath, "y\n")
         assert.deepEqual(requests(), [], args.join(" "))

@@ -52,7 +52,7 @@ writeFileSync(opencodeModule, replaceOnce(readFileSync(join(root, 'profiles/open
 const stamp = (value) => writeFileSync(join(engine, 'state/stamp.json'), JSON.stringify({ tag: value }));
 const preference = (value) => writeFileSync(join(engine, 'state/update-check'), value);
 const run = (body, input = '') => new Promise((done, reject) => {
-  const child = spawn('/bin/zsh', ['-fc', `setopt no_unset extended_glob; home=${quote(home)}; engine=${quote(engine)}; source ${quote(module)}; source ${quote(opencodeModule)}; ${body}`], { cwd: temp });
+  const child = spawn('/bin/zsh', ['-fc', `setopt no_unset extended_glob; home=${quote(home)}; engine=${quote(engine)}; source ${quote(module)}; source ${quote(join(root, 'profiles/opencode/runtime.zsh'))}; source ${quote(opencodeModule)}; ${body}`], { cwd: temp });
   let stdout = '', stderr = '';
   child.stdout.on('data', (b) => { stdout += b; }); child.stderr.on('data', (b) => { stderr += b; });
   child.on('error', reject); child.on('close', (status) => done({ status, stdout, stderr })); child.stdin.end(input);
@@ -180,6 +180,12 @@ try {
       const r = await run(`opencode_update_eligible ${quote(path)} 2.3.0; print -r -- $?`);
       assert.equal(r.stdout, eligible ? '0\n' : '1\n', path);
     }
+    // The installer's location linked to the app's bundled CLI is the app's.
+    const linked = join(temp, 'linked-home');
+    mkdirSync(join(linked, '.opencode/bin'), { recursive: true }); mkdirSync(join(linked, 'OpenCode.app/Contents/Resources'), { recursive: true });
+    writeFileSync(join(linked, 'OpenCode.app/Contents/Resources/opencode-cli'), '');
+    symlinkSync(join(linked, 'OpenCode.app/Contents/Resources/opencode-cli'), join(linked, '.opencode/bin/opencode'));
+    assert.equal((await run(`home=${quote(linked)}; opencode_update_eligible ${quote(join(linked, '.opencode/bin/opencode'))} 2.3.0; print -r -- $?`)).stdout, '1\n');
     for (const version of ['1.18.33', '0.0.0-dev-123', '2.3.0-rc.1', '2.3', '3.0.0', '']) {
       assert.equal((await run(`opencode_update_eligible ${quote(installerCli)} ${quote(version)}; print -r -- $?`)).stdout, '1\n', version);
     }
