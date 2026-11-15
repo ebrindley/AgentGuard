@@ -711,8 +711,8 @@ restore Aplus
 latest v0.0.2
 point=kill:current ag update
 rc=$?
-copies=("$state"/txn/{install.sh,account.zsh,uninstall.sh,profiles/opencode/harness.zsh}(N) "$state"/txn/installer/{lib,actions,harness/opencode,migrate/opencode-guard}.zsh(N))
-(( rc == 137 && $#copies == 8 )) && pass 'killed in the switch; the transaction holds its installer, modules and harness data' ||
+copies=("$state"/txn/{install.sh,account.zsh,lookup.zsh,uninstall.sh,profiles/opencode/harness.zsh}(N) "$state"/txn/installer/{lib,actions,harness/opencode,migrate/opencode-guard}.zsh(N))
+(( rc == 137 && $#copies == 9 )) && pass 'killed in the switch; the transaction holds its installer, modules and harness data' ||
   { fail "kill:current (exit $rc, $#copies copies)"; show }
 new_rid=$(/usr/bin/jq -r .rid_new "$state/txn/plan.json" 2>/dev/null)
 [[ -n $new_rid ]] && /bin/rm -rf "$engine/releases/$new_rid"

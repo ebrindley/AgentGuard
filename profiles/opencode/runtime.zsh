@@ -280,15 +280,35 @@ opencode_unconfined() {
   "${opencode_operator_env[@]}" "$cli" "$@"
 }
 
-# ARG...: OpenCode's updater, `opencode upgrade ARG...`, unconfined.
+# Warns on stderr when a new terminal window would now start an opencode other
+# than Agent Guard's launcher, as OpenCode's own installer does by adding
+# ~/.opencode/bin to the end of .zshrc. Changes no status. lookup.zsh is loaded
+# here because only an upgrade needs it.
+opencode_warn_shadow() {
+  source "$release/lookup.zsh" || return 0
+  ag_opencode_shadowed || return 0
+  print -ru2 -- "agent-guard: new terminal windows will start ${REPLY/#$home/~}, not Agent Guard's opencode, so OpenCode runs there without protection. Run agent-guard update to fix it."
+}
+
+# ARG...: OpenCode's updater, `opencode ARG...`, unconfined, then the PATH check
+# above. Returns the updater's status whatever it was. The explicit command and
+# the launch-time offer both run it.
+opencode_updater() {
+  local rc=0
+  opencode_unconfined "$@" || rc=$?
+  opencode_warn_shadow
+  return $rc
+}
+
+# ARG...: OpenCode's updater, `opencode upgrade ARG...`.
 opencode_upgrade() {
-  opencode_unconfined upgrade "$@"
+  opencode_updater upgrade "$@"
 }
 
 # The command the operator typed, for the runner of ag_update_run, which passes
 # one word.
 opencode_maintenance_run() {
-  opencode_unconfined "${opencode_maintenance_args[@]}"
+  opencode_updater "${opencode_maintenance_args[@]}"
 }
 
 # ARG...: the maintenance command the operator typed, outside any sandbox. Runs

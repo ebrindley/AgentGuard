@@ -143,24 +143,6 @@ ag_launch_check() {  # COMMAND LABEL
 
 ag_h_opencode_links() { reply=("$plugin" "$(/usr/bin/readlink -- "$plugin")") }
 
-ag_opencode_path_warning() {
-  REPLY=
-  [[ -n ${ZDOTDIR:-} && ${ZDOTDIR:A} != "$home" ]] || return 0
-  REPLY="ZDOTDIR uses ${ZDOTDIR:A}; add this line to its .zprofile and .zshrc for terminal activation: "
-  REPLY+='export PATH="$HOME/Library/Application Support/AgentGuard/bin:$PATH"'
-}
-
-# True when a new terminal window starts an opencode other than Agent Guard's
-# launcher, as a startup file that adds ~/.opencode/bin after Agent Guard's block
-# does. With ZDOTDIR elsewhere the lookup would not read the files it asks about,
-# and the warning above covers activation instead.
-ag_opencode_shadowed() {
-  ag_opencode_path_warning
-  [[ -z $REPLY ]] || return 1
-  ag_shell_resolve opencode -l -i
-  (( $? == 1 ))
-}
-
 # The launcher's check (design section 8), then the doctor line for where a new
 # terminal finds opencode: FAIL when another opencode comes first, except in the
 # install's own gate (AGENT_GUARD_GATE), where it is a warning because the install

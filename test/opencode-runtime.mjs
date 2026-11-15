@@ -178,6 +178,7 @@ for (const [major, args, expected] of [
     const result = spawnSync("/bin/zsh", ["-fc", `
       setopt err_exit no_unset pipe_fail extended_glob
       source "$1"
+      opencode_warn_shadow() { :; }
       cli=$2
       env_unset=(FIXTURE_UNSET FIXTURE_SSH)
       env_set=(FIXTURE_SET=session)
@@ -336,7 +337,17 @@ try {
   const envRecord = join(scratch, "env")
   writeFileSync(versionFile, "2.1.4\n")
   const proof = join(home, "Library/Application Support/AgentGuard/state/.upgrade-proof")
-  writeFileSync(join(bin, "opencode"), `#!/bin/sh\n[ "$1" = --version ] && { cat "\${0%/*}/version"; exit 0; }\n{ printf '%s\\n' "\${NPM_CONFIG_USERCONFIG:--}" "\${SSH_AUTH_SOCK:--}" "$PATH"; ( : > ${JSON.stringify(proof)} ) 2>/dev/null && echo written || echo denied; } > ${JSON.stringify(envRecord)}\nprintf '%s\\n' "\${AGENT_GUARD_SANDBOXED:--}" "\${AGENT_GUARD_OUTER_SANDBOX:--}" "$@" > ${JSON.stringify(record)}\nexit 7\n`)
+  // What a new terminal window finds: Agent Guard's block in .zshrc puts the
+  // engine's bin first, and the current release's bin/opencode is the launcher.
+  // An updater run with APPEND_PATH_LINE set adds OpenCode's own PATH line after it.
+  const rc = join(home, ".zshrc")
+  const block = '# >>> agent-guard >>>\npath=("$HOME/Library/Application Support/AgentGuard/bin" ${path:#"$HOME/Library/Application Support/AgentGuard/bin"})\n# <<< agent-guard <<<\n'
+  const pathLine = 'export PATH="$HOME/.opencode/bin:$PATH"'
+  const shadowWarning = "agent-guard: new terminal windows will start ~/.opencode/bin/opencode, not Agent Guard's opencode, so OpenCode runs there without protection. Run agent-guard update to fix it."
+  symlinkSync("current/bin", join(engine, "bin"))
+  writeFileSync(join(engine, "current/bin/opencode"), "#!/bin/sh\n", { mode: 0o755 })
+  writeFileSync(rc, block)
+  writeFileSync(join(bin, "opencode"), `#!/bin/sh\n[ "$1" = --version ] && { cat "\${0%/*}/version"; exit 0; }\n[ "$1" = upgrade ] && [ -n "\${APPEND_PATH_LINE:-}" ] && echo '${pathLine}' >> "$HOME/.zshrc"\n{ printf '%s\\n' "\${NPM_CONFIG_USERCONFIG:--}" "\${SSH_AUTH_SOCK:--}" "$PATH"; ( : > ${JSON.stringify(proof)} ) 2>/dev/null && echo written || echo denied; } > ${JSON.stringify(envRecord)}\nprintf '%s\\n' "\${AGENT_GUARD_SANDBOXED:--}" "\${AGENT_GUARD_OUTER_SANDBOX:--}" "$@" > ${JSON.stringify(record)}\nexit 7\n`)
   chmodSync(join(bin, "opencode"), 0o755)
   const log = join(home, "Agent Guard/last-launch-opencode.log")
   const launch = (outer, args, env = {}, input) => {
@@ -466,8 +477,25 @@ try {
         assert.equal(count(r.stderr, notice), 1, `${name}: ${r.stderr}`)
         assert.deepEqual(recorded(), ["-", "-", ...args], name)
         assert.deepEqual(checked(), ["/operator/npmrc", "/operator/agent.sock", operatorPath, "written"], name)
+        assert.equal(r.stderr.includes("new terminal windows will start"), false, `${name}: ${r.stderr}`)
       }
       console.log("ok launch cli runs OpenCode's updater unconfined with the operator's environment, prints the notice and exits with its status")
+      // An updater that adds its own PATH line after Agent Guard's block: the
+      // warning names the opencode a new terminal finds, and the status is the
+      // updater's.
+      version("2.1.4"); reset()
+      mkdirSync(join(home, ".opencode/bin"), { recursive: true })
+      writeFileSync(join(home, ".opencode/bin/opencode"), "#!/bin/sh\n", { mode: 0o755 })
+      try {
+        const r = launch(null, ["cli", "upgrade"], { ...operator, APPEND_PATH_LINE: "1" })
+        assert.equal(r.status, 7, r.stderr)
+        assert.equal(count(r.stderr, shadowWarning), 1, r.stderr)
+        assert.equal(readFileSync(rc, "utf8"), block + pathLine + "\n")
+      } finally {
+        rmSync(join(home, ".opencode"), { recursive: true, force: true })
+        writeFileSync(rc, block)
+      }
+      console.log("ok launch cli warns after an upgrade that puts another opencode ahead of Agent Guard's")
       for (const [v, args] of [["1.4.0", ["update"]], ["2.1.4", ["upgrade", "--help"]], ["1.4.0", ["upgrade", "-h"]], ["2.1.4", ["update", "1.2.3", "--help"]]]) {
         version(v); reset()
         const r = launch(null, ["cli", ...args], operator)
@@ -557,6 +585,7 @@ if [ "$1" = upgrade ]; then
   { printf '%s\\n' "$*" "\${AGENT_GUARD_SANDBOXED:--}"; ( : > ${JSON.stringify(proof)} ) 2>/dev/null && echo written || echo denied; } > ${JSON.stringify(upgraded)}
   case $(cat "$dir/mode") in
     install) printf '%s\\n' "$2" > "$dir/version" ;;
+    shadow) printf '%s\\n' "$2" > "$dir/version"; echo '${pathLine}' >> "$HOME/.zshrc" ;;
     other) echo 2.9.9 > "$dir/version" ;;
     fail) exit 1 ;;
   esac
@@ -593,7 +622,19 @@ exit 7
       // The session runs the new version, and --standalone shows the arguments were
       // prepared for OpenCode 2 after the update.
       assert.deepEqual(session(), ["2.4.0", "1", "--standalone", "hello"])
+      assert.equal(r.stderr.includes("new terminal windows will start"), false, r.stderr)
       console.log("ok launch cli offers an OpenCode update, runs the accepted one unconfined and starts the session on the new version")
+
+      // The same check after the accepted offer: the warning comes before the
+      // session, which still starts.
+      prepare({ mode: "shadow" })
+      try {
+        r = launch(null, ["cli", "hello"], onPath, "y\n")
+        assert.equal(r.status, 7, r.stderr)
+        assert.equal(r.stderr.split(shadowWarning).length - 1, 1, r.stderr)
+        assert.deepEqual(session(), ["2.4.0", "1", "--standalone", "hello"])
+      } finally { writeFileSync(rc, block) }
+      console.log("ok launch cli warns after an accepted OpenCode update that puts another opencode ahead of Agent Guard's, and starts the session")
 
       prepare()
       r = launch(null, ["cli"], onPath, "n\n")

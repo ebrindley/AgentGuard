@@ -32,6 +32,7 @@ files=(
   LICENSE
   engine/launch
   engine/account.zsh
+  engine/lookup.zsh
   engine/agent-guard
   engine/updates.zsh
   engine/profile.sb

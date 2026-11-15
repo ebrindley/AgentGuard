@@ -16,7 +16,7 @@ Applies to commits, pull requests, issues, backlog items, release notes, documen
 
 ## Shared code
 
-- Shared helpers live in `engine/account.zsh` (account lookup), `installer/lib.zsh` and `installer/harness/pi.zsh` (installer helpers, which `engine/agent-guard` also loads for the profile command files), and `test/lib.zsh` and `test/fixture-home.mjs` for tests. A new module reuses them instead of copying a sibling.
+- Shared helpers live in `engine/account.zsh` (account lookup), `engine/lookup.zsh` (the bounded run and the new-terminal command lookup, which the installer and the launcher both load), `installer/lib.zsh` and `installer/harness/pi.zsh` (installer helpers, which `engine/agent-guard` also loads for the profile command files), and `test/lib.zsh` and `test/fixture-home.mjs` for tests. A new module reuses them instead of copying a sibling.
 - The launch policy exists twice, in the Pi launcher preamble `profiles/pi/sandbox/pi-sandbox-preamble.zsh` and in `engine/launch`. A fix to one is applied to both.
 
 ## Findings

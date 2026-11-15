@@ -144,7 +144,7 @@ rid_form() { setopt local_options extended_glob; [[ $1 == "$version"-[0-9](#c8)T
 check "release ID is the version and the UTC install time" rid_form "$rid"
 check "current links to releases/<rid>, bin to current/bin" \
   test "$(/usr/bin/readlink "$engine/current")" = "releases/$rid" -a "$(/usr/bin/readlink "$engine/bin")" = current/bin -a -d "$release"
-check "release holds the runtime layout" test -x "$release/launch" -a -f "$release/profile.sb" -a -f "$release/account.zsh" \
+check "release holds the runtime layout" test -x "$release/launch" -a -f "$release/profile.sb" -a -f "$release/account.zsh" -a -f "$release/lookup.zsh" \
   -a -x "$release/uninstall.sh" -a -x "$release/bin/opencode" -a -x "$release/bin/opencode-gui" -a -x "$release/bin/agent-guard" \
   -a -f "$release/profiles/opencode/harness.zsh" -a -f "$release/vendor/cc-safety-net/dist/index.js" \
   -a "$(<"$release/VERSION")" = "$version"

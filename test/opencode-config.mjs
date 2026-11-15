@@ -19,6 +19,7 @@ function shell(f, body, journal = false) {
   const result = spawnSync("/bin/zsh", ["-fc", `
     setopt no_unset extended_glob
     source "$1/installer/lib.zsh"
+    source "$1/engine/lookup.zsh"
     source "$1/installer/harness/opencode.zsh"
     home=$2 engine=$3
     state="$engine/state" record="$state/permissions.json" ag_tstage="$home/stage" txn_dir="$state/txn"
