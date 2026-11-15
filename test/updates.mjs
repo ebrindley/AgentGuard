@@ -24,7 +24,7 @@ writeFileSync(join(release, 'RELEASE'), '2026.11.01-test\n');
 const quote = (s) => `'${s.replaceAll("'", "'\\''")}'`;
 const requests = [];
 let tag = 'v2026.11.05', response = 'redirect', answer = 'Later', updateStatus = 0;
-let opencodeReply = '2.4.0';
+let opencodeReply = '2.4.0', tapReply = '2.4.0', formulaReply = '2.4.0';
 // The desktop update service's reply (a status code for a failure), the archive it serves and the delay before it does.
 let desktopReply = {}, desktopZip = Buffer.alloc(0), desktopDelay = 0;
 const server = createServer((req, res) => {
@@ -33,6 +33,10 @@ const server = createServer((req, res) => {
     if (typeof desktopReply === 'number') res.writeHead(desktopReply).end(); else res.end(JSON.stringify(desktopReply));
   } else if (req.url.startsWith('/files/')) {
     setTimeout(() => res.end(desktopZip), desktopDelay);
+  } else if (req.url.startsWith('/opencode-tap-update?')) {
+    res.end(JSON.stringify({ channel: 'latest', name: 'cli', version: tapReply, metadata: { package: 'anomalyco/tap/opencode-v2' } }));
+  } else if (req.url === '/opencode-formula') {
+    res.end(JSON.stringify({ name: 'opencode', versions: { stable: formulaReply, head: 'HEAD', bottle: true } }));
   } else if (req.url.startsWith('/opencode-update?')) {
     if (opencodeReply === 'failure') res.writeHead(503).end();
     else if (opencodeReply === 'malformed') res.end('not json');
@@ -176,14 +180,19 @@ try {
     `cli=${quote(cli)}; opencode_version=${quote(version)}; opencode_upgrade() { print -r -- "upgrade $1"; print -r -- "$1" >> ${quote(upgradeCalls)}; return ${upgrade}; }; ${extra}; opencode_update_offer ${mode} ${quote(cli)}; print -r -- "status $?"`, input);
   const upgrades = () => { try { return readFileSync(upgradeCalls, 'utf8'); } catch { return ''; } };
   const bundleCli = '/Applications/OpenCode.app/Contents/Resources/opencode-cli';
-  await check('only stable OpenCode 2 in the installer or an npm global location is eligible', async () => {
+  await check('only stable OpenCode 2 in the installer, an npm global or a Homebrew formula location is eligible', async () => {
     const layouts = new Map([
       [installerCli, true], [join(temp, 'link/opencode'), true], [join(temp, 'npm/bin/opencode'), true], [npmCli, true],
       [join(temp, 'volta/tools/image/packages/@opencode/cli/lib/node_modules/@opencode/cli/bin/opencode'), false],
       [join(temp, 'mise/installs/npm-opencode-cli/2.3.0/lib/node_modules/@opencode/cli/bin/opencode'), false],
       [join(temp, 'pnpm/global/5/node_modules/@opencode/cli/bin/opencode'), false],
       [join(home, '.bun/install/global/node_modules/@opencode/cli/bin/opencode'), false],
-      [join(home, '.yarn/bin/opencode'), false], ['/opt/homebrew/Cellar/opencode/2.3.0/bin/opencode', false], ['/usr/local/bin/opencode', false],
+      [join(home, '.yarn/bin/opencode'), false], ['/usr/local/bin/opencode', false],
+      ['/opt/homebrew/Cellar/opencode/2.3.0/bin/opencode', true], ['/usr/local/Cellar/opencode-v2/2.3.0/bin/opencode', true],
+      ['/opt/homebrew/Cellar/opencode-beta/2.3.0/bin/opencode', false], ['/opt/homebrew/Cellar/opencode-desktop/2.3.0/bin/opencode', false],
+      ['/opt/homebrew/Caskroom/opencode/2.3.0/opencode', false], ['/opt/homebrew/Caskroom/opencode-desktop/2.3.0/bin/opencode', false],
+      [join(temp, 'volta/tools/image/packages/opencode/Cellar/opencode/2.3.0/bin/opencode'), false],
+      [join(temp, 'mise/installs/npm-opencode-cli/Cellar/opencode/2.3.0/bin/opencode'), false],
       [bundleCli, false], [join(temp, 'npm/lib/node_modules/@opencode/cli/opencode'), false], ['', false],
     ]);
     for (const [path, eligible] of layouts) {
@@ -211,6 +220,29 @@ try {
     assert.equal((await offer('cli', { cli: join(temp, 'npm/bin/opencode') })).stdout, 'upgrade 2.4.0\nstatus 2\n');
     rmSync(upgradeCalls);
   });
+  const tapCli = '/opt/homebrew/Cellar/opencode-v2/2.3.0/bin/opencode', coreCli = '/opt/homebrew/Cellar/opencode/2.3.0/bin/opencode';
+  await check('a Homebrew CLI reads its latest version from the feed of its formula and an accepted offer upgrades', async () => {
+    tapReply = '2.5.0'; formulaReply = '2.4.0'; opencodeReply = '2.6.0';
+    let before = requests.length;
+    let r = await offer('cli', { cli: tapCli });
+    assert.equal(r.stderr, "OpenCode 2.5.0 is available. You have 2.3.0.\nThe update runs without Agent Guard's protection.\nUpdate now? [Y/n] OpenCode updated to 2.5.0.\n");
+    assert.equal(r.stdout, 'upgrade 2.5.0\nstatus 2\n');
+    assert.deepEqual(requests.slice(before), ['/opencode-tap-update?current=2.3.0']);
+    rmSync(upgradeCalls); before = requests.length;
+    r = await offer('cli', { cli: coreCli });
+    assert.match(r.stderr, /^OpenCode 2\.4\.0 is available\. You have 2\.3\.0\./);
+    assert.equal(r.stdout, 'upgrade 2.4.0\nstatus 2\n');
+    assert.deepEqual(requests.slice(before), ['/opencode-formula']);
+    rmSync(upgradeCalls);
+  });
+  await check('the formula index must name a stable newer numeric version for a Homebrew offer', async () => {
+    for (const reply of ['2.3.0', '2.2.9', '3.0.0', '2.4.0-rc.1', '2.4', 'v2.4.0', null, 240]) {
+      formulaReply = reply; const r = await offer('cli', { cli: coreCli });
+      assert.equal(r.stdout, 'status 0\n', String(reply)); assert.equal(r.stderr, '', String(reply));
+    }
+    formulaReply = '2.4.0'; tapReply = '2.4.0';
+    assert.equal(upgrades(), '');
+  });
   await check('equal, older and next-major OpenCode versions make no offer', async () => {
     for (const offered of ['2.3.0', '2.2.9', '3.0.0']) {
       opencodeReply = offered; const r = await offer();
@@ -231,7 +263,7 @@ try {
       const r = await offer('cli', {}, input); assert.equal(r.stdout, 'status 0\n'); assert.match(r.stderr, /is available/);
     }
     let before = requests.length;
-    for (const options of [{ cli: '/opt/homebrew/Cellar/opencode/2.3.0/bin/opencode' }, { cli: bundleCli }, { version: '1.18.33' }, { version: '0.0.0-dev-123' }]) {
+    for (const options of [{ cli: '/opt/homebrew/Cellar/opencode-beta/2.3.0/bin/opencode' }, { cli: '/opt/homebrew/Caskroom/opencode/2.3.0/opencode' }, { cli: bundleCli }, { version: '1.18.33' }, { version: '0.0.0-dev-123' }]) {
       const r = await offer('cli', options); assert.equal(r.stdout, 'status 0\n'); assert.equal(r.stderr, '');
     }
     assert.equal(requests.length, before);
@@ -336,8 +368,11 @@ try {
   await check('each OpenCode CLI is told whether Agent Guard offers its updates and how else to update it', async () => {
     assert.deepEqual(await route('cli', installerCli, '2.3.0'), cliOffer);
     assert.deepEqual(await route('cli', npmCli, '2.3.0'), cliOffer);
+    assert.deepEqual(await route('cli', '/opt/homebrew/Cellar/opencode/2.3.0/bin/opencode', '2.3.0'), cliOffer);
+    assert.deepEqual(await route('cli', '/opt/homebrew/Cellar/opencode-v2/2.3.0/bin/opencode', '2.3.0'), cliOffer);
     for (const [path, version, reason] of [
-      ['/opt/homebrew/Cellar/opencode/2.3.0/bin/opencode', '2.3.0', 'it was installed by Homebrew'],
+      ['/opt/homebrew/Cellar/opencode-beta/2.3.0/bin/opencode', '2.3.0', 'it was installed by Homebrew'],
+      ['/opt/homebrew/Caskroom/opencode/2.3.0/opencode', '2.3.0', 'it was installed by Homebrew'],
       [join(temp, 'volta/tools/image/packages/@opencode/cli/lib/node_modules/@opencode/cli/bin/opencode'), '2.3.0', 'it was installed by Volta'],
       [join(temp, 'mise/installs/npm-opencode-cli/2.3.0/lib/node_modules/@opencode/cli/bin/opencode'), '2.3.0', 'it was installed by mise'],
       [join(temp, 'pnpm/global/5/node_modules/@opencode/cli/bin/opencode'), '2.3.0', 'it was installed another way'],
@@ -345,7 +380,7 @@ try {
       [installerCli, '2.3.0-rc.1', 'it is a prerelease'],
     ]) assert.deepEqual(await route('cli', path, version), cliHand(reason), path + version);
     // The reason is the one the launch offer's own check gave.
-    const r = await run(`opencode_update_eligible /opt/homebrew/Cellar/opencode/2.3.0/bin/opencode 2.3.0; print -r -- "$? $opencode_reason"; opencode_update_eligible ${quote(installerCli)} 2.3.0; print -r -- "$? [$opencode_reason]"`);
+    const r = await run(`opencode_update_eligible /opt/homebrew/Cellar/opencode-beta/2.3.0/bin/opencode 2.3.0; print -r -- "$? $opencode_reason"; opencode_update_eligible ${quote(installerCli)} 2.3.0; print -r -- "$? [$opencode_reason]"`);
     assert.equal(r.stdout, '1 it was installed by Homebrew\n0 []\n');
   });
   await check('the CLI inside the app is updated with the app and takes the app\'s route', async () => {
@@ -411,6 +446,10 @@ try {
     chmodSync(appParent, 0o755);
     assert.deepEqual(unwritable, [
       `note OpenCode app 2.3.0 at ~/Applications/OpenCode.app: ${appHand('its folder ~/Applications cannot be written by this account')[1]}`,
+      'status 0 ok=1',
+    ]);
+    assert.deepEqual(await notes('/opt/homebrew/Cellar/opencode/2.3.0/bin/opencode', '2.3.0', ''), [
+      `note OpenCode CLI 2.3.0 at /opt/homebrew/Cellar/opencode/2.3.0/bin/opencode: ${cliOffer[1]}`,
       'status 0 ok=1',
     ]);
     assert.deepEqual(await notes('', '', ''), ['status 0 ok=1']);

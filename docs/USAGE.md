@@ -153,22 +153,28 @@ message that names the versions; run `opencode upgrade` from Terminal, then
 start again. Declining, or a lookup that fails or takes longer than two
 seconds, starts the session unchanged and asks again next launch.
 
-In this release only OpenCode 2, installed by the opencode.ai installer or as an
-npm global install that Volta and mise do not own, gets the offer. Other
-installations, prereleases and other majors do not; `opencode upgrade` still
-works for them, because it runs OpenCode's own updater for whatever installed
-it. Homebrew is not needed for any of this.
+In this release only OpenCode 2 gets the offer, installed by the opencode.ai
+installer, as an npm global install that Volta and mise do not own, or by
+Homebrew from the `opencode` or `opencode-v2` formula (a path under
+`Cellar/opencode/` or `Cellar/opencode-v2/`). These are the installations that
+OpenCode's own updater can update. Other installations, prereleases and other
+majors do not get it; `opencode upgrade` still works for them, because it runs
+OpenCode's own updater for whatever installed it. For a Homebrew installation
+that updater runs `brew upgrade` on the formula; Agent Guard never runs `brew`
+itself, and Homebrew is not needed for any other installation. The `opencode`
+formula in Homebrew's core can trail the `opencode-v2` formula in
+`anomalyco/tap`, so its offer appears once Homebrew has the release.
 
 | Your OpenCode CLI | Updated by |
 |---|---|
-| OpenCode 2, stable, installed by the opencode.ai installer or an npm global install | Agent Guard's offer when you run `opencode` in Terminal |
-| Installed by Homebrew, Volta, mise or another package manager, OpenCode 1, or a prerelease | `opencode upgrade` in Terminal, outside a session |
+| OpenCode 2, stable, installed by the opencode.ai installer, an npm global install, or the Homebrew `opencode` or `opencode-v2` formula | Agent Guard's offer when you run `opencode` in Terminal |
+| Installed by Volta, mise, another Homebrew formula or another package manager, OpenCode 1, or a prerelease | `opencode upgrade` in Terminal, outside a session |
 | The CLI inside OpenCode.app | The app; see the app's table below |
 
 `agent-guard doctor` prints one `note` line for the CLI it runs, with its
 version and path (the home folder shown as `~`) and the row that applies, with
 the reason when Agent Guard offers nothing, for example `Agent Guard does not
-offer updates because it was installed by Homebrew. To update, run opencode
+offer updates because it was installed by Volta. To update, run opencode
 upgrade in Terminal, outside a session.` It is information; it never fails
 `doctor`.
 

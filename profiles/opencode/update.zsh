@@ -9,6 +9,12 @@
 # to the app, whose route opencode_update_route gives.
 opencode_reason=
 
+# Where the last eligibility check that passed found the latest release: npm
+# (the update service's npm feed, for the opencode.ai installer and npm global
+# installs), tap (its Homebrew feed, for the opencode-v2 formula) or core
+# (Homebrew's index, for the opencode formula). Empty after a refusal.
+opencode_source=
+
 # REASON: records why an installation gets no offer; returns 1.
 opencode_refuse() {
   opencode_reason=$1
@@ -16,47 +22,66 @@ opencode_refuse() {
 }
 
 # CLI VERSION: 0 when this installation gets an offer: a stable OpenCode 2
-# release in the opencode.ai installer's location or in an npm global install
-# that Volta and mise do not own. Anything else returns 1 with opencode_reason
-# set; the explicit upgrade command still works there.
+# release in the opencode.ai installer's location, in an npm global install that
+# Volta and mise do not own, or in a Cellar folder of the opencode or opencode-v2
+# formula, the installations OpenCode's own updater can update. Sets
+# opencode_source. Anything else returns 1 with opencode_reason set; the explicit
+# upgrade command still works there.
 opencode_update_eligible() {
   local exe=${1:A} installer=$home/.opencode/bin/opencode
-  opencode_reason=
+  opencode_reason= opencode_source=
   ! opencode_bundled "$exe" || return 1
   if [[ $2 != 2.<->.<-> ]]; then
     if [[ $2 == 1.* ]]; then opencode_refuse 'it is OpenCode 1'; else opencode_refuse 'it is a prerelease'; fi
     return
   fi
   installer=${installer:A}
-  [[ $exe == $installer ]] && return 0
+  [[ $exe == $installer ]] && { opencode_source=npm; return 0 }
   case $exe in
     (*/tools/image/packages/*) opencode_refuse 'it was installed by Volta' ;;
     (*/installs/npm-*) opencode_refuse 'it was installed by mise' ;;
-    (*/lib/node_modules/@opencode/cli/bin/[^/]#) return 0 ;;
+    (*/lib/node_modules/@opencode/cli/bin/[^/]#) opencode_source=npm ;;
+    (*/Cellar/opencode/*) opencode_source=core ;;
+    (*/Cellar/opencode-v2/*) opencode_source=tap ;;
     (*/Cellar/*|*/Caskroom/*) opencode_refuse 'it was installed by Homebrew' ;;
     (*) opencode_refuse 'it was installed another way' ;;
   esac
 }
 
-# URL INSTALLED: asks the update service at URL for the latest release as seen
-# by INSTALLED, the one request both products make. On success reply=(offered
-# body) holds the version, three numeric components, and the JSON reply; 1
-# otherwise.
+# URL [INSTALLED [FIELD]]: asks the service at URL for the latest release, the
+# one request every OpenCode lookup makes. The update service is told the
+# release INSTALLED; with none, as for Homebrew's index, the request carries no
+# query. FIELD is the jq path of the version in the JSON reply (.version when
+# omitted). On success reply=(offered body) holds the version, three numeric
+# components, and the JSON reply; 1 otherwise.
 opencode_update_feed() {
   local body offered
-  body=$(ag_update_fetch "$1?current=$2") || return 1
-  offered=$(/usr/bin/jq -er '.version | strings' <<<"$body" 2>/dev/null) || return 1
+  body=$(ag_update_fetch "$1${2:+?current=$2}") || return 1
+  offered=$(/usr/bin/jq -er "${3:-.version} | strings" <<<"$body" 2>/dev/null) || return 1
   [[ $offered == <->.<->.<-> ]] || return 1
   reply=($offered $body)
 }
 
 # The lookup for ag_update_check: reply=(installed offered) from the release
-# service's JSON reply. 1 when not eligible, 2 when the lookup failed.
+# service's JSON reply or, for the opencode formula, Homebrew's index. 1 when
+# not eligible, 2 when the lookup failed.
 opencode_update_lookup() {
-  local installed=${opencode_version:-} url
+  local installed=${opencode_version:-} url query field=.version
+  query=$installed
   opencode_update_eligible "${cli:-}" "$installed" || return 1
-  url='https://opencode.ai/update/api/latest/cli/npm'
-  opencode_update_feed "$url" "$installed" || return 2
+  case $opencode_source in
+    (npm)
+      url='https://opencode.ai/update/api/latest/cli/npm'
+      ;;
+    (tap)
+      url='https://opencode.ai/update/api/latest/cli/homebrew'
+      ;;
+    (core)
+      url='https://formulae.brew.sh/api/formula/opencode.json'
+      query= field=.versions.stable
+      ;;
+  esac
+  opencode_update_feed "$url" "$query" "$field" || return 2
   reply=($installed $reply[1])
 }
 
