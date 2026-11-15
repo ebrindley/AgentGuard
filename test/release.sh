@@ -24,7 +24,7 @@ expected=(
   engine/launch engine/account.zsh engine/agent-guard engine/updates.zsh engine/profile.sb engine/vendor/THIRD-PARTY-NOTICES
   engine/peers.zsh engine/peer-runtime.sb
   profiles/opencode/{harness.zsh,hooks.zsh,runtime.zsh,skills.zsh,protected.sb,credentials.sb,plugin.js,v2.js,permissions.js,permissions.jq,diagnostics.zsh,opencode,opencode-gui,install.sh,uninstall.sh}
-  profiles/opencode/browser.zsh
+  profiles/opencode/browser.zsh profiles/opencode/update.zsh
   profiles/opencode/browser/{helper.zsh,default-browser.js,bin/open,package.json,index.js,gui.cjs}
   installer/{lib.zsh,actions.zsh,harness/{opencode,pi,grok}.zsh,migrate/{opencode-guard,pi-sandbox-guard}.zsh}
   profiles/opencode/assets/{AgentGuard.icns,AgentGuard.entitlements}

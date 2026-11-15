@@ -54,8 +54,10 @@ opencode_gui_environment() {
 opencode_major() {
   local version
   version=$($sandbox -D GUI=0 "${opencode_host_env[@]}" "$1" --version 2>/dev/null) || fail "cannot read OpenCode version: $1"
-  if [[ $version =~ '(^|[[:space:]])v?([0-9]+)\.' ]]; then
-    REPLY=$match[2]
+  if [[ $version =~ '(^|[[:space:]])v?(([0-9]+)\.[^[:space:]]*)' ]]; then
+    REPLY=$match[3]
+    # The full version, for the update offer.
+    opencode_version=$match[2]
   else
     fail "unrecognized OpenCode version: $version"
   fi
@@ -67,12 +69,14 @@ opencode_major() {
 # --dir of `opencode run`, or empty when the command takes none. A subcommand
 # name is never a project, as in OpenCode. It returns 1 with the reason in
 # REPLY when an option this list does not know is followed by a word that could
-# be its value, because the project could then be misread.
+# be its value, because the project could then be misread. It also sets
+# opencode_subcommand (the subcommand, or empty) and opencode_attached (1 when
+# --attach or --server names a server), which opencode_session_launch reads.
 opencode_project_arg() {
   local arg name next unknown= command dir= letters letter
-  integer i=1 end=0 attached=0
+  integer i=1 end=0
   local -a args=("$@") positional
-  typeset -g opencode_browser_needed=0
+  typeset -g opencode_browser_needed=0 opencode_subcommand= opencode_attached=0
   local -a commands=(completion acp mcp attach run debug providers auth agent upgrade update uninstall serve web
                      models stats export import github pr session plugin plug db service api mini reload pair)
   local -a valued=(--log-level --port --hostname --mdns-domain --model --session --prompt --agent --replay-limit
@@ -90,10 +94,10 @@ opencode_project_arg() {
       name=${arg%%=*}
       if [[ $arg == *=* ]]; then
         [[ $name == --dir ]] && dir=${arg#*=}
-        [[ $name == (--attach|--server) ]] && attached=1
+        [[ $name == (--attach|--server) ]] && opencode_attached=1
       elif (( ${valued[(Ie)$arg]} )); then
         [[ $arg == --dir ]] && dir=$next
-        [[ $arg == (--attach|--server) ]] && attached=1
+        [[ $arg == (--attach|--server) ]] && opencode_attached=1
         (( i++ ))
       elif (( ${listed[(Ie)$arg]} )); then
         (( i++ ))
@@ -121,8 +125,9 @@ opencode_project_arg() {
   command=${positional[1]:-}
   if (( ${commands[(Ie)$command]} )); then
     [[ $command != auth || ${positional[2]:-} != login ]] || opencode_browser_needed=1
+    opencode_subcommand=$command
     REPLY=
-    [[ $command == run && $attached == 0 ]] && REPLY=$dir
+    [[ $command == run && $opencode_attached == 0 ]] && REPLY=$dir
     return 0
   fi
   if [[ -n $unknown ]]; then
@@ -131,6 +136,21 @@ opencode_project_arg() {
   fi
   REPLY=${positional[1]:-}
   opencode_browser_needed=1
+}
+
+# ARG...: succeeds when ARG... starts an interactive session of OpenCode's own,
+# `opencode` or `opencode <project>`: no subcommand and no server to attach to.
+# It reads ARG... as opencode_project_arg does, so the two cannot disagree about
+# what a subcommand is. REPLY is left as it was.
+opencode_session_launch() {
+  local REPLY arg
+  # --completions prints a shell completion script and exits.
+  for arg in "$@"; do
+    [[ $arg != -- ]] || break
+    [[ $arg != (--completions|--completions=*) ]] || return 1
+  done
+  opencode_project_arg "$@" || true
+  [[ -z $opencode_subcommand && $opencode_attached == 0 ]]
 }
 
 # REPLY is the count of leading words that are OpenCode global options. Of
@@ -199,6 +219,10 @@ opencode_cli_args() {
 }
 
 opencode_is_v2() { [[ $1 == (opencode\ v2.*|2.*|v2.*) ]] }
+
+# CLI: succeeds when CLI is the one bundled in OpenCode.app, which is updated
+# with the app. A link on PATH or in the installer's location can point into it.
+opencode_bundled() { [[ ${1:A} == */Contents/Resources/opencode-cli ]] }
 
 # MAJOR ARG...: succeeds when ARG... is OpenCode's own updater: upgrade on 1 and
 # 2, update on 2 only (on 1 it opens a project of that name). The command is the
@@ -271,8 +295,7 @@ opencode_maintenance_run() {
 # it through the shared runner and exits with its status; no session starts.
 opencode_maintain() {
   local rc=0
-  # A link on PATH can point into the app.
-  if [[ ${cli:A} == */Contents/Resources/opencode-cli ]]; then
+  if opencode_bundled "$cli"; then
     fail 'this OpenCode belongs to the OpenCode app and is updated with the app; quit OpenCode, then run brew upgrade --cask opencode-desktop or install the download from opencode.ai'
   fi
   opencode_maintenance_args=("$@")

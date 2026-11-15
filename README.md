@@ -133,8 +133,11 @@ Agent launches check GitHub once for a newer stable release by default. When one
 is available, interactive launches offer to update before starting. Accepting
 runs the updater, reports “Agent Guard updated to <version>.” and restarts the
 launcher with the same project and arguments. Declining or an unavailable update
-check continues normally. Use `agent-guard update-check off` to disable startup
-checks; noninteractive launches never prompt or upgrade.
+check continues normally. A terminal launch of an OpenCode session also offers
+a newer OpenCode 2 release for installations the offer covers
+([details](docs/USAGE.md#update-the-opencode-cli)). Use
+`agent-guard update-check off` to disable both startup checks; noninteractive
+launches never prompt or upgrade.
 
 The `--approval-preference auto|host` records your intended
 OpenCode approval mode; it does not enable it. For automatic approval, use

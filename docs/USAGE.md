@@ -118,6 +118,30 @@ OpenCode is updated with the app: quit OpenCode, then run
 `brew upgrade --cask opencode-desktop`, or install the download from
 opencode.ai.
 
+#### Update offer at launch
+
+The terminal launcher also offers the update when you start a session. Before
+`opencode` or `opencode <project>` starts, it asks OpenCode's update service for
+the latest stable version. When that is newer than yours and has the same
+major, it shows it after Agent Guard's own offer, if there is one, and asks
+`Update now? [Y/n]`; an empty answer updates. The prompt adds `The update runs
+without Agent Guard's protection.` because the updater is the same unconfined
+run as `opencode upgrade`. After an accepted update the launcher reads the
+new version again and starts the session on it. If the update fails, or the
+new installation does not report the offered version, the launch stops with a
+message that names the versions; run `opencode upgrade` from Terminal, then
+start again. Declining, or a lookup that fails or takes longer than two
+seconds, starts the session unchanged and asks again next launch.
+
+In this release only OpenCode 2, installed by the opencode.ai installer or as an
+npm global install that Volta and mise do not own, gets the offer. Other
+installations, prereleases and other majors do not; `opencode upgrade` still
+works for them. Subcommands (`run`, `serve`, `auth` and the rest), help and
+version requests, attached clients (`--attach`, `--server`), nested launches
+and the desktop app make no lookup. A launch without a terminal prints the
+availability lines and installs nothing. `agent-guard update-check off` turns
+off this offer and Agent Guard's own.
+
 ## OpenCode Desktop behavior
 
 Observed with OpenCode Desktop 2.1.4 on macOS unless noted. Statements about

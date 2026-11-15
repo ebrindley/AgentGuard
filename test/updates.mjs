@@ -21,9 +21,14 @@ writeFileSync(join(release, 'RELEASE'), '2026.11.01-test\n');
 const quote = (s) => `'${s.replaceAll("'", "'\\''")}'`;
 const requests = [];
 let tag = 'v2026.11.05', response = 'redirect', answer = 'Later', updateStatus = 0;
+let opencodeReply = '2.4.0';
 const server = createServer((req, res) => {
   requests.push(req.url);
-  if (req.url === '/releases/latest') {
+  if (req.url.startsWith('/opencode-update?')) {
+    if (opencodeReply === 'failure') res.writeHead(503).end();
+    else if (opencodeReply === 'malformed') res.end('not json');
+    else res.end(opencodeReply.startsWith('{') ? opencodeReply : JSON.stringify({ channel: 'latest', name: 'cli', version: opencodeReply, metadata: { package: '@opencode/cli' } }));
+  } else if (req.url === '/releases/latest') {
     if (response === 'failure') { res.writeHead(503).end(); return; }
     if (response === 'timeout') { setTimeout(() => res.end(), 10000).unref(); return; }
     res.writeHead(302, { Location: response === 'foreign' ? 'https://example.com/releases/tag/v9999' : `${base}/releases/tag/${tag}` }).end();
@@ -41,10 +46,13 @@ source = replaceOnce(source, "local repo='https://github.com/ebrindley/AgentGuar
 source = replaceOnce(source, "local -a curl_proto=(--proto '=https' --proto-redir '=https')", 'local -a curl_proto=()');
 source = source.replaceAll('/usr/bin/osascript', quote(join(temp, 'dialog')));
 writeFileSync(module, source);
+const opencodeModule = join(release, 'update.zsh');
+writeFileSync(opencodeModule, replaceOnce(readFileSync(join(root, 'profiles/opencode/update.zsh'), 'utf8'),
+  "url='https://opencode.ai/update/api/latest/cli/npm'", `url=${quote(`${base}/opencode-update`)}`));
 const stamp = (value) => writeFileSync(join(engine, 'state/stamp.json'), JSON.stringify({ tag: value }));
 const preference = (value) => writeFileSync(join(engine, 'state/update-check'), value);
 const run = (body, input = '') => new Promise((done, reject) => {
-  const child = spawn('/bin/zsh', ['-fc', `setopt no_unset extended_glob; home=${quote(home)}; engine=${quote(engine)}; source ${quote(module)}; ${body}`], { cwd: temp });
+  const child = spawn('/bin/zsh', ['-fc', `setopt no_unset extended_glob; home=${quote(home)}; engine=${quote(engine)}; source ${quote(module)}; source ${quote(join(root, 'profiles/opencode/runtime.zsh'))}; source ${quote(opencodeModule)}; ${body}`], { cwd: temp });
   let stdout = '', stderr = '';
   child.stdout.on('data', (b) => { stdout += b; }); child.stderr.on('data', (b) => { stderr += b; });
   child.on('error', reject); child.on('close', (status) => done({ status, stdout, stderr })); child.stdin.end(input);
@@ -144,6 +152,120 @@ try {
     for (const [reply, rule, text] of [['1.2.0 2.0.0', 'same-major', ''], ['1.2.0 2.0.0', '', 'ran 2.0.0\n']]) {
       const s = await run(other(reply, rule), 'y\n');
       assert.equal(s.stdout, `${text}status ${text ? 2 : 0}\n`, reply + rule);
+    }
+  });
+
+  // OpenCode as a product. opencode_upgrade is the launcher's; here it only records.
+  const upgradeCalls = join(temp, 'upgrade-calls');
+  const installerCli = join(home, '.opencode/bin/opencode');
+  const npmCli = join(temp, 'npm/lib/node_modules/@opencode/cli/bin/opencode');
+  for (const path of [installerCli, npmCli]) { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, ''); }
+  mkdirSync(join(temp, 'npm/bin')); symlinkSync('../lib/node_modules/@opencode/cli/bin/opencode', join(temp, 'npm/bin/opencode'));
+  mkdirSync(join(temp, 'link')); symlinkSync(installerCli, join(temp, 'link/opencode'));
+  const offer = (mode = 'cli', { version = '2.3.0', cli = installerCli, upgrade = 0, extra = '' } = {}, input = 'y\n') => run(
+    `cli=${quote(cli)}; opencode_version=${quote(version)}; opencode_upgrade() { print -r -- "upgrade $1"; print -r -- "$1" >> ${quote(upgradeCalls)}; return ${upgrade}; }; ${extra}; opencode_update_offer ${mode} ${quote(cli)}; print -r -- "status $?"`, input);
+  const upgrades = () => { try { return readFileSync(upgradeCalls, 'utf8'); } catch { return ''; } };
+  const bundleCli = '/Applications/OpenCode.app/Contents/Resources/opencode-cli';
+  await check('only stable OpenCode 2 in the installer or an npm global location is eligible', async () => {
+    const layouts = new Map([
+      [installerCli, true], [join(temp, 'link/opencode'), true], [join(temp, 'npm/bin/opencode'), true], [npmCli, true],
+      [join(temp, 'volta/tools/image/packages/@opencode/cli/lib/node_modules/@opencode/cli/bin/opencode'), false],
+      [join(temp, 'mise/installs/npm-opencode-cli/2.3.0/lib/node_modules/@opencode/cli/bin/opencode'), false],
+      [join(temp, 'pnpm/global/5/node_modules/@opencode/cli/bin/opencode'), false],
+      [join(home, '.bun/install/global/node_modules/@opencode/cli/bin/opencode'), false],
+      [join(home, '.yarn/bin/opencode'), false], ['/opt/homebrew/Cellar/opencode/2.3.0/bin/opencode', false], ['/usr/local/bin/opencode', false],
+      [bundleCli, false], [join(temp, 'npm/lib/node_modules/@opencode/cli/opencode'), false], ['', false],
+    ]);
+    for (const [path, eligible] of layouts) {
+      const r = await run(`opencode_update_eligible ${quote(path)} 2.3.0; print -r -- $?`);
+      assert.equal(r.stdout, eligible ? '0\n' : '1\n', path);
+    }
+    // The installer's location linked to the app's bundled CLI is the app's.
+    const linked = join(temp, 'linked-home');
+    mkdirSync(join(linked, '.opencode/bin'), { recursive: true }); mkdirSync(join(linked, 'OpenCode.app/Contents/Resources'), { recursive: true });
+    writeFileSync(join(linked, 'OpenCode.app/Contents/Resources/opencode-cli'), '');
+    symlinkSync(join(linked, 'OpenCode.app/Contents/Resources/opencode-cli'), join(linked, '.opencode/bin/opencode'));
+    assert.equal((await run(`home=${quote(linked)}; opencode_update_eligible ${quote(join(linked, '.opencode/bin/opencode'))} 2.3.0; print -r -- $?`)).stdout, '1\n');
+    for (const version of ['1.18.33', '0.0.0-dev-123', '2.3.0-rc.1', '2.3', '3.0.0', '']) {
+      assert.equal((await run(`opencode_update_eligible ${quote(installerCli)} ${quote(version)}; print -r -- $?`)).stdout, '1\n', version);
+    }
+  });
+  await check('a newer same-major OpenCode is offered with its note and an accepted offer upgrades and returns 2', async () => {
+    opencodeReply = '2.4.0'; const before = requests.length;
+    const r = await offer();
+    assert.equal(r.stderr, "OpenCode 2.4.0 is available. You have 2.3.0.\nThe update runs without Agent Guard's protection.\nUpdate now? [Y/n] OpenCode updated to 2.4.0.\n");
+    assert.equal(r.stdout, 'upgrade 2.4.0\nstatus 2\n');
+    assert.deepEqual(requests.slice(before), ['/opencode-update?current=2.3.0']);
+    assert.equal(upgrades(), '2.4.0\n');
+    rmSync(upgradeCalls);
+    assert.equal((await offer('cli', { cli: join(temp, 'npm/bin/opencode') })).stdout, 'upgrade 2.4.0\nstatus 2\n');
+    rmSync(upgradeCalls);
+  });
+  await check('equal, older and next-major OpenCode versions make no offer', async () => {
+    for (const offered of ['2.3.0', '2.2.9', '3.0.0']) {
+      opencodeReply = offered; const r = await offer();
+      assert.equal(r.stdout, 'status 0\n', offered); assert.equal(r.stderr, '', offered);
+    }
+    assert.equal(upgrades(), '');
+  });
+  await check('a failed, malformed or non-numeric OpenCode lookup makes no offer', async () => {
+    for (const reply of ['failure', 'malformed', '{"name":"cli"}', '{"version":2}', '{"version":"2.4.0-beta.1"}', '{"version":"v2.4.0"}', '{"version":"2.4"}']) {
+      opencodeReply = reply; const r = await offer();
+      assert.equal(r.stdout, 'status 0\n', reply); assert.equal(r.stderr, '', reply);
+    }
+    assert.equal(upgrades(), '');
+  });
+  await check('declining, ineligible installations and the update-check preference make no OpenCode upgrade', async () => {
+    opencodeReply = '2.4.0';
+    for (const input of ['n\n', 'maybe\n', '']) {
+      const r = await offer('cli', {}, input); assert.equal(r.stdout, 'status 0\n'); assert.match(r.stderr, /is available/);
+    }
+    let before = requests.length;
+    for (const options of [{ cli: '/opt/homebrew/Cellar/opencode/2.3.0/bin/opencode' }, { cli: bundleCli }, { version: '1.18.33' }, { version: '0.0.0-dev-123' }]) {
+      const r = await offer('cli', options); assert.equal(r.stdout, 'status 0\n'); assert.equal(r.stderr, '');
+    }
+    assert.equal(requests.length, before);
+    preference('off'); const r = await offer(); preference('on');
+    assert.equal(r.stdout, 'status 0\n'); assert.equal(r.stderr, ''); assert.equal(requests.length, before);
+    assert.equal(upgrades(), '');
+  });
+  await check('a failing OpenCode upgrade returns 1 without the success message', async () => {
+    opencodeReply = '2.4.0'; const r = await offer('cli', { upgrade: 1 });
+    assert.equal(r.stdout, 'upgrade 2.4.0\nstatus 1\n'); assert.doesNotMatch(r.stderr, /updated to/);
+    rmSync(upgradeCalls);
+  });
+  await check('the desktop offer shows the note, logs the upgrade and stops its window', async () => {
+    answer = 'Update'; ui(); rmSync(helperPid, { force: true }); opencodeReply = '2.4.0';
+    const log = join(home, 'Agent Guard/last-opencode-update.log');
+    // The recording upgrade waits for the window helper to start, as the updater stub does.
+    const wait = `opencode_upgrade() { repeat 50 { [[ -e ${quote(helperPid)} ]] && break; /bin/sleep 0.1 }; print -r -- "upgrade $1" }`;
+    const r = await offer('gui', { extra: wait }, '');
+    assert.equal(r.stdout, 'status 2\n', r.stderr);
+    assert.ok(readFileSync(alertArgs, 'utf8').endsWith("An update is available: 2.4.0.\nYou have 2.3.0.\nThe update runs without Agent Guard's protection.\n"));
+    assert.ok(readFileSync(alertArgs, 'utf8').includes('with title "OpenCode"'));
+    assert.ok(readFileSync(noticeArgs, 'utf8').endsWith('OpenCode updated to 2.4.0.\n'));
+    assert.equal(readFileSync(log, 'utf8'), 'upgrade 2.4.0\n');
+    assert.ok(helperStopped());
+    answer = 'Later'; ui();
+  });
+  await check('an installed update hands the offered version back in REPLY, after a terminal or a desktop run', async () => {
+    opencodeReply = '2.4.0'; answer = 'Update'; ui();
+    // The desktop run leaves the progress window's script in REPLY.
+    for (const mode of ['cli', 'gui']) {
+      const s = await run(`cli=${quote(installerCli)}; opencode_version=2.3.0; opencode_upgrade() { :; }; opencode_update_offer ${mode} >/dev/null 2>&1; print -r -- "$? $REPLY"`, 'y\n');
+      assert.equal(s.stdout, '2 2.4.0\n', `${mode}: ${s.stderr}`);
+    }
+    answer = 'Later'; ui();
+  });
+  await check('opencode_major leaves the full version it parsed and keeps its result', async () => {
+    const sandbox = join(temp, 'sandbox'); executable(sandbox, 'shift 2\nexec "$@"\n');
+    const probe = (output) => { const cli = join(temp, 'fake-opencode'); executable(cli, `print -r -- ${quote(output)}\n`);
+      return run(`sandbox=${quote(sandbox)}; fail() { print -r -- "fail: $*"; exit 3 }; source ${quote(join(root, 'profiles/opencode/runtime.zsh'))}; opencode_version=before; opencode_major ${quote(cli)}; print -r -- "$REPLY $opencode_version"`); };
+    for (const [output, expected] of [['v2.3.0', '2 2.3.0'], ['opencode v2.3.0', '2 2.3.0'], ['1.18.33', '1 1.18.33'], ['2.4.0-rc.1\n', '2 2.4.0-rc.1']]) {
+      assert.equal((await probe(output)).stdout, `${expected}\n`, output);
+    }
+    for (const output of ['garbage', '0.0.0-dev-123', '3.0.0']) {
+      const r = await probe(output); assert.equal(r.status, 3, output); assert.match(r.stdout, /^fail: /);
     }
   });
 
