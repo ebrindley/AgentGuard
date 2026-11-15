@@ -73,6 +73,7 @@ const seams = {
   downloadBase: "local repo='https://github.com/ebrindley/AgentGuard'; local -a curl_proto=(--proto '=https' --proto-redir '=https')",
   updateRepo: "local repo='https://github.com/ebrindley/AgentGuard'",
   updateProto: "local -a curl_proto=(--proto '=https' --proto-redir '=https')",
+  opencodeUpdateUrl: "url='https://opencode.ai/update/api/latest/cli/npm'",
   testPoint: 'test_point() { : }',
   bootstrapHome: "account_home || die 'cannot resolve account home'",
   cliSearch: 'cli_search=(/opt/homebrew/bin/opencode /usr/local/bin/opencode "$home/.opencode/bin/opencode")',
@@ -156,6 +157,7 @@ export function release(source, out, { home, tag, version, url }) {
   replaceOnce(join(tree, 'engine/agent-guard'), seams.downloadBase, `local repo=${quote(url)}; local -a curl_proto=()`);
   replaceOnce(join(tree, 'engine/updates.zsh'), seams.updateRepo, `local repo=${quote(url)}`);
   replaceOnce(join(tree, 'engine/updates.zsh'), seams.updateProto, 'local -a curl_proto=()');
+  replaceOnce(join(tree, 'profiles/opencode/update.zsh'), seams.opencodeUpdateUrl, `url=${quote(`${url}/opencode-update`)}`);
   isolateHarness(tree);
   piSeams(tree, home);
   rmSync(archive);

@@ -42,6 +42,7 @@ files=(
   profiles/opencode/hooks.zsh
   profiles/opencode/runtime.zsh
   profiles/opencode/browser.zsh
+  profiles/opencode/update.zsh
   profiles/opencode/browser/helper.zsh
   profiles/opencode/browser/default-browser.js
   profiles/opencode/browser/bin/open

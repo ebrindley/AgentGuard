@@ -54,8 +54,10 @@ opencode_gui_environment() {
 opencode_major() {
   local version
   version=$($sandbox -D GUI=0 "${opencode_host_env[@]}" "$1" --version 2>/dev/null) || fail "cannot read OpenCode version: $1"
-  if [[ $version =~ '(^|[[:space:]])v?([0-9]+)\.' ]]; then
-    REPLY=$match[2]
+  if [[ $version =~ '(^|[[:space:]])v?(([0-9]+)\.[^[:space:]]*)' ]]; then
+    REPLY=$match[3]
+    # The full version, for the update offer.
+    opencode_version=$match[2]
   else
     fail "unrecognized OpenCode version: $version"
   fi
