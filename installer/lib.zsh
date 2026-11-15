@@ -1285,7 +1285,7 @@ ag_shell_resolve() {
   local name=$1 p tag='agent-guard-lookup:'
   local -a found
   shift
-  p=$(ag_bounded 20 /usr/bin/env -i "HOME=$home" "PATH=/usr/bin:/bin:/usr/sbin:/sbin" /bin/zsh "$@" -c "print -r -- $tag\$(whence -p ${(q)name})" 2>/dev/null </dev/null)
+  p=$(ag_bounded 20 /usr/bin/env -i "HOME=$home" "PATH=/usr/bin:/bin:/usr/sbin:/sbin" /bin/zsh "$@" -c "print -r -- \"$tag\$(whence -p ${(q)name})\"" 2>/dev/null </dev/null)
   found=(${(M)${(@f)p}:#$tag*})
   REPLY=${${found[-1]:-}#$tag}
   [[ -n $REPLY ]] || return 2
