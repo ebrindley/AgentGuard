@@ -316,7 +316,8 @@ opencode_maintenance_run() {
 opencode_maintain() {
   local rc=0
   if opencode_bundled "$cli"; then
-    fail 'this OpenCode belongs to the OpenCode app and is updated with the app; quit OpenCode, then run brew upgrade --cask opencode-desktop or install the download from opencode.ai'
+    opencode_update_route cli "$cli" || true
+    fail "$REPLY"
   fi
   opencode_maintenance_args=("$@")
   print -ru2 -- "Updating OpenCode. The update runs without Agent Guard's protection; your next session will be protected as usual."

@@ -4,7 +4,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { tmpdir, userInfo } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { isolateHarness, layout, opencodeOfferSeams, stage } from "./engines/zsh.mjs"
+import { isolateHarness, layout, opencodeOfferSeams, opencodeUpdateSeams, stage } from "./engines/zsh.mjs"
 import { archive, bundle, feed, seams as desktopSeams, snapshot, tools } from "./desktop-fixture.mjs"
 import { quote } from "./fixture-home.mjs"
 import { groupExists, groupMembers, signalGroup } from "./process-group.mjs"
@@ -199,27 +199,48 @@ for (const [major, args, expected] of [
 }
 
 {
-  // The CLI bundled in OpenCode.app is updated with the app; nothing runs. A
-  // link to it is refused like its own path.
-  const bundle = mkdtempSync(join(tmpdir(), "agentguard-bundled-"))
-  mkdirSync(join(bundle, "OpenCode.app/Contents/Resources"), { recursive: true })
-  writeFileSync(join(bundle, "OpenCode.app/Contents/Resources/opencode-cli"), "")
-  symlinkSync(join(bundle, "OpenCode.app/Contents/Resources/opencode-cli"), join(bundle, "opencode"))
-  for (const bundled of ["/Applications/OpenCode.app/Contents/Resources/opencode-cli", join(bundle, "opencode")]) {
-  const result = spawnSync("/bin/zsh", ["-fc", `
-    setopt err_exit no_unset pipe_fail extended_glob
-    source "$1"
-    fail() { print -ru2 -- "agent-guard: $*"; exit 1; }
-    cli=$2
-    mode=cli
-    ag_update_run() { print ran; }
-    opencode_maintain upgrade
-  `, "runtime", join(root, "profiles/opencode/runtime.zsh"), bundled], { encoding: "utf8" })
-  assert.equal(result.status, 1)
-  assert.equal(result.stdout, "")
-  assert.equal(result.stderr, "agent-guard: this OpenCode belongs to the OpenCode app and is updated with the app; quit OpenCode, then run brew upgrade --cask opencode-desktop or install the download from opencode.ai\n")
-  }
-  rmSync(bundle, { recursive: true, force: true })
+  // The CLI bundled in OpenCode.app is updated with the app; nothing runs. The
+  // refusal gives the app's route, and a link to the CLI is refused like its own
+  // path. The app is a stand-in bundle; codesign and od are stand-ins, and
+  // Homebrew is looked for under the test home only.
+  const dir = mkdtempSync(join(tmpdir(), "agentguard-bundled-"))
+  try {
+    const module = join(dir, "update.zsh")
+    writeFileSync(module, desktopSeams(readFileSync(join(root, "profiles/opencode/update.zsh"), "utf8"), tools(dir), true))
+    opencodeUpdateSeams(module, "http://127.0.0.1:1")
+    const app = join(dir, "Applications/OpenCode.app")
+    const refusal = (bundled) => {
+      const result = spawnSync("/bin/zsh", ["-fc", `
+        setopt err_exit no_unset pipe_fail extended_glob
+        source "$1"
+        source "$2"
+        fail() { print -ru2 -- "agent-guard: $*"; exit 1; }
+        home=$4
+        cli=$3
+        mode=cli
+        ag_update_run() { print ran; }
+        opencode_maintain upgrade
+      `, "runtime", join(root, "profiles/opencode/runtime.zsh"), module, bundled, dir], { encoding: "utf8" })
+      assert.equal(result.status, 1)
+      assert.equal(result.stdout, "")
+      return result.stderr
+    }
+    const belongs = "agent-guard: This OpenCode belongs to the OpenCode app and is updated with the app. "
+    const download = "To update, quit OpenCode and install the download from opencode.ai"
+    bundle(app, { cli: "#!/bin/sh\n" })
+    symlinkSync(join(app, "Contents/Resources/opencode-cli"), join(dir, "opencode"))
+    for (const bundled of [join(app, "Contents/Resources/opencode-cli"), join(dir, "opencode")]) {
+      assert.equal(refusal(bundled), `${belongs}Agent Guard offers its updates when you open Agent Guard.\n`)
+    }
+    // An app Agent Guard does not update gets the manual route, with brew only where this Mac has the cask.
+    bundle(app, { cli: "#!/bin/sh\n", files: { "Contents/badsig": "" } })
+    const reason = `${belongs}Agent Guard does not offer updates because its signature cannot be checked. ${download}`
+    assert.equal(refusal(join(dir, "opencode")), `${reason}.\n`)
+    mkdirSync(join(dir, "homebrew/bin"), { recursive: true })
+    mkdirSync(join(dir, "homebrew/Caskroom/opencode-desktop"), { recursive: true })
+    writeFileSync(join(dir, "homebrew/bin/brew"), "#!/bin/sh\nexit 99\n", { mode: 0o755 })
+    assert.equal(refusal(join(dir, "opencode")), `${reason} or run brew upgrade --cask opencode-desktop.\n`)
+  } finally { rmSync(dir, { recursive: true, force: true }) }
 }
 console.log("ok OpenCode maintenance command: detection, the operator's environment and the app-bundled CLI")
 
@@ -802,7 +823,7 @@ app=\${0%/*/*/*}
         arrange("Update")
         r = launch(null, ["gui"])
         assert.equal(r.status, 1, r.stderr)
-        assert.match(r.stderr, new RegExp(`agent-guard: the OpenCode update failed and the app was not changed\\. Details: ${join(home, "Agent Guard/last-opencode-update.log").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\n`))
+        assert.match(r.stderr, new RegExp(`agent-guard: the OpenCode update failed and the app was not changed\\. To update by hand, quit OpenCode and install the download from opencode\\.ai\\. Details: ${join(home, "Agent Guard/last-opencode-update.log").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\n`))
         assert.match(readFileSync(join(home, "Agent Guard/last-opencode-update.log"), "utf8"), /^OpenCode update stopped: the download does not match the SHA-256/)
         assert.equal(recorded(), null)
         assert.deepEqual(snapshot(app), before)
@@ -837,6 +858,28 @@ app=\${0%/*/*/*}
           assert.deepEqual(recorded(), ["old", "1"], name)
         }
         console.log("ok launch gui starts an app that is a link, in an unwritable folder or a prerelease without a lookup")
+
+        // The launcher's check, which the doctor prints, adds one information line for the
+        // CLI it ran and one for the app. The stand-in server does not start, so the check
+        // fails as it does without the lines; the lines are not what fails it.
+        const notes = r => r.stdout.split("\n").filter(line => line.startsWith("note OpenCode CLI") || line.startsWith("note OpenCode app"))
+        install(); arrange("Later"); prepare()
+        r = launch(null, ["check"], onPath)
+        assert.equal(r.status, 1, r.stdout + r.stderr)
+        assert.match(r.stdout, /^FAIL Guard readiness degraded or unverified in OpenCode V2$/m)
+        assert.deepEqual(notes(r), [
+          "note OpenCode CLI 2.3.0 at ~/.opencode/bin/opencode: Agent Guard offers its updates when you run opencode in Terminal.",
+          "note OpenCode app 2.3.0 at ~/Applications/OpenCode.app: Agent Guard offers its updates when you open Agent Guard.",
+        ])
+        install({ files: { "Contents/badsig": "" } })
+        r = launch(null, ["check"], onPath)
+        assert.equal(r.status, 1, r.stdout + r.stderr)
+        assert.deepEqual(notes(r)[1], "note OpenCode app 2.3.0 at ~/Applications/OpenCode.app: Agent Guard does not offer updates because its signature cannot be checked. To update, quit OpenCode and install the download from opencode.ai.")
+        rmSync(join(home, "Applications"), { recursive: true, force: true })
+        r = launch(null, ["check"], onPath)
+        assert.equal(notes(r).length, 1, r.stdout)
+        assert.doesNotMatch(r.stdout, /note OpenCode app/)
+        console.log("ok launch check names the OpenCode CLI and app versions, paths and update routes as information lines that do not fail it")
       } finally {
         if (existsSync(dirname(app))) chmodSync(dirname(app), 0o755)
         rmSync(join(home, "Applications"), { recursive: true, force: true })

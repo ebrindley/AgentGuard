@@ -599,14 +599,17 @@ bundled CLI of the new app as for any desktop launch. The old app and the
 private folder are removed; a removal that fails does not fail the update.
 
 Failure and recovery: any failing step stops the launch with `the OpenCode
-update failed and the app was not changed` and the log path. The installed app
+update failed and the app was not changed`, the way to update by hand and the
+log path. The installed app
 is as it was and the private folder is removed. If the old app could not be put
 back after a failed swap, the log says where it is kept. The log's one-line
 reason names the step. macOS's App Management protection may refuse the swap for
 Agent Guard.app, which starts the launcher; this has not been tested, and the
 update then fails at the first move with the app unchanged. Reopen and choose
 Later to run the installed app, or update it by hand: quit OpenCode, then install
-the download from opencode.ai or run `brew upgrade --cask opencode-desktop`.
+the download from opencode.ai. The failure message says this too and adds `or run
+brew upgrade --cask opencode-desktop` only when Homebrew is installed on this
+Mac and its Caskroom holds `opencode-desktop` (see Commands, below).
 Homebrew's record of the cask keeps the older version after an update by this
 route.
 
@@ -669,6 +672,44 @@ loaded; `/reload` loads the extension now on disk.
   Guard's block, so a new terminal then starts OpenCode without the guard; this
   happened on 2026-11-15. `agent-guard update` repairs it: see
   [Installation](#installation).
+
+  The launcher's check, which `doctor` runs, adds up to two `note` lines
+  (information only: they are never `FAIL` or `warn`, and they do not change
+  `doctor`'s exit status or its `--json` `ok`):
+
+  ```
+  note OpenCode CLI 2.3.0 at ~/.opencode/bin/opencode: Agent Guard offers its updates when you run opencode in Terminal.
+  note OpenCode app 2.3.0 at ~/Applications/OpenCode.app: Agent Guard offers its updates when you open Agent Guard.
+  ```
+
+  The first names the CLI the check ran, with the version from the confined
+  probe the launcher uses and its path. The second names the app found in
+  `/Applications`, `~/Applications` or by bundle ID, with its version from
+  `Info.plist`. A missing CLI or app prints no line, and `check staged` prints
+  none. Each line ends with the route for that installation, from the same
+  checks that decide the launch offers. When Agent Guard offers nothing, the line
+  gives the reason and the way to update by hand:
+  - CLI: `Agent Guard does not offer updates because it was installed by
+    Homebrew. To update, run opencode upgrade in Terminal, outside a session.`
+    The reason is `it was installed by Homebrew`, `Volta` or `mise`, `it was
+    installed another way`, `it is OpenCode 1` or `it is a prerelease`.
+  - The CLI inside the app: `This OpenCode belongs to the OpenCode app and is
+    updated with the app.` followed by the app's route. The explicit `opencode
+    upgrade` refuses with the same text.
+  - App: `Agent Guard does not offer updates because <reason>. To update, quit
+    OpenCode and install the download from opencode.ai.` The reason is `it is a
+    link`, `it is not a folder`, `its folder <folder> cannot be written by this
+    account`, `its version cannot be read`, `it is a prerelease`, `its
+    executable cannot be read`, `its executable is not a single-architecture
+    build`, `its signature cannot be checked` or `its signature has no Team
+    Identifier`. ` or run brew upgrade --cask opencode-desktop` is added before
+    the final period only when `/opt/homebrew/bin/brew` or `/usr/local/bin/brew`
+    exists and `Caskroom/opencode-desktop` exists under the same prefix. Files
+    are checked; `brew` is never run.
+
+  The lines run `plutil` and `codesign` on the app, as the app offer does, and
+  run no OpenCode beyond the version probe the check already makes. They make no
+  network request.
 
   Without the `opencode` CLI, the OpenCode plugin check is skipped and named.
   A passing `doctor` with that skip does not verify that the desktop app loads

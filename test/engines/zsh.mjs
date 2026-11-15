@@ -45,10 +45,13 @@ export function layout(tree, engine, rid = '0.0.0-20260101T000000Z') {
 
 // Points the lookup addresses in file (profiles/opencode/update.zsh) at the server
 // at url: the CLI feed, the desktop feed and the address its archives must start with.
+// Homebrew is looked for under $home/homebrew only, so a Homebrew on the test Mac
+// does not change the update routes.
 export function opencodeUpdateSeams(file, url) {
   replaceOnce(file, seams.opencodeUpdateUrl, `url=${quote(`${url}/opencode-update`)}`);
   replaceOnce(file, seams.opencodeDesktopUrl, `url=${quote(`${url}/opencode-desktop-update`)}`);
   replaceOnce(file, seams.opencodeDesktopOrigin, `origin=${quote(`${url}/`)}`);
+  replaceOnce(file, seams.opencodeBrewPrefixes, 'local -a prefixes=("$home/homebrew")');
 }
 
 // Points a laid-out release's OpenCode update offer at url: plain HTTP and the
@@ -91,6 +94,7 @@ const seams = {
   opencodeUpdateUrl: "url='https://opencode.ai/update/api/latest/cli/npm'",
   opencodeDesktopUrl: "url='https://opencode.ai/update/api/latest/desktop/opencode'",
   opencodeDesktopOrigin: "origin='https://opencode.ai/'",
+  opencodeBrewPrefixes: 'local -a prefixes=(/opt/homebrew /usr/local)',
   testPoint: 'test_point() { : }',
   bootstrapHome: "account_home || die 'cannot resolve account home'",
   cliSearch: 'cli_search=(/opt/homebrew/bin/opencode /usr/local/bin/opencode "$home/.opencode/bin/opencode")',

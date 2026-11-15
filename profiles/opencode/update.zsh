@@ -4,18 +4,38 @@
 # opencode_major) before calling opencode_launch_offer, and provides
 # opencode_upgrade, which installs one version outside the sandbox.
 
+# Why the last eligibility check refused an installation, as a clause that
+# follows "because". Empty after a check that passed, and for a CLI that belongs
+# to the app, whose route opencode_update_route gives.
+opencode_reason=
+
+# REASON: records why an installation gets no offer; returns 1.
+opencode_refuse() {
+  opencode_reason=$1
+  return 1
+}
+
 # CLI VERSION: 0 when this installation gets an offer: a stable OpenCode 2
 # release in the opencode.ai installer's location or in an npm global install
-# that Volta and mise do not own. Anything else returns 1; the explicit
-# upgrade command still works there.
+# that Volta and mise do not own. Anything else returns 1 with opencode_reason
+# set; the explicit upgrade command still works there.
 opencode_update_eligible() {
   local exe=${1:A} installer=$home/.opencode/bin/opencode
-  [[ $2 == 2.<->.<-> ]] || return 1
+  opencode_reason=
   ! opencode_bundled "$exe" || return 1
+  if [[ $2 != 2.<->.<-> ]]; then
+    if [[ $2 == 1.* ]]; then opencode_refuse 'it is OpenCode 1'; else opencode_refuse 'it is a prerelease'; fi
+    return
+  fi
   installer=${installer:A}
   [[ $exe == $installer ]] && return 0
-  [[ ${exe:h:t} == bin && ${exe:h:h} == */lib/node_modules/@opencode/cli ]] || return 1
-  [[ $exe != */tools/image/packages/* && $exe != */installs/npm-* ]]
+  case $exe in
+    (*/tools/image/packages/*) opencode_refuse 'it was installed by Volta' ;;
+    (*/installs/npm-*) opencode_refuse 'it was installed by mise' ;;
+    (*/lib/node_modules/@opencode/cli/bin/[^/]#) return 0 ;;
+    (*/Cellar/*|*/Caskroom/*) opencode_refuse 'it was installed by Homebrew' ;;
+    (*) opencode_refuse 'it was installed another way' ;;
+  esac
 }
 
 # URL INSTALLED: asks the update service at URL for the latest release as seen
@@ -123,21 +143,83 @@ opencode_desktop_team() {
   return 1
 }
 
+# APP: REPLY is the CFBundleShortVersionString of APP; 1 when it has none.
+opencode_desktop_version() {
+  REPLY=$(/usr/bin/plutil -extract CFBundleShortVersionString raw "$1/Contents/Info.plist" 2>/dev/null)
+}
+
 # APP: 0 when this installation gets an offer, then reply=(version arch). It is
 # a stable N.N.N release in a real folder, not a link, whose parent the operator
 # can write, with a valid signature that has a Team Identifier and an executable
-# of one architecture the update service builds.
+# of one architecture the update service builds. Anything else returns 1 with
+# opencode_reason set.
 opencode_desktop_eligible() {
   local app=$1 plist=$1/Contents/Info.plist version main arch
-  [[ -d $app && ! -L $app && -w ${app:h} ]] || return 1
-  version=$(/usr/bin/plutil -extract CFBundleShortVersionString raw "$plist" 2>/dev/null) || return 1
-  [[ $version == <->.<->.<-> ]] || return 1
-  main=$(/usr/bin/plutil -extract CFBundleExecutable raw "$plist" 2>/dev/null) || return 1
-  opencode_desktop_arch "$app/Contents/MacOS/$main" || return 1
+  opencode_reason=
+  [[ ! -L $app ]] || { opencode_refuse 'it is a link'; return }
+  [[ -d $app ]] || { opencode_refuse 'it is not a folder'; return }
+  [[ -w ${app:h} ]] || { opencode_refuse "its folder ${${app:h}/#$home/~} cannot be written by this account"; return }
+  opencode_desktop_version "$app" || { opencode_refuse 'its version cannot be read'; return }
+  version=$REPLY
+  [[ $version == <->.<->.<-> ]] || { opencode_refuse 'it is a prerelease'; return }
+  main=$(/usr/bin/plutil -extract CFBundleExecutable raw "$plist" 2>/dev/null) || { opencode_refuse 'its executable cannot be read'; return }
+  opencode_desktop_arch "$app/Contents/MacOS/$main" || { opencode_refuse 'its executable is not a single-architecture build'; return }
   arch=$REPLY
-  /usr/bin/codesign --verify --deep --strict "$app" 2>/dev/null || return 1
-  opencode_desktop_team "$app" || return 1
+  /usr/bin/codesign --verify --deep --strict "$app" 2>/dev/null || { opencode_refuse 'its signature cannot be checked'; return }
+  opencode_desktop_team "$app" || { opencode_refuse 'its signature has no Team Identifier'; return }
   reply=($version $arch)
+}
+
+# Succeeds when Homebrew is installed on this Mac and its Caskroom holds the
+# OpenCode cask. Only files are read; brew never runs.
+opencode_brew_cask() {
+  local prefix
+  local -a prefixes=(/opt/homebrew /usr/local)
+  for prefix in $prefixes; do
+    [[ -x $prefix/bin/brew && -d $prefix/Caskroom/opencode-desktop ]] && return 0
+  done
+  return 1
+}
+
+# KIND: REPLY is how to update an installation by hand, a clause after "To
+# update,": the CLI (run its own updater) or the app (install the download, or
+# the cask when this Mac has it). Every message that names a way to update by
+# hand takes it from here.
+opencode_hand_route() {
+  if [[ $1 == cli ]]; then
+    REPLY='run opencode upgrade in Terminal, outside a session'
+  else
+    REPLY='quit OpenCode and install the download from opencode.ai'
+    ! opencode_brew_cask || REPLY+=' or run brew upgrade --cask opencode-desktop'
+  fi
+}
+
+# KIND TARGET [VERSION]: how the installation at TARGET is updated, as sentences
+# in REPLY. KIND is cli (TARGET is the executable, VERSION what it reports) or
+# app (TARGET is the bundle). Returns 0 when Agent Guard offers its updates and
+# 1 when it does not, from the same checks that decide the launch offers, so the
+# reason and the decision cannot differ. The CLI inside the app is updated with
+# the app and takes the app's route. Reads files and runs the system's plutil and
+# codesign on the app; runs no OpenCode and makes no request.
+opencode_update_route() {
+  local kind=$1 target=$2 route
+  if [[ $kind == cli ]] && opencode_bundled "$target"; then
+    opencode_update_route app "${${target:A}%/Contents/Resources/opencode-cli}" || true
+    REPLY="This OpenCode belongs to the OpenCode app and is updated with the app. $REPLY"
+    return 1
+  fi
+  if [[ $kind == cli ]]; then
+    opencode_update_eligible "$target" "${3:-}" && route='Agent Guard offers its updates when you run opencode in Terminal.'
+  else
+    opencode_desktop_eligible "$target" && route='Agent Guard offers its updates when you open Agent Guard.'
+  fi
+  if [[ -n ${route:-} ]]; then
+    REPLY=$route
+    return 0
+  fi
+  opencode_hand_route $kind
+  REPLY="Agent Guard does not offer updates because $opencode_reason. To update, $REPLY."
+  return 1
 }
 
 # The lookup for ag_update_check: reply=(installed offered) from the update
@@ -263,7 +345,10 @@ opencode_desktop_launch_offer() {
   local rc=0 offered found
   opencode_desktop_offer "$mode" "$@" || rc=$?
   case $rc in
-    (1) fail "the OpenCode update failed and the app was not changed. Details: $(opencode_update_log)" ;;
+    (1)
+      opencode_hand_route app
+      fail "the OpenCode update failed and the app was not changed. To update by hand, $REPLY. Details: $(opencode_update_log)"
+      ;;
     (2)
       offered=$REPLY
       found=$(/usr/bin/plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist" 2>/dev/null) || found=

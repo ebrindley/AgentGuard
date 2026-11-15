@@ -43,12 +43,28 @@ opencode_check_interrupted() {  # STATUS
   exit $1
 }
 
+# CLI VERSION APP: doctor's information lines for the OpenCode CLI the check ran
+# and for the app, when each was found: its version, its path and how it is
+# updated (opencode_update_route). They are never failures.
+opencode_update_notes() {
+  local cli=$1 version=$2 app=$3
+  if [[ -n $cli ]]; then
+    opencode_update_route cli "$cli" "$version" || true
+    print -r -- "note OpenCode CLI $version at ${cli/#$home/~}: $REPLY"
+  fi
+  if [[ -n $app ]]; then
+    opencode_desktop_version "$app" && version=$REPLY || version=
+    opencode_update_route app "$app" || true
+    print -r -- "note OpenCode app${version:+ $version} at ${app/#$home/~}: $REPLY"
+  fi
+}
+
 opencode_check() {
     # check staged replaces the global config folder with one inside the release
     # whose only plugin links to the release's plugin.js, so the live plugin is
     # not loaded. ~/.opencode is still read.
     local -a scope=(/usr/bin/env OPENCODE_DISABLE_PROJECT_CONFIG=1)
-    local label= definitions= readiness= permission_report= permission_at=0 ready=0
+    local label= definitions= readiness= permission_report= permission_at=0 ready=0 cli_version= found_app=
     if (( staged )); then
       scope=(/usr/bin/env -u OPENCODE_CONFIG -u OPENCODE_CONFIG_DIR -u OPENCODE_CONFIG_CONTENT
              OPENCODE_DISABLE_PROJECT_CONFIG=1 "XDG_CONFIG_HOME=$profile_dir/check-config")
@@ -57,6 +73,7 @@ opencode_check() {
     if next_cli; then
       local cli=$REPLY
       opencode_major "$cli"
+      cli_version=$opencode_version
       if [[ $REPLY == 2 ]]; then
         opencode_check_v2 "$cli"
       else
@@ -144,8 +161,9 @@ opencode_check() {
     # A desktop upgrade can leave a different major version on PATH. Probe its
     # bundled backend as well; a CLI pass does not establish desktop readiness.
     local bundled=
-    if find_app && [[ -x $REPLY/Contents/Resources/opencode-cli ]]; then
-      bundled="$REPLY/Contents/Resources/opencode-cli"
+    find_app && found_app=$REPLY
+    if [[ -n $found_app && -x $found_app/Contents/Resources/opencode-cli ]]; then
+      bundled="$found_app/Contents/Resources/opencode-cli"
       if [[ ${bundled:A} != ${${cli:-}:A} ]]; then
         opencode_major "$bundled"
         if [[ $REPLY == 2 ]]; then
@@ -156,6 +174,7 @@ opencode_check() {
     fi
     # Live only: OpenCode Guard's plugin would enforce its own rules next to this one.
     if (( ! staged )); then
+      opencode_update_notes "${cli:-}" "$cli_version" "$found_app"
       local old="$home/.config/opencode/plugins/opencode-guard.js"
       if [[ ! -e $old && ! -L $old ]] || within "${old:A}" "$engine/releases"; then
         print "ok   one guard plugin"
