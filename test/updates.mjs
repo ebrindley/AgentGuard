@@ -37,7 +37,8 @@ const downloadBase = "local repo='https://github.com/ebrindley/AgentGuard'; loca
 const module = join(release, 'updates.zsh');
 const replaceOnce = (s, a, b) => { assert.equal(s.split(a).length, 2, a); return s.replace(a, () => b); };
 let source = readFileSync(join(root, 'engine/updates.zsh'), 'utf8');
-source = replaceOnce(source, downloadBase, `local repo=${quote(base)}; local -a curl_proto=()`);
+source = replaceOnce(source, "local repo='https://github.com/ebrindley/AgentGuard'", `local repo=${quote(base)}`);
+source = replaceOnce(source, "local -a curl_proto=(--proto '=https' --proto-redir '=https')", 'local -a curl_proto=()');
 source = source.replaceAll('/usr/bin/osascript', quote(join(temp, 'dialog')));
 writeFileSync(module, source);
 const stamp = (value) => writeFileSync(join(engine, 'state/stamp.json'), JSON.stringify({ tag: value }));
@@ -134,6 +135,18 @@ try {
     }
   });
 
+  await check('another product supplies its own lookup, command and sentence and the offer returns to its caller', async () => {
+    ui();
+    const other = (lookup, rule = '') => `ag_lookup_other() { reply=(${lookup}); }; ag_run_other() { print -r -- "ran $1"; reply=(done); }; typeset -A other=(name Other lookup ag_lookup_other run ag_run_other log ${quote(join(temp, 'other.log'))} window_label Updating note 'Extra sentence.' same_major '${rule}'); ag_update_offer cli other; print -r -- "status $?"`;
+    const r = await run(other('1.2.0 1.3.0'), 'y\n');
+    assert.equal(r.stderr, 'Other 1.3.0 is available. You have 1.2.0.\nExtra sentence.\nUpdate now? [Y/n] Other updated to 1.3.0.\n');
+    assert.equal(r.stdout, 'ran 1.3.0\nstatus 2\n');
+    for (const [reply, rule, text] of [['1.2.0 2.0.0', 'same-major', ''], ['1.2.0 2.0.0', '', 'ran 2.0.0\n']]) {
+      const s = await run(other(reply, rule), 'y\n');
+      assert.equal(s.stdout, `${text}status ${text ? 2 : 0}\n`, reply + rule);
+    }
+  });
+
   await check('Pi and OMP restart through their shim with the saved peer PATH, cwd and arguments', async () => {
     // Keep the real shim and startup preamble through the update hook. Replace
     // account/runtime/probe inputs and stop before unrelated policy construction.
@@ -210,7 +223,7 @@ try {
   await check('the window helper runs the real script until the launcher process ends', async () => {
     // A call that throws ends the helper at once with a nonzero status.
     const began = Date.now();
-    const r = await run(`source ${quote(join(root, 'engine/updates.zsh'))}; ag_update_window_source; /bin/sleep 2 & /usr/bin/osascript -l JavaScript -e "$REPLY" ${quote(join(temp, 'window.log'))} $!; exit $?`);
+    const r = await run(`source ${quote(join(root, 'engine/updates.zsh'))}; ag_update_window_source; /bin/sleep 2 & /usr/bin/osascript -l JavaScript -e "$REPLY" ${quote(join(temp, 'window.log'))} $! 'Agent Guard' 'Downloading update…' 'Preparing update…' 'Installing update…'; exit $?`);
     assert.equal(r.status, 0, r.stderr);
     assert.ok(Date.now() - began >= 1500, 'the helper ended before the process it watches');
   });
