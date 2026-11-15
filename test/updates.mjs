@@ -220,7 +220,7 @@ try {
     assert.equal((await offer('cli', { cli: join(temp, 'npm/bin/opencode') })).stdout, 'upgrade 2.4.0\nstatus 2\n');
     rmSync(upgradeCalls);
   });
-  const tapCli = '/opt/homebrew/Cellar/opencode-v2/2.3.0/bin/opencode', coreCli = '/opt/homebrew/Cellar/opencode/2.3.0/bin/opencode';
+  const tapCli = '/opt/homebrew/Cellar/opencode-v2/2.3.0/bin/opencode', coreCli = '/opt/homebrew/Cellar/opencode/2.3.0/libexec/lib/node_modules/@opencode/cli/bin/opencode';
   await check('a Homebrew CLI reads its latest version from the feed of its formula and an accepted offer upgrades', async () => {
     tapReply = '2.5.0'; formulaReply = '2.4.0'; opencodeReply = '2.6.0';
     let before = requests.length;

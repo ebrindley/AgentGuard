@@ -40,9 +40,9 @@ opencode_update_eligible() {
   case $exe in
     (*/tools/image/packages/*) opencode_refuse 'it was installed by Volta' ;;
     (*/installs/npm-*) opencode_refuse 'it was installed by mise' ;;
-    (*/lib/node_modules/@opencode/cli/bin/[^/]#) opencode_source=npm ;;
     (*/Cellar/opencode/*) opencode_source=core ;;
     (*/Cellar/opencode-v2/*) opencode_source=tap ;;
+    (*/lib/node_modules/@opencode/cli/bin/[^/]#) opencode_source=npm ;;
     (*/Cellar/*|*/Caskroom/*) opencode_refuse 'it was installed by Homebrew' ;;
     (*) opencode_refuse 'it was installed another way' ;;
   esac
