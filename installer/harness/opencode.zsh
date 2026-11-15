@@ -150,21 +150,45 @@ ag_opencode_path_warning() {
   REPLY+='export PATH="$HOME/Library/Application Support/AgentGuard/bin:$PATH"'
 }
 
-# The launcher's check (design section 8). With --json: reply = its lines.
+# True when a new terminal window starts an opencode other than Agent Guard's
+# launcher, as a startup file that adds ~/.opencode/bin after Agent Guard's block
+# does. With ZDOTDIR elsewhere the lookup would not read the files it asks about,
+# and the warning above covers activation instead.
+ag_opencode_shadowed() {
+  ag_opencode_path_warning
+  [[ -z $REPLY ]] || return 1
+  ag_shell_resolve opencode -l -i
+  (( $? == 1 ))
+}
+
+# The launcher's check (design section 8), then the doctor line for where a new
+# terminal finds opencode: FAIL when another opencode comes first, except in the
+# install's own gate (AGENT_GUARD_GATE), where it is a warning because the install
+# may not be able to repair it and the report names it. With --json: reply = its
+# lines.
 ag_h_opencode_doctor() {
-  local out warning
+  local out found= warning
   integer rc
   ag_opencode_path_warning
   warning=$REPLY
+  if [[ -z $warning ]]; then
+    found=$(ag_shell_lookup opencode 'a new terminal window' 'run agent-guard update' -l -i)
+    if [[ $found == FAIL* && -n ${AGENT_GUARD_GATE:-} ]]; then found="warn ${found#FAIL }"; fi
+  fi
   if [[ ${2:-} != --json ]]; then
     [[ -z $warning ]] || print -r -- "warn $warning"
     "$1/launch" check
-    return
+    rc=$?
+    [[ -z $found ]] || print -r -- "$found"
+    [[ $found != FAIL* ]] || rc=1
+    return $rc
   fi
   out=$("$1/launch" check 2>&1)
   rc=$?
   reply=("${(@f)out}") REPLY='{}'
   [[ -z $warning ]] || reply+=("warn $warning")
+  [[ -z $found ]] || reply+=("$found")
+  [[ $found != FAIL* ]] || rc=1
   return $rc
 }
 
@@ -174,6 +198,9 @@ ag_h_opencode_report() {
   if [[ -n $REPLY ]]; then
     ag_warnings+=("$REPLY")
     ag_say 'PATH: terminal activation needs manual setup for ZDOTDIR'
+  elif ag_opencode_shadowed; then
+    ag_warnings+=("a new terminal window starts ${REPLY/#$home/~}, not Agent Guard's opencode, so OpenCode runs there without protection; remove or reorder the line that adds it, then run agent-guard update")
+    ag_say 'PATH: another opencode comes first in a new terminal window'
   else
     ag_say 'PATH: new terminal windows run opencode inside the guard'
   fi

@@ -312,6 +312,66 @@ rc=$?
 (( rc == 0 )) && /usr/bin/grep -q 'Agent Guard 0.0.2 is current.' "$out" && pass 'exit 0, "is current"' || { fail "update when current (exit $rc)"; show }
 same_snapshot 'nothing changed' "$run/B.snapshot"
 
+# --- PS: another opencode ahead of Agent Guard's in a new terminal, as the
+# opencode.ai installer leaves it by appending to .zshrc after the block.
+# opencode_path prints the opencode a new terminal window finds.
+opencode_path() { /usr/bin/env -i HOME="$home" PATH=$system_path /bin/zsh -l -i -c 'whence -p opencode' </dev/null 2>/dev/null }
+label=PS
+restore B
+/bin/mkdir -p "$home/.opencode/bin"
+print -r -- '#!/bin/sh' > "$home/.opencode/bin/opencode"
+/bin/chmod 755 "$home/.opencode/bin/opencode"
+zshrc="$home/dotfiles/zshrc"
+rc_shadow() { print -r -- 'export PATH="$HOME/.opencode/bin:$PATH"' >> "$1" }
+rc_ends() { [[ $(/usr/bin/tail -n 3 "$1") == $'# >>> agent-guard >>>\n'*$'\n# <<< agent-guard <<<' ]] }
+[[ $(opencode_path) == "$engine/bin/opencode" ]] && pass 'a new terminal finds the guarded opencode before the shadow' || fail 'a new terminal finds the guarded opencode'
+rc_shadow "$zshrc"
+save Bshadow
+[[ $(opencode_path) == "$home/.opencode/bin/opencode" ]] && ! rc_ends "$zshrc" && pass 'the appended line puts another opencode first' || fail 'the appended line puts another opencode first'
+point= ag doctor
+rc=$?
+(( rc != 0 )) && /usr/bin/grep -qF "FAIL opencode in a new terminal window resolves to ~/.opencode/bin/opencode, not Agent Guard's launcher; run agent-guard update" "$out" &&
+  pass 'doctor fails and names the opencode it found' || { fail "doctor with a shadow (exit $rc)"; show }
+# Same version: the update moves the block to the end instead of only running doctor.
+point= ag update
+rc=$?
+(( rc == 0 )) && /usr/bin/grep -q 'installing it again for the PATH block order' "$out" && rc_ends "$zshrc" && one_block "$zshrc" &&
+  /usr/bin/grep -qFx 'export PATH="$HOME/.opencode/bin:$PATH"' "$zshrc" && pass 'update on the current release moves the block after the added line' || { fail "update with a shadow (exit $rc)"; show }
+[[ -L $home/.zshrc && $(/usr/bin/stat -f %Lp "$zshrc") == 600 ]] && pass 'the link and the mode stay' || fail 'the link and the mode stay'
+[[ $(opencode_path) == "$engine/bin/opencode" ]] && pass 'a new terminal finds the guarded opencode again' || fail 'a new terminal finds the guarded opencode again'
+# A logout file that prints does not change what the lookup reports.
+print -r -- 'print Goodbye' > "$home/.zlogout"
+point= ag doctor
+rc=$?
+/bin/rm -f "$home/.zlogout"
+(( rc == 0 )) && /usr/bin/grep -q "^ok   opencode in a new terminal window resolves to .*, Agent Guard's launcher" "$out" && pass 'doctor passes' || { fail "doctor after the repair (exit $rc)"; show }
+# Not shadowed: nothing is rewritten.
+repaired=$(sha "$zshrc")$(sha "$home/.zprofile")
+point= ag update
+rc=$?
+(( rc == 0 )) && /usr/bin/grep -q 'is current; checking' "$out" && [[ $(sha "$zshrc")$(sha "$home/.zprofile") == "$repaired" ]] &&
+  pass 'an update with no shadow rewrites no startup file' || { fail "update without a shadow (exit $rc)"; show }
+# A failed gate puts the file back as it was, shadow and all.
+restore Bshadow
+point=fail:launch-check ag update
+rc=$?
+(( rc != 0 )) && [[ ! -e $state/txn ]] && /usr/bin/cmp -s "$zshrc" "$run/saved-Bshadow/dotfiles/zshrc" && ! rc_ends "$zshrc" &&
+  pass 'a rollback restores the startup file' || { fail "failed update with a shadow (exit $rc)"; show }
+# A shadow another file adds is not repaired and does not fail the install; doctor still fails.
+restore B
+/bin/mkdir -p "$home/.opencode/bin"
+/bin/cp "$run/saved-Bshadow/.opencode/bin/opencode" "$home/.opencode/bin/opencode"
+print -r -- 'export PATH="$HOME/.opencode/bin:$PATH"' > "$home/.zlogin"
+unrepaired=$(sha "$zshrc")$(sha "$home/.zprofile")
+point= boot latest
+rc=$?
+(( rc == 0 )) && /usr/bin/grep -q '^warn opencode in a new terminal window resolves to ~/.opencode/bin/opencode' "$out" &&
+  /usr/bin/grep -q "a new terminal window starts ~/.opencode/bin/opencode, not Agent Guard's opencode" "$out" &&
+  [[ $(sha "$zshrc")$(sha "$home/.zprofile") == "$unrepaired" ]] && pass 'install succeeds, warns, and rewrites nothing' || { fail "install with a shadow from .zlogin (exit $rc)"; show }
+point= ag doctor
+rc=$?
+(( rc != 0 )) && /usr/bin/grep -q '^FAIL opencode in a new terminal window' "$out" && pass 'doctor fails on the shadow the install could not repair' || { fail "doctor (exit $rc)"; show }
+
 # --- U3, G5: the one-liner again repairs with a new release ID; folders older than
 # the previous release go.
 label=U3

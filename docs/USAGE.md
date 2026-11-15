@@ -25,6 +25,16 @@ Installation and `agent-guard doctor` warn when their environment contains a
 nondefault `ZDOTDIR`; they do not edit those startup files. An unexported shell
 variable is not visible to them. Uninstall does not remove manually added lines.
 
+The opencode.ai installer appends `export PATH=$HOME/.opencode/bin:$PATH` to
+`~/.zshrc`, after Agent Guard's block, unless you run it with
+`--no-modify-path`; a new terminal then starts that `opencode` without the
+guard. `agent-guard doctor` fails and names the `opencode` it found, and
+`agent-guard update` moves Agent Guard's block back to the end of the file
+([details](OPERATIONS.md#commands)). Editors and other tools that pick an
+executable without a shell should be given the absolute path of the shim,
+`~/Library/Application Support/AgentGuard/bin/opencode`, with `~` expanded to
+your home folder.
+
 For the desktop app, open `~/Applications/Agent Guard.app` instead of
 `OpenCode.app`. Inside guarded OpenCode, the `agent_guard_status` tool reports
 the loaded advisory plugin and its observed guard release. Run `agent-guard doctor` from Terminal outside

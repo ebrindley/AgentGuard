@@ -158,7 +158,7 @@ if (name === 'outer-sandbox') {
   assert.equal(health.state, 'inactive');
   assert.equal(health.rules.loaded, false);
   for (const [tool, args] of [['bash', { command: 'pwd' }], ['read', { filePath: join(directory, 'README.md') }], ['write', { filePath: join(directory, 'allowed.txt') }]])
-    await assert.rejects(before({ tool }, { args }), /Agent Guard protects this computer.*OpenCode was started without it, so tools are disabled.*from a new terminal\.$/);
+    await assert.rejects(before({ tool }, { args }), /Agent Guard protects this computer.*OpenCode was started without it, so tools are disabled.*from a new terminal\. If a new terminal still starts OpenCode without Agent Guard, run agent-guard doctor\.$/);
   const unguarded = { output: 'zsh:1: operation not permitted: ps' };
   await hooks['tool.execute.after']({ tool: 'bash' }, unguarded);
   assert.equal(unguarded.output, 'zsh:1: operation not permitted: ps', 'no sandbox note outside the guard');
