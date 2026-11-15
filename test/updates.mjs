@@ -137,7 +137,7 @@ try {
 
   await check('another product supplies its own lookup, command and sentence and the offer returns to its caller', async () => {
     ui();
-    const other = (lookup, rule = '') => `ag_lookup_other() { reply=(${lookup}); }; ag_run_other() { print -r -- "ran $1"; }; typeset -A other=(name Other lookup ag_lookup_other run ag_run_other log ${quote(join(temp, 'other.log'))} window_label Updating note 'Extra sentence.' same_major '${rule}'); ag_update_offer cli other; print -r -- "status $?"`;
+    const other = (lookup, rule = '') => `ag_lookup_other() { reply=(${lookup}); }; ag_run_other() { print -r -- "ran $1"; reply=(done); }; typeset -A other=(name Other lookup ag_lookup_other run ag_run_other log ${quote(join(temp, 'other.log'))} window_label Updating note 'Extra sentence.' same_major '${rule}'); ag_update_offer cli other; print -r -- "status $?"`;
     const r = await run(other('1.2.0 1.3.0'), 'y\n');
     assert.equal(r.stderr, 'Other 1.3.0 is available. You have 1.2.0.\nExtra sentence.\nUpdate now? [Y/n] Other updated to 1.3.0.\n');
     assert.equal(r.stdout, 'ran 1.3.0\nstatus 2\n');

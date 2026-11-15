@@ -202,14 +202,16 @@ ag_update_notify() {
 ag_update_offer() {
   emulate -L zsh
   setopt no_unset extended_glob
-  local mode=$1
+  local mode=$1 installed offered
   local -A p=("${(@kv)${(P)2}}")
   shift 2
   ag_update_gate "$@" || return 0
   ag_update_check "${p[lookup]}" "${p[same_major]:-}" || return 0
-  ag_update_ask "$mode" "${p[name]}" "$reply[2]" "$reply[1]" "${p[note]:-}" || return 0
-  ag_update_run "$mode" "$reply[2]" "${p[run]}" "${p[log]}" "${p[name]}" "${p[window_label]}" ${(f)p[window_stages]:-} || return 1
-  ag_update_notify "$mode" "${p[name]}" "$reply[2]"
+  # A product's run function may use reply for its own results.
+  installed=$reply[1] offered=$reply[2]
+  ag_update_ask "$mode" "${p[name]}" "$offered" "$installed" "${p[note]:-}" || return 0
+  ag_update_run "$mode" "$offered" "${p[run]}" "${p[log]}" "${p[name]}" "${p[window_label]}" ${(f)p[window_stages]:-} || return 1
+  ag_update_notify "$mode" "${p[name]}" "$offered"
   return 2
 }
 
