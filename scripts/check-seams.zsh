@@ -45,6 +45,8 @@ once "$tree/engine/updates.zsh" "local -a curl_proto=(--proto '=https' --proto-r
 once "$tree/profiles/opencode/update.zsh" "url='https://opencode.ai/update/api/latest/cli/npm'"
 once "$tree/profiles/opencode/update.zsh" "url='https://opencode.ai/update/api/latest/desktop/opencode'"
 once "$tree/profiles/opencode/update.zsh" "origin='https://opencode.ai/'"
+# Where the update routes look for Homebrew.
+once "$tree/profiles/opencode/update.zsh" 'local -a prefixes=(/opt/homebrew /usr/local)'
 # Where the launcher looks for the CLI and the app.
 once "$tree/profiles/opencode/harness.zsh" 'cli_search=(/opt/homebrew/bin/opencode /usr/local/bin/opencode "$home/.opencode/bin/opencode")'
 once "$tree/profiles/opencode/harness.zsh" 'app_paths=(/Applications/OpenCode.app "$home/Applications/OpenCode.app")'

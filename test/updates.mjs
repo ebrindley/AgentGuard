@@ -327,6 +327,94 @@ try {
       assert.equal(r.stdout, 'status 0\n', name); assert.deepEqual(desktopRequests(before), [], name);
     }
   });
+  // The route each installation is told: the offer, or the reason and the way to update by hand.
+  const route = async (kind, path, version = '') => (await run(`opencode_update_route ${kind} ${quote(path)} ${quote(version)}; print -r -- "$?"; print -r -- "$REPLY"`)).stdout.trimEnd().split('\n');
+  const cliOffer = ['0', 'Agent Guard offers its updates when you run opencode in Terminal.'];
+  const cliHand = (reason) => ['1', `Agent Guard does not offer updates because ${reason}. To update, run opencode upgrade in Terminal, outside a session.`];
+  const appOffer = ['0', 'Agent Guard offers its updates when you open Agent Guard.'];
+  const appHand = (reason, brew = '') => ['1', `Agent Guard does not offer updates because ${reason}. To update, quit OpenCode and install the download from opencode.ai${brew}.`];
+  await check('each OpenCode CLI is told whether Agent Guard offers its updates and how else to update it', async () => {
+    assert.deepEqual(await route('cli', installerCli, '2.3.0'), cliOffer);
+    assert.deepEqual(await route('cli', npmCli, '2.3.0'), cliOffer);
+    for (const [path, version, reason] of [
+      ['/opt/homebrew/Cellar/opencode/2.3.0/bin/opencode', '2.3.0', 'it was installed by Homebrew'],
+      [join(temp, 'volta/tools/image/packages/@opencode/cli/lib/node_modules/@opencode/cli/bin/opencode'), '2.3.0', 'it was installed by Volta'],
+      [join(temp, 'mise/installs/npm-opencode-cli/2.3.0/lib/node_modules/@opencode/cli/bin/opencode'), '2.3.0', 'it was installed by mise'],
+      [join(temp, 'pnpm/global/5/node_modules/@opencode/cli/bin/opencode'), '2.3.0', 'it was installed another way'],
+      [installerCli, '1.18.33', 'it is OpenCode 1'],
+      [installerCli, '2.3.0-rc.1', 'it is a prerelease'],
+    ]) assert.deepEqual(await route('cli', path, version), cliHand(reason), path + version);
+    // The reason is the one the launch offer's own check gave.
+    const r = await run(`opencode_update_eligible /opt/homebrew/Cellar/opencode/2.3.0/bin/opencode 2.3.0; print -r -- "$? $opencode_reason"; opencode_update_eligible ${quote(installerCli)} 2.3.0; print -r -- "$? [$opencode_reason]"`);
+    assert.equal(r.stdout, '1 it was installed by Homebrew\n0 []\n');
+  });
+  await check('the CLI inside the app is updated with the app and takes the app\'s route', async () => {
+    installApp({ cli: '#!/bin/sh\n' });
+    const bundled = join(appPath, 'Contents/Resources/opencode-cli');
+    const text = 'This OpenCode belongs to the OpenCode app and is updated with the app. ';
+    assert.deepEqual(await route('cli', bundled, '2.3.0'), ['1', text + appOffer[1]]);
+    installApp({ cli: '#!/bin/sh\n', files: { 'Contents/badsig': '' } });
+    assert.deepEqual(await route('cli', bundled, '2.3.0'), ['1', text + appHand('its signature cannot be checked')[1]]);
+  });
+  await check('each OpenCode app is told whether Agent Guard offers its updates and how else to update it', async () => {
+    installApp();
+    assert.deepEqual(await route('app', appPath), appOffer);
+    const cases = [
+      ['a link', 'it is a link', () => { installApp(); renameSync(appPath, join(temp, 'real.app')); symlinkSync(join(temp, 'real.app'), appPath); }],
+      ['an unwritable folder', 'its folder ~/Applications cannot be written by this account', () => { installApp(); chmodSync(appParent, 0o555); }],
+      ['a prerelease', 'it is a prerelease', () => installApp({ version: '2.3.0-rc.1' })],
+      ['a universal executable', 'its executable is not a single-architecture build', () => { installApp(); writeFileSync(join(appPath, 'Contents/MacOS/AgFakeApp'), Buffer.from('cafebabe00000002', 'hex')); }],
+      ['a bad signature', 'its signature cannot be checked', () => installApp({ files: { 'Contents/badsig': '' } })],
+      ['no Team Identifier', 'its signature has no Team Identifier', () => installApp({ who: 'not set' })],
+      ['no app folder', 'it is not a folder', () => rmSync(appPath, { recursive: true, force: true })],
+    ];
+    for (const [name, reason, setup] of cases) {
+      setup();
+      const got = await route('app', appPath);
+      chmodSync(appParent, 0o755); rmSync(join(temp, 'real.app'), { recursive: true, force: true });
+      assert.deepEqual(got, appHand(reason), name);
+    }
+    installApp();
+  });
+  await check('the brew command is offered only when Homebrew is installed and its Caskroom holds the cask', async () => {
+    const prefix = join(home, 'homebrew'); const brew = ' or run brew upgrade --cask opencode-desktop';
+    installApp({ files: { 'Contents/badsig': '' } });
+    try {
+      assert.deepEqual(await route('app', appPath), appHand('its signature cannot be checked'));
+      mkdirSync(join(prefix, 'Caskroom/opencode-desktop'), { recursive: true });
+      assert.deepEqual(await route('app', appPath), appHand('its signature cannot be checked'), 'a Caskroom entry without brew');
+      rmSync(join(prefix, 'Caskroom'), { recursive: true });
+      mkdirSync(join(prefix, 'bin'), { recursive: true }); executable(join(prefix, 'bin/brew'), 'exit 99\n');
+      assert.deepEqual(await route('app', appPath), appHand('its signature cannot be checked'), 'brew without the cask');
+      mkdirSync(join(prefix, 'Caskroom/opencode-desktop'), { recursive: true });
+      assert.deepEqual(await route('app', appPath), appHand('its signature cannot be checked', brew));
+      // An app Agent Guard offers, and a CLI, are never told to use brew.
+      assert.deepEqual(await route('cli', installerCli, '1.18.33'), cliHand('it is OpenCode 1'));
+      installApp();
+      assert.deepEqual(await route('app', appPath), appOffer);
+    } finally { rmSync(prefix, { recursive: true, force: true }); }
+  });
+  await check('doctor notes name the version, path and route of the CLI and the app and change no status', async () => {
+    installApp();
+    const notes = async (cli, version, app) => (await run(`ok=1; source ${quote(join(root, 'profiles/opencode/hooks.zsh'))}; opencode_update_notes ${quote(cli)} ${quote(version)} ${quote(app)}; print -r -- "status $? ok=$ok"`)).stdout.trimEnd().split('\n');
+    assert.deepEqual(await notes(installerCli, '2.3.0', appPath), [
+      `note OpenCode CLI 2.3.0 at ~/.opencode/bin/opencode: ${cliOffer[1]}`,
+      `note OpenCode app 2.3.0 at ~/Applications/OpenCode.app: ${appOffer[1]}`,
+      'status 0 ok=1',
+    ]);
+    assert.deepEqual(await notes('/opt/homebrew/Cellar/opencode/1.18.33/bin/opencode', '1.18.33', ''), [
+      `note OpenCode CLI 1.18.33 at /opt/homebrew/Cellar/opencode/1.18.33/bin/opencode: ${cliHand('it is OpenCode 1')[1]}`,
+      'status 0 ok=1',
+    ]);
+    chmodSync(appParent, 0o555);
+    const unwritable = await notes('', '', appPath);
+    chmodSync(appParent, 0o755);
+    assert.deepEqual(unwritable, [
+      `note OpenCode app 2.3.0 at ~/Applications/OpenCode.app: ${appHand('its folder ~/Applications cannot be written by this account')[1]}`,
+      'status 0 ok=1',
+    ]);
+    assert.deepEqual(await notes('', '', ''), ['status 0 ok=1']);
+  });
   await check('an unusable desktop reply, an archive outside the update service or a version that is not newer within the major makes no offer', async () => {
     const before = installApp(); const start = requests.length;
     const foreign = ['http://localhost:' + base.split(':')[2] + '/files/a.zip', base + '.example/files/a.zip', base + '@example.test/files/a.zip', '/files/a.zip', ''];
@@ -437,7 +525,11 @@ try {
     publish('2.4.0'); installApp();
     const launch = (extra) => run(`app=${quote(appPath)}; mode=gui; main=before; fail() { print -r -- "fail: $*"; exit 3 }; ${extra}; opencode_desktop_launch_offer; print -r -- "main=$main"`);
     let r = await launch('opencode_desktop_run() { return 1 }');
-    assert.equal(r.status, 3); assert.equal(r.stdout, `fail: the OpenCode update failed and the app was not changed. Details: ${appLog}\n`);
+    assert.equal(r.status, 3); assert.equal(r.stdout, `fail: the OpenCode update failed and the app was not changed. To update by hand, quit OpenCode and install the download from opencode.ai. Details: ${appLog}\n`);
+    mkdirSync(join(home, 'homebrew/bin'), { recursive: true }); mkdirSync(join(home, 'homebrew/Caskroom/opencode-desktop'), { recursive: true }); executable(join(home, 'homebrew/bin/brew'), 'exit 99\n');
+    r = await launch('opencode_desktop_run() { return 1 }');
+    rmSync(join(home, 'homebrew'), { recursive: true });
+    assert.equal(r.stdout, `fail: the OpenCode update failed and the app was not changed. To update by hand, quit OpenCode and install the download from opencode.ai or run brew upgrade --cask opencode-desktop. Details: ${appLog}\n`);
     r = await launch('opencode_desktop_run() { :; }');
     assert.equal(r.status, 3); assert.equal(r.stdout, 'fail: the OpenCode update did not install the version offered: expected 2.4.0, found 2.3.0.\n');
     r = await launch('');

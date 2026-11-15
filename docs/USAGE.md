@@ -135,9 +135,8 @@ cannot write the install location, so neither installs anything there.
 
 When the OpenCode the launcher finds is the CLI bundled in OpenCode.app
 (`Contents/Resources/opencode-cli`), it runs nothing and says that this
-OpenCode is updated with the app: quit OpenCode, then run
-`brew upgrade --cask opencode-desktop`, or install the download from
-opencode.ai.
+OpenCode is updated with the app, followed by the app's route
+([Update offer for the desktop app](#update-offer-for-the-desktop-app)).
 
 #### Update offer at launch
 
@@ -157,7 +156,23 @@ seconds, starts the session unchanged and asks again next launch.
 In this release only OpenCode 2, installed by the opencode.ai installer or as an
 npm global install that Volta and mise do not own, gets the offer. Other
 installations, prereleases and other majors do not; `opencode upgrade` still
-works for them. Subcommands (`run`, `serve`, `auth` and the rest), help and
+works for them, because it runs OpenCode's own updater for whatever installed
+it. Homebrew is not needed for any of this.
+
+| Your OpenCode CLI | Updated by |
+|---|---|
+| OpenCode 2, stable, installed by the opencode.ai installer or an npm global install | Agent Guard's offer when you run `opencode` in Terminal |
+| Installed by Homebrew, Volta, mise or another package manager, OpenCode 1, or a prerelease | `opencode upgrade` in Terminal, outside a session |
+| The CLI inside OpenCode.app | The app; see the app's table below |
+
+`agent-guard doctor` prints one `note` line for the CLI it runs, with its
+version and path (the home folder shown as `~`) and the row that applies, with
+the reason when Agent Guard offers nothing, for example `Agent Guard does not
+offer updates because it was installed by Homebrew. To update, run opencode
+upgrade in Terminal, outside a session.` It is information; it never fails
+`doctor`.
+
+Subcommands (`run`, `serve`, `auth` and the rest), help and
 version requests, attached clients (`--attach`, `--server`) and nested launches
 make no lookup, and the desktop app has its own offer, below. A launch without a
 terminal prints the availability lines and installs nothing. `agent-guard
@@ -193,12 +208,26 @@ The offer covers an `OpenCode.app` at a stable version `N.N.N` that is a real
 folder (not a link), in a folder you can write (`~/Applications`, or
 `/Applications` when your account can write it), with a valid signature that has
 a Team ID and an executable for one architecture, arm64 or x64. For any other
-installation the launcher makes no lookup; update it by quitting OpenCode, then
-installing the download from opencode.ai or running `brew upgrade --cask
-opencode-desktop`. Terminal launches never offer it, and `agent-guard
-update-check off` turns it off. Homebrew's record of the cask keeps the older
-version after Agent Guard replaces the app. That is the usual state for this
-cask, which declares `auto_updates` and expects the app to replace itself.
+installation the launcher makes no lookup. Terminal launches never offer it, and
+`agent-guard update-check off` turns it off. Homebrew's record of the cask keeps
+the older version after Agent Guard replaces the app. That is the usual state
+for this cask, which declares `auto_updates` and expects the app to replace
+itself.
+
+| Your OpenCode app | Updated by |
+|---|---|
+| Meets the conditions above | Agent Guard's offer when you open Agent Guard |
+| In a folder this account cannot write, such as `/Applications`, or a link, a prerelease, a universal build or an app whose signature cannot be checked | Quit OpenCode, then install the download from opencode.ai |
+
+Homebrew is not needed. The second row gains `or run brew upgrade --cask
+opencode-desktop` only when Homebrew is installed on this Mac
+(`/opt/homebrew/bin/brew` or `/usr/local/bin/brew`) and its `Caskroom` holds
+`opencode-desktop`; Agent Guard reads those files and never runs `brew`. The
+same route ends the message that stops a launch after an app update failed.
+`agent-guard doctor` prints one `note` line for the app it finds, with its version, its path and the reason when
+Agent Guard offers nothing, for example `Agent Guard does not offer updates
+because its folder /Applications cannot be written by this account. To update,
+quit OpenCode and install the download from opencode.ai.`
 
 ## OpenCode Desktop behavior
 
@@ -216,7 +245,8 @@ OpenCode's code come from reading its bundle, not from running it.
   in-app update now fails without a prompt. Agent Guard offers the update when
   you open the app (see [Update offer for the desktop
   app](#update-offer-for-the-desktop-app)). To update by hand, quit OpenCode,
-  update it outside the guard, then reopen it through Agent Guard. For the Homebrew cask, run
+  update it outside the guard, then reopen it through Agent Guard. If you
+  installed the app with the Homebrew cask, run
   `brew upgrade --cask opencode-desktop`. The cask declares `auto_updates`, but
   Homebrew 7.0.10 also upgrades it with plain `brew upgrade` once the installed
   app is older than the tap's version (`Cask#outdated_version`), unless
