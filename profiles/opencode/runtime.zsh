@@ -1,6 +1,6 @@
 # Host version and server ownership. Every executable probe runs inside the
 # launcher's sandbox, including the CLI bundled with the desktop application.
-typeset -a opencode_host_env=()
+typeset -a opencode_host_env=() opencode_operator_env=(/usr/bin/env) opencode_maintenance_args=()
 
 opencode_gui_environment() {
   local shell=${SHELL:-/bin/zsh} entry key fd pid
@@ -196,6 +196,89 @@ opencode_cli_args() {
       managed=1 ;;
     (*) reply=("${prefix[@]}" --standalone "${rest[@]}") ;;
   esac
+}
+
+opencode_is_v2() { [[ $1 == (opencode\ v2.*|2.*|v2.*) ]] }
+
+# MAJOR ARG...: succeeds when ARG... is OpenCode's own updater: upgrade on 1 and
+# 2, update on 2 only (on 1 it opens a project of that name). The command is the
+# first word after the global options and words after -- are data. A help
+# request is not maintenance. The caller's REPLY is left as it was.
+opencode_maintenance() {
+  local major=$1 command arg REPLY
+  integer skip
+  shift
+  opencode_global_skip "$@"
+  skip=$REPLY
+  command=${@[skip+1]:-}
+  [[ $command == upgrade || ( $command == update && $major == 2 ) ]] || return 1
+  for arg in "${@:$(( skip + 2 ))}"; do
+    [[ $arg != -- ]] || break
+    [[ $arg != (--help|-h) ]] || return 1
+  done
+  return 0
+}
+
+# VERSION ARG...: for an OpenCode that runs inside an Agent Guard session, ends
+# with status 2 when ARG... is a maintenance command; VERSION is what
+# `opencode --version` printed.
+opencode_refuse_maintenance() {
+  local major=1
+  opencode_is_v2 "$1" && major=2
+  shift
+  opencode_maintenance $major "$@" || return 0
+  print -ru2 -- 'agent-guard: Updates cannot run from an agent session. Quit the session, then run opencode upgrade in Terminal. Agent Guard may also offer the update at your next launch.'
+  exit 2
+}
+
+# Records the operator's own values of every variable the launcher changes
+# before the session starts (the profile's env_unset and env_set, HOME, PATH,
+# the safety-net level and the rules snapshot) as an env command prefix for
+# opencode_unconfined. Call it before the launcher changes any of them.
+opencode_capture_env() {
+  local name
+  local -a unset_names set_values
+  for name in $env_unset ${env_set%%=*} HOME PATH CC_SAFETY_NET_LEVEL AGENT_GUARD_CONTEXT; do
+    if [[ -v $name ]]; then
+      set_values+=("$name=${(P)name}")
+    else
+      unset_names+=(-u "$name")
+    fi
+  done
+  # env reads its options before the first assignment.
+  opencode_operator_env=(/usr/bin/env "${unset_names[@]}" "${set_values[@]}")
+}
+
+# ARG...: runs the resolved OpenCode ($cli) with ARG... outside the profile, with
+# the operator's environment, and returns its status. The only place OpenCode
+# runs unconfined; callers have established that no sandbox is in effect.
+opencode_unconfined() {
+  "${opencode_operator_env[@]}" "$cli" "$@"
+}
+
+# ARG...: OpenCode's updater, `opencode upgrade ARG...`, unconfined.
+opencode_upgrade() {
+  opencode_unconfined upgrade "$@"
+}
+
+# The command the operator typed, for the runner of ag_update_run, which passes
+# one word.
+opencode_maintenance_run() {
+  opencode_unconfined "${opencode_maintenance_args[@]}"
+}
+
+# ARG...: the maintenance command the operator typed, outside any sandbox. Runs
+# it through the shared runner and exits with its status; no session starts.
+opencode_maintain() {
+  local rc=0
+  # A link on PATH can point into the app.
+  if [[ ${cli:A} == */Contents/Resources/opencode-cli ]]; then
+    fail 'this OpenCode belongs to the OpenCode app and is updated with the app; quit OpenCode, then run brew upgrade --cask opencode-desktop or install the download from opencode.ai'
+  fi
+  opencode_maintenance_args=("$@")
+  print -ru2 -- "Updating OpenCode. The update runs without Agent Guard's protection; your next session will be protected as usual."
+  ag_update_run "$mode" '' opencode_maintenance_run /dev/null OpenCode '' || rc=$?
+  exit $rc
 }
 
 # Classifies `service status` in REPLY: running for one server URL, inactive

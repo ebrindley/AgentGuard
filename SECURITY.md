@@ -260,6 +260,16 @@ behind linked ancestors. These changes follow the 0.2.0 prerelease.
   launcher runs it under that sandbox without Agent Guard's profile, so that
   sandbox's rules confine it, not the Guard List
   ([Inside another sandbox](docs/USAGE.md#inside-another-sandbox)).
+- OpenCode's updater, run by `opencode upgrade` (`opencode update` on OpenCode
+  2) from Terminal at your request. The launcher runs it without Agent Guard's
+  profile, only for that command and only when its `sandbox-exec` probe
+  succeeded. A guarded session cannot reach it: its processes inherit Seatbelt
+  and the probe fails there, and the nested and peer launchers refuse the
+  command. The updater runs your package manager or OpenCode's installer and
+  reads caches and configuration a session can write (`~/.npm`, `~/.cache`,
+  OpenCode's configuration), the exposure this document already accepts for
+  maintenance run outside the guard
+  ([Update the OpenCode CLI](docs/USAGE.md#update-the-opencode-cli)).
 - Work a shared Grok leader runs. Agent Guard covers the Grok process its
   launcher starts, interactive or headless (`grok -p`), with Grok's tools running
   in that process. `grok workspace start` and `grok worker start` run a leader

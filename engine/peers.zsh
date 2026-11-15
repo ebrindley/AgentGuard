@@ -134,8 +134,9 @@ agent_guard_peer() {
         export AGENT_GUARD_OUTER_SANDBOX=1 AGENT_GUARD_BYPASS=1
       fi
       version=$("$target" --version 2>/dev/null) || return 1
-      if [[ $version == (opencode\ v2.*|2.*|v2.*) ]]; then
-        source "$root/profiles/opencode/runtime.zsh"
+      source "$root/profiles/opencode/runtime.zsh"
+      opencode_refuse_maintenance "$version" "${args[@]}"
+      if opencode_is_v2 "$version"; then
         fail() { print -ru2 -- "agent-guard: $*"; exit 2; }
         opencode_cli_args "${args[@]}"
         (( ! managed )) || fail 'run this V2 command from Terminal outside the parent sandbox'

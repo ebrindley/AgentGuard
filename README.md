@@ -107,7 +107,9 @@ catalogs inside its writable cache. Pi/OMP packages and protected settings
 still need outside maintenance. These commands run with your account's full
 authority. Follow the [maintenance procedures](docs/OPERATIONS.md#maintenance-outside-the-guard),
 including the cache checks before installing code. Run `agent-guard doctor`
-after agent updates; an npm update can replace Pi's guarded launcher.
+after agent updates; an npm update can replace Pi's guarded launcher. Update
+the OpenCode CLI with `opencode upgrade` from Terminal
+([how](docs/USAGE.md#update-the-opencode-cli)).
 
 ## Commands and help
 

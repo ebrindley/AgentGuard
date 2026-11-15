@@ -159,6 +159,9 @@ find_app() {
 }
 [[ $mode == find-app ]] && { find_app && print -r -- "$REPLY"; exit }
 
+# OpenCode's updater runs with the operator's own environment, so the values are
+# taken before the changes below.
+[[ $harness != opencode ]] || opencode_capture_env
 # Apply in every mode, including nested launches and check. With no names,
 # export would print the environment.
 unset $env_unset
@@ -171,12 +174,17 @@ unset $env_unset
 # reports for applying a second profile shows another tool's sandbox (decision D10, docs/DESIGN.md section 15); a probe that fails for any
 # other reason takes the normal path and fails there.
 inside=
+# Only a probe that succeeded shows that no sandbox is in effect; OpenCode's
+# maintenance commands run unconfined on that evidence alone.
+integer probe_ok=0
 if ! probe=$(/usr/bin/sandbox-exec -p '(version 1)(allow default)' /usr/bin/true 2>&1); then
   if [[ ${AGENT_GUARD_SANDBOXED:-} == 1 ]]; then
     inside=guard
   elif [[ $probe == *'sandbox_apply: Operation not permitted'* ]]; then
     inside=other
   fi
+else
+  probe_ok=1
 fi
 if [[ -n $inside ]]; then
   if [[ $inside == other ]]; then
@@ -200,7 +208,9 @@ if [[ -n $inside ]]; then
     # This branch already inherits the outer sandbox; a second Seatbelt profile
     # cannot be applied. The version probe must keep that inherited confinement.
     version=$("$cli" --version 2>/dev/null) || fail 'cannot read nested OpenCode version'
-    if [[ $version == (opencode\ v2.*|2.*|v2.*) ]]; then
+    # Another tool's sandbox owns its policy; only a guarded session refuses.
+    [[ $inside != guard ]] || opencode_refuse_maintenance "$version" "$@"
+    if opencode_is_v2 "$version"; then
       managed=0
       opencode_cli_args "$@"
       (( ! managed )) || fail 'run this V2 command from Terminal outside the existing guard'
@@ -895,6 +905,11 @@ case $mode in
         [[ $arg == --attach || $arg == --attach=* ]] && attached=1
       done
       opencode_major "$cli"
+      # The version probe above stays confined. A maintenance command runs
+      # unconfined only when the nesting probe succeeded.
+      if (( probe_ok )) && opencode_maintenance $REPLY "$@"; then
+        opencode_maintain "$@"
+      fi
       if [[ $REPLY == 2 ]]; then
         # This notes an attached client itself.
         opencode_cli_args "$@"
