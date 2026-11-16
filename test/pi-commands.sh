@@ -78,6 +78,11 @@ print -r -- "#!/bin/zsh -f
 print -r -- ${(qq):-NFSHomeDirectory: $home}" > "$run/dscl"
 /bin/chmod 755 "$run/dscl"
 replace_once "$rel/profiles/pi/sandbox/pi-sandbox-preamble.zsh" 'typeset -r DSCL_BIN="/usr/bin/dscl"' "typeset -r DSCL_BIN=${(qq)run}/dscl"
+# The pinned PATH names a folder of the test's own instead of Homebrew's, so the doctor's
+# fd and ripgrep check does not depend on this Mac; the folder starts empty.
+fdbin="$run/fdbin"
+/bin/mkdir -p "$fdbin"
+replace_once "$rel/profiles/pi/sandbox/pi-sandbox-preamble.zsh" 'PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"' "PATH=\"$fdbin:/usr/bin:/bin:/usr/sbin:/sbin\""
 
 # What the installer puts in place.
 /bin/mkdir -p "$lb" "$ext/src"
@@ -420,7 +425,9 @@ for l in 'ok   protected write denied' 'ok   ~/.local/bin/pi matches the release
     'ok   profile self-test of ~/.local/bin/pi-sandbox.sb' \
     "ok   the checker's session copy is built from ~/.cc-safety-net" 'ok   the installed extension allows ls -la' \
     'ok   the installed extension blocks rm -rf /' "ok   the installed extension blocks git config core.hooksPath by Agent Guard's Git rules" \
-    'ok   pi --version through ~/.local/bin/pi: fake pi 1.0.0' 'ok   omp --version through ~/.local/bin/omp: fake omp 2.0.0'; do
+    'ok   pi --version through ~/.local/bin/pi: fake pi 1.0.0' 'ok   omp --version through ~/.local/bin/omp: fake omp 2.0.0' \
+    'warn fd not found by guarded Pi, so its find tool and @ file suggestions will not work; install it from a terminal outside the guard: brew install fd' \
+    'warn ripgrep not found by guarded Pi, so its grep tool will not work; install it from a terminal outside the guard: brew install ripgrep'; do
   outl=(${(f)out})
   (( ${outl[(Ie)$l]} )) && pass "prints: $l" || fail "prints: $l"
 done
@@ -437,6 +444,15 @@ json_is '--json: status.sh fields and every check' "
   and ([.checks[].result] - [\"ok\", \"skip\", \"warn\"]) == []"
 [[ $(/usr/bin/jq -r 'keys_unsorted[0:10] | join(",")' <<< "$out") == guard_present,launchers_present,release_match,guard_release_id,launchers_release_id,runtime_binding,pi_binding,pi_binding_path,omp_binding_path,drift ]] &&
   pass "--json keeps status.sh's field order" || fail "--json keeps status.sh's field order"
+# fd in the agent folder's bin and ripgrep in the pinned PATH's folder.
+runtime "$home/.pi/agent/bin/fd" 'exit 0'
+runtime "$fdbin/rg" 'exit 0'
+doctor_fails 'fd and ripgrep found'
+outl=(${(f)out})
+for l in 'ok   fd found for guarded Pi: ~/.pi/agent/bin/fd' "ok   ripgrep found for guarded Pi: $fdbin/rg"; do
+  (( ${outl[(Ie)$l]} )) && pass "prints: $l" || fail "prints: $l"
+done
+[[ $out != *'warn fd not found'* && $out != *'warn ripgrep not found'* ]] && pass 'no warning when both are found' || fail 'no warning when both are found'
 
 print -r -- '# changed' >> "$lb/omp"
 doctor_fails 'a launcher copy that differs' "~/.local/bin/omp differs from the release's profiles/pi/launchers/pi"
