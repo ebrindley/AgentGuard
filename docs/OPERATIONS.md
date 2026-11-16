@@ -666,6 +666,14 @@ loaded; `/reload` loads the extension now on disk.
   - `pi --version` and `omp --version`, run from a scratch project in the temp
     folder, because Pi refuses home as a project. A runtime that is not
     installed is skipped and named.
+  - with `pi --version` working, whether guarded Pi finds `fd` and `rg`: in
+    `~/.pi/agent/bin`, then in the directories of the launcher's pinned PATH
+    (`/opt/homebrew/bin`, `/usr/local/bin` and the system directories), not the
+    PATH of the shell that runs `doctor`. A missing tool is a `warn` line that
+    names what stops working; it is not `FAIL` or drift and does not change
+    `doctor`'s exit status or its `--json` `ok`. A `PI_CODING_AGENT_DIR` that a
+    wrapper sets only in Pi's environment is not seen. The remedy is under
+    [Running Pi or OMP without the guard](#running-pi-or-omp-without-the-guard).
 
   The OpenCode lookup starts `zsh -l -i` with a clean environment and your home
   and asks which `opencode` it finds. It passes when that is Agent Guard's
@@ -935,10 +943,23 @@ Inside the guard these writes are denied, and a package missing at start or at
 inside a session, because `auth.json` is write-protected; pi-sandbox-guard
 behaves the same.
 
-Pi's global `bin` and legacy `tools` folders are also write-protected. If `rg`
-or `fd` is missing, run the real Pi executable outside the guard to let it
-download the tool, then restart guarded Pi. A guarded session cannot perform
-that download and may continue without the missing tool.
+Pi's global `bin` and legacy `tools` folders are also write-protected. Pi needs
+`fd` for its `find` tool and `@` file suggestions and `rg` (ripgrep) for its
+`grep` tool. It looks for each in `<agent folder>/bin`, then on PATH (`fd`, then
+`fdfind`; `rg`), and otherwise downloads it into that `bin`. A guarded session
+cannot perform the download, and Pi does not attempt it when `PI_OFFLINE` is
+set, so Pi continues without the tool and its `find` or `grep` calls fail.
+
+To fix it, install the tool with a package manager from a plain Terminal outside
+the guard (`brew install fd`, `brew install ripgrep`). A guarded shell cannot
+write to Homebrew's prefix, and the launcher's pinned PATH includes
+`/opt/homebrew/bin` and `/usr/local/bin`, so a restarted guarded Pi finds it.
+Running the real Pi executable outside the guard also downloads the tool, but into
+the `bin` of the agent folder that Pi uses: `~/.pi/agent` unless
+`PI_CODING_AGENT_DIR` is set. A session that uses a different agent folder does
+not see that copy, and nothing is downloaded when `PI_OFFLINE` is set.
+`agent-guard doctor` prints a `warn` line for each of the two that guarded Pi
+would not find.
 
 An update of a Pi installed with npm's prefix at `~/.local` can put npm's `pi`
 back in `~/.local/bin` in place of the launcher; `pi` then starts Pi unguarded.

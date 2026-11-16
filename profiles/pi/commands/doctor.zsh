@@ -45,7 +45,7 @@ pi_doctor() {
   local p rel rt label rec out err want sum sev work darwin_temp l rid= rg= rl= match=absent copy= sdir=
   local -a names lines wnames
   local -A where
-  integer json=0 failed=0 drift=0 guard_present=0 launchers_present=0 rc
+  integer json=0 failed=0 drift=0 guard_present=0 launchers_present=0 pi_runs=0 rc
   typeset -ga pi_lines
   pi_lines=()
   [[ ${1:-} == --json ]] && json=1
@@ -226,6 +226,7 @@ pi_doctor() {
       elif (( rc == 0 )); then
         lines=(${(f)out})
         pi_doctor_say "ok   $rt --version through ~/.local/bin/$rt: ${lines[1]:-no output}"
+        [[ $rt == pi ]] && pi_runs=1
       elif [[ -z $rec && $err == *"cannot auto-resolve the real $label executable"* ]]; then
         pi_doctor_say "skip $rt --version: no $label binding and no $label CLI found"
       elif [[ $err == *'no longer usable'* ]]; then
@@ -236,6 +237,7 @@ pi_doctor() {
         pi_doctor_say "FAIL $rt --version through ~/.local/bin/$rt exited $rc: $(pi_doctor_reason "$err" $rc 20)"
       fi
     done
+    (( pi_runs )) && pi_doctor_helpers
     /bin/rm -rf -- "$work"
   fi
 
@@ -276,6 +278,44 @@ pi_doctor_resolves() {
   elif [[ $r == /* && ${r:A} == ${p:A} ]]; then pi_doctor_say "ok   $1 resolves to $2 in a login shell ($r)"
   else pi_doctor_say "FAIL $1 resolves to $r in a login shell, not to $2; put ~/.local/bin before the real binaries in PATH"
   fi
+}
+
+# pi_doctor_helpers: whether guarded Pi finds fd and ripgrep, which its find and grep
+# tools and @ file suggestions need. The guard write-denies Pi's bin folder and a
+# session cannot download them, so a missing one is a warning, never drift or a
+# failure. Pi looks in <agent folder>/bin, then on the PATH the preamble pins; this
+# reads that PATH from the installed preamble instead of repeating it, and checks the
+# default agent folder, since a relocated PI_CODING_AGENT_DIR is set only in Pi's
+# environment.
+pi_doctor_helpers() {
+  local pre="$bin/pi-sandbox-preamble.zsh" l
+  local -a dirs match mbegin mend
+  [[ -f $pre ]] && for l in "${(@f)$(<$pre)}"; do
+    [[ $l == (#b)'PATH="'(/[^\"\$]##)'"' ]] && { dirs=(${(s/:/)match[1]}); break }
+  done
+  if (( ! $#dirs )); then
+    pi_doctor_say "skip fd and ripgrep not checked: no pinned PATH found in ${pre/#$home/~}"
+    return
+  fi
+  pi_doctor_helper fd "its find tool and @ file suggestions" fd fdfind
+  pi_doctor_helper ripgrep "its grep tool" rg
+}
+
+# pi_doctor_helper WHAT NEEDED NAME...: the first executable file among the agent
+# folder's bin/NAME (the first NAME only) and NAME in each of dirs (from
+# pi_doctor_helpers), in the order Pi tries them. The remedy's formula is WHAT.
+pi_doctor_helper() {
+  local what=$1 needed=$2 n c
+  local -a cands=("$home/.pi/agent/bin/$3")
+  shift 2
+  for n in $@; do cands+=(${^dirs}/$n); done
+  for c in $cands; do
+    if [[ -f $c && -x $c ]]; then
+      pi_doctor_say "ok   $what found for guarded Pi: ${c/#$home/~}"
+      return
+    fi
+  done
+  pi_doctor_say "warn $what not found by guarded Pi, so $needed will not work; install it from a terminal outside the guard: brew install $what"
 }
 
 # pi_doctor_reason OUTPUT STATUS LIMIT: the last "Error:" line of OUTPUT, else its
