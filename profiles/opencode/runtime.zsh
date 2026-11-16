@@ -292,9 +292,13 @@ opencode_warn_shadow() {
 
 # ARG...: OpenCode's updater, `opencode ARG...`, unconfined, then the PATH check
 # above. Returns the updater's status whatever it was. The explicit command and
-# the launch-time offer both run it.
+# the launch-time offer both run it. For a Homebrew installation the updater runs
+# `brew upgrade`, and Homebrew refreshes its formula list once a day by default:
+# from an older list the upgrade installs nothing and still succeeds, so the
+# updater's Homebrew is told to refresh first.
 opencode_updater() {
   local rc=0
+  local -x HOMEBREW_AUTO_UPDATE_SECS=1
   opencode_unconfined "$@" || rc=$?
   opencode_warn_shadow
   return $rc

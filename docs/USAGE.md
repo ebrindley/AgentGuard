@@ -161,7 +161,11 @@ OpenCode's own updater can update. Other installations, prereleases and other
 majors do not get it; `opencode upgrade` still works for them, because it runs
 OpenCode's own updater for whatever installed it. For a Homebrew installation
 that updater runs `brew upgrade` on the formula; Agent Guard never runs `brew`
-itself, and Homebrew is not needed for any other installation. The `opencode`
+itself, and Homebrew is not needed for any other installation. Agent Guard sets
+`HOMEBREW_AUTO_UPDATE_SECS=1` for the updater, so Homebrew refreshes its formula
+list before it upgrades; with `HOMEBREW_NO_AUTO_UPDATE` set it does not, and an
+upgrade from an old list installs nothing. Run `brew update` first in that
+case. The `opencode`
 formula in Homebrew's core can trail the `opencode-v2` formula in
 `anomalyco/tap`, so its offer appears once Homebrew has the release.
 
