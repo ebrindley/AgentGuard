@@ -195,7 +195,8 @@ the first entry. The second is the offer made when the launch starts an
 interactive session (`opencode` or `opencode <project>`, not attached, no
 subcommand), asked on the operator's terminal before the sandbox is applied and
 run only after the operator answers yes. The offer adds one input: an HTTPS
-request to OpenCode's update service, whose JSON reply is parsed for a version
+request to OpenCode's update service (or, for Homebrew's `opencode` formula,
+Homebrew's formula index at `formulae.brew.sh`), whose JSON reply is parsed for a version
 of three numeric components that is passed to the updater as one literal
 argument; the reply is never executed. A guarded session cannot reach either
 entry: its processes inherit Seatbelt, so the probe fails there, and the nested

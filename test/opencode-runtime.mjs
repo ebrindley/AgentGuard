@@ -172,10 +172,11 @@ for (const [major, args, expected] of [
 {
   // The updater gets the operator's values of what the launcher changes for a
   // session, the way opencode_upgrade runs it; nothing set afterwards leaks in.
+  // Its Homebrew is told to refresh the formula list.
   const dir = mkdtempSync(join(tmpdir(), "agentguard-runtime-"))
   try {
     const cli = join(dir, "opencode")
-    writeFileSync(cli, `#!/bin/sh\nprintf '%s\\n' "\${FIXTURE_SET:--}" "\${FIXTURE_UNSET:--}" "\${FIXTURE_SSH:--}" "\${AGENT_GUARD_CONTEXT:--}" "$PATH" "$HOME" "$@"\nexit 3\n`)
+    writeFileSync(cli, `#!/bin/sh\nprintf '%s\\n' "\${FIXTURE_SET:--}" "\${FIXTURE_UNSET:--}" "\${FIXTURE_SSH:--}" "\${AGENT_GUARD_CONTEXT:--}" "$PATH" "$HOME" "\${HOMEBREW_AUTO_UPDATE_SECS:--}" "$@"\nexit 3\n`)
     chmodSync(cli, 0o755)
     const result = spawnSync("/bin/zsh", ["-fc", `
       setopt err_exit no_unset pipe_fail extended_glob
@@ -194,7 +195,7 @@ for (const [major, args, expected] of [
       print -r -- "status $rc"
     `, "runtime", join(root, "profiles/opencode/runtime.zsh"), cli], { encoding: "utf8", env: { PATH: "/usr/bin:/bin", HOME: "/operator-home" } })
     assert.equal(result.status, 0, result.stderr)
-    assert.deepEqual(result.stdout.trimEnd().split("\n"), ["operator", "operator", "-", "-", "/usr/bin:/bin", "/operator-home", "upgrade", "1.2.3", "status 3"])
+    assert.deepEqual(result.stdout.trimEnd().split("\n"), ["operator", "operator", "-", "-", "/usr/bin:/bin", "/operator-home", "1", "upgrade", "1.2.3", "status 3"])
   } finally { rmSync(dir, { recursive: true, force: true }) }
 }
 

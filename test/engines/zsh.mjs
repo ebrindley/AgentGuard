@@ -44,11 +44,13 @@ export function layout(tree, engine, rid = '0.0.0-20260101T000000Z') {
 }
 
 // Points the lookup addresses in file (profiles/opencode/update.zsh) at the server
-// at url: the CLI feed, the desktop feed and the address its archives must start with.
+// at url: the CLI feeds (npm, Homebrew tap and formula index), the desktop feed and the address its archives must start with.
 // Homebrew is looked for under $home/homebrew only, so a Homebrew on the test Mac
 // does not change the update routes.
 export function opencodeUpdateSeams(file, url) {
   replaceOnce(file, seams.opencodeUpdateUrl, `url=${quote(`${url}/opencode-update`)}`);
+  replaceOnce(file, seams.opencodeTapUrl, `url=${quote(`${url}/opencode-tap-update`)}`);
+  replaceOnce(file, seams.opencodeFormulaUrl, `url=${quote(`${url}/opencode-formula`)}`);
   replaceOnce(file, seams.opencodeDesktopUrl, `url=${quote(`${url}/opencode-desktop-update`)}`);
   replaceOnce(file, seams.opencodeDesktopOrigin, `origin=${quote(`${url}/`)}`);
   replaceOnce(file, seams.opencodeBrewPrefixes, 'local -a prefixes=("$home/homebrew")');
@@ -92,6 +94,8 @@ const seams = {
   updateRepo: "local repo='https://github.com/ebrindley/AgentGuard'",
   updateProto: "local -a curl_proto=(--proto '=https' --proto-redir '=https')",
   opencodeUpdateUrl: "url='https://opencode.ai/update/api/latest/cli/npm'",
+  opencodeTapUrl: "url='https://opencode.ai/update/api/latest/cli/homebrew'",
+  opencodeFormulaUrl: "url='https://formulae.brew.sh/api/formula/opencode.json'",
   opencodeDesktopUrl: "url='https://opencode.ai/update/api/latest/desktop/opencode'",
   opencodeDesktopOrigin: "origin='https://opencode.ai/'",
   opencodeBrewPrefixes: 'local -a prefixes=(/opt/homebrew /usr/local)',

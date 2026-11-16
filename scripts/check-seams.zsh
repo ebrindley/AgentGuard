@@ -43,6 +43,8 @@ once "$tree/engine/updates.zsh" "local -a curl_proto=(--proto '=https' --proto-r
 # OpenCode's release lookup addresses, and the address a desktop archive must
 # start with, which a test copy points at a local server.
 once "$tree/profiles/opencode/update.zsh" "url='https://opencode.ai/update/api/latest/cli/npm'"
+once "$tree/profiles/opencode/update.zsh" "url='https://opencode.ai/update/api/latest/cli/homebrew'"
+once "$tree/profiles/opencode/update.zsh" "url='https://formulae.brew.sh/api/formula/opencode.json'"
 once "$tree/profiles/opencode/update.zsh" "url='https://opencode.ai/update/api/latest/desktop/opencode'"
 once "$tree/profiles/opencode/update.zsh" "origin='https://opencode.ai/'"
 # Where the update routes look for Homebrew.

@@ -555,9 +555,15 @@ version requests, or an attached client), only in the terminal launcher and
 only when the nesting probe succeeded, so nested launches, peer wrappers and
 another tool's sandbox never reach it. The desktop launch has its own offer,
 described below. In this release the installation must be OpenCode 2 started
-from the opencode.ai installer's `~/.opencode/bin/opencode` or from an npm
-global install not owned by Volta or mise, at a stable version; the offered
-version is the service's latest stable one and never another major. The offer
+from the opencode.ai installer's `~/.opencode/bin/opencode`, from an npm
+global install not owned by Volta or mise, or from a Homebrew Cellar folder of
+the `opencode` or `opencode-v2` formula, at a stable version; the offered
+version is the latest stable one and never another major. The latest version
+comes from OpenCode's update service (its npm feed, or its Homebrew feed for
+`opencode-v2`) or, for the `opencode` formula, from the `versions.stable` field
+of `https://formulae.brew.sh/api/formula/opencode.json`, which can trail the
+tap. Accepting runs OpenCode's own updater, which runs `brew upgrade` for a
+Homebrew installation; Agent Guard does not run `brew`. The offer
 comes after Agent Guard's own; the two prompts are separate. Each lookup has its
 own two-second limit, so a launch can wait up to about four seconds when both
 are slow; nothing is stored, and every eligible launch looks again.
@@ -690,8 +696,9 @@ loaded; `/reload` loads the extension now on disk.
   checks that decide the launch offers. When Agent Guard offers nothing, the line
   gives the reason and the way to update by hand:
   - CLI: `Agent Guard does not offer updates because it was installed by
-    Homebrew. To update, run opencode upgrade in Terminal, outside a session.`
-    The reason is `it was installed by Homebrew`, `Volta` or `mise`, `it was
+    Volta. To update, run opencode upgrade in Terminal, outside a session.`
+    The reason is `it was installed by Homebrew` (a formula other than
+    `opencode` and `opencode-v2`, or a cask), `Volta` or `mise`, `it was
     installed another way`, `it is OpenCode 1` or `it is a prerelease`.
   - The CLI inside the app: `This OpenCode belongs to the OpenCode app and is
     updated with the app.` followed by the app's route. The explicit `opencode
