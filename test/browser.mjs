@@ -184,6 +184,45 @@ assert.equal(messages.filter(x => x.title === 'Provider connected').length, 2)
 cleanup()
 console.log('ok GUI commands: existing OAuth API supplies browser URLs and completion')
 
+for (const settleOld of [
+  ({ resolve }) => resolve({ data: { status: 'complete' } }),
+  ({ reject }) => reject(new Error('old status request failed')),
+]) {
+  const pending = [], waiting = [], outcomes = [], cancelled = []
+  let connectChatGPT, nextID = 0
+  const dispose = definition.setup({
+    main: () => ({ open: async () => {}, cancelClaude: async () => {} }),
+    client: { integration: { oauth: {
+      connect: async () => ({ data: { mode: 'auto', attemptID: String(++nextID), url: 'https://provider.test/openai' } }),
+      status: () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
+      cancel: async ({ attemptID }) => { cancelled.push(attemptID) },
+    } } },
+    add: (_, command) => { if (command.id === 'connect-openai') connectChatGPT = command.run },
+    toast: { show: message => {
+      if (message.actions) waiting.push(message)
+      if (['success', 'error'].includes(message.variant)) outcomes.push(message.title)
+      return { dismiss() {} }
+    } },
+  })
+  const first = connectChatGPT()
+  await new Promise(setImmediate)
+  assert.equal(pending.length, 1)
+  await waiting[0].actions[0].run()
+  const retry = connectChatGPT()
+  await new Promise(setImmediate)
+  assert.equal(pending.length, 2)
+  await waiting[0].actions[0].run()
+  settleOld(pending[0])
+  await first
+  assert.deepEqual(cancelled, ['1'])
+  assert.deepEqual(outcomes, [])
+  pending[1].resolve({ data: { status: 'complete' } })
+  await retry
+  assert.deepEqual(outcomes, ['Provider connected'])
+  dispose()
+}
+console.log('ok GUI OAuth retries ignore status and cancel actions from cancelled attempts')
+
 const lifecycle = join(run, 'browser.zsh')
 writeFileSync(lifecycle, readFileSync(join(source, '../browser.zsh'), 'utf8')
   .replace('/usr/bin/osascript -l JavaScript "$profile_dir/browser/default-browser.js"', `/usr/bin/printf %s ${quote(app)}`))
