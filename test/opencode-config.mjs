@@ -379,6 +379,40 @@ assert.match(shadowed, /another opencode comes first in a new terminal window/)
 assert.match(shadowed, /a new terminal window starts .*\/\.opencode\/bin\/opencode, not Agent Guard's opencode/)
 assert.match(shadowed, /^FAIL opencode in a new terminal window resolves to .*\/\.opencode\/bin\/opencode, not Agent Guard's launcher; run agent-guard update$\n^status 1$/m)
 assert.match(shadowed, /^warn opencode in a new terminal window resolves to .*\/\.opencode\/bin\/opencode, not Agent Guard's launcher; run agent-guard update$\n^gate status 0$/m)
+for (const [kind, definition] of [
+  ["alias", `alias opencode='print -r -- lookup-private-body > "$HOME/lookup-ran"'`],
+  ["function", 'opencode() { print -r -- lookup-private-body > "$HOME/lookup-ran"; }'],
+]) {
+  writeFileSync(join(activation.home, '.zshrc'), block + definition + '\n')
+  const { stdout, stderr } = shell(activation, `
+    unset ZDOTDIR
+    app="$home/Applications/Agent Guard.app"
+    marker_start='# >>> agent-guard >>>' marker_end='# <<< agent-guard <<<'
+    ag_h_opencode_report
+    print -rl -- "\${ag_warnings[@]}"
+    ag_h_opencode_doctor "$engine/current"; print "status $?"
+    AGENT_GUARD_GATE=1 ag_h_opencode_doctor "$engine/current"; print "gate status $?"
+    ag_rc_line "$home/.zshrc"
+    ag_rc_misplaced "$home/.zshrc" "$REPLY"; print "misplaced status $?"
+  `)
+  assert.match(stdout, new RegExp(`a new terminal window resolves opencode to a shell ${kind}`))
+  assert.match(stdout, new RegExp(`^FAIL opencode in a new terminal window resolves to a shell ${kind}; check your shell startup files$\\n^status 1$`, 'm'))
+  assert.match(stdout, new RegExp(`^warn opencode in a new terminal window resolves to a shell ${kind}; check your shell startup files$\\n^gate status 0$`, 'm'))
+  assert.match(stdout, /^misplaced status 1$/m)
+  assert.doesNotMatch(stdout + stderr, /lookup-private-body|new terminal windows run opencode inside the guard/)
+  assert.equal(existsSync(join(activation.home, 'lookup-ran')), false)
+}
+writeFileSync(join(activation.home, '.zshrc'), 'setopt err_exit\npath=(/usr/bin /bin)\n')
+const missing = shell(activation, `
+  unset ZDOTDIR
+  app="$home/Applications/Agent Guard.app"
+  ag_h_opencode_report
+  ag_h_opencode_doctor "$engine/current"
+`).stdout
+assert.match(missing, /^PATH: opencode was not found in a new terminal window$/m)
+assert.match(missing, /^skip opencode in a new terminal window: not found$/m)
+assert.doesNotMatch(missing, /new terminal windows run opencode inside the guard/)
+
 const tree = join(assembled.home, "tree")
 mkdirSync(tree)
 for (const name of ["engine", "profiles", "installer", "LICENSE", "install.sh"]) cpSync(join(root, name), join(tree, name), { recursive: true })

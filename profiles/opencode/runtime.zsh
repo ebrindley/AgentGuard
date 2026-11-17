@@ -295,14 +295,17 @@ opencode_unconfined() {
   "${opencode_operator_env[@]}" "$cli" "$@"
 }
 
-# Warns on stderr when a new terminal window would now start an opencode other
-# than Agent Guard's launcher, as OpenCode's own installer does by adding
-# ~/.opencode/bin to the end of .zshrc. Changes no status. lookup.zsh is loaded
-# here because only an upgrade needs it.
+# Warns on stderr when a new terminal window would resolve opencode to another
+# executable or to a shell definition. lookup.zsh is loaded only for the upgrade.
 opencode_warn_shadow() {
   source "$release/lookup.zsh" || return 0
-  ag_opencode_shadowed || return 0
-  print -ru2 -- "agent-guard: new terminal windows will start ${REPLY/#$home/~}, not Agent Guard's opencode, so OpenCode runs there without protection. Run agent-guard update to fix it."
+  ag_opencode_path_warning
+  [[ -z $REPLY ]] || return 0
+  ag_shell_resolve opencode -l -i
+  case $? in
+    (1) print -ru2 -- "agent-guard: new terminal windows will start ${REPLY/#$home/~}, not Agent Guard's opencode, so OpenCode runs there without protection. Run agent-guard update to fix it." ;;
+    (3) print -ru2 -- "agent-guard: new terminal windows resolve opencode to $REPLY. Check your shell startup files." ;;
+  esac
 }
 
 # ARG...: OpenCode's updater, `opencode ARG...`, unconfined, then the PATH check

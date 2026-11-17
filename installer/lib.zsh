@@ -1227,11 +1227,10 @@ ag_rc_ends() {  # FILE LINE: the complete block with LINE is the last thing in F
   [[ $(/usr/bin/tail -n 3 -- "$1") == "$marker_start"$'\n'"$2"$'\n'"$marker_end" ]]
 }
 
-# True when zsh startup file FILE holds the complete block somewhere before its
-# end and a new terminal does not run the guarded opencode (ag_opencode_shadowed):
-# something added after the block put another opencode ahead of it.
+# True when zsh startup file FILE holds the complete block before its end and a
+# new terminal finds another opencode executable ahead of Agent Guard's on PATH.
 ag_rc_misplaced() {  # FILE LINE
-  [[ $1 != *bash_profile && -f $1 ]] && ag_rc_has "$1" "$2" && ! ag_rc_ends "$1" "$2" && ag_opencode_shadowed
+  [[ $1 != *bash_profile && -f $1 ]] && ag_rc_has "$1" "$2" && ! ag_rc_ends "$1" "$2" && ag_opencode_path_shadowed
 }
 
 # True when FILE holds an older guard's start marker.
@@ -1318,15 +1317,22 @@ ag_switch() {
 }
 
 # ag_shell_lookup NAME LABEL REMEDY [SHELL-OPTIONS...]: the doctor line for
-# ag_shell_resolve. Returns 1 for a FAIL line, which ends with REMEDY.
+# ag_shell_resolve. Returns 1 for a FAIL line. A shell definition is a warning
+# during installation because changing the launcher does not change the definition.
 ag_shell_lookup() {
-  local name=$1 label=$2 remedy=$3
+  local name=$1 label=$2 remedy=$3 level=FAIL
   shift 3
   ag_shell_resolve "$name" "$@"
   case $? in
     (0) print -r -- "ok   $name in $label resolves to ${REPLY/#$home/~}, Agent Guard's launcher" ;;
     (1) print -r -- "FAIL $name in $label resolves to ${REPLY/#$home/~}, not Agent Guard's launcher; $remedy"; return 1 ;;
-    (*) print -r -- "skip $name in $label: not found" ;;
+    (2) print -r -- "skip $name in $label: not found" ;;
+    (3)
+      [[ -n ${AGENT_GUARD_GATE:-} ]] && level=warn
+      print -r -- "$level $name in $label resolves to $REPLY; check your shell startup files"
+      [[ $level == warn ]]
+      ;;
+    (*) print -r -- "skip $name in $label: shell lookup did not complete" ;;
   esac
 }
 

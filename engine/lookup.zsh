@@ -24,21 +24,40 @@ ag_bounded() {
   wait $pid
 }
 
-# ag_shell_resolve NAME [SHELL-OPTIONS...]: which executable zsh finds for NAME in
-# a clean environment with this account's home, as a new terminal window would
-# (-l -i). REPLY = its path. Returns 0 when that is Agent Guard's launcher (a
-# release's bin/NAME, reached through the current link), 1 when it is another
-# file, and 2 when there is none. The answer is read from a tagged line, because
-# startup and logout files may print lines of their own.
+# ag_shell_resolve NAME [SHELL-OPTIONS...]: resolve NAME as a clean zsh with
+# this account's home would (-l -i for a new terminal). Status 0 is Agent Guard's
+# launcher, 1 a different executable (REPLY is the path), 2 a missing name,
+# 3 a shell definition (REPLY describes its kind), and 4 a failed lookup.
+# A tagged line distinguishes the answer from startup and logout output.
 ag_shell_resolve() {
-  local name=$1 p tag='agent-guard-lookup:'
+  local name=$1 output tag='agent-guard-lookup:' result
   local -a found
   shift
-  p=$(ag_bounded 20 /usr/bin/env -i "HOME=$home" "PATH=/usr/bin:/bin:/usr/sbin:/sbin" /bin/zsh "$@" -c "print -r -- \"$tag\$(whence -p ${(q)name})\"" 2>/dev/null </dev/null)
-  found=(${(M)${(@f)p}:#$tag*})
-  REPLY=${${found[-1]:-}#$tag}
-  [[ -n $REPLY ]] || return 2
-  [[ ${REPLY:A} == "$engine"/releases/*/bin/$name ]]
+  REPLY=
+  output=$(ag_bounded 20 /usr/bin/env -i "HOME=$home" "PATH=/usr/bin:/bin:/usr/sbin:/sbin" /bin/zsh "$@" -c '
+    description=$(\builtin \whence -w -- "$1") || [[ -n $description ]] || exit 1
+    kind=${description##*: }
+    case $kind in
+      (command|hashed)
+        resolved=$(\builtin \whence -- "$1") || exit 1
+        [[ $resolved == /* ]] || resolved="$PWD/$resolved"
+        \builtin \print -r -- "${2}path:$resolved"
+        ;;
+      (alias|function|builtin|reserved|none) \builtin \print -r -- "$2$kind" ;;
+    esac
+  ' agent-guard-lookup "$name" "$tag" 2>/dev/null </dev/null) || return 4
+  found=(${(M)${(@f)output}:#$tag*})
+  result=${${found[-1]:-}#$tag}
+  case $result in
+    (path:*) REPLY=${result#path:}; [[ ${REPLY:A} == "$engine"/releases/*/bin/$name ]]; return ;;
+    (alias) REPLY='a shell alias' ;;
+    (function) REPLY='a shell function' ;;
+    (builtin) REPLY='a shell builtin' ;;
+    (reserved) REPLY='a reserved word' ;;
+    (none) return 2 ;;
+    (*) return 4 ;;
+  esac
+  return 3
 }
 
 # REPLY = the warning for a ZDOTDIR outside the home, whose startup files a new
@@ -50,11 +69,9 @@ ag_opencode_path_warning() {
   REPLY+='export PATH="$HOME/Library/Application Support/AgentGuard/bin:$PATH"'
 }
 
-# True when a new terminal window starts an opencode other than Agent Guard's
-# launcher, as a startup file that adds ~/.opencode/bin after Agent Guard's block
-# does. With ZDOTDIR elsewhere the lookup would not read the files it asks about,
-# and the warning above covers activation instead.
-ag_opencode_shadowed() {
+# True when a new terminal window resolves opencode to a different executable
+# on PATH. This is the shadowing the installer can fix by moving its PATH block.
+ag_opencode_path_shadowed() {
   ag_opencode_path_warning
   [[ -z $REPLY ]] || return 1
   ag_shell_resolve opencode -l -i

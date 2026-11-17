@@ -107,11 +107,18 @@ ag version
 
 label=update
 grok_state > "$run/state.1"
+print -r -- 'alias grok=/usr/bin/true' > "$home/.zlogin"
 boot v0.0.2
 rc=$?
-(( rc == 0 )) && pass 'updated (exit 0)' || { fail "update (exit $rc)"; show; finish }
+(( rc == 0 )) && /usr/bin/grep -qF 'warn grok in a new terminal window resolves to a shell alias' "$run/out" &&
+  pass 'update succeeds and warns about the shell alias' || { fail "update (exit $rc)"; show; finish }
 [[ $(grok_state) == "$(<"$run/state.1")" ]] && pass 'link, record and replaced link are unchanged' || fail "state changed: $(grok_state)"
 [[ $("$lb/grok" --version) == 'grok 1.0.0' ]] && pass 'grok still runs' || fail 'grok after update'
+ag doctor
+rc=$?
+(( rc != 0 )) && /usr/bin/grep -qF 'FAIL grok in a new terminal window resolves to a shell alias' "$run/out" &&
+  pass 'standalone doctor fails on the shell alias' || { fail "doctor with a shell alias (exit $rc)"; show }
+/bin/rm -- "$home/.zlogin"
 
 label=drift
 /bin/rm "$lb/grok"
