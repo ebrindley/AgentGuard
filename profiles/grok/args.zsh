@@ -9,7 +9,7 @@
 grok_args() {
   emulate -L zsh
   setopt no_unset extended_glob
-  local h=${home:-$HOME} arg prev= pending= id= saved= f real=${home:-$HOME}/.grok/bin/grok
+  local h=${home:-$HOME} arg prev= pending= id= saved= cwd=$PWD f real=${home:-$HOME}/.grok/bin/grok
   integer literal=0 resume=0 cont=0
   # Options that take a value in Grok's --help (-w and -r take an optional one).
   local value_options='--add-dir|--agent|--agents|--allow|--allowedTools|--allowed-tools|--cwd|--debug-file|--deny|--disallowedTools|--disallowed-tools|--json-schema|--leader-socket|-m|--model|--max-turns|--output-format|-p|--prompt|--single|--permission-mode|--prompt-file|--prompt-json|--reasoning-effort|--effort|--rules|-s|--session-id|--system-prompt|--system-prompt-override|--tools|--ref|--worktree-ref|-w|--worktree'
@@ -47,7 +47,10 @@ grok_args() {
         # The value of an option that takes one is data, whatever it says; an
         # argument that starts with a dash is still read as an option.
         pending=
-        if [[ $arg != -* ]]; then out+=("$arg"); prev=$arg; continue; fi ;;
+        if [[ $arg != -* ]]; then
+          [[ $prev != --cwd ]] || cwd=$arg
+          out+=("$arg"); prev=$arg; continue
+        fi ;;
     esac
     # A subcommand can follow global options, so every argument before -- that is
     # not the value of an option from grok --help is checked, and one that equals a
@@ -66,6 +69,7 @@ grok_args() {
       (--) literal=1; out+=("$arg") ;;
       (--sandbox) pending=sandbox ;;
       (${~value_options}) pending=value; out+=("$arg") ;;
+      (--cwd=*) cwd=${arg#*=}; out+=("$arg") ;;
       (--sandbox=*)
         [[ ${arg#*=} == off ]] || { REPLY="Grok cannot apply the sandbox profile '${arg#*=}' inside Agent Guard"; return 1 } ;;
       (--leader)
@@ -82,7 +86,8 @@ grok_args() {
   if (( resume && ${#id} )) && [[ $id == [0-9a-fA-F]##-[0-9a-fA-F-]## ]]; then
     found=("$h"/.grok/sessions/*/$id/summary.json(N[1]))
   elif (( cont )); then
-    found=("$h/.grok/sessions/$(/usr/bin/jq -rn --arg p "${PWD:A}" '$p | @uri')"/*/summary.json(Nom[1]))
+    # Grok keys sessions by the canonical working directory, including --cwd.
+    found=("$h/.grok/sessions/$(/usr/bin/jq -rn --arg p "${${cwd:-$PWD}:P}" '$p | @uri')"/*/summary.json(Nom[1]))
   fi
   (( $#found )) && saved=$(/usr/bin/jq -r '.sandbox_profile // empty' "${found[1]}" 2>/dev/null) || saved=
   if [[ -n $saved && $saved != off ]]; then
