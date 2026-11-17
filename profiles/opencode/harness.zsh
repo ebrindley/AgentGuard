@@ -17,6 +17,7 @@ protected_names=()
 protected_fragment=protected.sb
 state_hook=opencode_state_roots
 start_hook=opencode_project_arg
+no_project_hook=opencode_no_project
 gui_args=(--no-sandbox)
 credential_paths=("$home"/{.ssh,.gnupg,.aws,.git-credentials,.netrc,.npmrc,.secrets,.docker/config.json,.kube/config,.config/git/credentials})
 if [[ ${AGENT_GUARD_AWS_AUTH:-} == allow ]]; then
