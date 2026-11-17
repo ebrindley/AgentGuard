@@ -1,4 +1,4 @@
-import { closeSync, constants, existsSync, fstatSync, ftruncateSync, lstatSync, openSync, readFileSync, realpathSync, unlinkSync, writeSync } from "node:fs"
+import { closeSync, constants, existsSync, fstatSync, lstatSync, openSync, readFileSync, readSync, realpathSync, renameSync, unlinkSync, writeFileSync } from "node:fs"
 import { basename, dirname, join, resolve } from "node:path"
 import { homedir, tmpdir } from "node:os"
 import { randomBytes } from "node:crypto"
@@ -60,30 +60,76 @@ function sanitizedEvent(event) {
 
 // Advisory support evidence, never an enforcement input. Existing writable log
 // permissions suffice; failing to retain an observation cannot change a verdict.
-function recordEvent(fields) {
+const EVENT_LOGS = join(HOME, ".cc-safety-net/logs")
+const EVENT_LOG = join(EVENT_LOGS, "agent-guard-events.json")
+const EVENT_OPEN = constants.O_NOFOLLOW | constants.O_NONBLOCK
+// Darwin's sys/fcntl.h. Node does not expose this flag in fs.constants.
+const O_EXLOCK = 0x20
+const EVENT_LIMIT = 32
+const EVENT_BYTES = 65536
+let pendingEvents = [], eventRetry
+
+function readEvents() {
   let fd
   try {
-    const file = join(HOME, ".cc-safety-net/logs/agent-guard-events.json")
-    fd = openSync(file, constants.O_CREAT | constants.O_RDWR | constants.O_NOFOLLOW | constants.O_NONBLOCK, 0o600)
-    const info = fstatSync(fd)
-    if (!info.isFile()) return
-    let events = []
-    if (info.size <= 65536) {
-      try {
-        const previous = JSON.parse(readFileSync(fd, "utf8"))
-        if (previous.schemaVersion === 1 && previous.advisory === true && Array.isArray(previous.events))
-          events = previous.events.slice(-31).map(sanitizedEvent).filter(Boolean)
-      } catch { /* Discard invalid advisory history and retain this observation. */ }
-    }
-    const event = sanitizedEvent({ timestamp: Date.now(), tool: "other", ruleId: "unattributed", errno: "unknown", release: RELEASE ? basename(RELEASE) : null, ...fields })
-    if (event) {
-      const text = JSON.stringify({ schemaVersion: 1, advisory: true, events: [...events, event] }) + "\n"
-      writeSync(fd, text, 0, "utf8")
-      ftruncateSync(fd, Buffer.byteLength(text))
-    }
-  } catch {} finally {
-    if (fd !== undefined) { try { closeSync(fd) } catch {} }
+    fd = openSync(EVENT_LOG, constants.O_RDONLY | EVENT_OPEN)
+  } catch (error) {
+    if (error.code === "ENOENT") return []
+    throw error
   }
+  try {
+    const info = fstatSync(fd)
+    if (!info.isFile() || info.nlink !== 1) throw new Error("Invalid advisory event file")
+    if (info.size > EVENT_BYTES) return []
+    const buffer = Buffer.alloc(EVENT_BYTES + 1)
+    const bytes = readSync(fd, buffer, 0, buffer.length, 0)
+    if (bytes > EVENT_BYTES) return []
+    try {
+      const previous = JSON.parse(buffer.toString("utf8", 0, bytes))
+      if (previous.schemaVersion === 1 && previous.advisory === true && Array.isArray(previous.events))
+        return previous.events.slice(-EVENT_LIMIT).map(sanitizedEvent).filter(Boolean)
+    } catch { /* Discard invalid advisory history and retain future observations. */ }
+    return []
+  } finally { closeSync(fd) }
+}
+
+function flushEvents(retries = 8) {
+  eventRetry = undefined
+  let lock
+  try {
+    if (realpathSync(EVENT_LOGS) !== EVENT_LOGS || !lstatSync(EVENT_LOGS).isDirectory()) return
+    try {
+      // Keep the same lock inode across log replacements. The kernel releases
+      // the lock when this descriptor closes, including after process exit.
+      lock = openSync(`${EVENT_LOG}.lock`, EVENT_OPEN | constants.O_CREAT | constants.O_RDWR | O_EXLOCK, 0o600)
+    } catch (error) {
+      if (retries > 0 && ["EAGAIN", "EWOULDBLOCK"].includes(error.code))
+        eventRetry = setTimeout(() => flushEvents(retries - 1), 25)
+      return
+    }
+    const info = fstatSync(lock)
+    if (!info.isFile() || info.nlink !== 1) return
+    const events = [...readEvents(), ...pendingEvents].slice(-EVENT_LIMIT)
+    const next = `${EVENT_LOG}.next`
+    // Reuse one staging name even after a crash. Unlink removes only that entry.
+    try { unlinkSync(next) } catch (error) { if (error.code !== "ENOENT") throw error }
+    const fd = openSync(next, EVENT_OPEN | constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600)
+    try { writeFileSync(fd, JSON.stringify({ schemaVersion: 1, advisory: true, events }) + "\n") }
+    finally { closeSync(fd) }
+    renameSync(next, EVENT_LOG)
+  } catch {} finally {
+    if (lock !== undefined) { try { closeSync(lock) } catch {} }
+    if (!eventRetry) pendingEvents = []
+  }
+}
+
+function recordEvent(fields) {
+  if (process.platform !== "darwin") return
+  const event = sanitizedEvent({ timestamp: Date.now(), tool: "other", ruleId: "unattributed", errno: "unknown", release: RELEASE ? basename(RELEASE) : null, ...fields })
+  if (!event) return
+  pendingEvents.push(event)
+  if (pendingEvents.length > EVENT_LIMIT) pendingEvents.shift()
+  if (!eventRetry) flushEvents()
 }
 
 // The release folder this file really lives in, whatever link OpenCode loaded it

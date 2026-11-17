@@ -4,7 +4,8 @@ import os from 'node:os';
 import { syncBuiltinESMExports } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { once } from 'node:events';
 
 // Fault injection stays in this disposable-home fixture. It observes readiness
 // and refusal behavior without launching OpenCode or invoking a model.
@@ -273,6 +274,31 @@ if (ready) {
     assert.equal(fs.readFileSync(target, 'utf8'), 'preserve this file\n', 'advisory logging must not overwrite a symlink target');
     assert.equal(fs.lstatSync(eventFile).isSymbolicLink(), true);
     fs.unlinkSync(eventFile);
+    if (host === 'v1') {
+      await assert.rejects(before({ tool: 'read' }, { args: { filePath: denied } }), /DENY list/);
+      const prior = fs.readFileSync(eventFile, 'utf8');
+      const holder = spawn(process.execPath, ['-e', `
+        const fs = require('node:fs');
+        fs.openSync(process.argv[1], fs.constants.O_RDWR | 0x20);
+        process.stdout.write('locked');
+        process.stdin.resume();
+      `, `${eventFile}.lock`], { stdio: ['pipe', 'pipe', 'inherit'] });
+      const closed = once(holder, 'close');
+      try {
+        const ready = await Promise.race([once(holder.stdout, 'data').then(([chunk]) => String(chunk)), closed]);
+        assert.equal(ready, 'locked');
+        await assert.rejects(before({ tool: 'write' }, { args: { filePath: protectedFile } }), /protected/);
+        assert.equal(fs.readFileSync(eventFile, 'utf8'), prior, 'a busy writer must leave committed history intact');
+      } finally {
+        holder.stdin.end();
+        await closed;
+      }
+      for (let retry = 0; retry < 50 && fs.readFileSync(eventFile, 'utf8') === prior; retry++)
+        await new Promise(resolve => setTimeout(resolve, 10));
+      const retained = JSON.parse(fs.readFileSync(eventFile, 'utf8')).events;
+      assert.deepEqual(retained.slice(0, -1), JSON.parse(prior).events);
+      assert.equal(retained.at(-1).ruleId, 'guard.path.protected');
+    }
   }
   // Event retention must remain bounded after repeated refusals.
   for (let count = 0; count < 35; count++)
