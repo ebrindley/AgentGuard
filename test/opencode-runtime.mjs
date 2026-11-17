@@ -679,6 +679,7 @@ exit 7
         r = launch(null, ["cli"], onPath, "y\n")
         assert.equal(r.status, 1, r.stderr)
         assert.match(r.stderr, new RegExp(`the OpenCode update did not install the version offered: expected 2\\.4\\.0, found ${mode === "other" ? "2\\.9\\.9" : "2\\.3\\.0"}\\.`))
+        assert.doesNotMatch(r.stderr, /updated to/)
         assert.equal(session(), null, mode)
       }
       console.log("ok launch cli stops when the OpenCode update fails or does not install the offered version")
