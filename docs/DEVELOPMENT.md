@@ -124,10 +124,12 @@ review and required checks pass, use GitHub's protected squash merge for the
 reviewed head SHA. Native auto-merge is unavailable; merge normally after the
 required check passes. Set the squash subject to `<PR title> (#<number>)` and
 the body to blank, matching GitHub's `PR_TITLE` and `BLANK` defaults. Inspect the
-exact subject and body before merging. `script/land <pr-number>` applies that
-rule: it builds the subject from the title, checks it with `script/check-subject`
-and merges at the reviewed head with an empty body. It refuses when a local
-branch of the pull request's name holds commits the pull request lacks. The
+exact subject and body before merging. Pass the full commit SHA from the review
+to `script/land <pr-number> <reviewed-head-sha>`. The script checks that the pull
+request still has that head, builds the subject from the title, checks it with
+`script/check-subject` and merges at the reviewed head with an empty body. It
+refuses when a local branch of the pull request's name holds commits the pull
+request lacks. The
 `tests` check runs the same subject check on the pull request title. Local gate execution is useful for
 focused development, but is not required in addition to the hosted gate.
 
