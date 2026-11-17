@@ -131,6 +131,19 @@ assert.equal(launch(['--resume', offId]).status, 0);
 assert.equal(launch(['--resume', '--yolo']).status, 0);
 ok('resuming a session saved with a native profile is refused; a session saved with off resumes');
 
+const projects = dirname(project);
+mk(join(home, 'elsewhere'));
+symlinkSync('app', join(projects, 'app link'));
+for (const args of [['--continue', '--cwd', project], ['--cwd=./app link', '-c']]) {
+  const r = launch(args, {}, projects);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stderr, /saved with the sandbox profile 'workspace'/);
+}
+assert.equal(launch(['--continue', '--cwd', '../../elsewhere']).status, 0);
+assert.equal(launch(['--continue', '--', '--cwd', project], {}, projects).status, 0);
+assert.equal(launch(['--continue', '--cwd=./app', '--', '--cwd=../elsewhere'], {}, projects).status, 1);
+ok('continue checks the canonical --cwd directory and leaves arguments after -- untouched');
+
 // Writes: what Grok authors stays writable, protection and executable surfaces do not.
 const writable = [join(grok, 'skills/new/SKILL.md'), join(grok, 'agents/a.md'), join(grok, 'workflows/w.js'), join(grok, 'AGENTS.md'),
   join(grok, 'plugins/p/index.js'), join(grok, 'installed-plugins/p'), join(grok, 'marketplace-cache/m'), join(grok, 'memory/m.md'),
