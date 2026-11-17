@@ -114,9 +114,10 @@ ag_h_opencode_procs() {
   REPLY='Quit the OpenCode app and every opencode in a terminal'
 }
 
-# P7: the staged release's own check (design section 4.1).
+# P7: the staged release's own check (design section 4.1), from a scratch project
+# because @project resolves from the folder the check runs in.
 ag_h_opencode_staged() {
-  AGENT_GUARD_GATE=1 ag_run_check 'FAIL check staged' "$engine/releases/$ag_rid_new/launch" check staged
+  AGENT_GUARD_GATE=1 ag_run_check 'FAIL check staged' ag_scratch_run "$engine/releases/$ag_rid_new/launch" check staged
 }
 
 ag_h_opencode_gate() { ag_launch_check "$engine/bin/opencode" bin/opencode }
@@ -125,7 +126,7 @@ ag_launch_check() {  # COMMAND LABEL
   local out log="$list_dir/last-launch-opencode.log" first=
   integer rc
   /bin/rm -f -- "$log"
-  out=$(ag_bounded 20 "$1" --version 2>&1)
+  out=$(ag_scratch_run ag_bounded 20 "$1" --version 2>&1)
   rc=$?
   [[ -r $log ]] && first=$(/usr/bin/head -1 -- "$log")
   if (( rc != 0 && rc != 124 )) && [[ $out == *'agent-guard: opencode not found'* ]]; then
@@ -159,13 +160,13 @@ ag_h_opencode_doctor() {
   fi
   if [[ ${2:-} != --json ]]; then
     [[ -z $warning ]] || print -r -- "warn $warning"
-    "$1/launch" check
+    ag_scratch_run "$1/launch" check
     rc=$?
     [[ -z $found ]] || print -r -- "$found"
     [[ $found != FAIL* ]] || rc=1
     return $rc
   fi
-  out=$("$1/launch" check 2>&1)
+  out=$(ag_scratch_run "$1/launch" check 2>&1)
   rc=$?
   reply=("${(@f)out}") REPLY='{}'
   [[ -z $warning ]] || reply+=("warn $warning")

@@ -511,9 +511,8 @@ ag_h_pi_gate() {
   local rt label temp work out err
   local -a lines errs
   integer rc
-  temp=${$(/usr/bin/getconf DARWIN_USER_TEMP_DIR):A}
-  work=$(/usr/bin/mktemp -d "$temp/agent-guard-gate.XXXXXX") || { ag_failed+=("FAIL cannot create a folder in $temp"); return }
-  /bin/mkdir -p -- "$work/project"
+  ag_scratch_dir || { ag_failed+=("FAIL cannot create a folder in $REPLY"); return }
+  work=$REPLY temp=${REPLY:h}
   for rt label in pi Pi omp OMP; do
     out=$(ag_pi_clean_env; cd "$work/project" && ag_bounded 20 /usr/bin/env "PI_PROJECT=$work/project" "TMPDIR=$temp/" "$engine/bin/$rt" --version 2>"$work/$rt.err")
     rc=$?
