@@ -132,7 +132,7 @@ agent_guard_bootstrap() {
   /bin/mkdir -p -m 700 -- "$stage/dl" "$stage/tree" || die "cannot create $stage"
   for f in $a $a.sha256; do
     url="$repo/releases/download/$tag/$f"
-    /usr/bin/curl -q -fsSL $curl_proto -o "$stage/dl/$f" -- "$url" || die "download failed (curl $?): $url"
+    /usr/bin/curl -q -fsSL $curl_proto --connect-timeout 30 --speed-limit 1024 --speed-time 60 -o "$stage/dl/$f" -- "$url" || die "download failed (curl $?): $url"
   done
   test_point after-download || die "stopped at after-download"
 

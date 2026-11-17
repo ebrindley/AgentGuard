@@ -167,6 +167,22 @@ decided=$( (
 save A
 snapshot "$home" > "$run/A.snapshot"
 
+# --- --projects on a regular Guard List, then on one that is a link into dotfiles
+# (mode 600): the link stays, and its target gets the entry and keeps its mode.
+label=P6
+/bin/mkdir -p "$home/Projects/one" "$home/Projects/two"
+boot v0.0.1 --projects "$home/Projects/one"
+[[ $? == 0 && -f $list && ! -L $list ]] && /usr/bin/grep -Fxq "$home/Projects/one" "$list" &&
+  pass 'a regular Guard List gains the entry and stays a regular file' || { fail 'a regular Guard List gains the entry'; show }
+/bin/mv "$list" "$home/dotfiles/guard-list.txt" && /bin/chmod 600 "$home/dotfiles/guard-list.txt" &&
+  /bin/ln -s "$home/dotfiles/guard-list.txt" "$list"
+boot v0.0.1 --projects "$home/Projects/two"
+[[ $? == 0 && -L $list && $(/usr/bin/readlink "$list") == "$home/dotfiles/guard-list.txt" ]] &&
+  /usr/bin/grep -Fxq "$home/Projects/two" "$home/dotfiles/guard-list.txt" &&
+  /usr/bin/grep -Fxq "$home/Projects/one" "$home/dotfiles/guard-list.txt" &&
+  [[ $(/usr/bin/stat -f %Lp "$home/dotfiles/guard-list.txt") == 600 && ! -e "$list.tmp" ]] &&
+  pass 'a symlinked Guard List stays a link; its target gets the entry and keeps mode 600' || { fail 'a symlinked Guard List stays a link'; show }
+
 # --- B5 (design A10): the bootstrap's stage survives the installer's recovery; a
 # rerun after a kill there, or after the bootstrap's last point, installs.
 label=B5

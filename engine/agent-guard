@@ -175,7 +175,7 @@ update() {
   # Forwarders at OpenCode Guard's old command paths go after the first boot that
   # follows the switch, also when the install is current.
   ag_maintenance
-  text=$(/usr/bin/curl -q -fsSL $curl_proto -- "$url")
+  text=$(/usr/bin/curl -q -fsSL $curl_proto --connect-timeout 30 --speed-limit 1024 --speed-time 60 -- "$url")
   rc=$?
   (( rc == 0 )) || { ag_unlock; die "download failed (curl $rc): $url" }
   lines=("${(@f)text}")

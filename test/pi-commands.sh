@@ -460,7 +460,17 @@ done
 
 print -r -- '# changed' >> "$lb/omp"
 doctor_fails 'a launcher copy that differs' "~/.local/bin/omp differs from the release's profiles/pi/launchers/pi"
+repair='note to repair, run the installer for the installed release again from a terminal outside the guard: /bin/zsh -c "$(/usr/bin/curl -fsSL https://github.com/ebrindley/AgentGuard/releases/download/v0.2.0/install.sh)"'
+move='note ~/.local/bin/omp is the OMP executable itself, and the installer refuses it: move it out of ~/.local/bin first, and after the installer record its new path with: agent-guard bind --omp PATH'
+[[ $out == *"$repair"* ]] && pass 'drift names the installer for the installed tag' || fail 'drift names the installer for the installed tag'
+[[ $out != *'executable itself'* ]] && pass 'a launcher copy needs no move' || fail 'a launcher copy needs no move'
 json_is '--json: a differing file is drift' '.drift == 1 and .ok == false and .runtime_binding == "ok"'
+# A real executable at the launcher path: the installer refuses it, so the move comes first.
+/bin/cp "$lb/omp" "$run/omp.guard"
+runtime "$lb/omp" 'print -r -- "fake omp 2.0.0"'
+doctor_fails 'a real executable at the launcher path' "~/.local/bin/omp differs from the release's profiles/pi/launchers/pi"
+[[ $out == *"$repair"* && $out == *"$move"* ]] && pass 'it names the move, bind and the installer' || fail 'it names the move, bind and the installer'
+/bin/mv "$run/omp.guard" "$lb/omp"
 /bin/cp "$rel/profiles/pi/launchers/pi" "$lb/omp"
 /bin/rm "$rel/bin/pi"
 /bin/ln -s "$rel/profiles/pi/launchers/pi" "$rel/bin/pi"
