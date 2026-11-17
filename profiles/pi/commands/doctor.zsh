@@ -72,6 +72,7 @@ pi_doctor() {
     else pi_doctor_say "FAIL ${p/#$home/~} does not link to ~/.local/bin/$rt" drift
     fi
   done
+  (( drift )) && pi_doctor_remedy
   # check-path.sh: each entry point and each recorded wrapper resolves to its copy
   # in ~/.local/bin in a login shell, asked once for all names. This also catches an
   # npm update that puts a real pi back in ~/.local/bin.
@@ -266,6 +267,23 @@ pi_doctor_say() {
     [[ ${2:-} == drift ]] && drift=1
   fi
   return 0
+}
+
+# pi_doctor_remedy: note lines for drifted installed files or links. The repair is
+# the installer for the installed release, run again. The installer refuses a Pi or
+# OMP executable at its launcher path (ag_pi_entries_check), so each one there is
+# named with the move that comes first.
+pi_doctor_remedy() {
+  local rt label p tag cmd=
+  for rt label in pi Pi omp OMP; do
+    p="$bin/$rt"
+    [[ -f $p && ! -L $p ]] && ! ag_pi_is_guard "$p" &&
+      pi_doctor_say "note ${p/#$home/~} is the $label executable itself, and the installer refuses it: move it out of ~/.local/bin first, and after the installer record its new path with: agent-guard bind --$rt PATH"
+  done
+  tag=$(/usr/bin/jq -r '.tag // empty' "$engine/state/stamp.json" 2>/dev/null)
+  [[ $tag == v[0-9A-Za-z.+-]## ]] &&
+    cmd=": /bin/zsh -c \"\$(/usr/bin/curl -fsSL https://github.com/ebrindley/AgentGuard/releases/download/$tag/install.sh)\""
+  pi_doctor_say "note to repair, run the installer for the installed release again from a terminal outside the guard$cmd"
 }
 
 # pi_doctor_resolves NAME WHAT: NAME resolved to ~/.local/bin/NAME in the login
