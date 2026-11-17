@@ -540,6 +540,8 @@ folder for a later launch.
   Open With. Several folders can be dropped at once. The launcher takes each as
   given (no Git top-level lookup), applies the refusals above, and adds it to the
   store only when the launch goes ahead.
+- If the stored projects change while the app is preparing to launch, open
+  Agent Guard again to use the current list.
 - The first time you open the app with `@project` on and no remembered folder, a
   chooser asks for one. Cancel quits without launching. Later opens launch
   without a prompt.

@@ -274,12 +274,18 @@ if [[ ${1:-} == app-projects ]]; then
   store="$engine/state/opencode/app-projects"
   typeset -a lines keep
   typeset p l
-  [[ ! -r $store ]] || lines=(${(f)"$(<"$store")"})
+  source "$release/profiles/opencode/runtime.zsh" || die 'cannot load OpenCode runtime helpers'
   if (( ! $# )); then
+    opencode_app_projects_read "$store" || die "cannot read $store"
+    lines=(${(f)REPLY})
     (( $#lines )) && print -rl -- $lines || print -ru2 -- 'agent-guard: no app projects are remembered'
     exit 0
   fi
   [[ $1 == remove && $# == 2 && -n $2 ]] || usage
+  [[ -d ${store:h} ]] || die "not an app project: $2"
+  opencode_app_projects_lock "$store" || die "cannot lock $store"
+  opencode_app_projects_read "$store" || die "cannot read $store"
+  lines=(${(f)REPLY})
   # The entry as stored, else the path as typed resolved to its canonical form.
   for p in $2 ${2:A}; do
     keep=()

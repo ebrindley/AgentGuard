@@ -64,6 +64,18 @@ try {
   const text = readFileSync(join(source, 'engine/launch'), 'utf8');
   assert.equal(text.split('/usr/bin/osascript').length, 2);
   writeFileSync(join(source, 'engine/launch'), text.replace('/usr/bin/osascript', '/usr/bin/true'));
+  const runtime = join(source, 'profiles/opencode/runtime.zsh');
+  const desktopEnv = 'opencode_gui_environment() {';
+  writeFileSync(runtime, readFileSync(runtime, 'utf8').replace(desktopEnv, `${desktopEnv}
+    if [[ -n \${FAKE_APP_PROJECT_PAUSE:-} ]]; then
+      : > "$FAKE_APP_PROJECT_PAUSE/paused"
+      local i
+      for i in {1..100}; do
+        [[ -f $FAKE_APP_PROJECT_PAUSE/resume ]] && break
+        /bin/sleep 0.05
+      done
+      [[ -f $FAKE_APP_PROJECT_PAUSE/resume ]] || fail 'timed out waiting for the fixture to resume'
+    fi`));
   layout(source, engine);
   // A CLI that reports what a launch lets it write, then exits.
   writeFileSync(join(bin, 'opencode'), `#!/bin/sh
@@ -593,6 +605,42 @@ case "$1" in --version) echo 2.0.0 ;; service) echo http://127.0.0.1:1 ;; esac
   assert.equal(manage('remove').status, 2);
   assert.equal(manage('add', other).status, 2);
   console.log('ok   agent-guard app-projects lists the store and removes an entry as stored or as typed');
+
+  for (const mode of ['unmanaged', 'managed']) {
+    const gate = join(scratch, `app-projects-${mode}`);
+    mkdirSync(gate);
+    if (mode === 'managed') {
+      const bundledCLI = join(appDir, 'Resources/opencode-cli');
+      mkdirSync(dirname(bundledCLI), { recursive: true });
+      writeFileSync(bundledCLI, `#!/bin/sh
+[ "$1" = --version ] && { echo 2.3.0; exit 0; }
+: > "$FAKE_APP_PROJECT_PAUSE/service"
+echo stopped
+`, { mode: 0o755 });
+    }
+    setStore(other);
+    writeFileSync(list, ALLOW('@project'));
+    const out = join(gate, 'client');
+    const child = spawn('/bin/zsh', [...launcher(engine).slice(1), 'gui', '--project', sibling], {
+      cwd: app, env: { PATH: `${bin}:/usr/bin:/bin:/usr/sbin:/sbin`, HOME: home, TMPDIR: temp, PWD: app,
+        FAKE_OUT: out, FAKE_STORE: store, FAKE_APP_PROJECT_PAUSE: gate },
+    });
+    let stderr = '';
+    child.stderr.on('data', data => { stderr += data; });
+    const closed = new Promise(resolve => child.once('close', resolve));
+    try {
+      for (let i = 0; i < 100 && !existsSync(join(gate, 'paused')); i++) await new Promise(resolve => setTimeout(resolve, 50));
+      assert.ok(existsSync(join(gate, 'paused')), `${mode}: launch did not reach the fixture pause`);
+      const removal = manage('remove', other);
+      assert.equal(removal.status, 0, removal.stderr);
+    } finally { writeFileSync(join(gate, 'resume'), ''); }
+    assert.equal(await closed, 1, stderr);
+    assert.match(stderr, /The remembered app projects changed during launch/);
+    assert.equal(stored(), '');
+    assert.ok(!existsSync(out), `${mode}: stale app started`);
+    assert.ok(!existsSync(join(gate, 'service')), `${mode}: stale service started`);
+  }
+  console.log('ok   a project removed during desktop startup prevents a stale app or service from starting');
 
   // Real Seatbelt: writes inside @project, nowhere else; concurrent launches stay apart.
   const probes = [app, P('Projects/app/src'), other, P('Projects/sibling'), P('Projects/plain')];

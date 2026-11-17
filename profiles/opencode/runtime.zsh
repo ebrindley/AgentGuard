@@ -2,6 +2,23 @@
 # launcher's sandbox, including the CLI bundled with the desktop application.
 typeset -a opencode_host_env=() opencode_operator_env=(/usr/bin/env) opencode_maintenance_args=()
 
+# Serialize the Desktop launcher's final check and store update with removals.
+# This descriptor closes on exec and the kernel releases it if a writer exits.
+opencode_app_projects_lock() {
+  local lock="$1.lock" fd
+  [[ ! -L $lock && ( ! -e $lock || -f $lock ) ]] || return 1
+  zmodload zsh/system && { : >> "$lock" && zsystem flock -t 10 -f fd "$lock"; } || return 1
+  REPLY=$fd
+}
+
+opencode_app_projects_read() {
+  REPLY=
+  [[ ! -L $1 ]] || return 1
+  [[ -e $1 ]] || return 0
+  [[ -f $1 && -r $1 ]] || return 1
+  REPLY=$(<"$1")
+}
+
 opencode_gui_environment() {
   local shell=${SHELL:-/bin/zsh} entry key fd pid
   local -a entries shell_args=(-lic)
@@ -402,6 +419,7 @@ opencode_managed() {
     $sandbox "$@" <&$input_fd &
   fi
   opencode_client_pid=$!
+  [[ $mode != gui ]] || unlock_app_projects
   exec {input_fd}<&-
   opencode_client_exited
   wait $opencode_server_pid || true
