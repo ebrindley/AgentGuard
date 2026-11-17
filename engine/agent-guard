@@ -4,7 +4,31 @@ emulate -L zsh
 setopt no_unset pipe_fail extended_glob
 
 die() { print -ru2 -- "agent-guard: $*"; exit 1 }
-usage() { print -ru2 -- 'usage: agent-guard doctor|diagnose [--json]|version|update [--check|--to TAG] [--no-prompt] [--restore-edit-permissions] [--approval-preference auto|host]|update-check [on|off]|uninstall|bind [OPTIONS]|wrapper add|remove|list|app-projects [remove PATH]'; exit 2 }
+
+# Each command as its usage syntax, a tab and its help line. The usage message
+# joins the syntaxes; help prints the first word of each with its help line.
+typeset -a cmds=(
+  $'doctor\tCheck installed components; note warnings and skips'
+  $'diagnose [--json]\tCollect sanitized installation and failure observations (--json prints JSON)'
+  $'version\tShow the installed release and recorded file changes'
+  $'update [--check|--to TAG] [--no-prompt] [--restore-edit-permissions] [--approval-preference auto|host]\tInstall the latest stable release (--check only checks; --to TAG installs that tag)'
+  $'update-check [on|off]\tShow or change startup update checks'
+  $'uninstall\tRemove the guard; retain ~/Agent Guard'
+  $'bind [OPTIONS]\tRecord the Pi, OMP and Node executables the Pi launcher runs'
+  $'wrapper add|remove|list\tInstall, remove or list custom Pi wrappers'
+  $'app-projects [remove PATH]\tList or forget the folders @project grants OpenCode Desktop'
+)
+usage() { print -ru2 -- "usage: agent-guard ${(j:|:)${(@)cmds%%$'\t'*}}"; exit 2 }
+help() {
+  local c s
+  print -r -- 'usage: agent-guard COMMAND'$'\n'$'\n''Commands:'
+  for c in $cmds; do
+    s=${c%%$'\t'*}
+    print -r -- "  ${(r:14:)${s%% *}}${c#*$'\t'}"
+  done
+  exit 0
+}
+[[ $# == 1 && $1 == (--help|-h|help) ]] && help
 
 # This file is bin/agent-guard inside a release folder. Only a folder shaped like
 # one is trusted to supply the account lookup; after it, the release must be a
@@ -151,7 +175,7 @@ update() {
   # Forwarders at OpenCode Guard's old command paths go after the first boot that
   # follows the switch, also when the install is current.
   ag_maintenance
-  text=$(/usr/bin/curl -q -fsSL $curl_proto -- "$url")
+  text=$(/usr/bin/curl -q -fsSL $curl_proto --connect-timeout 30 --speed-limit 1024 --speed-time 60 -- "$url")
   rc=$?
   (( rc == 0 )) || { ag_unlock; die "download failed (curl $rc): $url" }
   lines=("${(@f)text}")

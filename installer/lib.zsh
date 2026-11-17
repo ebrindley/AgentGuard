@@ -931,7 +931,8 @@ ag_build() {
 }
 
 # P6: the template list only when none exists; --projects adds an ALLOW entry
-# through a temporary file and a rename.
+# through a temporary file and a rename; a symlinked list goes through replace_file
+# so it stays a link.
 ag_list_step() {
   local listed partial="$list_dir/.Guard List.txt.partial"
   /bin/mkdir -p -- "$list_dir" || return 1
@@ -951,10 +952,13 @@ ag_list_step() {
       END { print f["DENY"] ? "DENY" : f["READ ONLY"] ? "READ ONLY" : f["ALLOW"] ? "ALLOW" : done ? "added" : "" }' "$list") ||
       { /bin/rm -f -- "$list.tmp"; return 1 }
     if [[ $listed == added ]]; then
-      /bin/mv -f -- "$list.tmp" "$list" || return 1
-    else
-      /bin/rm -f -- "$list.tmp"
+      if [[ -L $list ]]; then
+        replace_file "$list" "$list.tmp" || { /bin/rm -f -- "$list.tmp"; return 1 }
+      else
+        /bin/mv -f -- "$list.tmp" "$list" || return 1
+      fi
     fi
+    /bin/rm -f -- "$list.tmp"
     case $listed in
       (ALLOW|added) ag_say "allowed: $ag_projects" ;;
       ('') ag_err "no ALLOW heading in $list; add $ag_projects under ALLOW yourself"; return 1 ;;

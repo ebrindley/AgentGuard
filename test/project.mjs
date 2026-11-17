@@ -250,6 +250,30 @@ exit 0
   rmSync(join(engine, 'state/stamp.json'));
   console.log('ok   a too broad, sensitive, guard-containing or protected @project refuses the launch and is logged');
 
+  // A command that exits without a session has no project: from home it is not refused and gets
+  // no project grant. A help or version flag counts only as the last argument, since a later value
+  // can turn it off (`run --help false`). Anything that can start a session keeps the refusal.
+  const withList = { cwd: home, text: ALLOW('@project', P('Projects/sibling')) };
+  const withoutList = { cwd: home, text: ALLOW(P('Projects/sibling')) };
+  for (const args of [['--help'], ['-h'], ['--version'], ['-v'], ['run', '--help'], ['run', 'x', '--help'], ['--model', '--help'], ['run', 'x', '-v'], ['--pure', 'upgrade'], ['upgrade'], ['upgrade', '--help']]) {
+    const r = profile(args, withList);
+    assert.match(logText(), /skipped @project, the command starts no session/, args.join(' '));
+    assert.doesNotMatch(logText(), /@project resolves to/, args.join(' '));
+    assert.equal(r.stdout, profile(args, withoutList).stdout, `${args.join(' ')}: a project was granted`);
+  }
+  refuse('a session from home', [], /@project is too broad/, { cwd: home });
+  refuse('a session with options from home', ['--print-logs'], /@project is too broad/, { cwd: home });
+  refuse('run from home', ['run', 'hello'], /@project is too broad/, { cwd: home });
+  refuse('serve from home', ['serve'], /@project is too broad/, { cwd: home });
+  refuse('update from home', ['update'], /@project is too broad/, { cwd: home });
+  refuse('help after --', ['run', '--', '--help'], /@project is too broad/, { cwd: home });
+  refuse('help as an option value', ['--prompt=--help'], /@project is too broad/, { cwd: home });
+  refuse('help that is not the last argument', ['--help', 'run'], /@project is too broad/, { cwd: home });
+  refuse('help turned off by a later value', ['run', '--help', 'false', 'hello'], /@project is too broad/, { cwd: home });
+  same('help turned off by a later value, project named', ['run', '--dir', other, '--help', 'false', 'hello'], other, { cwd: home });
+  same('version turned off by a later value, project named', ['run', '--dir', other, '--version', 'false', 'hello'], other, { cwd: home });
+  console.log('ok   a trailing help or version flag and upgrade need no project from home; sessions, run, serve and update are still refused');
+
   // `..` through a link: OpenCode 1 and 2 disagree, so the launch is refused.
   symlinkSync(P('Projects/app/src/deep'), P('Projects/deeplink'));
   const viaLink = launch('profile', ['../other'], { cwd: P('Projects/deeplink'), env: { PWD: P('Projects/deeplink') }, text: ALLOW('@project') });

@@ -138,6 +138,21 @@ opencode_project_arg() {
   opencode_browser_needed=1
 }
 
+# ARG...: succeeds when OpenCode exits on ARG... without starting a session, so
+# @project has nothing to resolve: --help, -h, --version or -v as the last
+# argument with no -- before it, or upgrade after the global options. The flag
+# must be last because OpenCode 1 (yargs) lets a later value turn it off, as in
+# `run --help false "task"`, which runs the session; nothing can follow the last
+# argument. upgrade is a command of its own whatever follows it. update is left
+# out: it is the updater on OpenCode 2 only, and the major version is not known
+# when @project resolves. An empty opencode_project_arg result is not a reason
+# to succeed here.
+opencode_no_project() {
+  local REPLY
+  [[ ${argv[-1]:-} == (--help|-h|--version|-v) && ${argv[(Ie)--]} == 0 ]] && return 0
+  opencode_maintenance 1 "$@"
+}
+
 # ARG...: succeeds when ARG... starts an interactive session of OpenCode's own,
 # `opencode` or `opencode <project>`: no subcommand and no server to attach to.
 # It reads ARG... as opencode_project_arg does, so the two cannot disagree about
