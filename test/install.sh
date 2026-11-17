@@ -540,6 +540,24 @@ rc=$?
 [[ $(<"$cfg") == "$original" ]] || /usr/bin/jq -e --argjson o "$original" '. == $o' "$cfg" >/dev/null && pass 'permissions restored' || fail 'permissions restored'
 snapshot "$home" > "$run/uninstalled.snapshot"
 
+# A valid block followed by a stray marker must leave the whole file intact.
+label='malformed startup blocks'
+for marker in '# >>> agent-guard >>>' '# <<< agent-guard <<<'; do
+  restore A
+  printf '\n%s\nexport EDITOR=emacs\n' "$marker" >> "$home/.zshrc"
+  before=$(sha "$home/.zshrc")
+  point= boot v0.0.1
+  rc=$?
+  (( rc != 0 )) && /usr/bin/grep -qF "$home/.zshrc has unbalanced or misordered PATH block markers" "$out" &&
+    [[ $(sha "$home/.zshrc") == "$before" ]] && pass "install preserves .zshrc with a stray $marker" ||
+    { fail "install with a stray $marker (exit $rc)"; show }
+  point= ag uninstall
+  rc=$?
+  (( rc != 0 )) && /usr/bin/grep -qF "$home/.zshrc has unbalanced or misordered PATH block markers" "$out" &&
+    [[ -L $home/.zshrc && $(sha "$home/.zshrc") == "$before" ]] && pass "uninstall preserves .zshrc with a stray $marker" ||
+    { fail "uninstall with a stray $marker (exit $rc)"; show }
+done
+
 # --- X7: a record entry without wrote (an interrupted OpenCode Guard install) and
 # a config whose bash key the user deleted: uninstall leaves the config as it is.
 label=X7
