@@ -69,7 +69,7 @@ const run = (body, input = '') => new Promise((done, reject) => {
   const child = spawn('/bin/zsh', ['-fc', `setopt no_unset extended_glob; home=${quote(home)}; engine=${quote(engine)}; source ${quote(module)}; source ${quote(join(root, 'profiles/opencode/runtime.zsh'))}; source ${quote(opencodeModule)}; ${body}`], { cwd: temp });
   let stdout = '', stderr = '';
   child.stdout.on('data', (b) => { stdout += b; }); child.stderr.on('data', (b) => { stderr += b; });
-  child.on('error', reject); child.on('close', (status) => done({ status, stdout, stderr })); child.stdin.end(input);
+  child.on('error', reject); child.on('close', (status, signal) => done({ status, signal, stdout, stderr })); child.stdin.end(input);
 });
 const executable = (path, text) => writeFileSync(path, '#!/bin/zsh -f\n' + text, { mode: 0o755 });
 const startup = (mode = 'gui', args = '', input = '') => run(`ag_update_startup ${mode} OpenCode ${quote(join(temp, 'restart'))} ${args}; exit $?`, input);
@@ -531,24 +531,29 @@ try {
       unchanged(before, name);
     }
   });
-  const moves = (failing) => { // a mv that fails on the calls numbered in failing
-    const counter = join(temp, 'mv-count'); writeFileSync(counter, '0');
-    executable(join(temp, 'mv'), `n=$(( $(<${quote(counter)}) + 1 )); print -r -- $n > ${quote(counter)}\n[[ ",${failing}," == *",$n,"* ]] && exit 1\nexec /bin/mv "$@"\n`);
-    writeFileSync(join(temp, 'update-mv.zsh'), readFileSync(opencodeModule, 'utf8').replaceAll('/bin/mv', quote(join(temp, 'mv'))));
-    return `source ${quote(join(temp, 'update-mv.zsh'))}`;
-  };
-  await check('a failed second move puts the old app back, and an old app that cannot be put back is kept', async () => {
-    publish('2.4.0'); let before = installApp();
-    const r = await desktop(moves('2'));
-    assert.equal(r.stdout, 'status 1\n'); assert.match(readFileSync(appLog, 'utf8'), /^OpenCode update stopped: cannot move the new OpenCode\.app into place/);
+  await check('a failed atomic exchange leaves the installed app in place', async () => {
+    publish('2.4.0'); const before = installApp();
+    const r = await desktop('functions -c opencode_desktop_swap real_swap; opencode_desktop_swap() { real_swap "$1.missing"; }');
+    assert.equal(r.stdout, 'status 1\n');
+    assert.match(readFileSync(appLog, 'utf8'), /^OpenCode update stopped: cannot atomically replace OpenCode\.app/);
     unchanged(before);
-    installApp();
-    const kept = await desktop(moves('2,3,4'));
-    assert.equal(kept.stdout, 'status 1\n'); assert.equal(existsSync(appPath), false);
-    const [staging] = readdirSync(appParent); assert.match(staging, /^\.opencode-update\./);
-    assert.match(readFileSync(appLog, 'utf8'), /the previous OpenCode\.app is kept in /);
-    assert.equal(readFileSync(join(appParent, staging, 'old/Contents/Resources/payload'), 'utf8'), 'old');
-    rmSync(join(appParent, staging), { recursive: true });
+  });
+  await check('killing the launcher on either side of the exchange leaves a complete app installed', async () => {
+    publish('2.4.0');
+    for (const [step, installed, staged] of [['', 'old', 'new'], ['real_swap "$@" || return; ', 'new', 'old']]) {
+      installApp();
+      const r = await run(`app=${quote(appPath)}; opencode_desktop_lookup || exit 99;
+        functions -c opencode_desktop_swap real_swap
+        opencode_desktop_swap() { ${step}kill -KILL $$; }
+        opencode_desktop_run 2.4.0`);
+      assert.equal(r.signal, 'SIGKILL', r.stderr);
+      const [staging] = readdirSync(appParent).filter((name) => name !== 'OpenCode.app');
+      assert.match(staging, /^\.opencode-update\./);
+      const payload = 'Contents/Resources/payload';
+      assert.equal(readFileSync(join(appPath, payload), 'utf8'), installed);
+      assert.equal(readFileSync(join(appParent, staging, 'new/OpenCode.app', payload), 'utf8'), staged);
+      rmSync(join(appParent, staging), { recursive: true });
+    }
   });
   await check('an old app that cannot be removed after the swap is not a failed update', async () => {
     installApp({ files: { 'Contents/locked/file': 'x' } }); chmodSync(join(appPath, 'Contents/locked'), 0o500);
@@ -557,7 +562,7 @@ try {
     assert.match(readFileSync(join(appPath, 'Contents/Info.plist'), 'utf8'), /<string>2\.4\.0<\/string>/);
     const left = readdirSync(appParent).filter((n) => n !== 'OpenCode.app');
     assert.equal(left.length, 1);
-    chmodSync(join(appParent, left[0], 'old/Contents/locked'), 0o700); rmSync(join(appParent, left[0]), { recursive: true });
+    chmodSync(join(appParent, left[0], 'new/OpenCode.app/Contents/locked'), 0o700); rmSync(join(appParent, left[0]), { recursive: true });
   });
   await check('the launcher\'s desktop offer stops on a failed update or another version and reads the executable again after an update', async () => {
     publish('2.4.0'); installApp(); rmSync(noticeArgs, { force: true });

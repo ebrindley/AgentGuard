@@ -323,20 +323,24 @@ opencode_desktop_verify() {
   /usr/sbin/spctl --assess --type execute "$new" 2>/dev/null || opencode_desktop_stop 'Gatekeeper does not accept the new app'
 }
 
-# STAGING NEW: moves the installed app into STAGING and NEW into its place, both
-# renames on one volume. When the second fails the first is undone.
+# NEW: exchanges the installed and staged bundles on one volume. The kernel
+# keeps a bundle at the installed path even if the updater is killed.
 opencode_desktop_swap() {
-  /bin/mv -- "$app" "$1/old" 2>/dev/null || { opencode_desktop_stop "cannot move ${app:t} aside"; return }
-  /bin/mv -- "$2" "$app" 2>/dev/null && return
-  /bin/mv -- "$1/old" "$app" 2>/dev/null
-  opencode_desktop_stop "cannot move the new ${app:t} into place"
+  if ! /usr/bin/osascript -l JavaScript - "$app" "$1" >/dev/null 2>&1 <<'JXA'
+ObjC.bindFunction('renamex_np', ['int', ['char *', 'char *', 'unsigned int']]);
+function run(argv) {
+  const RENAME_SWAP = 0x00000002;
+  if ($.renamex_np(argv[0], argv[1], RENAME_SWAP) !== 0) throw new Error('renamex_np failed');
+}
+JXA
+  then
+    opencode_desktop_stop "cannot atomically replace ${app:t}"
+  fi
 }
 
 # OFFERED: the product's run. The staging folder is inside the app's parent, so
-# the swap stays on one volume and is out of reach of a guarded session. Any
-# failure leaves the installed app as it was; the app's path is never left empty
-# and a previous app that cannot be put back is kept, not deleted. An old app
-# that cannot be removed afterwards does not fail the update.
+# the swap stays on one volume and is out of reach of a guarded session. The
+# old app takes the staged app's place. A failed cleanup does not fail the update.
 opencode_desktop_run() {
   local staging rc=0
   staging=$(/usr/bin/mktemp -d "${app:h}/.opencode-update.XXXXXXXX" 2>/dev/null) ||
@@ -345,13 +349,9 @@ opencode_desktop_run() {
     opencode_desktop_download "$staging" &&
       opencode_desktop_unpack "$staging" &&
       opencode_desktop_verify "$1" "$staging/new/OpenCode.app" &&
-      opencode_desktop_swap "$staging" "$staging/new/OpenCode.app" || rc=$?
+      opencode_desktop_swap "$staging/new/OpenCode.app" || rc=$?
   } always {
-    if [[ ! -d $app && -d $staging/old ]]; then
-      /bin/mv -- "$staging/old" "$app" 2>/dev/null ||
-        { print -ru2 -- "OpenCode update stopped: the previous ${app:t} is kept in $staging"; staging= }
-    fi
-    [[ -z $staging ]] || /bin/rm -rf -- "$staging" 2>/dev/null
+    /bin/rm -rf -- "$staging" 2>/dev/null
   }
   return $rc
 }
