@@ -35,15 +35,19 @@ module.exports.default = Plugin.define({
         attempts.set(integrationID, attempt)
         if (result.data.mode !== 'auto') throw new Error('This provider requires a different connection method')
         await opener.open(result.data.url)
+        if (attempts.get(integrationID) !== attempt) return
         toast.dismiss()
         const waiting = ctx.toast.show({
           title: 'Complete sign-in in your browser', persistent: true,
-          actions: [{ label: 'Cancel', run: () => cancel(integrationID) }],
+          actions: [{ label: 'Cancel', run: () => {
+            if (attempts.get(integrationID) === attempt) return cancel(integrationID)
+          } }],
         })
         try {
           const deadline = Date.now() + 10 * 60 * 1000
           while (attempts.get(integrationID) === attempt && Date.now() < deadline) {
             const response = await ctx.client.integration.oauth.status(attempt)
+            if (attempts.get(integrationID) !== attempt) return
             const status = response.data ?? response
             if (status.status === 'complete') {
               attempts.delete(integrationID)
@@ -57,7 +61,8 @@ module.exports.default = Plugin.define({
           if (attempts.get(integrationID) === attempt) throw new Error('Sign-in expired. Try connecting again.')
         } finally { waiting.dismiss() }
       } catch (error) {
-        ctx.toast.show({ title: 'Could not complete sign-in', description: error.message, variant: 'error' })
+        if (attempts.get(integrationID) === attempt || attempts.get(integrationID) === pending)
+          ctx.toast.show({ title: 'Could not complete sign-in', description: error.message, variant: 'error' })
       } finally {
         toast.dismiss()
         if (attempts.get(integrationID) === attempt || attempts.get(integrationID) === pending) await cancel(integrationID).catch(() => {})
