@@ -17,9 +17,9 @@ unguarded parent for the Seatbelt probe.
 `node test/browser-native.mjs` additionally checks that OpenCode 2.2.5 loads the
 local GUI plugin package and serves its commands through the native plugin API.
 `AG_TEST_OPENCODE` selects the CLI. It uses an isolated home and project and does
-not open the renderer or authenticate an account. The required gate runs
-`test/browser.mjs`; the version-specific native fixture is an explicit
-development test that no workflow runs.
+not open the renderer or authenticate an account. The required gate and the
+full matrix run `test/browser.mjs`; the version-specific native fixture is an
+explicit development test that no workflow runs.
 
 `node test/aws-auth.mjs` checks AWS opt-in reads, atomic token-cache writes,
 configuration protection, Guard List precedence and redirected-cache refusal
@@ -29,7 +29,7 @@ recursive write deny with three cache exclusions, adds three write grants and
 seven unique directory-entry write denials. Without the opt-in, these totals
 are unchanged. With key agents denied, the AWS socket-path outbound deny also
 changes from one to zero; other credential socket denies are unchanged.
-The required gate runs this file.
+The required gate and the full matrix run this file.
 
 ### Offline checker comparison
 
@@ -106,7 +106,10 @@ of a separate inspection failure.
 Managed launches add one child-exit signal handler to end the client and its
 original service together; the filesystem and command policy is unchanged.
 Full validation runs six macOS jobs, its suites, Pi migration and OpenCode V2
-jobs on macOS 15 and 26; its `full-tests` aggregate requires all of them.
+jobs on macOS 15 and 26; its `full-tests` aggregate requires all of them. Its
+suites job also runs the offline scopes of `script/test`, including
+`test/updates.mjs`, `test/opencode-runtime.mjs`, `test/authentication.mjs`,
+`test/browser.mjs` and `test/aws-auth.mjs`.
 
 ### Fast landing and background validation
 

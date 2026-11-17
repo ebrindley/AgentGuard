@@ -40,6 +40,9 @@ jobs:
       - if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node test/golden.mjs
       # Offline focused scopes also run in the required gate, script/test.
+      - name: Desktop and CLI updates
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node test/updates.mjs
       - name: OpenCode permission configuration
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node test/opencode-config.mjs
@@ -52,6 +55,18 @@ jobs:
       - name: Effective permission evaluation
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node test/permissions.mjs
+      - name: OpenCode runtime launches
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node test/opencode-runtime.mjs
+      - name: Provider authentication access
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node test/authentication.mjs
+      - name: Browser helper
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node test/browser.mjs
+      - name: AWS opt-in access
+        if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
+        run: node test/aws-auth.mjs
       - name: "@project in the Guard List"
         if: ${{ !cancelled() && steps.setup.outcome == 'success' }}
         run: node test/project.mjs
