@@ -806,7 +806,10 @@ loaded; `/reload` loads the extension now on disk.
   modes: `--detect` proposes the installs it finds and records them once you
   confirm; `--pi`, `--omp` and `--node` record absolute paths, `--node` being the
   interpreter for a Pi that is a Node script; `--show` prints the bindings;
-  `--check` exits 3 when one is missing or stale. `--checker-node`, which
+  `--check` exits 3 when one is missing or stale. `--show`, `--check` and
+  recording a native Pi or OMP need no Node on PATH, so a Mac with only OMP
+  works without one; recording a Node does.
+  `--checker-node`, which
   recorded the analyzer's Node, is accepted and ignored with one line, so older
   scripts keep working. The launcher refuses a stale binding and names this
   command. Bind again after an upgrade

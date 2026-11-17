@@ -172,7 +172,27 @@ runtime "$home/.cache/x/pi" ':'
 runs 'refuses a runtime in a sandbox-writable root' 2 "pi is inside a sandbox-writable root ($home/.cache/x/pi)" bind --pi "$home/.cache/x/pi" --yes
 runs 'refuses an unknown argument' 2 'unknown argument: --bogus' bind --bogus
 runs 'show works without node on PATH' 0 "pi   = $fake_pi" PATH=/usr/bin:/bin bind --show
-runs 'refuses without node on PATH' 2 'node is not on PATH; agent-guard bind runs it to resolve paths' PATH=/usr/bin:/bin bind --check
+# A native binding is checked without Node, and every rule still applies.
+runs 'check passes without node on PATH' 0 "binding ok: $fake_pi"$'\n'"omp: $fake_omp" PATH=/usr/bin:/bin bind --check
+/bin/cp "$conf" "$run/conf.keep"
+runtime "$home/.cache/x/omp" ':'
+print -r -- "omp=$home/.cache/x/omp" > "$conf"
+runs 'check refuses a write-root binding without node' 3 "invalid: omp is inside a sandbox-writable root ($home/.cache/x/omp)" PATH=/usr/bin:/bin bind --check
+print -r -- "omp=opt/omp/bin/omp" > "$conf"
+runs 'check refuses a relative binding without node' 3 'invalid: omp must be an absolute path: opt/omp/bin/omp' PATH=/usr/bin:/bin bind --check
+# A link target ending in a newline names a different folder than the same text without
+# it: read exactly, this path stays under ~/.cache; with the newline dropped it would
+# resolve to an existing executable outside every write root and pass.
+nl="$home/.cache/nl/escape"
+/bin/mkdir -p "$nl/a/usr/bin"
+runtime "$nl/a/usr/bin/true" ':'
+runtime "$home/usr/bin/true" ':'
+/bin/ln -s $'a/..\n' "$nl/l"
+print -r -- "omp=$nl/l/l/l/l/../../../../usr/bin/true" > "$conf"
+runs 'check keeps a newline in a link target' 3 "invalid: omp is inside a sandbox-writable root ($nl/a/usr/bin/true)" PATH=/usr/bin:/bin bind --check
+/bin/rm -rf "$home/.cache/nl" "$home/usr"
+/bin/mv "$run/conf.keep" "$conf"
+runs 'recording a Node needs node on PATH' 2 'node is not on PATH; agent-guard bind runs it to name the Node it records' PATH=/usr/bin:/bin bind --pi "$fake_pi" --node "$node_bin" --yes
 
 # Detection, with the layouts in the disposable home.
 system_pi=(/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js(N) /usr/local/lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js(N)
@@ -528,6 +548,14 @@ else
   [[ $out == *"ok   bindings valid: omp=$fake_omp"* ]] && pass 'the OMP binding is checked' || fail 'the OMP binding is checked'
   json_is '--json: OMP alone' ".runtime_binding == \"ok\" and .pi_binding_path == \"\" and .omp_binding_path == \"$fake_omp\""
   runs 'restores the pi binding' 0 recorded bind --pi "$fake_pi" --omp "$fake_omp" --yes
+fi
+# With no Node reachable (none recorded, none on PATH or in Homebrew's folders), native
+# bindings are still valid.
+if [[ -x /opt/homebrew/bin/node || -x /usr/local/bin/node ]]; then
+  print -r -- 'skip: a Homebrew Node is reachable, so doctor finds one'
+else
+  out=$(ag PATH=/usr/bin:/bin doctor 2>&1 </dev/null) || :
+  [[ $out == *"ok   bindings valid: pi=$fake_pi, omp=$fake_omp"* && $out != *'bindings stale'* ]] && pass 'native bindings are valid without a Node' || { fail 'native bindings are valid without a Node'; print -r -- "$out" | /usr/bin/sed 's/^/     /' }
 fi
 
 # The checker: the session copy and the installed extension's verdicts.

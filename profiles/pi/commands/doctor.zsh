@@ -87,8 +87,8 @@ pi_doctor() {
   pi_doctor_resolves omp 'the guard'
 
   # The recorded bindings, with status.sh's states: bind --check decides, and only
-  # when a Pi or OMP binding is recorded. A Node for bind and for the checker below
-  # comes first on PATH because bind resolves paths with node.
+  # when a Pi or OMP binding is recorded. bind needs no Node for that. A Node found
+  # for the checker below comes first on PATH.
   # Read as the launcher reads them (ag_pi_conf_get).
   ag_pi_conf_get pi; pi_rec=$REPLY
   ag_pi_conf_get omp; omp_rec=$REPLY

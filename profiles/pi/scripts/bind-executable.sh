@@ -93,76 +93,66 @@ if [ "$CHECKER" -eq 1 ]; then
 fi
 # Bare invocation means --detect, so `agent-guard bind` alone detects and records.
 [ -n "$MODE" ] || MODE="detect"
-# Every path is resolved with node (canonicalize, ops_stable_node_path). npm run
-# guaranteed one on PATH; agent-guard runs this script from any shell.
-if [ "$MODE" != "show" ] && ! command -v node >/dev/null 2>&1; then
-  die "node is not on PATH; agent-guard bind runs it to resolve paths"
-fi
-
 # canonicalize <path> — absolute, symlinks resolved. Empty on failure.
 #
-# Uses node, not python3, for the same reason deploy-local.sh does: /usr/bin/python3
-# is a Command Line Tools shim that can be absent on a clean macOS host, and failing
-# here is not a no-op — every path in this script routes through canonicalize(), so an
-# absent python3 made `npm run bind` die with "cannot be canonicalized" and no hint.
-# node is checked on PATH above, before any path is resolved.
+# Plain bash, so --check and recording a native target need no Node: a Mac with only
+# OMP may have none. Not python3 either: /usr/bin/python3 is a Command Line Tools
+# shim that can be absent on a clean macOS host, and every path in this script
+# routes through canonicalize().
 # Must match os.path.realpath on MISSING paths too, and that is not the same as
-# "realpathSync, else path.resolve". realpathSync throws if any component is absent,
-# and a lexical fallback then discards symlinks already resolved in the surviving
-# prefix — so `~/bin/link-to-tmp/missing/../pi` would canonicalize to a path that
-# hides the symlink into /private/tmp, and the Seatbelt-write-root check below would
-# not see it. That check is the reason this function exists, so it must not be
-# defeatable by a nonexistent trailing component.
+# "realpath, else resolve lexically". A lexical fallback discards symlinks already
+# resolved in the surviving prefix — so `~/bin/link-to-tmp/missing/../pi` would
+# canonicalize to a path that hides the symlink into /private/tmp, and the
+# Seatbelt-write-root check below would not see it. That check is the reason this
+# function exists, so it must not be defeatable by a nonexistent trailing component.
 #
 # Resolve component by component instead: walk the path, expanding each symlink as
 # encountered, and fall back to lexical joining only for the components that truly do
-# not exist. This is what os.path.realpath does.
-#
-# Verified against os.path.realpath on 30 probe paths — exact match on all of them,
-# including symlinked ancestors with missing leaves, ".." escaping past a symlink,
-# dangling links, spaces, and the Homebrew/nvm/volta/Nix chain shapes. One deliberate
-# difference: a symlink CYCLE yields empty (so the caller refuses) rather than
-# realpath's non-throwing partial result — an uncanonicalizable path must not be
-# recordable, since the write-root check below cannot vet a path it cannot resolve.
+# not exist. This is what os.path.realpath does. One deliberate difference: a symlink
+# CYCLE yields empty (so the caller refuses) rather than realpath's non-throwing
+# partial result — an uncanonicalizable path must not be recordable, since the
+# write-root check below cannot vet a path it cannot resolve.
 canonicalize() {
   [ -n "${1:-}" ] || return 0
-  node -e '
-    const fs = require("fs"), path = require("path");
-    // Pending components, consumed left to right. A symlink pushes its own
-    // components back onto the front, so an absolute target restarts the walk from
-    // "/" — without that restart, a link pointing at /tmp/... would keep the
-    // unresolved /tmp prefix and hide the very symlink this check exists to catch.
-    //
-    // INVARIANT: nothing may collapse ".." before the walk sees it. Both
-    // path.resolve() and path.join() normalize lexically, so neither may touch the
-    // input — with `opt/node -> ../Cellar/node/24.4.1`, a lexical pass rewrites the
-    // valid `opt/node/../24.4.1/bin/node` to a nonexistent `opt/24.4.1/...` and
-    // refuses a real binding. Prepend the cwd by STRING concatenation only; every
-    // ".." then reaches the ".." branch below, which applies it to the resolved,
-    // symlink-free prefix in kernel order.
-    const input = process.argv[1];
-    const absolute = input.startsWith("/") ? input : process.cwd() + "/" + input;
-    const queue = absolute.split("/").filter(Boolean);
-    let resolved = "/";
-    // Bounded like the kernel: a symlink cycle must terminate, not spin. Exiting
-    // non-zero here yields an empty result, which the caller treats as
-    // un-canonicalizable and refuses — the safe direction for a cyclic path.
-    let hops = 0;
-    const MAX_HOPS = 64;
-    while (queue.length) {
-      const part = queue.shift();
-      if (part === ".") continue;
-      // ".." applies to the already-resolved (symlink-free) prefix, as the kernel does.
-      if (part === "..") { resolved = path.dirname(resolved); continue; }
-      const next = path.join(resolved, part);
-      let link;
-      try { link = fs.readlinkSync(next); } catch { resolved = next; continue; }
-      if (++hops > MAX_HOPS) process.exit(1);
-      if (path.isAbsolute(link)) resolved = "/";
-      queue.unshift(...link.split("/").filter(Boolean));
-    }
-    process.stdout.write(resolved);
-  ' "$1" 2>/dev/null || true
+  # Pending components, consumed left to right. A symlink puts its own components
+  # back in front, so an absolute target restarts the walk from "/" — without that
+  # restart, a link pointing at /tmp/... would keep the unresolved /tmp prefix and
+  # hide the very symlink this check exists to catch.
+  #
+  # INVARIANT: nothing may collapse ".." before the walk sees it. With
+  # `opt/node -> ../Cellar/node/24.4.1`, a lexical pass rewrites the valid
+  # `opt/node/../24.4.1/bin/node` to a nonexistent `opt/24.4.1/...` and refuses a
+  # real binding. Prepend the cwd by STRING concatenation only; ".." applies to the
+  # already-resolved, symlink-free prefix, as the kernel does.
+  local rest="$1" resolved="/" part next link hops=0
+  case "$rest" in /*) ;; *) rest="$PWD/$rest" ;; esac
+  while [ -n "$rest" ]; do
+    case "$rest" in
+      */*) part="${rest%%/*}"; rest="${rest#*/}" ;;
+      *) part="$rest"; rest="" ;;
+    esac
+    case "$part" in
+      ""|.) continue ;;
+      ..) resolved="${resolved%/*}"; [ -n "$resolved" ] || resolved="/"; continue ;;
+    esac
+    if [ "$resolved" = "/" ]; then next="/$part"; else next="$resolved/$part"; fi
+    if [ -L "$next" ]; then
+      # Bounded like the kernel: a symlink cycle must terminate, not spin. Printing
+      # nothing makes the caller refuse the path, the safe direction for a cycle.
+      hops=$((hops + 1))
+      [ "$hops" -le 64 ] || return 0
+      # Trailing newlines are part of the target's last component. -n stops readlink
+      # adding one (macOS adds none when the target ends in one, so it could not be
+      # told apart), and the sentinel stops command substitution stripping them.
+      link="$(readlink -n "$next" && printf x)" || return 0
+      link="${link%x}"
+      case "$link" in /*) resolved="/" ;; esac
+      rest="$link/$rest"
+    else
+      resolved="$next"
+    fi
+  done
+  printf '%s' "$resolved"
 }
 
 # Reject anything the shim itself would reject, with a specific reason. Keeping the
@@ -451,6 +441,9 @@ fi
 NODE_CANON=""
 [ -n "$NODE_PATH" ] && NODE_CANON="$(validate_target "$NODE_PATH" "node")"
 if [ -n "$NODE_CANON" ]; then
+  # ops_stable_node_path runs node; only a recorded Node needs one.
+  command -v node >/dev/null 2>&1 \
+    || die "node is not on PATH; agent-guard bind runs it to name the Node it records"
   NODE_CANON="$(ops_stable_node_path "$NODE_CANON")"
 fi
 
