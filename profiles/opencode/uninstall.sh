@@ -54,18 +54,17 @@ main() {
     if (( ${ag_harness_modules[(Ie)$h]} )); then harnesses+=("$h"); else ag_warn "the stamp names $h, which this release cannot uninstall"; fi
   done
 
-  # U1: PATH blocks, at each file's resolved target. An unfinished block is
-  # reported, not touched.
+  # U1: PATH blocks, at each file's resolved target.
   test_point uninstall-rc || stop uninstall-rc
   for rc in "$home"/{.zprofile,.zshrc,.bash_profile}; do
-    [[ -f $rc ]] && /usr/bin/grep -Fxq -- "$marker_start" "$rc" || continue
-    if ! /usr/bin/grep -Fxq -- "$marker_end" "$rc"; then
-      ag_warn "$rc has an unfinished agent-guard block; remove it by hand"
-      unfinished+=("$rc")
-      continue
-    fi
-    ag_rc_strip "$rc" > "$scratch/rc" && replace_file "$rc" "$scratch/rc" ||
-      { ag_warn "$rc not changed"; unfinished+=("$rc") }
+    [[ -f $rc ]] || continue
+    /usr/bin/grep -Fxq -e "$marker_start" -e "$marker_end" -- "$rc"
+    case $? in
+      (1) continue ;;
+      (0) if ag_rc_strip "$rc" > "$scratch/rc" && replace_file "$rc" "$scratch/rc"; then continue; fi ;;
+    esac
+    ag_warn "$rc not changed"
+    unfinished+=("$rc")
   done
 
   # U2: the values each harness set (OpenCode: the recorded permission values).

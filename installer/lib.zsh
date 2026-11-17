@@ -708,18 +708,12 @@ ag_rc_files() {
   return 0
 }
 
-# A start marker without its end marker, Agent Guard's or an older guard's
-# (ag_old_blocks): removing that block would remove the rest of the file.
-ag_rc_unfinished() {
-  local rc s e
+# Check the order of all owned markers before switching any startup file.
+ag_rc_check() {
+  local rc
   for rc in "$home"/{.zprofile,.zshrc,.bash_profile}; do
     [[ -f $rc ]] || continue
-    for s e in "$marker_start" "$marker_end" $ag_old_blocks; do
-      /usr/bin/grep -Fxq -- "$s" "$rc" || continue
-      /usr/bin/grep -Fxq -- "$e" "$rc" && continue
-      ag_err "$rc has a start marker ($s) without an end marker; fix it by hand. Nothing changed."
-      return 1
-    done
+    ag_rc_strip "$rc" old >/dev/null || return 1
   done
   return 0
 }
@@ -1172,14 +1166,37 @@ ag_rc_line() {
 # ag_rc_strip FILE [old]: FILE without Agent Guard's complete blocks, and with old,
 # also without the older guards' blocks (ag_old_blocks, start and end markers).
 ag_rc_strip() {
-  local olds=
+  local olds= rc
   [[ ${2:-} == old ]] && olds=${(pj:\n:)ag_old_blocks}
   OLDS=$olds /usr/bin/awk -v s="$marker_start" -v e="$marker_end" '
-    BEGIN { n = split(ENVIRON["OLDS"], o, "\n"); for (i = 1; i < n; i += 2) old[o[i]] = o[i + 1] }
-    skip == "" && $0 == s { skip = e; next }
-    skip == "" && ($0 in old) { skip = old[$0]; next }
-    skip != "" && $0 == skip { skip = ""; next }
-    skip == "" { print }' "$1"
+    BEGIN {
+      end_for[s] = e
+      ends[e] = 1
+      count = split(ENVIRON["OLDS"], old, "\n")
+      for (i = 1; i < count; i += 2) {
+        end_for[old[i]] = old[i + 1]
+        ends[old[i + 1]] = 1
+      }
+    }
+    $0 in end_for {
+      if (expected != "") { invalid = 1; exit }
+      expected = end_for[$0]
+      next
+    }
+    $0 in ends {
+      if ($0 != expected) { invalid = 1; exit }
+      expected = ""
+      next
+    }
+    expected == "" { print }
+    END { if (invalid || expected != "") exit 3 }' "$1"
+  rc=$?
+  case $rc in
+    (3) ag_err "$1 has unbalanced or misordered PATH block markers; fix them by hand" ;;
+    (0) ;;
+    (*) ag_err "cannot read PATH blocks in $1" ;;
+  esac
+  return $rc
 }
 
 ag_rc_has() {  # FILE LINE: FILE holds the complete block with LINE
@@ -1631,7 +1648,7 @@ ag_install_main() {
   ag_recover install "$ag_txn" || ag_abort
   ag_tree_info || ag_abort
   ag_layout || ag_abort
-  ag_rc_unfinished || ag_abort
+  ag_rc_check || ag_abort
   ag_volume || ag_abort
   ag_prepare || ag_abort
   ag_checks || ag_abort

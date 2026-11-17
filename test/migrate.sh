@@ -719,7 +719,7 @@ before=$(ocg_files)
 snap=$(snapshot "$home")
 point= boot y
 rc=$?
-(( rc != 0 )) && /usr/bin/grep -qF "$home/.zprofile has a start marker" "$out" && pass "exit $rc, the file named" || { fail "exit $rc"; show }
+(( rc != 0 )) && /usr/bin/grep -qF "$home/.zprofile has unbalanced or misordered PATH block markers" "$out" && pass "exit $rc, the file named" || { fail "exit $rc"; show }
 [[ $(ocg_files) == "$before" && $(snapshot "$home") == "$snap" && ! -e $engine ]] && pass 'nothing changed' || fail 'something changed'
 
 # --- M14: OpenCode Guard's record is not an object of per-file entries.
