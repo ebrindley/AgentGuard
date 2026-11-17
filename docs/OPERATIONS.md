@@ -908,7 +908,11 @@ Guard's `OPENCODE_GUARD_BYPASS` is no longer honored.
 The installer replaces `~/.local/bin/grok` with a link to Agent Guard's `bin/grok`,
 records Grok's executable (normally `~/.grok/bin/grok`) in `state/grok-executable`
 and keeps the entry it replaced in `state/grok-replaced/grok`; uninstall puts it
-back. A regular executable at `~/.local/bin/grok` with no `~/.grok/bin/grok` is
+back when `~/.local/bin/grok` is still Agent Guard's link. An entry it does not
+put back, because that path now holds something else or nothing, or because an
+earlier install replaced it (a time suffix), is copied to
+`~/Agent Guard/grok-replaced-<time>/` before the engine folder is removed, and
+uninstall prints where; if the copy fails it keeps the engine folder and exits 1. A regular executable at `~/.local/bin/grok` with no `~/.grok/bin/grok` is
 also copied to `state/grok-kept/grok`, which the record names. Nothing under
 `~/.grok` is changed. Run the recorded executable directly, `~/.grok/bin/grok` or
 in that layout the kept copy under the engine's `state` folder, for what the

@@ -132,6 +132,30 @@ boot
 ag uninstall
 (( $? == 0 )) && [[ $(/usr/bin/readlink "$lb/grok") == "$original" ]] && pass 'uninstall again restores the link' || { fail 'second uninstall'; show }
 
+# An entry in state/grok-replaced that uninstall does not put back, because the link
+# was replaced or is gone or an earlier install replaced it (a time suffix), would go
+# with the engine folder: it is copied to ~/Agent Guard/grok-replaced-<time> first.
+for c in replaced missing suffixed; do
+  label="uninstall, $c link"
+  restore fresh
+  boot || { fail "install for $c"; show; continue }
+  case $c in
+    replaced) /bin/rm "$lb/grok"; /bin/ln -s /usr/bin/true "$lb/grok" ;;
+    missing) /bin/rm "$lb/grok" ;;
+    suffixed) /bin/ln -s ../old/grok "$state/grok-replaced/grok.1700000000" ;;
+  esac
+  ag uninstall
+  rc=$?
+  kept=("$home/Agent Guard"/grok-replaced-*(N))
+  (( rc == 0 && $#kept == 1 )) && [[ ! -e $engine ]] && /usr/bin/grep -qF "are copied to ${kept[1]/#$home/~}" "$run/out" ||
+    { fail "uninstall (exit $rc)"; show; continue }
+  case $c in
+    replaced) [[ $(/usr/bin/readlink "$kept[1]/grok") == "$original" && $(/usr/bin/readlink "$lb/grok") == /usr/bin/true ]] && pass 'the original is copied and the replacing link is left' || fail 'replaced' ;;
+    missing) [[ $(/usr/bin/readlink "$kept[1]/grok") == "$original" && ! -e $lb/grok && ! -L $lb/grok ]] && pass 'the original is copied and nothing is put at the path' || fail 'missing' ;;
+    suffixed) [[ $(/usr/bin/readlink "$kept[1]/grok.1700000000") == ../old/grok && $(/usr/bin/readlink "$lb/grok") == "$original" ]] && pass 'the earlier copy is exported and the latest is put back' || fail 'suffixed' ;;
+  esac
+done
+
 # A failure and a kill at each point leave the original link or a finished install.
 for p in grok-binding grok-shim grok-keep; do
   label="fail:$p"
