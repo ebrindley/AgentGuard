@@ -245,7 +245,9 @@ existing `~/.cc-safety-net/rules/rule.json`, and switches the app, `current`, th
 plugin link, the OpenCode permission values, OpenCode's shared service opt-out
 and the PATH blocks, and runs the gate:
 `agent-guard doctor` and a launch of `opencode --version` through the new PATH
-shim. With Pi's guard, the staged
+shim. OpenCode's staged check, doctor and this launch run from a scratch project
+folder in the temp folder, so `@project` resolves the same way wherever you run
+them from. With Pi's guard, the staged
 checks also test the new Pi files, the switch also replaces the Pi files at
 their paths ([Pi and OMP](USAGE.md#pi-and-omp)), and the gate includes `doctor`'s Pi
 checks, which run `pi --version` and `omp --version`. If any check fails, it puts

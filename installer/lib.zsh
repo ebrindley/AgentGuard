@@ -1273,6 +1273,29 @@ ag_shell_lookup() {
   esac
 }
 
+# ag_scratch_dir: REPLY is a new folder in the per-user temp folder, with a
+# project folder inside it, for a launch that resolves @project from the folder it
+# runs in. The caller removes it. When it cannot be made, returns 1 with REPLY the
+# temp folder.
+ag_scratch_dir() {
+  local temp
+  temp=${$(/usr/bin/getconf DARWIN_USER_TEMP_DIR):A}
+  REPLY=$(/usr/bin/mktemp -d "$temp/agent-guard-gate.XXXXXX") || { REPLY=$temp; return 1 }
+  /bin/mkdir -p -- "$REPLY/project"
+}
+
+# ag_scratch_run CMD...: runs CMD from a scratch project folder, then removes it.
+ag_scratch_run() {
+  local work
+  integer rc
+  ag_scratch_dir || { print -r -- "FAIL cannot create a folder in $REPLY"; return 1 }
+  work=$REPLY
+  (cd -q -- "$work/project" && "$@")
+  rc=$?
+  /bin/rm -rf -- "$work"
+  return rc
+}
+
 # ag_run_check LABEL CMD...: runs a release's check and prints its output. When it
 # fails, its FAIL lines go to ag_failed, or "LABEL exited STATUS" when it printed
 # none, and it returns 1.

@@ -361,6 +361,13 @@ point= ag doctor
 rc=$?
 /bin/rm -f "$home/.zlogout"
 (( rc == 0 )) && /usr/bin/grep -q "^ok   opencode in a new terminal window resolves to .*, Agent Guard's launcher" "$out" && pass 'doctor passes' || { fail "doctor after the repair (exit $rc)"; show }
+# With @project on, doctor run from the home folder checks from a scratch project.
+/bin/cp -p "$list" "$run/list.keep"
+/usr/bin/sed -i '' 's/^# @project$/@project/' "$list"
+(cd "$home" && point= ag doctor)
+rc=$?
+/bin/cp -p "$run/list.keep" "$list"
+(( rc == 0 )) && ! /usr/bin/grep -q '^agent-guard: @project' "$out" && pass 'doctor passes from the home folder with @project on' || { fail "doctor from the home folder with @project (exit $rc)"; show }
 # Not shadowed: nothing is rewritten.
 repaired=$(sha "$zshrc")$(sha "$home/.zprofile")
 point= ag update
