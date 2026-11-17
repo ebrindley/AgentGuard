@@ -511,9 +511,8 @@ ag_h_pi_gate() {
   local rt label temp work out err
   local -a lines errs
   integer rc
-  temp=${$(/usr/bin/getconf DARWIN_USER_TEMP_DIR):A}
-  work=$(/usr/bin/mktemp -d "$temp/agent-guard-gate.XXXXXX") || { ag_failed+=("FAIL cannot create a folder in $temp"); return }
-  /bin/mkdir -p -- "$work/project"
+  ag_scratch_dir || { ag_failed+=("FAIL cannot create a folder in $REPLY"); return }
+  work=$REPLY temp=${REPLY:h}
   for rt label in pi Pi omp OMP; do
     out=$(ag_pi_clean_env; cd "$work/project" && ag_bounded 20 /usr/bin/env "PI_PROJECT=$work/project" "TMPDIR=$temp/" "$engine/bin/$rt" --version 2>"$work/$rt.err")
     rc=$?
@@ -610,8 +609,8 @@ ag_h_pi_doctor() {  # RELEASE [--json]
 # first, links as links, and fails the step when it cannot be. Names the custom
 # wrappers it leaves.
 ag_h_pi_uninstall_remove() {
-  local rt f dest partial="$list_dir/.pi-replaced.partial"
-  local -a left kept
+  local rt f
+  local -a left
   for rt in pi omp; do
     f="$pi_bin/$rt"
     /bin/rm -f -- "$pi_bin/.$rt.partial"
@@ -627,20 +626,7 @@ ag_h_pi_uninstall_remove() {
       /bin/rm -f -- "$f" || { ag_err "cannot remove ${f/#$home/~}; $engine is kept, so agent-guard uninstall can run again"; return 1 }
     fi
   done
-  kept=("$pi_replaced"/*(DN))
-  if (( $#kept )); then
-    dest="$list_dir/pi-replaced-$(/bin/date -u +%Y%m%dT%H%M%SZ)"
-    [[ -e $dest || -L $dest ]] && dest+="-$$"
-    /bin/rm -rf -- "$partial"
-    if ! { /bin/mkdir -p -- "$partial" && /bin/cp -Rp -- $kept "$partial/" && /bin/mv -- "$partial" "$dest" }; then
-      /bin/rm -rf -- "$partial"
-      ag_err "could not copy the entries Agent Guard replaced in ${pi_bin/#$home/~} from $pi_replaced to $dest, so $engine is kept. Run agent-guard uninstall again."
-      return 1
-    fi
-    # Copied: a rerun after a later failure does not copy them again.
-    /bin/rm -rf -- $kept
-    ag_warn "entries Agent Guard replaced in ${pi_bin/#$home/~} and did not put back (${(j:, :)${kept:t}}) are copied to ${dest/#$home/~}"
-  fi
+  ag_export_replaced pi-replaced "$pi_bin" "$pi_replaced" || return 1
   /bin/rm -rf -- "$pi_ext" || { ag_err "cannot remove ${pi_ext/#$home/~}; $engine is kept, so agent-guard uninstall can run again"; return 1 }
   /bin/rm -f -- "$pi_bin/pi-sandbox.sb" "$pi_bin/pi-sandbox-preamble.zsh" "$pi_bin/.pi-sandbox.sb.partial" "$pi_bin/.pi-sandbox-preamble.zsh.partial" ||
     { ag_err "cannot remove the profile and preamble in ${pi_bin/#$home/~}; $engine is kept, so agent-guard uninstall can run again"; return 1 }

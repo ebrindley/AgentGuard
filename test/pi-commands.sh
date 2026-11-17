@@ -1,5 +1,5 @@
 #!/bin/zsh
-# agent-guard bind, agent-guard wrapper add|remove|list and the Pi checks of
+# agent-guard help, bind, agent-guard wrapper add|remove|list and the Pi checks of
 # agent-guard doctor and doctor --json (docs/DESIGN.md section 11, Commands), in a
 # disposable home. The release's Pi files and the installed copies are
 # profiles/pi's, with the preamble's directory lookup pointed at the disposable
@@ -480,7 +480,17 @@ done
 
 print -r -- '# changed' >> "$lb/omp"
 doctor_fails 'a launcher copy that differs' "~/.local/bin/omp differs from the release's profiles/pi/launchers/pi"
+repair='note to repair, run the installer for the installed release again from a terminal outside the guard: /bin/zsh -c "$(/usr/bin/curl -fsSL https://github.com/ebrindley/AgentGuard/releases/download/v0.2.0/install.sh)"'
+move='note ~/.local/bin/omp is the OMP executable itself, and the installer refuses it: move it out of ~/.local/bin first, and after the installer record its new path with: agent-guard bind --omp PATH'
+[[ $out == *"$repair"* ]] && pass 'drift names the installer for the installed tag' || fail 'drift names the installer for the installed tag'
+[[ $out != *'executable itself'* ]] && pass 'a launcher copy needs no move' || fail 'a launcher copy needs no move'
 json_is '--json: a differing file is drift' '.drift == 1 and .ok == false and .runtime_binding == "ok"'
+# A real executable at the launcher path: the installer refuses it, so the move comes first.
+/bin/cp "$lb/omp" "$run/omp.guard"
+runtime "$lb/omp" 'print -r -- "fake omp 2.0.0"'
+doctor_fails 'a real executable at the launcher path' "~/.local/bin/omp differs from the release's profiles/pi/launchers/pi"
+[[ $out == *"$repair"* && $out == *"$move"* ]] && pass 'it names the move, bind and the installer' || fail 'it names the move, bind and the installer'
+/bin/mv "$run/omp.guard" "$lb/omp"
 /bin/cp "$rel/profiles/pi/launchers/pi" "$lb/omp"
 /bin/rm "$rel/bin/pi"
 /bin/ln -s "$rel/profiles/pi/launchers/pi" "$rel/bin/pi"
@@ -627,5 +637,18 @@ doctor_fails 'without a stamp, no Pi checks'
 [[ $out != *'~/.local/bin/pi'* ]] && pass 'no Pi lines' || fail 'no Pi lines'
 write_stamp opencode pi
 runs 'doctor takes only --json' 2 'usage: agent-guard' doctor --bogus
+
+# --- help
+label=help
+for h in --help help -h; do
+  integer rc=0
+  out=$(ag $h 2>"$run/help.err" </dev/null) || rc=$?
+  [[ $rc == 0 && $out == *$'\n  doctor '*$'\n  app-projects '* && ! -s $run/help.err ]] && pass "$h prints help on stdout and exits 0" ||
+    fail "$h prints help on stdout and exits 0 (exit $rc)"
+done
+rc=0
+out=$(ag bogus 2>&1 >/dev/null </dev/null) || rc=$?
+[[ $rc == 2 && $out == 'usage: agent-guard doctor|'* ]] && pass 'an unknown command still prints the usage on stderr, exit 2' ||
+  { fail "an unknown command still prints the usage on stderr, exit 2 (exit $rc)"; print -r -- "$out" | /usr/bin/sed "s/^/     /"; }
 
 finish

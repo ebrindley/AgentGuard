@@ -276,6 +276,28 @@ move_into() {
   /bin/mv -- "$1" "$2"
 }
 
+# ag_export_replaced PREFIX BINDIR DIR: the entries still in DIR, which the engine
+# folder's removal would delete, copied (links as links) to
+# ~/Agent Guard/PREFIX-<UTC time>, then removed from DIR, and named. Fails, with the
+# message, when the copy fails; DIR is then untouched.
+ag_export_replaced() {
+  local dest partial="$list_dir/.$1.partial"
+  local -a kept
+  kept=("$3"/*(DN))
+  (( $#kept )) || return 0
+  dest="$list_dir/$1-$(/bin/date -u +%Y%m%dT%H%M%SZ)"
+  [[ -e $dest || -L $dest ]] && dest+="-$$"
+  /bin/rm -rf -- "$partial"
+  if ! { /bin/mkdir -p -- "$partial" && /bin/cp -Rp -- $kept "$partial/" && /bin/mv -- "$partial" "$dest" }; then
+    /bin/rm -rf -- "$partial"
+    ag_err "could not copy the entries Agent Guard replaced in ${2/#$home/~} from $3 to $dest, so $engine is kept. Run agent-guard uninstall again."
+    return 1
+  fi
+  # Copied: a rerun after a later failure does not copy them again.
+  /bin/rm -rf -- $kept
+  ag_warn "entries Agent Guard replaced in ${2/#$home/~} and did not put back (${(j:, :)${kept:t}}) are copied to ${dest/#$home/~}"
+}
+
 # restore_over_link LINK FILE: replaces LINK itself, never its target, with a copy of FILE.
 restore_over_link() {
   local tmp="${1:h}/.${1:t}.partial"
@@ -931,7 +953,8 @@ ag_build() {
 }
 
 # P6: the template list only when none exists; --projects adds an ALLOW entry
-# through a temporary file and a rename.
+# through a temporary file and a rename; a symlinked list goes through replace_file
+# so it stays a link.
 ag_list_step() {
   local listed partial="$list_dir/.Guard List.txt.partial"
   /bin/mkdir -p -- "$list_dir" || return 1
@@ -951,10 +974,13 @@ ag_list_step() {
       END { print f["DENY"] ? "DENY" : f["READ ONLY"] ? "READ ONLY" : f["ALLOW"] ? "ALLOW" : done ? "added" : "" }' "$list") ||
       { /bin/rm -f -- "$list.tmp"; return 1 }
     if [[ $listed == added ]]; then
-      /bin/mv -f -- "$list.tmp" "$list" || return 1
-    else
-      /bin/rm -f -- "$list.tmp"
+      if [[ -L $list ]]; then
+        replace_file "$list" "$list.tmp" || { /bin/rm -f -- "$list.tmp"; return 1 }
+      else
+        /bin/mv -f -- "$list.tmp" "$list" || return 1
+      fi
     fi
+    /bin/rm -f -- "$list.tmp"
     case $listed in
       (ALLOW|added) ag_say "allowed: $ag_projects" ;;
       ('') ag_err "no ALLOW heading in $list; add $ag_projects under ALLOW yourself"; return 1 ;;
@@ -1267,6 +1293,29 @@ ag_shell_lookup() {
     (1) print -r -- "FAIL $name in $label resolves to ${REPLY/#$home/~}, not Agent Guard's launcher; $remedy"; return 1 ;;
     (*) print -r -- "skip $name in $label: not found" ;;
   esac
+}
+
+# ag_scratch_dir: REPLY is a new folder in the per-user temp folder, with a
+# project folder inside it, for a launch that resolves @project from the folder it
+# runs in. The caller removes it. When it cannot be made, returns 1 with REPLY the
+# temp folder.
+ag_scratch_dir() {
+  local temp
+  temp=${$(/usr/bin/getconf DARWIN_USER_TEMP_DIR):A}
+  REPLY=$(/usr/bin/mktemp -d "$temp/agent-guard-gate.XXXXXX") || { REPLY=$temp; return 1 }
+  /bin/mkdir -p -- "$REPLY/project"
+}
+
+# ag_scratch_run CMD...: runs CMD from a scratch project folder, then removes it.
+ag_scratch_run() {
+  local work
+  integer rc
+  ag_scratch_dir || { print -r -- "FAIL cannot create a folder in $REPLY"; return 1 }
+  work=$REPLY
+  (cd -q -- "$work/project" && "$@")
+  rc=$?
+  /bin/rm -rf -- "$work"
+  return rc
 }
 
 # ag_run_check LABEL CMD...: runs a release's check and prints its output. When it

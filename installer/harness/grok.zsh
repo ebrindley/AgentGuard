@@ -192,7 +192,10 @@ ag_h_grok_doctor() {  # RELEASE [--json]
 # --- Uninstall.
 
 # U3: the link goes, and the entry it replaced is put back by one rename, a link
-# with its original target text. A grok that is no longer our link is left.
+# with its original target text. A grok that is no longer our link is left. An
+# entry in state/grok-replaced that is not put back (the place holds something
+# else or nothing, or an earlier install replaced it, a time suffix) would go with
+# the engine folder, so it is copied to ~/Agent Guard/grok-replaced-<time> first.
 ag_h_grok_uninstall_remove() {
   local f=$grok_shim
   /bin/rm -f -- "${f:h}/.grok.partial"
@@ -207,5 +210,5 @@ ag_h_grok_uninstall_remove() {
   elif [[ -e $f || -L $f ]]; then
     ag_warn "${f/#$home/~} is not Agent Guard's link; left as it is"
   fi
-  return 0
+  ag_export_replaced grok-replaced "${f:h}" "$grok_replaced"
 }
