@@ -187,11 +187,21 @@ ag_h_opencode_report() {
   if [[ -n $REPLY ]]; then
     ag_warnings+=("$REPLY")
     ag_say 'PATH: terminal activation needs manual setup for ZDOTDIR'
-  elif ag_opencode_shadowed; then
-    ag_warnings+=("a new terminal window starts ${REPLY/#$home/~}, not Agent Guard's opencode, so OpenCode runs there without protection; remove or reorder the line that adds it, then run agent-guard update")
-    ag_say 'PATH: another opencode comes first in a new terminal window'
   else
-    ag_say 'PATH: new terminal windows run opencode inside the guard'
+    ag_shell_resolve opencode -l -i
+    case $? in
+      (0) ag_say 'PATH: new terminal windows run opencode inside the guard' ;;
+      (1)
+        ag_warnings+=("a new terminal window starts ${REPLY/#$home/~}, not Agent Guard's opencode, so OpenCode runs there without protection; remove or reorder the line that adds it, then run agent-guard update")
+        ag_say 'PATH: another opencode comes first in a new terminal window'
+        ;;
+      (2) ag_say 'PATH: opencode was not found in a new terminal window' ;;
+      (3)
+        ag_warnings+=("a new terminal window resolves opencode to $REPLY; check your shell startup files")
+        ag_say 'PATH: a shell definition takes precedence over the opencode launcher'
+        ;;
+      (*) ag_say 'PATH: could not check opencode in a new terminal window' ;;
+    esac
   fi
   ag_say "GUI: $app (drag it to the Dock)"
   "$engine/current/launch" find-app >/dev/null 2>&1 || ag_warnings+=('OpenCode.app not found: install it, then open Agent Guard')
