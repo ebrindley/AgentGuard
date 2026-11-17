@@ -569,10 +569,11 @@ are slow; nothing is stored, and every eligible launch looks again.
 The prompt reads `OpenCode <offered> is available. You have <installed>.`, then
 the note `The update runs without Agent Guard's protection.`, then `Update now?
 [Y/n]`. Accepting runs `opencode upgrade <offered>` unconfined, as the explicit
-command does, and prints `OpenCode updated to <offered>.`. The launcher then
-finds the executable again, reads its version under the profile and starts the
-session on it. If the update fails, the launch stops with `the OpenCode update
-failed`; if the new version is not the offered one or its major changed, it
+command does. The launcher then finds the executable again and reads its
+version under the profile. Once it confirms the offered version, it prints
+`OpenCode updated to <offered>.` and starts the session on it. If the update
+fails, the launch stops with `the OpenCode update failed`; if the new version
+is not the offered one or its major changed, it
 stops and names the expected and the found version. In both cases run
 `opencode upgrade` from Terminal and start again. A launch without a terminal
 prints the first two lines on stderr, installs nothing and starts the session.

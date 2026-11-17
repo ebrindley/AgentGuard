@@ -94,8 +94,8 @@ opencode_update_log() {
 }
 
 # MODE LOOKUP RUN ARG...: the shared offer for an OpenCode product, the terminal
-# CLI or the desktop app. Returns 0 when nothing was installed, 1 when an
-# accepted update failed and 2 when it was installed.
+# CLI or the desktop app. Returns 0 when nothing was run, 1 when an accepted
+# updater failed and 2 when it reported success.
 opencode_offer() {
   local mode=$1
   local -A opencode_product=(
@@ -104,6 +104,7 @@ opencode_offer() {
     same_major same-major
     note "The update runs without Agent Guard's protection."
     run $3
+    defer_notify 1
     log "$(opencode_update_log)"
     window_label 'Updating OpenCode…'
   )
@@ -139,6 +140,7 @@ opencode_launch_offer() {
       opencode_major "$cli"
       [[ $opencode_version == "$offered" && $REPLY == "$major" ]] ||
         fail "the OpenCode update did not install the version offered: expected $offered, found $opencode_version. Run opencode upgrade in Terminal, then reopen."
+      ag_update_notify "$mode" OpenCode "$offered"
       ;;
   esac
 }
@@ -381,6 +383,7 @@ opencode_desktop_launch_offer() {
         fail "the OpenCode update did not install the version offered: expected $offered, found ${found:-none}."
       main=$(/usr/bin/plutil -extract CFBundleExecutable raw "$app/Contents/Info.plist" 2>/dev/null) && [[ -x $app/Contents/MacOS/$main ]] ||
         fail "the updated OpenCode has no executable to start."
+      ag_update_notify "$mode" OpenCode "$offered"
       ;;
   esac
 }

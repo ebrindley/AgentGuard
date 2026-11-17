@@ -192,14 +192,14 @@ ag_update_notify() {
 #   same_major     same-major to ask for that rule (optional)
 #   note           a sentence shown with the offer (optional)
 #   run            a function called with the offered version that installs it
+#   defer_notify   1 when the caller verifies the installation before notifying (optional)
 #   log            the file that receives the output of a desktop run
 #   window_label   the first label of the desktop progress window
 #   window_stages  lines the run prints that replace the label (optional)
 # ARG... are the launch's arguments, which the gate reads.
 # Returns 0 when nothing was installed (no offer, a failed lookup, a declined or
-# unanswered offer), 1 when an accepted update failed and 2 when it was
-# installed, with the offered version in REPLY; the caller decides what happens
-# next. A failed check is optional.
+# unanswered offer), 1 when an accepted updater failed and 2 when it reported
+# success, with the offered version in REPLY. A failed lookup is optional.
 ag_update_offer() {
   emulate -L zsh
   setopt no_unset extended_glob
@@ -212,7 +212,7 @@ ag_update_offer() {
   installed=$reply[1] offered=$reply[2]
   ag_update_ask "$mode" "${p[name]}" "$offered" "$installed" "${p[note]:-}" || return 0
   ag_update_run "$mode" "$offered" "${p[run]}" "${p[log]}" "${p[name]}" "${p[window_label]}" ${(f)p[window_stages]:-} || return 1
-  ag_update_notify "$mode" "${p[name]}" "$offered"
+  [[ ${p[defer_notify]:-} == 1 ]] || ag_update_notify "$mode" "${p[name]}" "$offered"
   # The desktop run's window source was the last REPLY.
   REPLY=$offered
   return 2

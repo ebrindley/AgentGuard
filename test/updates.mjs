@@ -212,7 +212,7 @@ try {
   await check('a newer same-major OpenCode is offered with its note and an accepted offer upgrades and returns 2', async () => {
     opencodeReply = '2.4.0'; const before = requests.length;
     const r = await offer();
-    assert.equal(r.stderr, "OpenCode 2.4.0 is available. You have 2.3.0.\nThe update runs without Agent Guard's protection.\nUpdate now? [Y/n] OpenCode updated to 2.4.0.\n");
+    assert.equal(r.stderr, "OpenCode 2.4.0 is available. You have 2.3.0.\nThe update runs without Agent Guard's protection.\nUpdate now? [Y/n] ");
     assert.equal(r.stdout, 'upgrade 2.4.0\nstatus 2\n');
     assert.deepEqual(requests.slice(before), ['/opencode-update?current=2.3.0']);
     assert.equal(upgrades(), '2.4.0\n');
@@ -225,7 +225,7 @@ try {
     tapReply = '2.5.0'; formulaReply = '2.4.0'; opencodeReply = '2.6.0';
     let before = requests.length;
     let r = await offer('cli', { cli: tapCli });
-    assert.equal(r.stderr, "OpenCode 2.5.0 is available. You have 2.3.0.\nThe update runs without Agent Guard's protection.\nUpdate now? [Y/n] OpenCode updated to 2.5.0.\n");
+    assert.equal(r.stderr, "OpenCode 2.5.0 is available. You have 2.3.0.\nThe update runs without Agent Guard's protection.\nUpdate now? [Y/n] ");
     assert.equal(r.stdout, 'upgrade 2.5.0\nstatus 2\n');
     assert.deepEqual(requests.slice(before), ['/opencode-tap-update?current=2.3.0']);
     rmSync(upgradeCalls); before = requests.length;
@@ -277,7 +277,7 @@ try {
     rmSync(upgradeCalls);
   });
   await check('the desktop offer shows the note, logs the upgrade and stops its window', async () => {
-    answer = 'Update'; ui(); rmSync(helperPid, { force: true }); opencodeReply = '2.4.0';
+    answer = 'Update'; ui(); rmSync(helperPid, { force: true }); rmSync(noticeArgs, { force: true }); opencodeReply = '2.4.0';
     const log = join(home, 'Agent Guard/last-opencode-update.log');
     // The recording upgrade waits for the window helper to start, as the updater stub does.
     const wait = `opencode_upgrade() { repeat 50 { [[ -e ${quote(helperPid)} ]] && break; /bin/sleep 0.1 }; print -r -- "upgrade $1" }`;
@@ -285,7 +285,7 @@ try {
     assert.equal(r.stdout, 'status 2\n', r.stderr);
     assert.ok(readFileSync(alertArgs, 'utf8').endsWith("An update is available: 2.4.0.\nYou have 2.3.0.\nThe update runs without Agent Guard's protection.\n"));
     assert.ok(readFileSync(alertArgs, 'utf8').includes('with title "OpenCode"'));
-    assert.ok(readFileSync(noticeArgs, 'utf8').endsWith('OpenCode updated to 2.4.0.\n'));
+    assert.equal(existsSync(noticeArgs), false);
     assert.equal(readFileSync(log, 'utf8'), 'upgrade 2.4.0\n');
     assert.ok(helperStopped());
     answer = 'Later'; ui();
@@ -495,7 +495,6 @@ try {
     const alert = readFileSync(alertArgs, 'utf8');
     assert.ok(alert.includes('with title "OpenCode"'));
     assert.ok(alert.endsWith("An update is available: 2.4.0.\nYou have 2.3.0.\nThe update runs without Agent Guard's protection.\n"));
-    assert.ok(readFileSync(noticeArgs, 'utf8').endsWith('OpenCode updated to 2.4.0.\n'));
     assert.deepEqual(desktopRequests(start), ['/opencode-desktop-update?current=2.3.0', '/files/opencode-desktop-mac-arm64.zip']);
     assert.match(readFileSync(join(appPath, 'Contents/Info.plist'), 'utf8'), /<string>2\.4\.0<\/string>/);
     assert.equal(readFileSync(join(appPath, 'Contents/Resources/payload'), 'utf8'), 'new');
@@ -561,7 +560,7 @@ try {
     chmodSync(join(appParent, left[0], 'old/Contents/locked'), 0o700); rmSync(join(appParent, left[0]), { recursive: true });
   });
   await check('the launcher\'s desktop offer stops on a failed update or another version and reads the executable again after an update', async () => {
-    publish('2.4.0'); installApp();
+    publish('2.4.0'); installApp(); rmSync(noticeArgs, { force: true });
     const launch = (extra) => run(`app=${quote(appPath)}; mode=gui; main=before; fail() { print -r -- "fail: $*"; exit 3 }; ${extra}; opencode_desktop_launch_offer; print -r -- "main=$main"`);
     let r = await launch('opencode_desktop_run() { return 1 }');
     assert.equal(r.status, 3); assert.equal(r.stdout, `fail: the OpenCode update failed and the app was not changed. To update by hand, quit OpenCode and install the download from opencode.ai. Details: ${appLog}\n`);
@@ -571,8 +570,10 @@ try {
     assert.equal(r.stdout, `fail: the OpenCode update failed and the app was not changed. To update by hand, quit OpenCode and install the download from opencode.ai or run brew upgrade --cask opencode-desktop. Details: ${appLog}\n`);
     r = await launch('opencode_desktop_run() { :; }');
     assert.equal(r.status, 3); assert.equal(r.stdout, 'fail: the OpenCode update did not install the version offered: expected 2.4.0, found 2.3.0.\n');
+    assert.equal(existsSync(noticeArgs), false);
     r = await launch('');
     assert.equal(r.status, 0, r.stderr); assert.equal(r.stdout, 'main=AgFakeApp\n');
+    assert.ok(readFileSync(noticeArgs, 'utf8').endsWith('OpenCode updated to 2.4.0.\n'));
     answer = 'Later'; ui(); installApp();
     assert.equal((await launch('')).stdout, 'main=before\n');
   });
