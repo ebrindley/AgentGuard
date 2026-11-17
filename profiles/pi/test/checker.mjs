@@ -149,30 +149,35 @@ async function main() {
   await check('deleting a repository below the working folder needs the user\'s own approval (decision D18)', async () => {
     mkdirSync(join(project, 'inner/.git'), { recursive: true });
     mkdirSync(join(project, 'inner/build'), { recursive: true });
-    let asked = 0, answer = async () => true;
-    const ui = { confirm: async (title, message) => { asked++; assert.equal(title, 'Agent Guard'); assert.match(message, /deletes the repository .*inner or its Git data/); return answer(); } };
+    let answer = async () => true;
+    const questions = [];
+    const ui = { confirm: async (title, message) => { questions.push({ title, message }); return answer(); } };
     const ask = (command, extra = { hasUI: true, ui }) => run(bash(command), project, extra);
     mkdirSync(join(project, 'spaced repo/.git'), { recursive: true });
     for (const command of ['rm -rf inner/build', 'ls inner', 'mv inner renamed', 'rm inner/.git/index.lock', 'rsync --archive --dry-run --delete sub/ inner/',
       `find ${join(project, 'inner').replaceAll(' ', '\\ ')} -maxdepth 0 -type f -delete`]) assert.equal(await ask(command), undefined, command);
-    assert.equal(asked, 0);
+    assert.equal(questions.length, 0);
     const refused = (r, text) => { assert.ok(r && r.block === true); assert.match(r.reason, /^Agent Guard: this command deletes the repository .*\/inner or its Git data\. /); assert.match(r.reason, text); };
     refused(await ask('rm -rf inner'), /approval came back at once.*automatic/);
+    assert.equal(questions.at(-1).title, 'Agent Guard');
+    assert.match(questions.at(-1).message, /deletes the repository .*inner or its Git data/);
     answer = async () => false;
     refused(await ask('rm -rf ./inner/'), /The user did not approve it/);
     refused(await ask('rm -rf inner/.git'), /The user did not approve it/);
+    refused(await ask('rm -rf inner\nprintf "%s" "\u001b\u202e"'), /The user did not approve it/);
+    assert.ok(questions.at(-1).message.endsWith(String.raw`Command: "rm -rf inner\nprintf \"%s\" \"\u001b\u202e\""`));
     { const r = await ask('rm -rf spaced\\ repo'); assert.ok(r && r.block === true); assert.match(r.reason, /deletes the repository .*\/spaced repo or its Git data\. The user did not approve it/); }
     // A case-insensitive volume takes another letter case for the same folder.
     const folded = existsSync(join(project, 'INNER')) ? 1 : 0;
     if (folded) refused(await ask('rm -rf INNER'), /The user did not approve it/);
     assert.equal(await ask('rm -rf INNER/build'), undefined);
-    assert.equal(asked, 4 + folded);
+    assert.equal(questions.length, 5 + folded);
     refused(await ask('rm -rf inner', { ui }), /cannot ask the user in this session.*outside Agent Guard\.$/);
     refused(await ask('rm -rf inner', {}), /cannot ask the user in this session/);
-    assert.equal(asked, 4 + folded);
+    assert.equal(questions.length, 5 + folded);
     answer = () => new Promise((resolve) => setTimeout(() => resolve(true), 1600));
     assert.equal(await ask('rm -rf inner'), undefined);
-    assert.equal(asked, 5 + folded);
+    assert.equal(questions.length, 6 + folded);
   });
 
   await check('worst of the candidate folders: input.cwd inside the project cannot hide the session folder', async () => {

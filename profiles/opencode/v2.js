@@ -18,8 +18,14 @@ export async function setup(context, guard) {
   let confirm
   try {
     if (typeof context.permission?.assert === "function") {
-      await context.permission.hook("evaluate", event => { if (event?.action === DELETE_REPOSITORY) event.effect = "ask" })
-      confirm = ({ sessionID, repository, message }) => context.permission.assert({ sessionID, action: DELETE_REPOSITORY, resources: [repository], message })
+      await context.permission.hook("evaluate", event => {
+        if (event?.action !== DELETE_REPOSITORY) return
+        event.effect = "ask"
+        if (typeof event.metadata?.agentGuardMessage === "string") event.message = event.metadata.agentGuardMessage
+      })
+      confirm = ({ sessionID, repository, message }) => context.permission.assert({
+        sessionID, action: DELETE_REPOSITORY, resources: [repository], metadata: { agentGuardMessage: message },
+      })
     }
   } catch { confirm = undefined }
   const hooks = await guard({

@@ -109,7 +109,13 @@ if (host === 'v2') {
     agent: { list: async () => ({ data: [{ id: 'build', permissions: [{ action: 'shell', resource: '*', effect: 'allow' }] }] }) },
     permission: {
       hook: async (name, callback) => { assert.equal(name, 'evaluate'); globalThis.permission.evaluate = callback; },
-      assert: async request => { globalThis.permission.asked.push(request); await globalThis.permission.answer(request); },
+      assert: async ({ action, resources, sessionID, metadata }) => {
+        const request = { action, resources, sessionID, metadata, effect: 'allow' };
+        await globalThis.permission.evaluate(request);
+        assert.equal(request.effect, 'ask');
+        globalThis.permission.asked.push(request);
+        await globalThis.permission.answer(request);
+      },
     },
     tool: {
       hook: async (name, callback) => { assert.ok(['execute.before', 'execute.after'].includes(name)); if (name === 'execute.before') execute = callback; else finished = callback; },
@@ -184,7 +190,7 @@ if (ready) {
   assert.match(denial.output, /^touch: \/x: Operation not permitted\n\nAgent Guard: this session runs in Agent Guard's sandbox.*ps, open, launchctl and codesign.*outside Agent Guard\.$/s);
   // Decision D18: a command that deletes a repository below its folder needs the
   // user's approval. V1 has no request to raise, so it refuses.
-  const remove = () => before({ tool: 'bash', sessionID: 'ses_fixture' }, { args: { command: 'rm DELETE-REPO repo' } });
+  const remove = () => before({ tool: 'bash', sessionID: 'ses_fixture' }, { args: { command: 'rm DELETE-REPO repo\nprintf "%s" "\u001b\u202e"' } });
   await before({ tool: 'bash' }, { args: { command: 'rm DELETE-REPO other' } });
   await before({ tool: 'bash' }, { args: { command: 'ls DELETE-REPO repo' } });
   if (host === 'v1') await assert.rejects(remove(), /deletes the repository .*\/Projects\/app\/repo or its Git data\. Agent Guard cannot ask the user in this session.*outside Agent Guard\.$/);
@@ -196,6 +202,8 @@ if (ready) {
     await assert.rejects(remove(), /approval came back at once.*automatic/);
     assert.deepEqual(permission.asked.at(-1).resources, [join(directory, 'repo')]);
     assert.equal(permission.asked.at(-1).sessionID, 'ses_fixture');
+    assert.match(permission.asked.at(-1).message, /deletes the repository .*\/Projects\/app\/repo or its Git data/);
+    assert.ok(permission.asked.at(-1).message.endsWith(String.raw`Command: "rm DELETE-REPO repo\nprintf \"%s\" \"\u001b\u202e\""`));
     permission.answer = async () => { throw new Error('rejected'); };
     await assert.rejects(remove(), /The user did not approve it/);
     permission.answer = () => new Promise(resolve => setTimeout(resolve, 1600));
