@@ -245,9 +245,12 @@ const UNGUARDED =
 // Decision D18: deleting a whole repository needs the user's approval. An answer that
 // comes back sooner than a person can read the question is not the user's.
 const CONFIRM_MIN_MS = 1500;
+// Keep the full command visible without rendering terminal controls or bidi marks.
+const shownCommand = (command) => JSON.stringify(command).replace(/[\u007f-\u009f\p{Cf}\p{Zl}\p{Zp}]/gu, (char) =>
+  char.split('').map((unit) => '\\u' + unit.charCodeAt(0).toString(16).padStart(4, '0')).join(''));
 
 /** Ask before a command deletes `repository`; a block unless the user approves. */
-async function confirmDelete(ctx, repository) {
+async function confirmDelete(ctx, repository, command) {
   let home = '';
   try {
     home = realpathSync(homedir());
@@ -262,7 +265,7 @@ async function confirmDelete(ctx, repository) {
   const started = Date.now();
   let approved = false;
   try {
-    approved = (await ctx.ui.confirm('Agent Guard', `This command deletes the repository ${shown} or its Git data. Approve only if you asked for that.`)) === true;
+    approved = (await ctx.ui.confirm('Agent Guard', `This command deletes the repository ${shown} or its Git data. Approve only if you asked for that.\n\nCommand: ${shownCommand(command)}`)) === true;
   } catch {
     approved = false;
   }
@@ -363,7 +366,7 @@ export default function (pi) {
     } catch {
       repository = null;
     }
-    return repository ? confirmDelete(ctx, repository) : undefined;
+    return repository ? confirmDelete(ctx, repository, event.input.command) : undefined;
   };
 
   // The sandbox note, when the launch applied Seatbelt and the checker is healthy.

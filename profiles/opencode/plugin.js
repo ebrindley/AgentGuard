@@ -29,6 +29,9 @@ const SANDBOX_NOTE = "Agent Guard: this session runs in Agent Guard's sandbox, w
 // that comes back sooner than a person can read the request is a client approving
 // by itself (opencode run --auto), which the plugin cannot otherwise see.
 const CONFIRM_MIN_MS = 1500
+// Keep the full command visible without rendering terminal controls or bidi marks.
+const shownCommand = command => JSON.stringify(command).replace(/[\u007f-\u009f\p{Cf}\p{Zl}\p{Zp}]/gu, char =>
+  char.split("").map(unit => "\\u" + unit.charCodeAt(0).toString(16).padStart(4, "0")).join(""))
 const UNSAFE_NET_ENV = ["CC_SAFETY_NET_HOME", "CC_SAFETY_NET_WORKTREE", "SAFETY_NET_WORKTREE", "CC_SAFETY_NET_AUDIT_HOME"]
 const releaseID = value => typeof value === "string" && value.length <= 100 && /^[0-9A-Za-z.+-]+$/.test(value) && value !== "." && value !== ".." ? value : null
 const publicReleaseID = value => typeof value === "string" && /^(?:dev|\d+\.\d+\.\d+(?:\.\d+)?(?:-(?:rc|beta|alpha|pre)[.-]?\d+)?)-(?:\d{8}T\d{6}Z|fixture)$/.test(value) ? value : null
@@ -360,7 +363,7 @@ async function guard(input) {
   }
   // The command passed the checker and would delete a repository below the folder
   // it runs in. The host asks the user where it can; anywhere else it is refused.
-  const confirmDelete = async (tool, info, repository) => {
+  const confirmDelete = async (tool, info, repository, command) => {
     const shown = tilde(repository)
     const deny = text => refuse(tool, `Agent Guard: this command deletes the repository ${shown} or its Git data. ${text}`, "safety-net", "command-denied", "review-policy", "custom")
     if (typeof input.confirm !== "function")
@@ -368,7 +371,7 @@ async function guard(input) {
     const started = Date.now()
     let approved = false
     try {
-      await input.confirm({ sessionID: info.sessionID, repository, message: `Agent Guard: this command deletes the repository ${shown} or its Git data. Approve only if you asked for that.` })
+      await input.confirm({ sessionID: info.sessionID, repository, message: `Agent Guard: this command deletes the repository ${shown} or its Git data. Approve only if you asked for that.\n\nCommand: ${shownCommand(command)}` })
       approved = true
     } catch {}
     if (!approved) deny("The user did not approve it, so it was not run. Do not delete it another way; report this to the user.")
@@ -431,7 +434,7 @@ async function guard(input) {
       let folder = canonical(directory)
       try { if (typeof args.workdir === "string") folder = target(args.workdir, tool) } catch {}
       const repository = repositoryDelete(checkCommand, args.command, [folder])
-      if (repository) await confirmDelete(tool, info, repository)
+      if (repository) await confirmDelete(tool, info, repository, args.command)
     }
     if (tool === "bash") peerPath(args)
   }
