@@ -301,11 +301,11 @@ behind linked ancestors. These changes follow the 0.2.0 prerelease.
   trusted ([threat model](docs/THREAT-MODEL.md#2-trust-boundaries)). The offer
   is a dialog you answer.
 - Work a shared Grok leader runs. Agent Guard covers the Grok process its
-  launcher starts, interactive or headless (`grok -p`), with Grok's tools running
-  in that process. `grok workspace start` and `grok worker start` run a leader
-  that takes work from xAI's Computer Hub or from Cursor. The launcher refuses to
-  start them, so they run outside the guard, and the leader and the work it runs
-  have no Agent Guard profile.
+  launcher starts, interactive or headless (`grok -p`), and the tools that run
+  in that process. Work sent to a leader already running outside Agent Guard,
+  including work from xAI's Computer Hub or Cursor private workers, runs
+  outside the profile. The launcher refuses `grok workspace start`,
+  `grok workspace restart` and `grok workspace resume`.
 
 ## Known limitations
 
