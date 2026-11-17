@@ -108,6 +108,7 @@ ag_m_opencode_guard_checks() {
     ag_say "OpenCode Guard was installed here before, and no permission record of it exists, so the values it wrote cannot be restored.${found:+ Check edit, bash and external_directory in: ${(j:, :)found}}"
   fi
   [[ $ag_ocg_state == full ]] || return 0
+  ag_opencode_migration_plugin_slot || return 1
   if [[ -e $ocg_record || -L $ocg_record ]] && ! /usr/bin/jq -e 'type == "object" and all(.[]; type == "object" and all(.[]; type == "object" and has("orig")))' "$ocg_record" >/dev/null 2>&1; then
     ag_err "OpenCode Guard's permission record $ocg_record cannot be read or is not an object of per-file entries. Nothing changed."
     return 1
@@ -323,6 +324,7 @@ do_plugin_name() {
   local b="$txn_dir/backup/plugin-name"
   ag_jlast plugin-name
   [[ $REPLY == done ]] && return 0
+  ag_opencode_migration_plugin_slot || return 1
   if [[ -z $REPLY ]]; then
     ag_backup plugin-name || return 1
     if [[ -L $plugin ]]; then /usr/bin/readlink -- "$plugin" > "$b/link" || return 1; fi

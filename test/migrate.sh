@@ -527,6 +527,16 @@ boot_notty
 rc=$?
 (( rc != 0 )) && /usr/bin/grep -q 'Nothing changed' "$out" && [[ ! -e $list ]] && pass "exit $rc, the list is not imported without a terminal" || { fail "exit $rc"; show }
 
+label='M2 occupied plugin path'
+restore ocg-1.0.4
+print -r -- '// operator plugin' > "$plugin"
+snapshot "$home" > "$run/occupied-plugin.snapshot"
+point= boot y
+rc=$?
+(( rc != 0 )) && /usr/bin/grep -qF "migration would overwrite $plugin" "$out" &&
+  pass 'migration refuses the occupied plugin path' || { fail "migration (exit $rc)"; show }
+same_snapshot 'the operator plugin and the legacy install are unchanged' "$run/occupied-plugin.snapshot"
+
 # --- M3: a failure after each switch action and after the live doctor rolls back.
 # OpenCode Guard's files that were links during the switch are regular files again,
 # byte-identical (design A1).
@@ -554,6 +564,23 @@ for p in rulebook rulejson current fwd-cli fwd-gui plugin-take plugin-name rc ap
   label="M3 fail:$p"
   rolled_back 1.0.4 $p
 done
+label='M3 interrupted migration, occupied plugin path'
+restore ocg-1.0.4
+point=kill:plugin-name boot y
+rc=$?
+if (( rc == 137 )); then
+  print -r -- '// operator plugin' > "$plugin"
+  point= boot y
+  rc=$?
+  (( rc != 0 )) && /usr/bin/grep -qF "migration would overwrite $plugin" "$out" &&
+    [[ -f $plugin && ! -L $plugin && $(<"$plugin") == '// operator plugin' ]] &&
+    /usr/bin/cmp -s -- "$old_plugin" "$run/saved-ocg-1.0.4${old_plugin#$home}" &&
+    pass 'recovery preserves the operator plugin and restores the legacy plugin' || { fail "recovery (exit $rc)"; show }
+else
+  fail "kill at plugin-name (exit $rc)"
+  show
+fi
+
 # A rollback puts back OpenCode Guard's plugin as the link it was.
 label='M3 fail:plugin-take link'
 restore ocg-1.0.4
