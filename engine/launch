@@ -384,6 +384,7 @@ normalize() {
 # it is never widened. The profile's start_hook reads the launch arguments and
 # gives the project argument OpenCode itself would open, if any.
 typeset -a projects project_names
+integer ambiguous_update=0
 lexical() {
   local component resolved=/
   local -a parts
@@ -503,6 +504,17 @@ resolve_project() {
     fi
     $start_hook "${launch_args[@]}" || { record "refused @project: $REPLY"; fail "@project: $REPLY" }
     arg=$REPLY
+    if [[ $harness == opencode && ${opencode_subcommand:-} == update ]]; then
+      # A bare update can select a V1 project or V2 maintenance. Give it no
+      # project while building the profile for the confined version probe.
+      if [[ $mode == profile ]]; then
+        record "refused @project: update can name a project or a maintenance command"
+        fail "@project: use ./update to select the project or upgrade to select maintenance"
+      fi
+      ambiguous_update=1
+      record "skipped @project for the OpenCode version probe"
+      return 1
+    fi
   fi
   if [[ -n $arg ]]; then
     # OpenCode 1 joins a relative project to $PWD and then changes into it, so
@@ -915,6 +927,10 @@ case $mode in
       # unconfined only when the nesting probe succeeded.
       if (( probe_ok )) && opencode_maintenance $REPLY "$@"; then
         opencode_maintain "$@"
+      fi
+      if (( ambiguous_update )); then
+        record "refused @project: update can name a project or a maintenance command"
+        fail "@project: use opencode ./update to open the project or opencode upgrade for maintenance"
       fi
       # OpenCode's own update offer, after Agent Guard's, on the same evidence:
       # only for a session of its own, and not attached to a server. It leaves
