@@ -93,6 +93,10 @@ replace_once "$rel/profiles/pi/sandbox/pi-sandbox-preamble.zsh" 'PATH="/opt/home
 /bin/cp "$rel/profiles/pi/scripts/extension-entry.ts" "$ext/index.ts"
 /bin/cp "$rel/profiles/pi/src/index.mjs" "$ext/src/"
 print -r -- 'export PATH="$HOME/.local/bin:$PATH"' > "$home/.zprofile"
+# A login shell reads /etc/zprofile, whose path_helper adds the host's PATH entries
+# (Homebrew's folder), so a host OpenCode, Pi or OMP would be found. .zshenv skips the
+# remaining system startup files and leaves the home's own .zprofile in charge.
+print -r -- 'unsetopt GLOBAL_RCS' > "$home/.zshenv"
 
 # Fake runtimes outside every sandbox-writable root.
 runtime() {  # PATH BODY
