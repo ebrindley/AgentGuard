@@ -92,7 +92,7 @@ const malformed = (name, policy) => {
     assert.equal(verdict.ruleId, rule, command)
   }
   const minimal = { version: 1, destructive_command_protection: { overrides: { [rule]: "on" } } }
-  for (const [name, policy] of [["not-json", "not json"], ["array", "[1]"], ["empty", ""]]) {
+  for (const [name, policy] of [["not-json", "not json"], ["array", "[1]"], ["empty", ""], ["two-objects", '{"version":1} {"version":1}']]) {
     const copy = malformed(name, policy)
     assert.deepEqual(copy.session, minimal, name)
     assert.equal(checkCommand({ command: 'rm -rf "$TARGET"', cwd: copy.cwd }).kind, "deny", name)
