@@ -792,7 +792,7 @@ ag_projects_check() {
 
 # The app runs a path that does not change between releases, so it is rebuilt only
 # when its inputs (script, bundle ID, privacy text, signing options, icon,
-# entitlements) differ from the stamp's, or it is missing.
+# entitlements) differ from the stamp's, or it is missing or invalid.
 # Opening the app runs the launcher; a folder dropped on it, or chosen at the first
 # open when @project is on and no folder is remembered, goes to the launcher as
 # --project, one literal argument each (docs/DESIGN.md section 4). The script text
@@ -852,6 +852,13 @@ ag_app_usage_keys() {
 }
 ag_app_usage_text() { REPLY='OpenCode asked for this while running inside Agent Guard. Agent Guard does not use it itself.' }
 
+ag_app_valid() {
+  local bundle=$1 executable
+  executable=$(/usr/bin/plutil -extract CFBundleExecutable raw "$bundle/Contents/Info.plist" 2>/dev/null) &&
+    [[ -n $executable && $executable != */* && -f $bundle/Contents/MacOS/$executable && -x $bundle/Contents/MacOS/$executable ]] &&
+    /usr/bin/codesign --verify --strict "$bundle" 2>/dev/null
+}
+
 ag_app_decide() {
   local icon="$ag_tree/profiles/opencode/assets/AgentGuard.icns" ents="$ag_tree/profiles/opencode/assets/AgentGuard.entitlements" s old=
   [[ -f $ents ]] || { ag_err "the release has no $ents"; return 1 }
@@ -863,7 +870,7 @@ ag_app_decide() {
   ag_app_inputs=${s%% *}
   [[ -f $stamp ]] && old=$(/usr/bin/jq -r '.app_inputs // empty' "$stamp" 2>/dev/null)
   ag_app_rebuild=1
-  [[ -d $app && $old == "$ag_app_inputs" ]] && ag_app_rebuild=0
+  [[ $old == "$ag_app_inputs" ]] && ag_app_valid "$app" && ag_app_rebuild=0
   return 0
 }
 
@@ -952,7 +959,7 @@ ag_build() {
   ag_app_sign_options
   /usr/bin/codesign --force --sign - $reply --entitlements "$rel/profiles/opencode/assets/AgentGuard.entitlements" "$s" 2>/dev/null ||
     { ag_err 'cannot sign the app'; return 1 }
-  /usr/bin/codesign --verify --strict "$s" 2>/dev/null || { ag_err 'the built app fails codesign --verify --strict'; return 1 }
+  ag_app_valid "$s" || { ag_err 'the built app is missing its executable or fails codesign --verify --strict'; return 1 }
   id=$(/usr/bin/plutil -extract CFBundleIdentifier raw "$s/Contents/Info.plist") && [[ $id == "$bundle_id" ]] ||
     { ag_err "the built app's bundle ID is not $bundle_id"; return 1 }
 }
@@ -1395,6 +1402,7 @@ ag_stamp_write() {
   local out="$ag_tstage/stamp.json" rel="$engine/releases/$ag_rid_new" sums links harnesses h m
   local -a files kv
   test_point stamp || return 1
+  ag_app_valid "$app" || { ag_err "cannot stamp $app: its executable is missing or its signature is invalid"; return 1 }
   files=("$rel"/**/*(.DN) "$app"/**/*(.DN))
   for h in $ag_harnesses; do reply=(); ag_hook_opt h $h files; files+=("${reply[@]}"); done
   sums=$(/usr/bin/shasum -a 256 -- $files) || return 1
