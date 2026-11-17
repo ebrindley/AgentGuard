@@ -427,53 +427,49 @@ try {
     console.log("ok a guarded launch drops the outer-sandbox variable")
   }
   {
-    // Session folders: the launcher prunes ended ones outside the sandbox, once
-    // a day, in the background.
+    // Detached descendants can still hold a snapshot whose owner has exited.
+    // Prune only sessions from before this boot.
     const sessions = join(engine, "state/opencode")
-    const stamp = join(engine, "state/.session-prune")
+    const stamp = join(sessions, ".session-prune")
     const wait = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
     const until = (done, what) => { for (let i = 0; i < 100 && !done(); i++) wait(100); assert.ok(done(), what) }
-    const startOf = pid => execFileSync("/bin/ps", ["-o", "lstart=", "-p", String(pid)], { encoding: "utf8" }).trim().split(/\s+/).join(" ")
-    const old = new Date("2020-01-01T00:00:00Z")
-    const folder = (name, { owner, mtime = old } = {}) => {
+    const boot = Number(execFileSync("/usr/sbin/sysctl", ["-n", "kern.boottime"], { encoding: "utf8" }).match(/sec = (\d+),/)[1])
+    const preboot = new Date((boot - 1) * 1000)
+    const thisBoot = new Date(Math.max(boot * 1000, Date.now() - 2 * 86400 * 1000))
+    const folder = (name, mtime, owner) => {
       const d = join(sessions, `fixture.${name}`)
       mkdirSync(d, { recursive: true })
       if (owner) writeFileSync(join(d, "owner"), `${owner[0]}\n${owner[1]}\n`)
       utimesSync(d, mtime, mtime)
       return d
     }
-    const live = spawn("/bin/sleep", ["60"], { stdio: "ignore" })
-    try {
-      const dead = spawnSync("/usr/bin/true").pid
-      const liveStart = startOf(live.pid)
-      const kept = {
-        live: folder("liveowne", { owner: [live.pid, liveStart] }),
-        recent: folder("recentde", { owner: [dead, "Mon Jan  1 00:00:00 2001"], mtime: new Date() }),
-        fresh: folder("freshnoow", { mtime: new Date() }),
-      }
-      const gone = {
-        dead: folder("deadowne", { owner: [dead, liveStart] }),
-        reused: folder("reusedpi", { owner: [live.pid, "Mon Jan  1 00:00:00 2001"] }),
-        preboot: folder("preboot0", {}),
-      }
-      assert.equal(launch(null, ["cli", "hello"]).status, 7)
-      until(() => Object.values(gone).every(d => !existsSync(d)), "ended sessions were not removed")
-      wait(500)
-      assert.ok(Object.values(kept).every(existsSync), "a live, recent or fresh session was removed")
-      assert.ok(existsSync(sessions) && existsSync(stamp))
-      const own = execFileSync("/bin/ls", [sessions], { encoding: "utf8" }).split("\n").filter(n => n && !n.startsWith("fixture."))
-      assert.equal(own.length, 1)
-      assert.match(readFileSync(join(sessions, own[0], "owner"), "utf8"), /^\d+\n\w{3} \w{3} +\d+ [\d:]{8} \d{4}\n$/)
-      console.log("ok launch removes sessions of dead or reused owners and owner-less folders from before boot, and keeps the rest")
-      const again = folder("deadtwo0", { owner: [dead, liveStart] })
-      assert.equal(launch(null, ["cli", "hello"]).status, 7)
-      wait(1500)
-      assert.ok(existsSync(again), "the stamp did not throttle pruning")
-      utimesSync(stamp, old, old)
-      assert.equal(launch(null, ["cli", "hello"]).status, 7)
-      until(() => !existsSync(again), "pruning did not run after the stamp aged")
-      console.log("ok the stamp throttles pruning")
-    } finally { live.kill() }
+    const dead = spawnSync("/usr/bin/true").pid
+    const start = execFileSync("/bin/ps", ["-o", "lstart=", "-p", String(process.pid)], { encoding: "utf8" }).trim().split(/\s+/).join(" ")
+    const kept = [
+      folder("deadowne", thisBoot, [dead, start]),
+      folder("noowner0", thisBoot),
+    ]
+    const gone = [
+      folder("oldowne0", preboot, [process.pid, start]),
+      folder("preboot0", preboot),
+    ]
+    assert.equal(launch(null, ["cli", "hello"]).status, 7)
+    until(() => gone.every(d => !existsSync(d)), "sessions from before boot were not removed")
+    assert.ok(kept.every(existsSync), "a session from this boot was removed")
+    assert.ok(existsSync(stamp))
+    const own = readdirSync(sessions).filter(n => !n.startsWith(".") && !n.startsWith("fixture."))
+    assert.equal(own.length, 1)
+    assert.ok(existsSync(join(sessions, own[0], "permissions.json")))
+    console.log("ok launch prunes only sessions from before boot, regardless of former owners")
+    const again = folder("oldagain", preboot)
+    assert.equal(launch(null, ["cli", "hello"]).status, 7)
+    wait(1500)
+    assert.ok(existsSync(again), "the stamp did not throttle pruning")
+    const oldStamp = new Date(Date.now() - 2 * 86400 * 1000)
+    utimesSync(stamp, oldStamp, oldStamp)
+    assert.equal(launch(null, ["cli", "hello"]).status, 7)
+    until(() => !existsSync(again), "pruning did not run after the stamp aged")
+    console.log("ok the stamp throttles pruning")
     rmSync(join(engine, "state"), { recursive: true, force: true })
     rmSync(log, { force: true })
   }
