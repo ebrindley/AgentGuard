@@ -19,10 +19,18 @@ launch_args=("$@")
 # it is not read as part of the launch whose log it follows. The stage line stays
 # last for agent-guard diagnose.
 integer header_written=0
+app_lock_fd=
+unlock_app_projects() {
+  if [[ -n $app_lock_fd ]]; then
+    zsystem flock -u "$app_lock_fd"
+    app_lock_fd=
+  fi
+}
 show_alert() {
   /usr/bin/osascript -e 'on run argv' -e 'display alert "Agent Guard" message (item 1 of argv) as critical' -e 'end run' "$1" >/dev/null 2>&1 || true
 }
 fail() {
+  unlock_app_projects
   if [[ -n ${log:-} && -d ${log:h} ]]; then
     {
       (( header_written )) || print -r -- "Agent Guard ${mode:-} ${${release:-}:t} $(/bin/date '+%Y-%m-%d %H:%M:%S') refused before launch"
@@ -259,7 +267,6 @@ if [[ $mode == gui ]]; then
   done
   set -- "${gui_rest[@]}"
 fi
-[[ ! -r $app_store ]] || app_lines=(${(f)"$(<"$app_store")"})
 # The answer is read-only: it writes no log, snapshot or store. An open app gets
 # the launch, which names it.
 if (( app_query )); then
@@ -270,7 +277,11 @@ if (( app_query )); then
       line=${${line%$'\r'}##[[:space:]]##}
       line=${line%%[[:space:]]##}
       if list_section "$line"; then section=$REPLY; continue; fi
-      if [[ $section == allow && $line == @project ]] && (( ! $#app_lines )); then answer=ask; break; fi
+      if [[ $section == allow && $line == @project ]]; then
+        opencode_app_projects_read "$app_store" || { print -ru2 -- "agent-guard: cannot read $app_store"; exit 1; }
+        [[ -n $REPLY ]] || answer=ask
+        break
+      fi
     done < "$list"
   fi
   print -r -- $answer
@@ -457,6 +468,9 @@ check_project() {
 resolve_app_projects() {
   local p given top canon hint
   local -a saved_links
+  opencode_app_projects_read "$app_store" || fail "cannot read the app projects in $app_store"
+  app_snapshot=$REPLY
+  app_lines=(${(f)app_snapshot})
   app_listed=1
   for p in $app_lines; do
     hint="Remove it with: agent-guard app-projects remove ${(q-)p}"
@@ -1028,15 +1042,24 @@ unset AGENT_GUARD_OUTER_SANDBOX
 # profiles/pi/sandbox/pi-sandbox-preamble.zsh, AG_PEER_RELEASE; change both together.
 export AGENT_GUARD_PEER_PATH=${AGENT_GUARD_PEER_PATH:-$PATH}
 path=("$release/peers" $path)
-# The remembered app projects change only once the launch is certain (just before
-# the client starts) and outside the sandbox: a temp file in the same folder,
-# then a rename.
+# Keep the verified store stable through startup, including the managed server,
+# whose permissions are fixed when it starts. All update prompts have finished.
+lock_app_projects() {
+  (( app_listed )) || return 0
+  opencode_app_projects_lock "$app_store" || fail "cannot lock the app projects in $app_store"
+  app_lock_fd=$REPLY
+  opencode_app_projects_read "$app_store" || fail "cannot read the app projects in $app_store"
+  [[ $REPLY == "$app_snapshot" ]] || fail 'The remembered app projects changed during launch. Open Agent Guard again to use the current list.'
+}
+
+# Only remember new projects once the launch is ready to start its client.
 record_app_projects() {
   (( $#app_new )) || return 0
   print -rl -- $app_lines $app_new > "$app_store.$$" && /bin/mv -f -- "$app_store.$$" "$app_store" ||
     { /bin/rm -f -- "$app_store.$$"; fail "cannot record the app projects in $app_store" }
   app_new=()
 }
+lock_app_projects
 (( ! managed )) || opencode_managed "$managed_cli" "$@"
 record_app_projects
 if [[ $harness == opencode && $mode == cli ]] && opencode_browser_cli_requested "${launch_args[@]}"; then
