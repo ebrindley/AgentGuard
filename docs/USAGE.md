@@ -96,10 +96,10 @@ existing desktop window, and does not call a model.
 ### Update the OpenCode CLI
 
 Run `opencode upgrade` from Terminal, outside any agent session. On OpenCode 2,
-`opencode update` is the same command; on OpenCode 1 it is not a command, and
-`opencode update` opens a project named `update` as before. The command is the
-first word after OpenCode's global options, so `opencode --print-logs upgrade`
-counts and words after `--` do not.
+`opencode update` is the same command. To open an OpenCode 1 project named
+`update` with `@project` enabled, use `opencode ./update` or its full path.
+An updater command is the first word after OpenCode's global options, so
+`opencode --print-logs upgrade` counts and words after `--` do not.
 
 The launcher prints `Updating OpenCode. The update runs without Agent Guard's
 protection; your next session will be protected as usual.` and runs OpenCode's
@@ -496,11 +496,10 @@ ALLOW
 - With no project argument, `@project` is the Git top level of the folder you
   start in, else that folder. Symlinks are resolved first, and a protected name
   inside the project that is a symlink is handled as in the launch folder.
-- Help, version and upgrade need no project: `--help`, `-h`, `--version` or
-  `-v` as the last argument (with no `--` before it), and `opencode upgrade`,
-  skip `@project` and are not refused from your home folder. The log records the
-  skip. Nothing else is skipped: a session, `run`, `serve` and `update` from a
-  folder `@project` refuses are still refused.
+- A final `--help`, `-h`, `--version` or `-v` (with no `--` before it) and
+  OpenCode's updater skip `@project` and can run from your home folder. Agent
+  Guard reads the OpenCode version under confinement before treating bare
+  `update` as V2 maintenance.
 - Each launch uses its own rules, so two sessions in different projects each
   write only their own project.
 - Linked worktrees and checkouts with a separate Git directory grant the

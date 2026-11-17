@@ -67,7 +67,8 @@ try {
   layout(source, engine);
   // A CLI that reports what a launch lets it write, then exits.
   writeFileSync(join(bin, 'opencode'), `#!/bin/sh
-[ "$1" = --version ] && { echo 1.18.33; exit 0; }
+[ "$1" = --version ] && { echo "\${FAKE_VERSION:-1.18.33}"; exit 0; }
+[ -n "$FAKE_UPDATE_OUT" ] && [ "$2" = update ] && { printf '%s\\n' "$@" > "$FAKE_UPDATE_OUT"; exit 7; }
 if [ -n "$FAKE_BARRIER" ]; then
   : > "$FAKE_BARRIER/$$"
   i=0; while [ "$(ls "$FAKE_BARRIER" | wc -l)" -lt 2 ] && [ $i -lt 200 ]; do sleep 0.1; i=$((i + 1)); done
@@ -265,14 +266,28 @@ exit 0
   refuse('a session with options from home', ['--print-logs'], /@project is too broad/, { cwd: home });
   refuse('run from home', ['run', 'hello'], /@project is too broad/, { cwd: home });
   refuse('serve from home', ['serve'], /@project is too broad/, { cwd: home });
-  refuse('update from home', ['update'], /@project is too broad/, { cwd: home });
+  refuse('bare update in a profile from home', ['update'], /use \.\/update to select the project or upgrade to select maintenance/, { cwd: home });
   refuse('help after --', ['run', '--', '--help'], /@project is too broad/, { cwd: home });
   refuse('help as an option value', ['--prompt=--help'], /@project is too broad/, { cwd: home });
   refuse('help that is not the last argument', ['--help', 'run'], /@project is too broad/, { cwd: home });
   refuse('help turned off by a later value', ['run', '--help', 'false', 'hello'], /@project is too broad/, { cwd: home });
   same('help turned off by a later value, project named', ['run', '--dir', other, '--help', 'false', 'hello'], other, { cwd: home });
   same('version turned off by a later value, project named', ['run', '--dir', other, '--version', 'false', 'hello'], other, { cwd: home });
-  console.log('ok   a trailing help or version flag and upgrade need no project from home; sessions, run, serve and update are still refused');
+  console.log('ok   a trailing help or version flag and upgrade need no project from home');
+
+  const updateProject = P('Projects/app/update');
+  mkdirSync(updateProject);
+  const v1Project = launch('cli', ['update'], { ...withList, cwd: app });
+  assert.equal(v1Project.status, 1, v1Project.stderr);
+  assert.match(v1Project.stderr, /opencode \.\/update to open the project/);
+  assert.deepEqual(rules().allow, [P('Projects/sibling')]);
+  same('qualified update grants only that folder', ['./update'], updateProject, { cwd: app });
+  const updateOut = join(scratch, 'v2-update');
+  const v2Update = launch('cli', ['--print-logs', 'update'], { ...withList, env: { FAKE_VERSION: '2.3.0', FAKE_UPDATE_OUT: updateOut } });
+  assert.equal(v2Update.status, 7, v2Update.stderr);
+  assert.equal(readFileSync(updateOut, 'utf8'), '--print-logs\nupdate\n');
+  assert.deepEqual(rules().allow, [P('Projects/sibling')]);
+  console.log('ok   bare update grants no implicit project and V2 maintenance works from home');
 
   // `..` through a link: OpenCode 1 and 2 disagree, so the launch is refused.
   symlinkSync(P('Projects/app/src/deep'), P('Projects/deeplink'));
