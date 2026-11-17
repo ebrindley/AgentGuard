@@ -675,6 +675,38 @@ kept=("$home/Agent Guard"/pi-replaced-*(N))
 (( rc == 0 && $#kept == 1 )) && [[ ! -e $engine && $(/usr/bin/readlink "$kept[1]/pi") == "../$pkg" && $(/usr/bin/readlink "$kept[1]/pi.1700000000") == ../old/cli.js ]] &&
   [[ $(/usr/bin/readlink "$lb/pi") == /usr/bin/true ]] && /usr/bin/grep -qF "are copied to ${kept[1]/#$home/~}" "$out" &&
   pass "the rerun copies both as links to the folder it names; ~/.local/bin/pi is left" || { fail "rerun (exit $rc)"; show; listing "$home/Agent Guard" | /usr/bin/sed 's/^/    /' }
+label='uninstall, custom wrapper backups'
+restore npm-installed
+backups="$state/wrapper-backups"
+list_dir="$home/Agent Guard"
+/bin/mkdir -p "$backups"
+print -r -- 'original wrapper' > "$backups/custom.20261117T000000Z.ABCDEF"
+/bin/chmod 751 "$backups/custom.20261117T000000Z.ABCDEF"
+print -r -- 'edited wrapper' > "$lb/custom"
+print -r -- 'older export' > "$list_dir/pi-wrapper-backups-previous"
+/bin/chmod 555 "$list_dir"
+point= ag uninstall
+rc=$?
+/bin/chmod 755 "$list_dir"
+(( rc == 1 )) && [[ -d $engine && -f $backups/custom.20261117T000000Z.ABCDEF ]] &&
+  /usr/bin/grep -qF "from $backups to" "$out" && pass 'failed export keeps the engine and original wrapper' ||
+  { fail "uninstall (exit $rc)"; show }
+point=fail:uninstall-engine ag uninstall
+rc=$?
+kept=("$list_dir"/pi-wrapper-backups-20*(N))
+(( rc == 1 && $#kept == 1 )) && [[ -d $engine && ! -e $backups/custom.20261117T000000Z.ABCDEF &&
+    $(<"$kept[1]/custom.20261117T000000Z.ABCDEF") == 'original wrapper' &&
+    $(/usr/bin/stat -f %Lp "$kept[1]/custom.20261117T000000Z.ABCDEF") == 751 ]] &&
+  /usr/bin/grep -qF "are copied to ${kept[1]/#$home/~}" "$out" && pass 'retry saves and names the original wrapper with its mode' ||
+  { fail "uninstall (exit $rc)"; show }
+point= ag uninstall
+rc=$?
+kept=("$list_dir"/pi-wrapper-backups-20*(N))
+(( rc == 0 && $#kept == 1 )) && [[ ! -e $engine && $(<"$lb/custom") == 'edited wrapper' &&
+    $(<"$list_dir/pi-wrapper-backups-previous") == 'older export' ]] &&
+  pass 'uninstall finishes with one export and preserves the edited wrapper and prior export' ||
+  { fail "uninstall (exit $rc)"; show }
+
 # A failure in the switch puts the link back and removes what the install added,
 # folders included; a kill between the bindings and the launcher leaves the link or
 # the guard at ~/.local/bin/pi, and the rerun ends as the uninterrupted install.

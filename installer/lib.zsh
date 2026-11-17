@@ -281,15 +281,26 @@ move_into() {
 # ~/Agent Guard/PREFIX-<UTC time>, then removed from DIR, and named. Fails, with the
 # message, when the copy fails; DIR is then untouched.
 ag_export_replaced() {
-  local dest partial="$list_dir/.$1.partial"
+  local dest base partial=
   local -a kept
+  integer suffix=0
+  if [[ -L $3 || ( -e $3 && ! -d $3 ) ]]; then
+    ag_err "$3 is not a regular backup folder, so $engine is kept"
+    return 1
+  fi
   kept=("$3"/*(DN))
   (( $#kept )) || return 0
-  dest="$list_dir/$1-$(/bin/date -u +%Y%m%dT%H%M%SZ)"
-  [[ -e $dest || -L $dest ]] && dest+="-$$"
-  /bin/rm -rf -- "$partial"
-  if ! { /bin/mkdir -p -- "$partial" && /bin/cp -Rp -- $kept "$partial/" && /bin/mv -- "$partial" "$dest" }; then
-    /bin/rm -rf -- "$partial"
+  base="$list_dir/$1-$(/bin/date -u +%Y%m%dT%H%M%SZ)"
+  dest=$base
+  while [[ -e $dest || -L $dest ]]; do
+    (( ++suffix ))
+    dest="$base-$suffix"
+  done
+  if ! { /bin/mkdir -p -- "$list_dir" &&
+      partial=$(/usr/bin/mktemp -d "$list_dir/.$1.XXXXXX") &&
+      /bin/cp -Rp -- $kept "$partial/" &&
+      /bin/mv -hn -- "$partial" "$dest" && [[ ! -e $partial ]]; }; then
+    [[ -z $partial ]] || /bin/rm -rf -- "$partial"
     ag_err "could not copy the entries Agent Guard replaced in ${2/#$home/~} from $3 to $dest, so $engine is kept. Run agent-guard uninstall again."
     return 1
   fi

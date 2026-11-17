@@ -606,8 +606,9 @@ ag_h_pi_doctor() {  # RELEASE [--json]
 # left. An entry in state/legacy/replaced that is not put back, because its place
 # holds something else or because an earlier install replaced it (a time suffix),
 # would go with the engine folder: it is copied to ~/Agent Guard/pi-replaced-<time>
-# first, links as links, and fails the step when it cannot be. Names the custom
-# wrappers it leaves.
+# first, links as links, and fails the step when it cannot be. Copies originals
+# replaced by wrapper add to ~/Agent Guard/pi-wrapper-backups-<time> and names
+# the custom wrappers it leaves.
 ag_h_pi_uninstall_remove() {
   local rt f
   local -a left
@@ -627,6 +628,7 @@ ag_h_pi_uninstall_remove() {
     fi
   done
   ag_export_replaced pi-replaced "$pi_bin" "$pi_replaced" || return 1
+  ag_export_replaced pi-wrapper-backups "$pi_bin" "$state/wrapper-backups" || return 1
   /bin/rm -rf -- "$pi_ext" || { ag_err "cannot remove ${pi_ext/#$home/~}; $engine is kept, so agent-guard uninstall can run again"; return 1 }
   /bin/rm -f -- "$pi_bin/pi-sandbox.sb" "$pi_bin/pi-sandbox-preamble.zsh" "$pi_bin/.pi-sandbox.sb.partial" "$pi_bin/.pi-sandbox-preamble.zsh.partial" ||
     { ag_err "cannot remove the profile and preamble in ${pi_bin/#$home/~}; $engine is kept, so agent-guard uninstall can run again"; return 1 }
