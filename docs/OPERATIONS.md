@@ -596,23 +596,22 @@ into a private folder inside the app's parent folder (ten minutes at most),
 checks the SHA-256, unpacks it with `ditto`, requires exactly the app's folder
 name, and verifies the unpacked app (bundle ID, executable name, version,
 Team ID, `codesign --verify --deep --strict` against the installed app's
-designated requirement, `spctl --assess --type execute`). Only then are the old
-app and the new one swapped by two renames on one volume, with the first undone
-if the second fails. After the swap the launcher reads the app's version again
-and requires the offered one, reads the executable's name again, and probes the
-bundled CLI of the new app as for any desktop launch. The old app and the
-private folder are removed; a removal that fails does not fail the update.
+designated requirement, `spctl --assess --type execute`). Only then does macOS
+atomically exchange the two bundles on the same volume. After the exchange the
+launcher reads the app's version again and requires the offered one, reads the
+executable's name again, and probes the bundled CLI as for any desktop launch.
+The updater removes the old app and private folder when it can.
 
-Failure and recovery: any failing step stops the launch with `the OpenCode
-update failed and the app was not changed`, the way to update by hand and the
-log path. The installed app
-is as it was and the private folder is removed. If the old app could not be put
-back after a failed swap, the log says where it is kept. The log's one-line
-reason names the step. macOS's App Management protection may refuse the swap for
-Agent Guard.app, which starts the launcher; this has not been tested, and the
-update then fails at the first move with the app unchanged. Reopen and choose
-Later to run the installed app, or update it by hand: quit OpenCode, then install
-the download from opencode.ai. The failure message says this too and adds `or run
+If a verification or the exchange fails, the installed app stays in place and
+the launch stops with the way to update by hand and the log path. The exchange
+requires support from the app's filesystem. If the launcher is
+interrupted, the installed app is the previous bundle before the exchange or
+the verified new bundle after it. Reopen Agent Guard to use the installed app.
+Once the update has stopped, a `.opencode-update.*` folder next to the app can
+be removed if the updater did not clean it up. macOS's App Management
+protection may also refuse the exchange for Agent Guard.app. Reopen and choose
+Later to run the installed app, or quit OpenCode and install the download from
+opencode.ai. The failure message says this too and adds `or run
 brew upgrade --cask opencode-desktop` only when Homebrew is installed on this
 Mac and its Caskroom holds `opencode-desktop` (see Commands, below).
 Homebrew's record of the cask keeps the older version after an update by this
