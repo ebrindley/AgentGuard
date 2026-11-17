@@ -648,7 +648,14 @@ loaded; `/reload` loads the extension now on disk.
   self-test and which `opencode` a new terminal window finds first (below), with Grok installed the launcher's Grok check and which `grok` a new
   terminal and `zsh -c` find first, and, with Pi's guard installed, Pi's checks:
   - everything pi-sandbox-guard's `npm run status` and `npm run check:path`
-    checked, comparing the installed Pi files with the stamp's hashes;
+    checked, comparing the installed Pi files with the current release's copies
+    byte for byte. When a file or link has drifted, a `note` line gives the
+    repair: run the installer for the installed release again, shown with the
+    stamp's tag. When a real `pi` or `omp` executable sits at its launcher path
+    in `~/.local/bin`, the installer refuses it, so the `note` says to move it
+    out of `~/.local/bin` first and record its new path with `agent-guard bind`
+    afterwards. `agent-guard update --to` with the installed tag does not repair
+    drift;
   - the profile's self-test, the checker's session copy built from
     `~/.cc-safety-net`, and one allowed command and two blocked ones through the
     installed extension, which proves cc-safety-net loads and Agent Guard's Git
@@ -747,10 +754,11 @@ loaded; `/reload` loads the extension now on disk.
   the latest, it installs it again only to finish a migration or retirement that
   is still pending, to add a harness found on this Mac that the install does
   not include yet, for example Pi installed after Agent Guard, or to move the
-  PATH block to the end of a startup file when another `opencode` shadows it. Otherwise, and
-  when the installed release is newer, it does nothing apart from removing the
-  forwarders at OpenCode Guard's old command paths once the Mac has restarted
-  since the migration.
+  PATH block to the end of a startup file when another `opencode` shadows it. Otherwise,
+  and when the installed release is newer, it runs `agent-guard doctor`, which
+  reports drifted files and does not repair them (rerun the installer for
+  that), and removes the forwarders at OpenCode Guard's old command paths once
+  the Mac has restarted since the migration.
   A migration-detection error returns failure with its diagnostic; it is not
   reported as current. It does not fetch prereleases. To install a prerelease, rerun the installer for that tag under
   [Release channels](#release-channels).
