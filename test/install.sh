@@ -149,8 +149,8 @@ decided=$( (
   source "$source_root/installer/lib.zsh"
   t="$run/decide/tree"
   /bin/mkdir -p "$t/profiles/opencode" && /bin/cp -R "$source_root/profiles/opencode/assets" "$t/profiles/opencode/" || exit 1
+  /usr/bin/ditto "$app" "$run/decide/App.app" || exit 1
   ag_tree=$t engine="$run/decide/engine" bundle_id=test.bundle app="$run/decide/App.app" stamp="$run/decide/stamp.json"
-  /bin/mkdir -p "$app"
   keep() { ag_app_decide || exit 1; print -r -- "{\"app_inputs\":\"$ag_app_inputs\"}" > "$stamp" }
   keep; ag_app_decide; print -n "$ag_app_rebuild "
   ag_app_usage_text() { REPLY='another sentence' }
@@ -166,6 +166,24 @@ decided=$( (
   fail "ag_app_decide: '$decided'"
 save A
 snapshot "$home" > "$run/A.snapshot"
+
+# Reinstalling the same recipe repairs a broken installed app.
+label='reinstall repairs app'
+app_exec=$(/usr/bin/plutil -extract CFBundleExecutable raw "$app/Contents/Info.plist")
+for damage in executable signature; do
+  restore A
+  recipe=$(/usr/bin/jq -r .app_inputs "$state/stamp.json")
+  case $damage in
+    (executable) /bin/rm -- "$app/Contents/MacOS/$app_exec" ;;
+    (signature) print -r -- damaged >> "$app/Contents/Resources/Scripts/main.scpt" ;;
+  esac
+  point= boot v0.0.1
+  rc=$?
+  (( rc == 0 )) && [[ -x $app/Contents/MacOS/$app_exec && $(/usr/bin/jq -r .app_inputs "$state/stamp.json") == "$recipe" ]] &&
+    /usr/bin/codesign --verify --strict "$app" 2>/dev/null && pass "same recipe repairs the app's $damage" ||
+    { fail "repair app $damage (exit $rc)"; show }
+done
+restore A
 
 # --- --projects on a regular Guard List, then on one that is a link into dotfiles
 # (mode 600): the link stays, and its target gets the entry and keeps its mode.
