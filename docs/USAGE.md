@@ -496,6 +496,11 @@ ALLOW
 - With no project argument, `@project` is the Git top level of the folder you
   start in, else that folder. Symlinks are resolved first, and a protected name
   inside the project that is a symlink is handled as in the launch folder.
+- Help, version and upgrade need no project: `--help`, `-h`, `--version` or
+  `-v` as the last argument (with no `--` before it), and `opencode upgrade`,
+  skip `@project` and are not refused from your home folder. The log records the
+  skip. Nothing else is skipped: a session, `run`, `serve` and `update` from a
+  folder `@project` refuses are still refused.
 - Each launch uses its own rules, so two sessions in different projects each
   write only their own project.
 - Linked worktrees and checkouts with a separate Git directory grant the
