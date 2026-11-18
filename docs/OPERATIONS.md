@@ -932,7 +932,9 @@ Grok with its own sandbox setting, not Agent Guard's. `grok update` or a
 reinstall of Grok can put a link of its own back at `~/.local/bin/grok`; then
 `grok` in a new terminal starts Grok unguarded and `agent-guard doctor` fails with
 the lookup that no longer finds Agent Guard's launcher. Run the installer again
-to restore it.
+to restore it. If the recorded external executable is removed while the guard link is in place,
+Agent Guard can still update the other harnesses. It keeps the link and its uninstall record,
+and reports the skipped Grok runtime checks. To use Grok again, reinstall Grok and rerun the Agent Guard installer.
 
 ## Running Pi or OMP without the guard
 
