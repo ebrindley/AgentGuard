@@ -498,6 +498,9 @@ doctor_fails "a bin/pi that does not link to ~/.local/bin/pi" '~/Library/Applica
 /bin/rm "$rel/bin/pi"
 /bin/ln -s "$lb/pi" "$rel/bin/pi"
 runtime "$home/shadow/pi" 'print real'
+print -r -- 'alias omp=/usr/bin/true' > "$home/.zshrc"
+doctor_fails 'an interactive alias shadows the OMP launcher' 'omp resolves to a shell alias in a login shell*'
+/bin/rm -- "$home/.zshrc"
 print -r -- 'export PATH="$HOME/shadow:$HOME/.local/bin:$PATH"' > "$home/.zprofile"
 doctor_fails 'an entry point that resolves elsewhere' "pi resolves to $home/shadow/pi in a login shell, not to the guard*"
 # Startup files from another folder cannot hide it.
