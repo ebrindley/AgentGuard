@@ -19,7 +19,7 @@ ag_h_opencode_title() { REPLY=OpenCode }
 # skipped and say so.
 ag_h_opencode_detect() { return 0 }
 
-ag_h_opencode_prepare() { ag_classify_configs }
+ag_h_opencode_prepare() { ag_opencode_plugin_slot && ag_classify_configs }
 
 ag_h_opencode_volume() { reply=("${plugins:A}") }
 
@@ -29,9 +29,10 @@ ag_h_opencode_bundle() { reply=(profiles/opencode/harness.zsh) }
 # True for a plugin path that is Agent Guard's link (into current).
 ag_ours() { [[ -L $1 && $(/usr/bin/readlink -- "$1") == "$plugin_target" ]] }
 
-ag_opencode_migration_plugin_slot() {
-  [[ ! -e $plugin || -L $plugin ]] && return 0
-  ag_err "migration would overwrite $plugin; move it aside before rerunning the installer"
+ag_opencode_plugin_slot() {
+  [[ ! -e $plugin && ! -L $plugin ]] && return 0
+  ag_ours "$plugin" && return 0
+  ag_err "install would overwrite $plugin; move it aside before rerunning the installer"
   return 1
 }
 
@@ -220,7 +221,7 @@ do_plugin() {
   local tmp="$plugins/.agent-guard.js.partial" created=0 b="$txn_dir/backup/plugin"
   ag_jlast plugin
   [[ $REPLY == done ]] && return 0
-  if [[ ${ag_source:-} == opencode-guard ]]; then ag_opencode_migration_plugin_slot || return 1; fi
+  ag_opencode_plugin_slot || return 1
   if [[ -z $REPLY ]]; then
     if [[ -L $plugin && $(/usr/bin/readlink -- "$plugin") == "$plugin_target" ]]; then test_point plugin; return; fi
     [[ -e $plugin || -L $plugin ]] || created=1

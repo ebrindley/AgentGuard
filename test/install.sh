@@ -104,6 +104,24 @@ snapshot "$home" > "$pre"
 /bin/cp "$home/dotfiles/zshrc" "$run/clean-zshrc"
 save clean
 
+# A fresh install must leave a foreign entry at the plugin destination alone.
+label=plugin-slot
+/bin/mkdir -p "$plugins"
+for kind in file link; do
+  if [[ $kind == file ]]; then print -r -- '// user plugin' > "$plugin"
+  else /bin/ln -s "$home/missing-plugin.js" "$plugin"; fi
+  boot v0.0.1 --projects "$home/Projects"
+  rc=$?
+  if (( rc != 0 )) && /usr/bin/grep -qF "would overwrite $plugin" "$out" &&
+     { [[ $kind == file && ! -L $plugin && $(<"$plugin") == '// user plugin' ]] ||
+       [[ $kind == link && $(/usr/bin/readlink "$plugin") == "$home/missing-plugin.js" ]]; }; then
+    pass "install preserves a foreign plugin $kind"
+  else fail "foreign plugin $kind (exit $rc)"; show; fi
+  /bin/rm -- "$plugin"
+done
+restore clean
+[[ ${1:-} != plugin-slot ]] || finish
+
 # --- B8: a release's own bootstrap URL installs that release, whatever is latest.
 # S4 and S6 on the result.
 label=B8
