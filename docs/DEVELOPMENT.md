@@ -303,8 +303,9 @@ scripts/release.sh [--dev] [--out DIR] 0.2.0
 This writes three release assets to `dist/` (or `DIR`):
 `agent-guard-0.2.0.tar.gz`, `agent-guard-0.2.0.tar.gz.sha256` and
 `install.sh`. The archive holds one `agent-guard-0.2.0/` folder with the files
-listed in the script, the whole of `engine/vendor/cc-safety-net` and
-`profiles/opencode/templates`, a `VERSION` file and a `COMMIT` file. The script
+listed in the script, `VERSION` and `COMMIT`. Production builds also include the
+tracked files under `engine/vendor/cc-safety-net`, `engine/checker`, `engine/peers`
+and `profiles/opencode/templates`. The script
 stops if a listed file is missing. It uses only tools that ship with macOS. The
 checksum file names the archive without a folder, so check it from `dist/`:
 
@@ -322,9 +323,10 @@ sandbox, and a copy cut short runs nothing.
 Every build runs `scripts/check-seams.zsh` on what it packages and stops if it
 fails: the production forms of the test seams must occur once each and
 `AG_TEST_` must appear nowhere in the shipped files. Without `--dev` the checkout
-must have no uncommitted changes and `COMMIT` holds its `HEAD`. `--dev` builds
-from any tree and writes `COMMIT` as `dev` unless the checkout is clean. Do not
-publish a `--dev` build.
+must have no uncommitted changes and `COMMIT` holds its `HEAD`. With `--dev`,
+the four folders contribute their files on disk, excluding Finder and AppleDouble
+files. This mode accepts any source tree and writes `COMMIT` as `dev` unless
+the checkout is clean. Do not publish a `--dev` build.
 
 `zsh test/release.sh` builds `0.0.0-rc.0`, compares the archive listing with the
 release file list, checks the checksum, `VERSION`, `COMMIT` and `install.sh`,
