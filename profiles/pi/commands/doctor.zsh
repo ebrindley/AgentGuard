@@ -44,7 +44,7 @@ pi_doctor() {
   local scripts="$release/profiles/pi/scripts" jsnode= state=unbound pi_rec= omp_rec= node_rec=
   local p rel rt label rec out err want sum sev work darwin_temp l rid= rg= rl= match=absent copy= sdir=
   local -a names lines wnames
-  local -A where
+  local -A ag_resolved
   integer json=0 failed=0 drift=0 guard_present=0 launchers_present=0 pi_runs=0 rc
   typeset -ga pi_lines
   pi_lines=()
@@ -78,12 +78,7 @@ pi_doctor() {
   # npm update that puts a real pi back in ~/.local/bin.
   [[ -f $wrec ]] && wnames=(${(f)"$(/usr/bin/jq -r '.wrappers | objects | keys[]' "$wrec" 2>/dev/null)"})
   wnames=(${(M)wnames:#[A-Za-z0-9._-]##})
-  out=$(ag_bounded 20 /usr/bin/env "HOME=$home" /bin/zsh -lc \
-    'for n; do print -r -- "agent-guard-resolve:$n:$(command -v -- $n)"; done' zsh pi omp $wnames 2>/dev/null) || out=
-  for l in ${(M)${(f)out}:#agent-guard-resolve:*}; do
-    l=${l#agent-guard-resolve:}
-    where[${l%%:*}]=${l#*:}
-  done
+  ag_shell_paths -l -i -- pi omp "${wnames[@]}" || ag_resolved=()
   pi_doctor_resolves pi 'the guard'
   pi_doctor_resolves omp 'the guard'
 
@@ -289,11 +284,15 @@ pi_doctor_remedy() {
 # pi_doctor_resolves NAME WHAT: NAME resolved to ~/.local/bin/NAME in the login
 # shell; WHAT names that in the line.
 pi_doctor_resolves() {
-  local r=${where[$1]:-} p="$bin/$1"
+  local r=${ag_resolved[$1]:-} p="$bin/$1"
   # The caller's PATH is not what a guarded launch uses, so it is no evidence.
-  if (( ! ${+where[$1]} )); then pi_doctor_say "skip $1 not checked: the login shell gave no answer"
+  if (( ! ${+ag_resolved[$1]} )); then pi_doctor_say "skip $1 not checked: the interactive login shell gave no answer"
   elif [[ -z $r ]]; then pi_doctor_say "FAIL $1 is not on PATH in a login shell"
   elif [[ $r == /* && ${r:A} == ${p:A} ]]; then pi_doctor_say "ok   $1 resolves to $2 in a login shell ($r)"
+  elif [[ $r != /* ]]; then
+    local level=FAIL
+    [[ ${AGENT_GUARD_GATE:-} == 1 ]] && level=warn
+    pi_doctor_say "$level $1 resolves to $r in a login shell; check your shell startup files"
   else pi_doctor_say "FAIL $1 resolves to $r in a login shell, not to $2; put ~/.local/bin before the real binaries in PATH"
   fi
 }
