@@ -61,12 +61,13 @@ base="$fakebin:$nodebin:/usr/bin:/bin:/usr/sbin:/sbin"
 want_node=$(stable_node "$node_bin")
 
 # Releases: v0.0.1 and v0.0.2 from this checkout, the same files apart from VERSION,
-# and v0.0.3 whose Pi profile has one more comment line.
+# and v0.0.3 with an extra comment in Pi's profile and launcher.
 build "$source_root" 0.0.1 || { print -ru2 'cannot build v0.0.1'; finish }
 build "$source_root" 0.0.2 || { print -ru2 'cannot build v0.0.2'; finish }
 /bin/mkdir -p "$run/src-c"
 /bin/cp -R "$source_root"/{engine,profiles,installer,scripts,install.sh,LICENSE} "$run/src-c/"
 print -r -- ';; v0.0.3' >> "$run/src-c/profiles/pi/sandbox/pi-sandbox.sb"
+print -r -- '# v0.0.3' >> "$run/src-c/profiles/pi/launchers/pi"
 build "$run/src-c" 0.0.3 || { print -ru2 'cannot build v0.0.3'; finish }
 print -r -- v0.0.1 > "$served/latest.txt"
 
@@ -577,6 +578,44 @@ rc=$?
 same 'the state is as after an uninterrupted update' "$run/updated.state" pi_state
 print -r -- v0.0.1 > "$served/latest.txt"
 
+label='update, custom OMP launcher'
+restore M1
+print -r -- '#!/bin/sh
+# Run OMP separately from pi-sandbox-guard.
+exit 0' > "$lb/omp"
+pi_state > "$run/custom-launcher.state"
+print -r -- v0.0.2 > "$served/latest.txt"
+point= ag update
+rc=$?
+(( rc != 0 )) && /usr/bin/grep -qF 'agent-guard bind --omp PATH' "$out" &&
+  pass 'update refuses to overwrite the custom launcher' || { fail "update (exit $rc)"; show }
+same 'the launcher and installed release are preserved' "$run/custom-launcher.state" pi_state
+print -r -- v0.0.1 > "$served/latest.txt"
+
+label='update recovery, custom OMP launcher'
+restore M1
+print -r -- v0.0.3 > "$served/latest.txt"
+point=kill:pi-launcher-omp ag update
+rc=$?
+(( rc == 137 )) && pass 'interrupted before replacing OMP' || { fail "update (exit $rc)"; show }
+custom_omp="$run/custom-omp"
+print -r -- '#!/bin/sh
+exit 0' > "$custom_omp"
+/bin/cp "$custom_omp" "$lb/omp"
+for command in update uninstall; do
+  point= ag "$command"
+  rc=$?
+  (( rc != 0 )) && [[ -d $state/txn ]] && /usr/bin/cmp -s "$custom_omp" "$lb/omp" &&
+    /usr/bin/grep -qF '~/.local/bin/omp changed during the launcher switch' "$out" &&
+    pass "$command preserves the modified launcher and the transaction" || { fail "$command (exit $rc)"; show }
+done
+/bin/mv -- "$lb/omp" "$run/moved-omp"
+point= ag uninstall
+rc=$?
+(( rc == 0 )) && [[ ! -e $engine ]] && /usr/bin/cmp -s "$custom_omp" "$run/moved-omp" &&
+  pass 'uninstall recovers after the launcher is moved aside' || { fail "uninstall (exit $rc)"; show }
+print -r -- v0.0.1 > "$served/latest.txt"
+
 # --- An install that still carries an earlier release's analyzer files and
 # .guard-node: update replaces the extension folder with the release's files, and
 # uninstall removes it; neither fails or warns about them. The security event log
@@ -661,7 +700,11 @@ rc=$?
 label='uninstall, entries not put back'
 restore npm-installed
 /bin/rm "$lb/pi"
-/bin/ln -s /usr/bin/true "$lb/pi"
+print -r -- '#!/bin/sh
+# Use this launcher alongside pi-sandbox-guard.
+exit 0' > "$run/custom-launcher"
+/bin/cp "$run/custom-launcher" "$lb/omp"
+/bin/ln -s "$run/custom-launcher" "$lb/pi"
 /bin/ln -s ../old/cli.js "$replaced/pi.1700000000"
 /bin/chmod 555 "$home/Agent Guard"
 point= ag uninstall
@@ -673,7 +716,8 @@ point= ag uninstall
 rc=$?
 kept=("$home/Agent Guard"/pi-replaced-*(N))
 (( rc == 0 && $#kept == 1 )) && [[ ! -e $engine && $(/usr/bin/readlink "$kept[1]/pi") == "../$pkg" && $(/usr/bin/readlink "$kept[1]/pi.1700000000") == ../old/cli.js ]] &&
-  [[ $(/usr/bin/readlink "$lb/pi") == /usr/bin/true ]] && /usr/bin/grep -qF "are copied to ${kept[1]/#$home/~}" "$out" &&
+  [[ $(/usr/bin/readlink "$lb/pi") == "$run/custom-launcher" ]] && /usr/bin/cmp -s "$lb/omp" "$run/custom-launcher" &&
+  /usr/bin/grep -qF "are copied to ${kept[1]/#$home/~}" "$out" &&
   pass "the rerun copies both as links to the folder it names; ~/.local/bin/pi is left" || { fail "rerun (exit $rc)"; show; listing "$home/Agent Guard" | /usr/bin/sed 's/^/    /' }
 label='uninstall, custom wrapper backups'
 restore npm-installed
@@ -751,7 +795,7 @@ pi_path=$lb
 point= boot
 rc=$?
 pi_path=
-(( rc != 0 )) && /usr/bin/grep -qF "~/.local/bin/omp is the OMP executable itself" "$out" && /usr/bin/grep -qF 'agent-guard bind --omp PATH' "$out" &&
+(( rc != 0 )) && /usr/bin/grep -qF "~/.local/bin/omp has unverified ownership" "$out" && /usr/bin/grep -qF 'agent-guard bind --omp PATH' "$out" &&
   pass "exit $rc, says to move it and bind it" || { fail "exit $rc"; show }
 same 'nothing changed' "$run/omp.files" pi_files
 [[ ! -e $engine ]] && pass 'no engine folder' || fail 'engine folder left'

@@ -649,10 +649,11 @@ loaded; `/reload` loads the extension now on disk.
     checked, comparing the installed Pi files with the current release's copies
     byte for byte. When a file or link has drifted, a `note` line gives the
     repair: run the installer for the installed release again, shown with the
-    stamp's tag. When a real `pi` or `omp` executable sits at its launcher path
-    in `~/.local/bin`, the installer refuses it, so the `note` says to move it
-    out of `~/.local/bin` first and record its new path with `agent-guard bind`
-    afterwards. `agent-guard update --to` with the installed tag does not repair
+    stamp's tag. If `~/.local/bin/pi` or `~/.local/bin/omp` holds a regular file
+    whose ownership the installer cannot verify, it leaves the file in place.
+    Move it aside before reinstalling. If it is your runtime executable,
+    record its new path with `agent-guard bind` afterwards.
+    `agent-guard update --to` with the installed tag does not repair
     drift;
   - the profile's self-test, the checker's session copy built from
     `~/.cc-safety-net`, and one allowed command and two blocked ones through the
@@ -876,6 +877,9 @@ checked (install, update) or rolled back (uninstall, or a rollback that had
 begun); one stopped after the stamp has its cleanup finished. `agent-guard
 doctor` does not recover. "another Agent Guard install is running" means a live
 run holds the lock; a lock left by a process that is gone is taken over.
+
+If a Pi or OMP launcher changed during an interrupted switch, recovery keeps
+the file and transaction. Move the named launcher aside, then rerun the command.
 
 OpenCode does not start, from the terminal or the app, when one of the records
 it reads in `~/Library/Application Support/AgentGuard` exists but cannot be

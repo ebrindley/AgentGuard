@@ -123,6 +123,15 @@ ag_psg_stamp_get() {
   return 0
 }
 
+ag_psg_owns_launcher() {
+  local want got
+  [[ -f $1 && ! -L $1 ]] || return 1
+  ag_psg_stamp_get "hash_launcher_${1:t}"
+  want=$REPLY
+  [[ $want == [0-9a-f](#c64) ]] || return 1
+  got=$(ag_pi_clean_env; ag_sha "$1" && print -r -- "$REPLY") && [[ $got == "$want" ]]
+}
+
 # P6a, the staged action psg-wrappers: the wrapper records of pi-sandbox-guard's
 # launcher stamp into state/wrappers.json, in agent-guard wrapper's form: each
 # name of launcher_names but pi and omp with its hash_launcher_<name>, and the
