@@ -24,40 +24,55 @@ ag_bounded() {
   wait $pid
 }
 
-# ag_shell_resolve NAME [SHELL-OPTIONS...]: resolve NAME as a clean zsh with
-# this account's home would (-l -i for a new terminal). Status 0 is Agent Guard's
-# launcher, 1 a different executable (REPLY is the path), 2 a missing name,
-# 3 a shell definition (REPLY describes its kind), and 4 a failed lookup.
-# A tagged line distinguishes the answer from startup and logout output.
+# ag_shell_paths [ZSH-OPTIONS...] -- NAME...: fill the caller's associative
+# array ag_resolved in one shell. Startup helpers may outlive zsh with stdout
+# open. Only the lookup writes to the private result file, after startup.
+ag_shell_paths() {
+  local result_file name value
+  local -a opts
+  while [[ $1 != -- ]]; do opts+=("$1"); shift; done
+  shift
+  result_file=$(/usr/bin/mktemp -t agent-guard-lookup) || return 1
+  {
+    ag_bounded 20 /usr/bin/env -i "HOME=$home" "PATH=/usr/bin:/bin:/usr/sbin:/sbin" /bin/zsh "${opts[@]}" -c '
+      exec 3>|"$1" || exit 1
+      shift
+      for name; do
+        description=$(\builtin \whence -w -- "$name") || [[ -n $description ]] || exit 1
+        case ${description##*: } in
+          (command|hashed)
+            value=$(\builtin \whence -- "$name") || exit 1
+            [[ $value == /* ]] || value="$PWD/$value" ;;
+          (alias) value="a shell alias" ;;
+          (function) value="a shell function" ;;
+          (builtin) value="a shell builtin" ;;
+          (reserved) value="a reserved word" ;;
+          (none) value="" ;;
+          (*) exit 1 ;;
+        esac
+        \builtin \print -rN -- "$name" "$value" >&3
+      done
+    ' agent-guard-lookup "$result_file" "$@" >/dev/null 2>&1 || return 1
+    while IFS= read -r -d "" name && IFS= read -r -d "" value; do
+      ag_resolved[$name]=$value
+    done < "$result_file"
+  } always {
+    /bin/rm -f -- "$result_file"
+  }
+}
+
+# ag_shell_resolve NAME [SHELL-OPTIONS...]: 0 for Guard's launcher, 1 for a
+# different path, 2 for a missing name, 3 for a definition, 4 for no answer.
 ag_shell_resolve() {
-  local name=$1 output tag='agent-guard-lookup:' result
-  local -a found
+  local name=$1
+  local -A ag_resolved
   shift
   REPLY=
-  output=$(ag_bounded 20 /usr/bin/env -i "HOME=$home" "PATH=/usr/bin:/bin:/usr/sbin:/sbin" /bin/zsh "$@" -c '
-    description=$(\builtin \whence -w -- "$1") || [[ -n $description ]] || exit 1
-    kind=${description##*: }
-    case $kind in
-      (command|hashed)
-        resolved=$(\builtin \whence -- "$1") || exit 1
-        [[ $resolved == /* ]] || resolved="$PWD/$resolved"
-        \builtin \print -r -- "${2}path:$resolved"
-        ;;
-      (alias|function|builtin|reserved|none) \builtin \print -r -- "$2$kind" ;;
-    esac
-  ' agent-guard-lookup "$name" "$tag" 2>/dev/null </dev/null) || return 4
-  found=(${(M)${(@f)output}:#$tag*})
-  result=${${found[-1]:-}#$tag}
-  case $result in
-    (path:*) REPLY=${result#path:}; [[ ${REPLY:A} == "$engine"/releases/*/bin/$name ]]; return ;;
-    (alias) REPLY='a shell alias' ;;
-    (function) REPLY='a shell function' ;;
-    (builtin) REPLY='a shell builtin' ;;
-    (reserved) REPLY='a reserved word' ;;
-    (none) return 2 ;;
-    (*) return 4 ;;
-  esac
-  return 3
+  ag_shell_paths "$@" -- "$name" && (( ${+ag_resolved[$name]} )) || return 4
+  REPLY=${ag_resolved[$name]}
+  [[ -n $REPLY ]] || return 2
+  [[ $REPLY == /* ]] || return 3
+  [[ ${REPLY:A} == "$engine"/releases/*/bin/$name ]]
 }
 
 # REPLY = the warning for a ZDOTDIR outside the home, whose startup files a new
