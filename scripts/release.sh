@@ -93,7 +93,7 @@ files=(
   profiles/pi/commands/doctor.zsh
   profiles/pi/commands/wrapper.zsh
 )
-# Folders shipped whole, apart from Finder and AppleDouble files.
+# Production ships tracked files here. --dev ships the files on disk except .DS_Store and ._* files.
 trees=(
   engine/vendor/cc-safety-net
   engine/checker
@@ -106,7 +106,9 @@ for f in $files; do
 done
 for t in $trees; do
   [[ -d $root/$t ]] || die "missing: $t/"
-  files+=(${(f)"$(cd "$root" && /usr/bin/find "$t" -type f ! -name .DS_Store ! -name '._*' | /usr/bin/sort)"})
+  if (( dev )); then
+    files+=(${(f)"$(cd "$root" && /usr/bin/find "$t" -type f ! -name .DS_Store ! -name '._*' | /usr/bin/sort)"})
+  fi
 done
 
 # COMMIT: HEAD of a clean checkout. A tree inside another checkout (a test copy) is not one.
@@ -123,6 +125,11 @@ elif (( dev )); then
   commit=dev
 else
   die "$root is not a git checkout; pass --dev"
+fi
+
+if (( ! dev )); then
+  tracked=$(/usr/bin/git -C "$root" ls-files -z -- "${trees[@]}") || die "cannot list tracked release files"
+  files+=(${(0)tracked})
 fi
 
 # The account lookup: the function from its "account_home() {" line through the
