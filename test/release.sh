@@ -7,14 +7,15 @@ setopt no_unset pipe_fail
 source_root=${0:A:h:h}
 version=0.0.0-rc.0
 name="agent-guard-$version"
-archive="$source_root/dist/$name.tar.gz"
+run=$(/usr/bin/mktemp -d "$source_root/test/.run-release-XXXXXX") || exit 1
+archive="$run/$name.tar.gz"
 fails=0
 pass() { print -r -- "ok   $*" }
 fail() { print -r -- "FAIL $*"; fails=$((fails + 1)) }
 
 # --dev so a checkout with uncommitted changes can be tested; COMMIT then reads "dev".
 # release.sh stops when the seam check fails, with --dev too.
-built=$(/bin/zsh "$source_root/scripts/release.sh" --dev $version 2>&1 >/dev/null) || { print -ru2 "release.sh failed: $built"; exit 1 }
+built=$(/bin/zsh "$source_root/scripts/release.sh" --dev --out "$run" $version 2>&1 >/dev/null) || { print -ru2 "release.sh failed: $built"; exit 1 }
 pass "release.sh passed the seam check: production seam forms present, no AG_TEST_"
 
 # The file list from the backlog item: named files, VERSION, COMMIT, and every
@@ -48,11 +49,10 @@ unwanted=(${(M)${(f)listed}:#(*/|)(test|docs|backlog|.build-project)/*} ${(M)${(
 [[ $(/usr/bin/tar -xOzf "$archive" "$name/VERSION") == $version ]] && pass "VERSION holds $version" || fail "VERSION"
 if [[ -z $(/usr/bin/git -C "$source_root" status --porcelain) ]]; then want=$(/usr/bin/git -C "$source_root" rev-parse HEAD); else want=dev; fi
 [[ $(/usr/bin/tar -xOzf "$archive" "$name/COMMIT") == $want ]] && pass "COMMIT holds $want" || fail "COMMIT"
-bootstrap="$source_root/dist/install.sh"
+bootstrap="$run/install.sh"
 [[ $(/usr/bin/grep -c "local tag='v$version' version='$version'" "$bootstrap") == 1 ]] && ! /usr/bin/grep -qE '@[A-Z_]+@' "$bootstrap" &&
-  /bin/zsh -n "$bootstrap" && pass "dist/install.sh names v$version, has no placeholder and parses" || fail "dist/install.sh"
+  /bin/zsh -n "$bootstrap" && pass "test bootstrap names v$version, has no placeholder and parses" || fail "test bootstrap"
 
-run=$(/usr/bin/mktemp -d "$source_root/test/.run-release-XXXXXX")
 /usr/bin/tar -xzf "$archive" -C "$run" || fail "unpack"
 print -r -- "integration checks against the unpacked archive:"
 /bin/zsh "$source_root/test/test.sh" --source "$run/$name" || fails=$((fails + 1))
