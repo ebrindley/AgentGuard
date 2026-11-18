@@ -287,6 +287,16 @@ exit 0
   same('version turned off by a later value, project named', ['run', '--dir', other, '--version', 'false', 'hello'], other, { cwd: home });
   console.log('ok   a trailing help or version flag and upgrade need no project from home');
 
+  const api = join(app, 'api');
+  mkdirSync(api);
+  const v1Api = launch('cli', ['api'], { ...withList, cwd: app });
+  assert.notEqual(v1Api.status, 0);
+  assert.match(v1Api.stderr, /opencode \.\/api to open the V1 project/);
+  assert.ok(!existsSync(join(engine, 'state/rules.json')), 'a refused V1 launch published its parent grant');
+  same('qualified V1 project named api', ['./api'], api, { cwd: app });
+  const v2Api = launch('cli', ['api'], { ...withList, cwd: app, env: { FAKE_VERSION: '2.3.0', FAKE_OUT: join(scratch, 'api') } });
+  assert.equal(v2Api.status, 0, v2Api.stderr);
+  assert.ok(rules().allow.includes(app), 'the V2 command retains its working project');
   const updateProject = P('Projects/app/update');
   mkdirSync(updateProject);
   const v1Project = launch('cli', ['update'], { ...withList, cwd: app });

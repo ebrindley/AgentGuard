@@ -98,6 +98,8 @@ existing desktop window, and does not call a model.
 Run `opencode upgrade` from Terminal, outside any agent session. On OpenCode 2,
 `opencode update` is the same command. To open an OpenCode 1 project named
 `update` with `@project` enabled, use `opencode ./update` or its full path.
+Also qualify V1 project names that are commands in OpenCode 2: `api`, `mini`,
+`pair`, `reload` and `service`. For example, run `opencode ./api`.
 An updater command is the first word after OpenCode's global options, so
 `opencode --print-logs upgrade` counts and words after `--` do not.
 

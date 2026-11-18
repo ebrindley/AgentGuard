@@ -396,6 +396,7 @@ normalize() {
 # gives the project argument OpenCode itself would open, if any.
 typeset -a projects project_names
 integer ambiguous_update=0
+opencode_v2_command=
 lexical() {
   local component resolved=/
   local -a parts
@@ -518,6 +519,10 @@ resolve_project() {
     fi
     $start_hook "${launch_args[@]}" || { record "refused @project: $REPLY"; fail "@project: $REPLY" }
     arg=$REPLY
+    if [[ $harness == opencode && ${opencode_subcommand:-} == (api|mini|pair|reload|service) ]]; then
+      opencode_v2_command=$opencode_subcommand
+      [[ $mode != profile ]] || fail "@project: $opencode_v2_command can name a V1 project or a V2 command; use ./$opencode_v2_command to select the project"
+    fi
     if [[ $harness == opencode && ${opencode_subcommand:-} == update ]]; then
       # A bare update can select a V1 project or V2 maintenance. Give it no
       # project while building the profile for the confined version probe.
@@ -566,7 +571,9 @@ resolve_project() {
     normalize "$given" literal || { note "skipped, not a full path: $given"; return 1 }
     top=$REPLY
   fi
-  check_project "$given" "$top" "Start from a narrower folder, or comment out @project in $list"
+  local hint="Start from a narrower folder, or comment out @project in $list"
+  [[ -z $opencode_v2_command ]] || hint+="; use ./$opencode_v2_command to select the V1 project"
+  check_project "$given" "$top" "$hint"
   top=$REPLY
   if [[ ! -d $top ]]; then
     note "skipped, @project folder does not exist: $top"
@@ -887,6 +894,7 @@ make_folder() {
 for p in $writable; do make_folder "$p"; done
 if [[ $mode == gui ]]; then make_folder "$writable_gui[1]"; fi
 
+sandbox=(/usr/bin/sandbox-exec -D "HOME=$home" -D "DARWIN_TEMP=$darwin_temp" -D "DARWIN_CACHE=$darwin_cache" -p "$profile")
 if [[ $harness == opencode ]]; then
   jarr() { /usr/bin/jq -cn '$ARGS.positional' --args "$@" }
   /bin/mkdir -p "$engine/state"
@@ -910,20 +918,27 @@ if [[ $harness == opencode ]]; then
     --arg checker "$session/checker" --arg preparation "$channel" --arg preparationReplies "$replies" --arg preparationStatus "$preparation_status" \
     '{allow:$allow,readonly:$readonly,deny:$deny,protected:$protected,skills:$skills,configs:$configs,writable:$writable,pins:$pins,projects:$projects,credentials:$credentials,checker:$checker,preparation:$preparation,preparationReplies:$preparationReplies,preparationStatus:$preparationStatus}' > "$context"
   export AGENT_GUARD_CONTEXT="$context"
+  if [[ $mode == cli ]]; then
+    # Check the host before publishing a V2-only command's working-directory grant.
+    failure_stage=host-launch
+    next_cli || fail "opencode not found"
+    cli=$REPLY
+    opencode_major "$cli"
+    cli_major=$REPLY
+    [[ -z $opencode_v2_command || $cli_major == 2 ]] ||
+      fail "@project: use opencode ./$opencode_v2_command to open the V1 project"
+  fi
   if (( ! staged )); then
     /bin/cp "$context" "$engine/state/rules.json.$$"
     /bin/mv -f "$engine/state/rules.json.$$" "$engine/state/rules.json"
   fi
 fi
 
-sandbox=(/usr/bin/sandbox-exec -D "HOME=$home" -D "DARWIN_TEMP=$darwin_temp" -D "DARWIN_CACHE=$darwin_cache" -p "$profile")
 managed=0 managed_cli=
 
 case $mode in
   (cli)
     failure_stage=host-launch
-    next_cli || fail "${cli_names[1]} not found"
-    cli=$REPLY
     if [[ $harness == opencode ]]; then
       attached=0
       [[ ${1:-} == attach ]] && attached=1
@@ -931,7 +946,7 @@ case $mode in
         [[ $arg == -- ]] && break
         [[ $arg == --attach || $arg == --attach=* ]] && attached=1
       done
-      opencode_major "$cli"
+      REPLY=$cli_major
       # The version probe above stays confined. A maintenance command runs
       # unconfined only when the nesting probe succeeded.
       if (( probe_ok )) && opencode_maintenance $REPLY "$@"; then
@@ -957,6 +972,8 @@ case $mode in
       fi
       set -- -D GUI=0 "$cli" "$@"
     else
+      next_cli || fail "${cli_names[1]} not found"
+      cli=$REPLY
       $args_hook "$@" || fail "$REPLY"
       set -- -D GUI=0 "$cli" "${reply[@]}"
     fi
