@@ -47,7 +47,25 @@ ag_grok_resolve() {
   fi
   [[ -x $grok_default && ! -d $grok_default ]] && { ag_grok_exec=$grok_default; return 0 }
   [[ -f $grok_shim && ! -L $grok_shim && -x $grok_shim ]] && { ag_grok_exec=$grok_shim; return 0 }
-  return 1
+  ag_grok_runtime_removed || return 1
+  ag_grok_exec=$(<"$grok_record")
+}
+
+# An installed shim can outlive the external Grok it replaced. Keep the recorded
+# path for uninstall; a damaged kept copy or a non-executable file still fails.
+ag_grok_runtime_removed() {
+  local t
+  [[ -r $grok_record && -L $grok_shim && $(/usr/bin/readlink -- "$grok_shim") == "$engine/bin/grok" ]] || return 1
+  t=$(<"$grok_record")
+  [[ $t == /* && ${t:A} != "$engine"/* && ! -e $t && ! -x $grok_default ]] || return 1
+  ag_stamp_harnesses
+  (( ${reply[(Ie)grok]} ))
+}
+
+ag_grok_check_release() {
+  local -x AGENT_GUARD_GROK_RUNTIME_REMOVED=0
+  ag_grok_runtime_removed && AGENT_GUARD_GROK_RUNTIME_REMOVED=1
+  "$1/launch" --harness grok check "${@:2}"
 }
 
 ag_h_grok_prepare() {
@@ -88,7 +106,7 @@ ag_grok_stage() {
 # finds it before the switch.
 ag_h_grok_staged() {
   ag_grok_stage || { ag_failed+=('FAIL cannot stage the Grok record'); return 1 }
-  ag_run_check 'FAIL Grok check staged' "$engine/releases/$ag_rid_new/launch" --harness grok check staged
+  ag_run_check 'FAIL Grok check staged' ag_grok_check_release "$engine/releases/$ag_rid_new" staged
 }
 
 # --- Switch actions, registered in actions.zsh: the record, then the link, so the
@@ -131,6 +149,10 @@ undo_grok_shim() { ag_pi_put_undo grok-shim "$grok_shim" }
 ag_h_grok_gate() {
   local out log="$list_dir/last-launch-grok.log" first=
   integer rc
+  if ag_grok_runtime_removed; then
+    ag_say 'skip Grok --version: recorded executable is absent'
+    return 0
+  fi
   /bin/rm -f -- "$log"
   out=$(ag_bounded 20 "$engine/bin/grok" --version 2>&1)
   rc=$?
@@ -161,6 +183,10 @@ ag_h_grok_keep() {
 # Names the executable the install recorded, which is the kept copy when Grok was
 # a regular file at the link's place, and is quoted for the shell.
 ag_h_grok_report() {
+  if ag_grok_runtime_removed; then
+    ag_say 'Grok: recorded executable is absent; its launcher and uninstall record were retained'
+    return 0
+  fi
   local real=$grok_default shown
   [[ -r $grok_record ]] && real=$(<"$grok_record")
   [[ $real == /* ]] || real=$grok_default
@@ -179,7 +205,7 @@ ag_h_grok_doctor() {  # RELEASE [--json]
   local out remedy='run the installer again to put the link back'
   local -a lines
   integer rc=0
-  out=$("$1/launch" --harness grok check 2>&1) || rc=1
+  out=$(ag_grok_check_release "$1" 2>&1) || rc=1
   lines=("${(@f)out}")
   out=$(ag_shell_lookup grok 'a new terminal window' "$remedy" -l -i) || rc=1
   lines+=("${(@f)out}")

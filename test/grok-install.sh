@@ -11,6 +11,11 @@ setopt no_unset pipe_fail extended_glob
 unset AGENT_GUARD_RELEASE AGENT_GUARD_SANDBOXED OPENCODE_SANDBOXED
 command -v node >/dev/null || { print -ru2 'Node is required for the release server and the fake OpenCode'; exit 1 }
 
+case ${1:-all} in
+  all|removed) ;;
+  *) print -ru2 'usage: test/grok-install.sh [removed]'; exit 2 ;;
+esac
+
 source_root=${0:A:h:h}
 adapter="$source_root/test/engines/zsh.mjs"
 source "$source_root/test/lib.zsh"
@@ -83,10 +88,29 @@ grok_state() {
   [[ -L $state/grok-replaced/grok ]] && print -r -- "replaced -> $(/usr/bin/readlink "$state/grok-replaced/grok")" || print -r -- "replaced absent"
 }
 
+removed_runtime() {
+  label='removed Grok runtime'
+  /bin/rm -- "$grok/bin/grok"
+  ag update --to v0.0.2 --no-prompt
+  if (( $? == 0 )) && /usr/bin/jq -e '.tag == "v0.0.2" and .harnesses == ["opencode","grok"]' "$state/stamp.json" >/dev/null; then
+    pass 'OpenCode updates while the removed Grok still has a saved link'
+  else
+    fail 'update after removing Grok'; show
+  fi
+  ag uninstall
+  (( $? == 0 )) && [[ ! -e $engine && -L $lb/grok && $(/usr/bin/readlink "$lb/grok") == "$original" ]] &&
+    pass 'uninstall restores the original dangling vendor link' || { fail 'uninstall after removing Grok'; show }
+}
+
 label=install
 boot
 rc=$?
 (( rc == 0 )) && pass 'installed (exit 0)' || { fail "install (exit $rc)"; show; finish }
+if [[ ${1:-all} == removed ]]; then
+  removed_runtime
+  stop_release_server
+  end_run
+fi
 rid=$(<"$engine/current/RELEASE")
 [[ -L $lb/grok && $(/usr/bin/readlink "$lb/grok") == "$engine/bin/grok" ]] && pass '~/.local/bin/grok links to the launcher' || fail "link: $(grok_state)"
 [[ $(<"$state/grok-executable") == "$grok/bin/grok" ]] && pass 'the real executable is recorded' || fail "record: $(grok_state)"
@@ -136,8 +160,7 @@ rc=$?
 label=reinstall
 boot
 (( $? == 0 )) && pass 'installed again' || { fail 'reinstall'; show; finish }
-ag uninstall
-(( $? == 0 )) && [[ $(/usr/bin/readlink "$lb/grok") == "$original" ]] && pass 'uninstall again restores the link' || { fail 'second uninstall'; show }
+removed_runtime
 
 # An entry in state/grok-replaced that uninstall does not put back, because the link
 # was replaced or is gone or an earlier install replaced it (a time suffix), would go

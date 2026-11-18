@@ -26,6 +26,8 @@ grok_check() {
     f=$REPLY
     print "ok   Grok executable $f"
     $sandbox -D GUI=0 /usr/bin/touch -c "${f:A}" 2>/dev/null && { print "FAIL Grok executable write allowed"; ok=0 } || print "ok   Grok executable write denied"
+  elif [[ ${AGENT_GUARD_GROK_RUNTIME_REMOVED:-0} == 1 ]]; then
+    print "skip Grok runtime checks: recorded executable is absent; reinstall Grok and rerun the installer to use it again"
   else
     print "FAIL Grok executable not found"; ok=0
   fi
