@@ -265,15 +265,14 @@ pi_doctor_say() {
 }
 
 # pi_doctor_remedy: note lines for drifted installed files or links. The repair is
-# the installer for the installed release, run again. The installer refuses a Pi or
-# OMP executable at its launcher path (ag_pi_entries_check), so each one there is
-# named with the move that comes first.
+# the installer for the installed release, run again. Regular files with
+# unverified ownership must be moved aside before the installer can replace them.
 pi_doctor_remedy() {
   local rt label p tag cmd=
   for rt label in pi Pi omp OMP; do
     p="$bin/$rt"
-    [[ -f $p && ! -L $p ]] && ! ag_pi_is_guard "$p" &&
-      pi_doctor_say "note ${p/#$home/~} is the $label executable itself, and the installer refuses it: move it out of ~/.local/bin first, and after the installer record its new path with: agent-guard bind --$rt PATH"
+    [[ -f $p && ! -L $p ]] && ! ag_pi_owns_launcher "$p" &&
+      pi_doctor_say "note ${p/#$home/~} has unverified ownership. Move it out of ~/.local/bin before reinstalling. If it is your $label executable, record its new path with: agent-guard bind --$rt PATH"
   done
   tag=$(/usr/bin/jq -r '.tag // empty' "$engine/state/stamp.json" 2>/dev/null)
   [[ $tag == v[0-9A-Za-z.+-]## ]] &&

@@ -61,10 +61,17 @@ ag_h_pi_volume() { reply=("$pi_bin" "${pi_ext:h}" "${pi_conf:h}") }
 
 # --- What is on this Mac.
 
-# True for a file holding pi-sandbox-guard's name: its launcher, preamble or
-# profile, or Agent Guard's copy of them. bind and the launcher refuse such a
-# target, which would loop.
+# A hint for discovery and recursion checks. Ownership needs an exact match.
 ag_pi_is_guard() { /usr/bin/grep -qs -- pi-sandbox-guard "$1" }
+
+ag_pi_owns_launcher() {
+  [[ -f $1 && ! -L $1 ]] && /usr/bin/cmp -s -- "$1" "$engine/current/profiles/pi/launchers/pi"
+}
+
+ag_pi_known_launcher() {
+  ag_pi_owns_launcher "$1" ||
+    { [[ $ag_source == pi-sandbox-guard || ${ag_mig_state[pi-sandbox-guard]:-} == migrate ]] && ag_psg_owns_launcher "$1"; }
+}
 
 # pi-sandbox-guard's parts in its layout (design section 11, The adoption, item 1),
 # in reply.
@@ -224,13 +231,13 @@ ag_pi_entries_check() {
   for rt label in pi Pi omp OMP; do
     e="$pi_bin/$rt"
     [[ -e $e || -L $e ]] || continue
-    [[ -f $e ]] && ag_pi_is_guard "$e" && continue
+    ag_pi_known_launcher "$e" && continue
     if [[ -d $e ]]; then
       ag_err "${e/#$home/~} is a folder, and the $label launcher goes at that path. Move it, then run this again. Nothing changed."
       return 1
     fi
     if [[ ! -L $e ]]; then
-      ag_err "${e/#$home/~} is the $label executable itself, and the guard's launcher goes at that path. Move it out of ~/.local/bin, run this again, then record its new path with: agent-guard bind --$rt PATH. Nothing changed."
+      ag_err "${e/#$home/~} has unverified ownership. Move it out of ~/.local/bin and rerun the installer. If it is your $label executable, record its new path with: agent-guard bind --$rt PATH. Nothing changed."
       return 1
     fi
     if ! ag_pi_target "$e"; then
@@ -364,6 +371,16 @@ ag_pi_identical() {
   fi
 }
 
+# A launcher may be absent or match an entry the transaction already holds.
+ag_pi_launcher_unchanged() {
+  local f=$1 expected
+  shift
+  [[ -e $f || -L $f ]] || return 0
+  for expected in "$@"; do ag_pi_identical "$f" "$expected" && return 0; done
+  ag_err "${f/#$home/~} changed during the launcher switch. Move it aside and rerun to finish recovery."
+  return 1
+}
+
 # ag_pi_missing PATH: REPLY = how many of PATH's parent folders, the nearest first,
 # are missing; the action that creates them journals the count as mk.
 ag_pi_missing() {
@@ -388,18 +405,31 @@ ag_pi_rmdirs() {
 # (old: none, guard or other, an entry that is not the guard's), then the staged
 # copy is renamed over it. An identical TARGET is left as it is.
 ag_pi_put() {
-  local a=$1 t=$2 s=$3 want=$4 old
+  local a=$1 t=$2 s=$3 want=$4 old b="$txn_dir/backup/$1"
   ag_jlast $a
   [[ $REPLY == done ]] && return 0
   if [[ -z $REPLY ]]; then
     if ag_pi_identical "$t" "$s"; then test_point $a; return; fi
     old=none
-    if [[ -e $t || -L $t ]]; then old=other; [[ -f $t ]] && ag_pi_is_guard "$t" && old=guard; fi
+    if [[ -e $t || -L $t ]]; then
+      old=other
+      case $a in
+        (pi-launcher-*) ag_pi_known_launcher "$t" && old=guard ;;
+        (*) [[ -f $t ]] && ag_pi_is_guard "$t" && old=guard ;;
+      esac
+    fi
     ag_pi_missing "$t"
-    ag_pi_backup $a "$t" && ag_jnl $a begun "old=$old mk=$REPLY" || return 1
+    ag_pi_backup $a "$t" || return 1
+    # Rollback may run without the candidate release. Keep the expected launcher
+    # in the journal's backup directory before moving the staged copy.
+    [[ $a != pi-launcher-* ]] || /bin/cp -p -- "$s" "$b/expected" || return 1
+    ag_jnl $a begun "old=$old mk=$REPLY" || return 1
   fi
   test_point $a || return 1
-  if [[ -e $s ]]; then /bin/mkdir -p -- "${t:h}" && /bin/mv -fh -- "$s" "$t" || return 1; fi
+  if [[ -e $s ]]; then
+    [[ $a != pi-launcher-* ]] || ag_pi_launcher_unchanged "$t" "$b/file" || return 1
+    /bin/mkdir -p -- "${t:h}" && /bin/mv -fh -- "$s" "$t" || return 1
+  fi
   [[ -f $t && ! -L $t ]] && /usr/bin/cmp -s -- "$want" "$t" || return 1
   ag_jnl $a done
 }
@@ -410,6 +440,7 @@ ag_pi_put_undo() {  # ACTION TARGET
   local a=$1 t=$2 b="$txn_dir/backup/$1/file" tmp="${2:h}/.${2:t}.partial"
   ag_jlast $a
   [[ $REPLY == (begun|done) ]] || return 0
+  [[ $a != pi-launcher-* ]] || ag_pi_launcher_unchanged "$t" "$b" "${b:h}/expected" || return 1
   /bin/rm -f -- "$tmp"
   if [[ -e $b || -L $b ]]; then
     if ! ag_pi_identical "$b" "$t"; then
@@ -615,7 +646,7 @@ ag_h_pi_uninstall_remove() {
   for rt in pi omp; do
     f="$pi_bin/$rt"
     /bin/rm -f -- "$pi_bin/.$rt.partial"
-    if [[ -e $f || -L $f ]] && ! { [[ -f $f ]] && ag_pi_is_guard "$f" }; then
+    if [[ -e $f || -L $f ]] && ! ag_pi_owns_launcher "$f"; then
       ag_warn "${f/#$home/~} is not the guard's launcher; left as it is"
       continue
     fi
