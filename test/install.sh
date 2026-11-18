@@ -104,6 +104,25 @@ snapshot "$home" > "$pre"
 /bin/cp "$home/dotfiles/zshrc" "$run/clean-zshrc"
 save clean
 
+# A disowned startup helper can keep stdout open after the login shell exits.
+label=lookup
+(
+  home="$run/lookup-home"
+  /bin/mkdir -p "$home"
+  print -r -- 'unsetopt GLOBAL_RCS' > "$home/.zshenv"
+  print -r -- 'setopt NO_CLOBBER
+/bin/sleep 10 &!
+print -r -- $! >| "$HOME/helper.pid"
+alias opencode=/usr/bin/true' > "$home/.zshrc"
+  source "$source_root/engine/lookup.zsh"
+  ag_shell_resolve opencode -l -i
+  rc=$?
+  [[ -s $home/helper.pid ]] || exit 1
+  helper=$(<"$home/helper.pid")
+  # The result arrived while the helper still held its descriptors.
+  kill "$helper" 2>/dev/null && [[ $rc == 3 && $REPLY == 'a shell alias' ]]
+) && pass 'terminal lookup finishes before a startup helper exits' || fail 'terminal lookup failed or waited for a startup helper'
+
 # A fresh install must leave a foreign entry at the plugin destination alone.
 label=plugin-slot
 /bin/mkdir -p "$plugins"
