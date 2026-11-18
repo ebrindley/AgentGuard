@@ -533,7 +533,7 @@ print -r -- '// operator plugin' > "$plugin"
 snapshot "$home" > "$run/occupied-plugin.snapshot"
 point= boot y
 rc=$?
-(( rc != 0 )) && /usr/bin/grep -qF "migration would overwrite $plugin" "$out" &&
+(( rc != 0 )) && /usr/bin/grep -qF "install would overwrite $plugin" "$out" &&
   pass 'migration refuses the occupied plugin path' || { fail "migration (exit $rc)"; show }
 same_snapshot 'the operator plugin and the legacy install are unchanged' "$run/occupied-plugin.snapshot"
 
@@ -572,7 +572,7 @@ if (( rc == 137 )); then
   print -r -- '// operator plugin' > "$plugin"
   point= boot y
   rc=$?
-  (( rc != 0 )) && /usr/bin/grep -qF "migration would overwrite $plugin" "$out" &&
+  (( rc != 0 )) && /usr/bin/grep -qF "install would overwrite $plugin" "$out" &&
     [[ -f $plugin && ! -L $plugin && $(<"$plugin") == '// operator plugin' ]] &&
     /usr/bin/cmp -s -- "$old_plugin" "$run/saved-ocg-1.0.4${old_plugin#$home}" &&
     pass 'recovery preserves the operator plugin and restores the legacy plugin' || { fail "recovery (exit $rc)"; show }
