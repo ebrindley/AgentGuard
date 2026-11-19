@@ -1,11 +1,10 @@
 # Agent Guard design
 
-Status: accepted plan, updated 2026-11-13. The zsh OpenCode engine, staged
-installer, update/uninstall/recovery, version stamp, OpenCode Guard migration
+The zsh OpenCode engine, staged installer, update/uninstall/recovery,
+version stamp, OpenCode Guard migration
 and cache protection are built (steps 1–7). The installer split, adoption and
 migration of Pi/OMP, and cross-harness project-config protection are built
-(steps 7a–7d and 7f). 2026.11.14 is the latest stable release, for
-OpenCode, Pi, OMP and Grok. 0.2.2 added the OpenCode [skill policy](SKILLS.md).
+(steps 7a–7d and 7f). Release 0.2.2 added the OpenCode [skill policy](SKILLS.md).
 
 0.2.1 includes Pi/OMP state-root pinning and protection of missing OpenCode
 configuration behind linked ancestors, committed after the 0.2.0 tag.
