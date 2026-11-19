@@ -650,9 +650,12 @@ loaded; `/reload` loads the extension now on disk.
 
 ## Commands
 
-- `agent-guard doctor` runs each installed harness's checks: OpenCode's installed
-  self-test and which `opencode` a new terminal window finds first (below), with Grok installed the launcher's Grok check and which `grok` a new
-  terminal and `zsh -c` find first, and, with Pi's guard installed, Pi's checks:
+- `agent-guard doctor` runs each installed harness's checks. For OpenCode it runs
+  the installed self-test and checks which `opencode` a new terminal window finds
+  first (below). For Grok it runs the launcher's check and checks which `grok`
+  a new terminal and `zsh -c` find first. The unreleased check also verifies
+  the link at `~/.local/bin/grok`. With Pi's guard installed it also runs the
+  checks below.
   - everything pi-sandbox-guard's `npm run status` and `npm run check:path`
     checked, comparing the installed Pi files with the current release's copies
     byte for byte. When a file or link has drifted, a `note` line gives the
@@ -941,12 +944,15 @@ guard refuses (its refusal message names the path): `login`, `logout`, `update`,
 `workspace start` and changes to
 `config.toml`, `sandbox.toml`, hooks and other protected files. A direct start runs
 Grok with its own sandbox setting, not Agent Guard's. `grok update` or a
-reinstall of Grok can put a link of its own back at `~/.local/bin/grok`; then
-`grok` in a new terminal starts Grok unguarded and `agent-guard doctor` fails with
-the lookup that no longer finds Agent Guard's launcher. Run the installer again
-to restore it. If the recorded external executable is removed while the guard link is in place,
-Agent Guard can still update the other harnesses. It keeps the link and its uninstall record,
-and reports the skipped Grok runtime checks. To use Grok again, reinstall Grok and rerun the Agent Guard installer.
+reinstall of Grok can put a link of its own back at `~/.local/bin/grok`. Invoking
+that path then starts Grok outside Agent Guard, even when a new terminal's
+`PATH` still finds Agent Guard's launcher. `agent-guard version` reports the
+changed link, and the unreleased `agent-guard doctor` reports it too. Run the
+installer again to restore it. If the recorded external executable is
+removed while the guard link is in place, Agent Guard can still update the other
+harnesses. It keeps the link and its uninstall record, and reports the skipped
+Grok runtime checks. To use Grok again, reinstall Grok and rerun the Agent Guard
+installer.
 
 ## Running Pi or OMP without the guard
 
