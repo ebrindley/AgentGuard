@@ -1,9 +1,11 @@
 import assert from "node:assert/strict"
-import { execFileSync, spawn, spawnSync } from "node:child_process"
+import { execFile, execFileSync, spawn, spawnSync } from "node:child_process"
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs"
+import { createServer } from "node:http"
 import { tmpdir, userInfo } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { promisify } from "node:util"
 import { isolateHarness, layout, opencodeOfferSeams, opencodeUpdateSeams, stage } from "./engines/zsh.mjs"
 import { archive, bundle, feed, seams as desktopSeams, snapshot, tools } from "./desktop-fixture.mjs"
 import { quote } from "./fixture-home.mjs"
@@ -78,6 +80,26 @@ assert.equal(pluginReport({ data: [{ id: "healthy", state: { status: "active" } 
   assert.deepEqual(mixed.stdout.trim().split("\n").map(line => line.replace(/^.*V2 \(fixture\): /, "")), ["#2 broken: failed"])
 }
 console.log("ok OpenCode V2 plugin diagnostics: healthy, unavailable, failed and sanitized status")
+
+{
+  const local = createServer((req, res) => {
+    // A proxied request uses an absolute URL instead of the local path.
+    if (req.url !== "/ready") res.writeHead(502).end()
+    else res.end("ready")
+  })
+  await new Promise(resolve => local.listen(0, "127.0.0.1", resolve))
+  try {
+    const url = `http://127.0.0.1:${local.address().port}`
+    const { stdout } = await promisify(execFile)("/bin/zsh", [
+      "-fc", 'source "$1"; "${opencode_probe_curl[@]}" -sf --max-time 5 "$2"',
+      "readiness", join(root, "profiles/opencode/hooks.zsh"), url + "/ready",
+    ], { env: { http_proxy: url } })
+    assert.equal(stdout, "ready")
+  } finally {
+    local.close()
+  }
+  console.log("ok readiness curl reaches loopback directly with http_proxy set")
+}
 
 function prepare(args) {
   const result = spawnSync("/bin/zsh", ["-fc", `

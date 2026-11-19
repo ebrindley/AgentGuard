@@ -59,6 +59,9 @@ opencode_update_notes() {
   fi
 }
 
+# Readiness endpoints belong to the local probe, even in a proxied shell.
+opencode_probe_curl=(/usr/bin/curl -q --noproxy 127.0.0.1)
+
 opencode_check() {
     # check staged replaces the global config folder with one inside the release
     # whose only plugin links to the release's plugin.js, so the live plugin is
@@ -93,25 +96,25 @@ opencode_check() {
         kill -0 $pid 2>/dev/null || break
         url=$(/usr/bin/grep -o 'http://127\.0\.0\.1:[0-9]*' "$out" 2>/dev/null | head -1) || true
         if [[ -n $url && -z $epid ]]; then
-          /usr/bin/curl -sN "$url/global/event" > "$events" 2>/dev/null &
+          "${opencode_probe_curl[@]}" -sN "$url/global/event" > "$events" 2>/dev/null &
           epid=$! check_events=$!
           for j in {1..20}; do /usr/bin/grep -q '"server.connected"' "$events" 2>/dev/null && { listening=1; break }; sleep 0.1; done
           sleep 0.2
         fi
-        [[ -n $url ]] && ids=$(/usr/bin/curl -sf --max-time 5 "$url/experimental/tool/ids?directory=$query" 2>/dev/null) &&
+        [[ -n $url ]] && ids=$("${opencode_probe_curl[@]}" -sf --max-time 5 "$url/experimental/tool/ids?directory=$query" 2>/dev/null) &&
           [[ $ids == *'"agent_guard_status"'* ]] && break
         sleep 0.5
       done
       # Plugin errors are published in the background; give them a moment.
       [[ $ids == *'"agent_guard_status"'* ]] && sleep 1
       if [[ $ids == *'"agent_guard_status"'* ]] &&
-        definitions=$(/usr/bin/curl -sf --max-time 5 "$url/experimental/tool?directory=$query&provider=agent-guard&model=agent-guard" 2>/dev/null); then
+        definitions=$("${opencode_probe_curl[@]}" -sf --max-time 5 "$url/experimental/tool?directory=$query&provider=agent-guard&model=agent-guard" 2>/dev/null); then
         readiness=$(print -r -- "$definitions" | /usr/bin/jq -r '[.[] | select(.id == "agent_guard_status") | .description] | first // ""' 2>/dev/null) || readiness=
         [[ $readiness == *'[agent-guard:ready]'* ]] && ready=1
       fi
       if (( ready && ! staged )); then
         permission_at=$(/bin/date +%s)
-        permission_report=$(/usr/bin/curl -sf --max-time 5 "$url/agent?directory=$query" 2>/dev/null |
+        permission_report=$("${opencode_probe_curl[@]}" -sf --max-time 5 "$url/agent?directory=$query" 2>/dev/null |
           /usr/bin/jq -c '{agents:.,sessions:[]}' |
           /usr/bin/jq -c --arg scope global --arg outside '/agent-guard-external-probe/*' --argjson observed "$(( permission_at * 1000 ))" -f "$profile_dir/permissions.jq" 2>/dev/null) || permission_report=
       fi
@@ -246,7 +249,7 @@ opencode_check_v2() {
     kill -0 $pid 2>/dev/null || break
     url=$(/usr/bin/grep -o 'http://127\.0\.0\.1:[0-9]*' "$out" 2>/dev/null | head -1) || true
     if [[ -n $url ]]; then
-      result=$(/usr/bin/curl -sf --max-time 5 -u "opencode:$password" -H 'Content-Type: application/json' \
+      result=$("${opencode_probe_curl[@]}" -sf --max-time 5 -u "opencode:$password" -H 'Content-Type: application/json' \
         -d '{"input":{}}' "$url/api/rpc/agent-guard/status?location%5Bdirectory%5D=$query" 2>/dev/null) && break
     fi
     sleep 0.25
@@ -254,10 +257,10 @@ opencode_check_v2() {
   if print -r -- "$result" | /usr/bin/jq -e '.output | .state=="active" and .sandbox.result=="confined" and .safetyNet.hooksReady==true' >/dev/null 2>&1; then
     print "ok   Guard readiness in OpenCode V2$label"
     [[ ${AGENT_GUARD_GATE:-} == 1 ]] && sev=warn
-    plugins=$(/usr/bin/curl -sf --max-time 5 -u "opencode:$password" "$url/api/plugin?location%5Bdirectory%5D=$query" 2>/dev/null) || plugins=
+    plugins=$("${opencode_probe_curl[@]}" -sf --max-time 5 -u "opencode:$password" "$url/api/plugin?location%5Bdirectory%5D=$query" 2>/dev/null) || plugins=
     opencode_plugins_v2 "$plugins" "$sev" "$label" || { [[ $sev == warn ]] || ok=0 }
     if (( ! staged )); then
-      permission_report=$(/usr/bin/curl -sf --max-time 5 -u "opencode:$password" -H 'Content-Type: application/json' \
+      permission_report=$("${opencode_probe_curl[@]}" -sf --max-time 5 -u "opencode:$password" -H 'Content-Type: application/json' \
         -d '{"input":{}}' "$url/api/rpc/agent-guard/permissions?location%5Bdirectory%5D=$query" 2>/dev/null | /usr/bin/jq -c .output) || permission_report=
       if print -r -- "$permission_report" | /usr/bin/jq -e '.availability=="observed"' >/dev/null 2>&1; then
         print -r -- "$permission_report" | /usr/bin/jq -r '.agents[] | select(.agent=="build" or .agent=="plan" or .agent=="explore")
