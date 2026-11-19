@@ -4,7 +4,7 @@ Agent Guard limits where coding agents can write on macOS using the operating
 system sandbox (Seatbelt). The sandbox covers the agent and its child processes;
 plugins and command analyzers provide additional checks.
 
-The stable release, [2026.11.19.1](https://github.com/ebrindley/AgentGuard/releases/tag/v2026.11.19.1),
+The stable release, [2026.11.19.2](https://github.com/ebrindley/AgentGuard/releases/tag/v2026.11.19.2),
 supports OpenCode, Pi, Oh My Pi (OMP) and Grok CLI. Agent Guard replaces OpenCode
 Guard and pi-sandbox-guard. Pi and OMP use a separate project-based policy; see
 [Grok](docs/USAGE.md#grok) for Grok.
@@ -107,8 +107,8 @@ catalogs inside its writable cache. Pi/OMP packages and protected settings
 still need outside maintenance. These commands run with your account's full
 authority. Follow the [maintenance procedures](docs/OPERATIONS.md#maintenance-outside-the-guard),
 including the cache checks before installing code. Run `agent-guard doctor`
-after agent updates. In stable 2026.11.19.1, an npm update can replace the
-launcher used by both the `pi` command and custom wrappers. See
+after agent updates. An npm update can replace the compatibility launcher
+that custom Pi wrappers use. See
 [Pi launcher recovery](docs/OPERATIONS.md#running-pi-or-omp-without-the-guard).
 Update the OpenCode CLI with `opencode upgrade` from Terminal
 ([how](docs/USAGE.md#update-the-opencode-cli)).

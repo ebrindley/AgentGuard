@@ -21,7 +21,7 @@ best-effort basis. There is no bug bounty.
 ## Supported versions
 
 Fixes go into the latest release only; older releases do not receive backports.
-The latest stable release is 2026.11.19.1 (OpenCode, Pi, OMP and Grok).
+The latest stable release is 2026.11.19.2 (OpenCode, Pi, OMP and Grok).
 `agent-guard update` follows stable releases and leaves a newer installed version
 unchanged. See [release channels](docs/OPERATIONS.md#release-channels) for tagged
 installers; they do not include later commits. The policy below includes current
@@ -35,7 +35,7 @@ retain their existing policy.
 ## What Agent Guard is
 
 Agent Guard is a macOS Seatbelt write-containment boundary for terminal coding
-agents. Release 2026.11.19.1 guards OpenCode, Pi, Oh My Pi (OMP) and Grok. Each harness, and
+agents. Release 2026.11.19.2 guards OpenCode, Pi, Oh My Pi (OMP) and Grok. Each harness, and
 every process it starts, runs under `/usr/bin/sandbox-exec`. OpenCode, Pi and OMP
 check commands with the same checker, cc-safety-net, under one policy; Pi and OMP
 still run pi-sandbox-guard's profile and launcher until they move onto Agent
@@ -49,7 +49,7 @@ they address and the layer that covers each are in
 
 ### OpenCode
 
-Stable 2026.11.19.1 supports OpenCode 1.18.33 and newer V1 releases, plus
+Stable 2026.11.19.2 supports OpenCode 1.18.33 and newer V1 releases, plus
 OpenCode 2.0.32 and 2.1.1. The 2.1.1 qualification covers macOS 26.7.1 arm64
 with isolated application and service data. First-launch onboarding and
 production-account upgrades remain unqualified. The native V2 fixtures also pass
@@ -159,10 +159,9 @@ The exception does not permit regular files, symlinks or writes inside the lock,
 and does not make settings or other configuration writable.
 
 The launchers run Pi and OMP under a fixed Seatbelt profile derived from
-pi-sandbox-guard 7ad441f. In stable 2026.11.19.1, Agent Guard's `bin/pi` and
-`bin/omp` link to the launchers in `~/.local/bin`. The unreleased layout puts
-its own launchers in the active release and keeps the `~/.local/bin` copies
-for compatibility. The profile does not read the Guard List. The agent can
+pi-sandbox-guard 7ad441f. The active release has its own `bin/pi` and
+`bin/omp` launchers. Agent Guard keeps copies in `~/.local/bin` for
+compatibility. The profile does not read the Guard List. The agent can
 write only to the project (`PI_PROJECT`, else the Git top level, else the
 launch folder), temp, Pi's state folder apart from its
 configuration, the OMP runtime folders the profile lists, `~/.npm`, `~/.cache`
@@ -449,7 +448,7 @@ cc-safety-net (difference 17), so:
   can miss quoted or wrapped forms, executable stdin programs and `eval`; these
   remain checker limitations.
 - **Compatibility launchers trust `~/.local/bin`.** They load the profile and
-  preamble beside them. The unreleased `bin/pi` and `bin/omp` load these files
+  preamble beside them. Agent Guard's `bin/pi` and `bin/omp` load these files
   from the active release in the write-protected engine folder. Pi sessions
   cannot write `~/.local/bin`, the launcher refuses a project that contains it,
   and OpenCode sessions cannot write the guard's files there. A route around
@@ -473,8 +472,8 @@ cc-safety-net (difference 17), so:
   `.gemini/extensions` into the project. Their direct path writes remain denied.
 - **npm can replace a compatibility launcher.** With npm's prefix at `~/.local`,
   updating or reinstalling a runtime can put its vendor link in `~/.local/bin`.
-  Stable 2026.11.19.1 follows the replaced path even through Agent Guard's
-  `bin`. The unreleased layout keeps bare commands guarded when PATH finds
+  In 2026.11.19.1, Agent Guard's `bin` followed the replaced path.
+  Starting with 2026.11.19.2, bare commands stay guarded when PATH finds
   Agent Guard's `bin` first. An absolute call to the replaced path, a script
   that finds it first on PATH, or a recorded wrapper that hands off to it can
   still start the runtime without Seatbelt.

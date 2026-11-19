@@ -1025,8 +1025,8 @@ It has no uninstaller. It writes no shell startup file: `~/.local/bin` must come
 
 ### The adopted guard
 
-Steps 7b and 7c retained pi-sandbox-guard's paths. The unreleased layout adds
-independent launchers in the active release:
+Steps 7b and 7c retained pi-sandbox-guard's paths. Release 2026.11.19.2 adds
+independent launchers in the active release.
 
 ```
 ~/.local/bin/pi, ~/.local/bin/omp                 byte-identical copies of profiles/pi/launchers/pi; copies, not links,
@@ -1040,9 +1040,9 @@ independent launchers in the active release:
                                                   there, and update and uninstall remove them
 ~/.config/pi-sandbox-guard/executables.conf       bindings (pi=, omp=, node=), pi-sandbox-guard's path and format
 ~/.pi/agent/security-events.log                   the analyzer's old log, left where it was, read-denied to sessions; nothing writes it
-$engine/bin/pi, $engine/bin/omp                   active release launcher copies (links to ~/.local/bin in stable 2026.11.19.1)
-$engine/bin/pi-sandbox.sb                         active release profile copy (unreleased)
-$engine/bin/pi-sandbox-preamble.zsh               active release preamble copy (unreleased)
+$engine/bin/pi, $engine/bin/omp                   active release launcher copies (links to ~/.local/bin in 2026.11.19.1)
+$engine/bin/pi-sandbox.sb                         active release profile copy
+$engine/bin/pi-sandbox-preamble.zsh               active release preamble copy
 $engine/state/wrappers.json                       custom wrapper records: names, historical names, hashes
 $engine/state/legacy/pi-sandbox-guard/            durable legacy bundle: local-bin/, extension/pi-sandbox-guard/,
                                                   extension-backups/ (The adoption, item 7)
@@ -1052,7 +1052,7 @@ $engine/state/legacy/replaced/                    entries a fresh install replac
 The release carries the source copies under `profiles/pi/`, in pi-sandbox-guard's relative layout (`launchers/`, `sandbox/`, `src/`, `scripts/`, `test/`). Install and update copy them into place as switch actions with backup and undo (section 6), and the stamp records the hashes of the copies. The extension folder holds only the release's files, so an update replaces a folder that still has an earlier release's analyzer files or `.guard-node` as a whole, and an uninstall removes it; neither fails, prompts or warns about them. pi-sandbox-guard's own stamps, `.pi-sandbox-launchers-version` and `.deployed-version`, are not written; nothing in `launchers/`, `sandbox/` or `src/` reads them. `launchers/pi` takes its runtime and install folder from its resolved path (`${0:A:t}`, `${0:A:h}`) and loads the profile and preamble from that folder. Agent Guard's PATH block puts `$engine/bin` first. `state/migration.json` holds one record per migrated source (one object for one source, a list for more) and the stamp has `harnesses` (section 6, Installer structure).
 
 With npm's prefix at `~/.local`, both updating and reinstalling Pi can replace
-the compatibility launcher with npm's link. The unreleased layout keeps
+the compatibility launcher with npm's link. Release 2026.11.19.2 keeps
 normal shell launches on the release's own executables when `$engine/bin`
 comes first. Launches through absolute compatibility paths, shells that find
 those paths first and wrappers with sibling handoff still use that copy.
@@ -1137,7 +1137,7 @@ Planned for step 7c.
    - `pi-sandbox-preamble.zsh`, then `pi-sandbox.sb`. A launch between the two runs the new preamble with 7ad441f's profile: 7ad441f's policy with the new refusals;
    - `pi`, then `omp`;
    - the extension folder: the old folder is renamed into the backup, then the staged folder into place. Between the two renames a guarded start of an agent session refuses, because `launchers/pi` refuses when the extension is missing, and a direct start of the real binary loads no extension;
-   - then the switch actions of section 6 activate `current`, which supplies `$engine/bin/pi` and `omp`. The stable links are activated after the compatibility copies. The unreleased executables and their profile and preamble are assembled together in the release before the switch.
+   - then the switch actions of section 6 activate `current`, which supplies `$engine/bin/pi` and `omp`. The release executables and their profile and preamble are assembled together before the switch.
 
    Each state between two renames is a test point: every entry point runs Pi under at least 7ad441f's protections or refuses; none starts it unguarded, and none loops.
 6. **Gate.** Section 6's gate plus `doctor`'s Pi checks (Commands), including `pi --version` and `omp --version` through `$engine/bin`. On failure, the rollback renames pi-sandbox-guard's files back from the backup in reverse order, byte-identical to before.
@@ -1162,11 +1162,11 @@ Planned for step 7c. pi-sandbox-guard's npm scripts are no longer used:
 | `npm run preflight` | `doctor` checks the command checker instead: the session copy builder and the installed extension with cc-safety-net and Agent Guard's Git rules |
 | `.githooks/pre-push`, `setup-hooks.sh` | CI; retired |
 
-`doctor` checks everything `status` and `check-path.sh` check, comparing the installed files with the stamp's hashes instead of a checkout, and `--json` keeps `status --json`'s fields, such as `runtime_binding`, `pi_binding` and `drift`, with the same meaning. It also runs the profile self-test, builds the checker's session copy from `~/.cc-safety-net` with the release's builder and asks the installed extension about one allowed command and two blocked ones, one of them by Agent Guard's `hooks-path` rule, which proves cc-safety-net loads and Agent Guard's Git rules are in force; that check runs on the recorded Node or the `node` on PATH and is skipped, and named, when there is none. It checks where the login shell resolves `pi`, `omp` and each recorded wrapper, and reports an entry point as skipped when the shell gives no answer. The unreleased checks verify the release's own launcher copies separately from the compatibility files and report drift in `~/.local/bin` even when bare commands reach the release's own launchers. `doctor` also checks binding staleness, wrapper hashes, historical wrapper names that are still executable and the relocation variables `PI_CODING_AGENT_DIR` and `PI_PACKAGE_DIR`. It runs `pi --version` and `omp --version` from a scratch project in the temp folder, because Pi refuses the home folder as a project. A missing runtime is skipped and named; a stale binding fails. When `pi --version` runs, it also warns, without failing or counting drift, for each of `fd` and `rg` that guarded Pi would not find in `~/.pi/agent/bin` or the preamble's pinned PATH, which it reads from the installed preamble. `agent-guard version` reports drift in the Pi files outside the engine folder from the stamp, as it does for the release folder. Pi's migration redoes the Pi parts of `doctor` for the engine's layout.
+`doctor` checks everything `status` and `check-path.sh` check, comparing the installed files with the stamp's hashes instead of a checkout, and `--json` keeps `status --json`'s fields, such as `runtime_binding`, `pi_binding` and `drift`, with the same meaning. It also runs the profile self-test, builds the checker's session copy from `~/.cc-safety-net` with the release's builder and asks the installed extension about one allowed command and two blocked ones, one of them by Agent Guard's `hooks-path` rule, which proves cc-safety-net loads and Agent Guard's Git rules are in force; that check runs on the recorded Node or the `node` on PATH and is skipped, and named, when there is none. It checks where the login shell resolves `pi`, `omp` and each recorded wrapper, and reports an entry point as skipped when the shell gives no answer. The checks verify the release's own launcher copies separately from the compatibility files and report drift in `~/.local/bin` even when bare commands reach the release's own launchers. `doctor` also checks binding staleness, wrapper hashes, historical wrapper names that are still executable and the relocation variables `PI_CODING_AGENT_DIR` and `PI_PACKAGE_DIR`. It runs `pi --version` and `omp --version` from a scratch project in the temp folder, because Pi refuses the home folder as a project. A missing runtime is skipped and named; a stale binding fails. When `pi --version` runs, it also warns, without failing or counting drift, for each of `fd` and `rg` that guarded Pi would not find in `~/.pi/agent/bin` or the preamble's pinned PATH, which it reads from the installed preamble. `agent-guard version` reports drift in the Pi files outside the engine folder from the stamp, as it does for the release folder. Pi's migration redoes the Pi parts of `doctor` for the engine's layout.
 
 ### Custom wrappers
 
-A wrapper hands off to the `pi` next to it (`PI_SHIM="${0:A:h}/pi"`, then `exec "$PI_SHIM" "$@"`; `launchers/example-custom`). `~/.local/bin/pi` and `omp` remain launcher copies in the unreleased layout. An npm replacement of the sibling `pi` still affects wrappers. The unreleased `doctor` reports this even when the wrapper's hash matches. The entry points and the recorded wrappers are launch links (section 3, Executables and launch links).
+A wrapper hands off to the `pi` next to it (`PI_SHIM="${0:A:h}/pi"`, then `exec "$PI_SHIM" "$@"`; `launchers/example-custom`). `~/.local/bin/pi` and `omp` are compatibility launcher copies. An npm replacement of the sibling `pi` still affects wrappers. `doctor` reports this even when the wrapper's hash matches. The entry points and the recorded wrappers are launch links (section 3, Executables and launch links).
 
 From step 7c, `agent-guard wrapper add|remove|list` replaces `deploy:launchers --extra-launchers`, with pi-sandbox-guard's checks before anything is installed: a regular file, not a link; a name that matches `[A-Za-z0-9._-]`, does not start with `-`, is not a duplicate and is not reserved, where `opencode`, `opencode-gui` and `agent-guard` are reserved besides `pi` and `omp`; and `scripts/check-launchers.mjs --sources`, which checks that the wrapper uses `#!/bin/zsh -f`, hands off to the `pi` next to it and calls only permitted helpers before the sandbox. It installs a copy in `~/.local/bin`, next to `pi`, keeps a backup of a wrapper it replaces, and records names, historical names and hashes in `state/wrappers.json`. `remove` deletes a wrapper whose content still matches its recorded hash and keeps its name as historical; a changed wrapper is reported and left. `doctor` checks each recorded hash and reports a historical name that is still executable, as `scripts/status.sh` does with `launcher_names_seen`. Under `AGENT_GUARD_GATE=1` new content in a recorded regular file is a warning: a session cannot write a recorded wrapper, and a rollback would leave the edited file in place.
 
