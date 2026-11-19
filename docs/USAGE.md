@@ -1,6 +1,6 @@
 # Using Agent Guard
 
-This guide describes release 2026.11.19.1, which supports OpenCode, Pi, OMP and Grok.
+This guide describes release 2026.11.19.2, which supports OpenCode, Pi, OMP and Grok.
 See [release channels](OPERATIONS.md#release-channels) for installation.
 
 ## Start OpenCode
@@ -47,7 +47,7 @@ Review changes before executing them outside the guard.
 
 ## OpenCode versions
 
-Stable 2026.11.19.1 targets OpenCode 1.18.33 and newer V1 releases,
+Stable 2026.11.19.2 targets OpenCode 1.18.33 and newer V1 releases,
 plus OpenCode 2.0.32 and 2.1.1 CLI and desktop backends. The native V2
 fixtures also pass with the OpenCode 2.1.4 CLI. Keep shared configuration in the V1 format
 when both versions use it; V2 normalizes supported V1 settings in memory.
@@ -666,10 +666,9 @@ below them remain writable.
 
 After updating Pi or OMP, run `agent-guard doctor` from Terminal. With npm's
 prefix at `~/.local`, updating or reinstalling Pi can replace
-`~/.local/bin/pi` with the vendor's command. In stable
-2026.11.19.1, Agent Guard's `bin` links to those paths. In the unreleased
-layout, Agent Guard's `bin` holds its own launchers, so bare `pi` and `omp`
-stay guarded in shells that find its `bin` first. An absolute call to the
+`~/.local/bin/pi` with the vendor's command. Starting with 2026.11.19.2,
+bare `pi` and `omp` stay guarded in shells that find Agent Guard's `bin`
+first. An absolute call to the
 replaced path, a script that finds it first on PATH, or a custom wrapper
 that hands off to it can still start the runtime without Seatbelt.
 See [repairing a replaced launcher](OPERATIONS.md#running-pi-or-omp-without-the-guard),
@@ -749,8 +748,8 @@ Agent Guard's `grok` refuses them from any terminal and says so: `grok login`,
 `grok logout`, `grok update` and `grok workspace start|restart|resume`. After
 `grok update`, run `agent-guard doctor`. The update can put Grok's own link back
 at `~/.local/bin/grok` while a new terminal still finds Agent Guard's launcher.
-`agent-guard version` reports the changed link, and the unreleased
-`agent-guard doctor` reports it too. Run the installer again to restore the link.
+Both `agent-guard doctor` and `agent-guard version` report the changed link.
+Run the installer again to restore it.
 Grok's updater is off in a guarded session. The launcher also refuses an explicit `--sandbox` profile other
 than `off` (and `GROK_SANDBOX`), `--leader`, `use_leader = true` in the
 configuration, a `GROK_HOME` other than `~/.grok`, and resuming a session that

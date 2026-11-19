@@ -1,12 +1,12 @@
 # Installation and maintenance
 
-These procedures describe stable 2026.11.19.1 unless marked unreleased. For everyday use, see the
+These procedures describe stable 2026.11.19.2 unless marked unreleased. For everyday use, see the
 [user guide](USAGE.md).
 
 ## Release channels
 
 The latest stable release is
-[2026.11.19.1](https://github.com/ebrindley/AgentGuard/releases/tag/v2026.11.19.1), for OpenCode,
+[2026.11.19.2](https://github.com/ebrindley/AgentGuard/releases/tag/v2026.11.19.2), for OpenCode,
 Pi, Oh My Pi (OMP) and Grok. Run the installer from Terminal outside any agent session
 or sandbox:
 
@@ -478,12 +478,11 @@ pi-sandbox-guard checkout. It does not reinstate pi-sandbox-guard itself.
 
 ## Pi's files
 
-In stable 2026.11.19.1, Agent Guard's `bin/pi` and `bin/omp` link to the
-launchers in `~/.local/bin`. In the unreleased layout, the active release
-holds its own executable launchers at `bin/pi` and `bin/omp`. They load
-`pi-sandbox.sb` and `pi-sandbox-preamble.zsh` from the same folder.
+The active release holds its own executable launchers at `bin/pi` and
+`bin/omp`. They load `pi-sandbox.sb` and `pi-sandbox-preamble.zsh` from the
+same folder.
 
-Both layouts keep these files at the original paths:
+Agent Guard also installs compatibility files at the original paths.
 
 - `~/.local/bin/pi` and `~/.local/bin/omp`: copies of the launcher that take
   their runtime from their file name and load the `pi-sandbox.sb` and
@@ -545,8 +544,8 @@ installer checks do not check for updates.
 
 Accepting installs the offered tag through the existing updater, then restarts
 the launcher once with the original working directory and arguments. The handoff
-skips the repeated check. In the unreleased layout, Pi and OMP restart through
-Agent Guard's `bin`, which points to the active release. Desktop upgrades show
+skips the repeated check. Pi and OMP restart through Agent Guard's `bin`,
+which points to the active release. Desktop upgrades show
 “Downloading update…”, “Preparing update…” and “Installing update…” in a small
 progress window and record output in `~/Agent Guard/last-update.log`. The window
 follows the stage lines the installer prints. An accepted upgrade that fails stops that launch;
@@ -655,8 +654,8 @@ loaded; `/reload` loads the extension now on disk.
 - `agent-guard doctor` runs each installed harness's checks. For OpenCode it runs
   the installed self-test and checks which `opencode` a new terminal window finds
   first (below). For Grok it runs the launcher's check and checks which `grok`
-  a new terminal and `zsh -c` find first. The unreleased check also verifies
-  the link at `~/.local/bin/grok`. With Pi's guard installed it also runs the
+  a new terminal and `zsh -c` find first. It also verifies the link at
+  `~/.local/bin/grok`. With Pi's guard installed it also runs the
   checks below.
   - everything pi-sandbox-guard's `npm run status` and `npm run check:path`
     checked, comparing the installed Pi files with the current release's copies
@@ -673,9 +672,9 @@ loaded; `/reload` loads the extension now on disk.
     installed extension, which proves cc-safety-net loads and Agent Guard's Git
     rules are in force. This check runs on the recorded Node or the `node` on
     PATH and is skipped, and named, when there is none. Its audit entries go to a scratch folder, so `~/.cc-safety-net` is not changed;
-  - where `pi`, `omp` and each recorded wrapper resolve in a login shell. In
-    the unreleased layout, the PATH check can pass for `pi` or `omp` even when
-    the copy in `~/.local/bin` has drifted. A wrapper that finds the wrong
+  - where `pi`, `omp` and each recorded wrapper resolve in a login shell. The
+    PATH check can pass for `pi` or `omp` even when the copy in `~/.local/bin`
+    has drifted. A wrapper that finds the wrong
     sibling `pi` fails its check even if the wrapper's hash matches;
   - that the bindings in `executables.conf` are still usable; a stale binding
     fails;
@@ -684,8 +683,8 @@ loaded; `/reload` loads the extension now on disk.
   - `PI_CODING_AGENT_DIR` and `PI_PACKAGE_DIR`, which move Pi's folders,
     reported when set;
   - `pi --version` and `omp --version`, run from a scratch project in the temp
-    folder, because Pi refuses home as a project. The unreleased layout runs
-    these checks through Agent Guard's `bin`. A runtime that is not installed
+    folder, because Pi refuses home as a project. Doctor runs these checks
+    through Agent Guard's `bin`. A runtime that is not installed
     is skipped and named.
   - with `pi --version` working, whether guarded Pi finds `fd` and `rg`: in
     `~/.pi/agent/bin`, then in the directories of the launcher's pinned PATH
@@ -950,9 +949,9 @@ guard refuses (its refusal message names the path): `login`, `logout`, `update`,
 Grok with its own sandbox setting, not Agent Guard's. `grok update` or a
 reinstall of Grok can put a link of its own back at `~/.local/bin/grok`. Invoking
 that path then starts Grok outside Agent Guard, even when a new terminal's
-`PATH` still finds Agent Guard's launcher. `agent-guard version` reports the
-changed link, and the unreleased `agent-guard doctor` reports it too. Run the
-installer again to restore it. If the recorded external executable is
+`PATH` still finds Agent Guard's launcher. Both `agent-guard doctor` and
+`agent-guard version` report the changed link. Run the installer again to
+restore it. If the recorded external executable is
 removed while the guard link is in place, Agent Guard can still update the other
 harnesses. It keeps the link and its uninstall record, and reports the skipped
 Grok runtime checks. To use Grok again, reinstall Grok and rerun the Agent Guard
@@ -999,12 +998,11 @@ not see that copy, and nothing is downloaded when `PI_OFFLINE` is set.
 would not find.
 
 An npm update or reinstall with its prefix at `~/.local` can replace the Pi
-launcher at `~/.local/bin/pi`. In stable 2026.11.19.1,
-Agent Guard's `bin` links to those paths, so even bare commands that find its
-`bin` first can start the runtime without Seatbelt. In the unreleased layout,
-those commands reach the release's own launchers and stay guarded. Absolute
-calls to the replaced path, wrappers that hand off to it and bare commands
-that find the vendor's command first can still start without Seatbelt.
+launcher at `~/.local/bin/pi`. Starting with 2026.11.19.2, bare commands
+that find Agent Guard's `bin` first reach the release's own launchers and stay
+guarded. Absolute calls to the replaced path, wrappers that hand off to it and
+bare commands that find the vendor's command first can still start without
+Seatbelt.
 
 `agent-guard doctor` reports the changed launcher. If it reports a stale
 runtime binding too, repair that with `agent-guard bind`. Rerun the installer
