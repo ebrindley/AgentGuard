@@ -148,6 +148,10 @@ fi
 
 PI_SANDBOX_GUARD_EXTENSION="$PI_SANDBOX_INSTALL_DIR/pi-sandbox-guard-extension/index.ts"
 if [ ! -f "$PI_SANDBOX_GUARD_EXTENSION" ]; then
+  # Keep using a legacy sibling extension if one was installed.
+  PI_SANDBOX_GUARD_EXTENSION="$HOME/.local/bin/pi-sandbox-guard-extension/index.ts"
+fi
+if [ ! -f "$PI_SANDBOX_GUARD_EXTENSION" ]; then
   PI_SANDBOX_GUARD_EXTENSION="$HOME/.pi/agent/extensions/pi-sandbox-guard/index.ts"
 fi
 typeset -r PI_SANDBOX_GUARD_EXTENSION

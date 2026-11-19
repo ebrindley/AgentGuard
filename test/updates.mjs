@@ -583,31 +583,50 @@ try {
     assert.equal((await launch('')).stdout, 'main=before\n');
   });
 
-  await check('Pi and OMP restart through their shim with the saved peer PATH, cwd and arguments', async () => {
+  await check('Pi and OMP restart from the new release with the saved peer PATH, cwd and arguments', async () => {
     // Keep the real shim and startup preamble through the update hook. Replace
     // account/runtime/probe inputs and stop before unrelated policy construction.
-    updateStatus = 0; ui();
-    const bin = join(home, '.local/bin'); mkdirSync(bin, { recursive: true });
+    const bin = join(home, '.local/bin');
+    const oldBin = join(release, 'bin');
+    const newRelease = join(engine, `releases/${tag.slice(1)}-test`);
+    const newBin = join(newRelease, 'bin');
+    const current = join(engine, 'current');
+    symlinkSync('current/bin', join(engine, 'bin'));
+    mkdirSync(newRelease);
+    copyFileSync(module, join(newRelease, 'updates.zsh'));
     const agent = join(temp, 'pi-agent');
-    executable(agent, `/usr/bin/jq -cn --arg cwd "$PWD" --arg peers "$AGENT_GUARD_PEER_PATH" --arg marker "\${AGENT_GUARD_UPDATE_RESTART:-}" --args '{cwd:$cwd,peers:$peers,marker:$marker,args:$ARGS.positional}' -- "$@"\n`);
+    executable(agent, `/usr/bin/jq -cn --arg shim "$FIXTURE_PI_SHIM" --arg cwd "$PWD" --arg peers "$AGENT_GUARD_PEER_PATH" --arg marker "\${AGENT_GUARD_UPDATE_RESTART:-}" --args '{shim:$shim,cwd:$cwd,peers:$peers,marker:$marker,args:$ARGS.positional}' -- "$@"\n`);
     let preamble = readFileSync(join(root, 'profiles/pi/sandbox/pi-sandbox-preamble.zsh'), 'utf8');
     const end = preamble.indexOf('# fail-closed prerequisites (absolute path; do not trust'); assert.ok(end > 0);
     preamble = preamble.slice(0, end);
     preamble = replaceOnce(preamble, 'typeset -r DSCL_BIN="/usr/bin/dscl"', `fixture_dscl() { print -r -- ${quote('NFSHomeDirectory: ' + home)}; }; typeset -r DSCL_BIN=fixture_dscl`);
     preamble = replaceOnce(preamble, 'typeset -r SANDBOX_EXEC="/usr/bin/sandbox-exec"', 'typeset -r SANDBOX_EXEC="/usr/bin/true"');
-    preamble = replaceOnce(preamble, '\nresolve_agent_executable\n', `\nPI_LAUNCH_VECTOR=(${quote(agent)})\n`);
-    writeFileSync(join(bin, 'pi-sandbox-preamble.zsh'), preamble + '\nreturn 0\n');
-    mkdirSync(join(bin, 'pi-sandbox-guard-extension')); writeFileSync(join(bin, 'pi-sandbox-guard-extension/index.ts'), '');
+    preamble = replaceOnce(preamble, '\nresolve_agent_executable\n', `\nPI_LAUNCH_VECTOR=(${quote(agent)})\nexport FIXTURE_PI_SHIM="$PI_SANDBOX_SHIM_PATH"\n`);
+    for (const dir of [bin, oldBin, newBin]) {
+      mkdirSync(join(dir, 'pi-sandbox-guard-extension'), { recursive: true });
+      writeFileSync(join(dir, 'pi-sandbox-preamble.zsh'), preamble + '\nreturn 0\n');
+      writeFileSync(join(dir, 'pi-sandbox-guard-extension/index.ts'), '');
+    }
     const originalPath = `${temp}/custom-peers:/usr/bin:/bin`;
+    const launcher = readFileSync(join(root, 'profiles/pi/launchers/pi'), 'utf8');
+    const vendor = join(temp, 'vendor-runtime'); executable(vendor, 'exit 99\n');
     for (const runtime of ['pi', 'omp']) {
-      const shim = join(bin, runtime); executable(shim, readFileSync(join(root, 'profiles/pi/launchers/pi'), 'utf8'));
+      for (const dir of [bin, oldBin, newBin]) executable(join(dir, runtime), launcher);
+      // Switch releases and replace the compatibility entry while updating.
+      executable(join(oldBin, 'agent-guard'), `set -e\n` +
+        `/bin/ln -sf ${quote(vendor)} ${quote(join(bin, runtime))}\n` +
+        `/bin/ln -s ${quote(newRelease)} ${quote(join(engine, '.next'))}\n` +
+        `/bin/mv -fh ${quote(join(engine, '.next'))} ${quote(current)}\n`);
+      const shim = join(runtime === 'pi' ? bin : join(engine, 'bin'), runtime);
       const before = requests.length;
       const r = await run(`unset AGENT_GUARD_PEER_PATH; export PATH=${quote(originalPath)}; exec /bin/zsh -f ${quote(shim)} '--prompt' 'a; $literal'`, 'y\n');
       assert.equal(r.status, 0, r.stderr);
       const result = JSON.parse(r.stdout);
+      assert.equal(result.shim, join(newBin, runtime));
       assert.equal(result.cwd, temp); assert.equal(result.peers, originalPath); assert.equal(result.marker, '');
       assert.deepEqual(result.args.slice(2), ['--prompt', 'a; $literal']);
       assert.match(r.stderr, /Agent Guard updated to 2026\.11\.05\./); assert.equal(requests.length - before, 1);
+      rmSync(current); symlinkSync('releases/2026.11.01-test', current);
     }
   });
 

@@ -404,7 +404,7 @@ config_value_for_key() {
 resolve_command_outside_shim_dir() {
   local command_name="$1"
   local shim_dir=""
-  local path_dir path_dir_canon candidate
+  local legacy_shim_dir path_dir path_dir_canon candidate
 
   if [[ "$command_name" == */* ]]; then
     print -r -- "$(canonical_path "$command_name")"
@@ -414,11 +414,12 @@ resolve_command_outside_shim_dir() {
   if [ -n "${PI_SANDBOX_SHIM_PATH:-}" ]; then
     shim_dir="$(canonical_path "${PI_SANDBOX_SHIM_PATH:h}")"
   fi
+  legacy_shim_dir="$(canonical_path "$HOME/.local/bin")"
 
   for path_dir in "${(@s/:/)PATH}"; do
     [ -n "$path_dir" ] || path_dir="."
     path_dir_canon="$(canonical_path "$path_dir")"
-    if [ -n "$shim_dir" ] && [ "$path_dir_canon" = "$shim_dir" ]; then
+    if [[ $path_dir_canon == "$shim_dir" || $path_dir_canon == "$legacy_shim_dir" ]]; then
       continue
     fi
     candidate="$path_dir/$command_name"
@@ -952,7 +953,7 @@ if [ "${PI_SANDBOX_COMMAND_KIND:-0}" -eq 1 ]; then
     ag_pi_update_startup() {
       local home="$HOME_CANON_EARLY" engine="$AG_UPDATE_ENGINE"
       export AGENT_GUARD_PEER_PATH
-      ag_update_startup cli "$PI_SANDBOX_RUNTIME" "$PI_SANDBOX_SHIM_PATH" "$@"
+      ag_update_startup cli "$PI_SANDBOX_RUNTIME" "$engine/bin/$PI_SANDBOX_RUNTIME" "$@"
     }
     if ! ag_pi_update_startup "$@"; then
       emit "update failed; run agent-guard update from Terminal to finish recovery before reopening."
@@ -1026,12 +1027,16 @@ fi
 # Twin, with the refusals below through agent_guard_protected: engine/launch,
 # project_refusal; change both together.
 HOME_CANON="$(cd -P "$HOME" 2>/dev/null && pwd -P || echo "$HOME")"
-INSTALL_DIR_CANON="$(cd -P "$PI_SANDBOX_INSTALL_DIR" 2>/dev/null && pwd -P || echo "$PI_SANDBOX_INSTALL_DIR")"
-case "$INSTALL_DIR_CANON" in
-  "$PROJECT"|"$PROJECT"/*)
-    emit "refusing unsafe boundary '$PROJECT' because it contains the sandbox guard install dir '$INSTALL_DIR_CANON'."
-    emit "cd into a project directory or set PI_PROJECT=<dir>; $(direct_run_hint "$PI_EXECUTABLE")"; exit 1 ;;
-esac
+# The compatibility launchers and custom wrappers still run from ~/.local/bin.
+for _pi_install_dir in "$PI_SANDBOX_INSTALL_DIR" "$HOME_CANON/.local/bin"; do
+  INSTALL_DIR_CANON="$(canonical_path "$_pi_install_dir")"
+  case "$INSTALL_DIR_CANON" in
+    "$PROJECT"|"$PROJECT"/*)
+      emit "refusing unsafe boundary '$PROJECT' because it contains the sandbox guard install dir '$INSTALL_DIR_CANON'."
+      emit "cd into a project directory or set PI_PROJECT=<dir>; $(direct_run_hint "$PI_EXECUTABLE")"; exit 1 ;;
+  esac
+done
+unset _pi_install_dir INSTALL_DIR_CANON
 #
 # NOTE on what is and isn't listed:
 #  - System prefixes (/etc, /usr, /bin, /sbin, /System, /Library, /Applications,
