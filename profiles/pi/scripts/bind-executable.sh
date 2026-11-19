@@ -216,9 +216,9 @@ carried_over() {
 # list is for PROPOSING a value, never for trusting one — the operator confirms.
 # Ambient PATH is consulted last and only to notice an install the layouts missed.
 detect_pi() {
-  local c
+  local c f pkg=@earendil-works/pi-coding-agent/dist
   local -a candidates=()
-  # npm-style layouts: <prefix>/lib/node_modules/<pkg>/dist/cli.js
+  # npm-style layouts: Pi's current bundled CLI and earlier CLI.
   local -a prefixes=(
     "/opt/homebrew" "/usr/local" "$HOME/.npm-global" "$HOME/.local"
     "$HOME/.nvm/versions/node"/* "$HOME/.asdf/installs/nodejs"/*
@@ -227,8 +227,9 @@ detect_pi() {
   )
   for c in "${prefixes[@]}"; do
     [ -d "$c" ] || continue
-    [ -e "$c/lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js" ] \
-      && candidates+=("$c/lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js")
+    for f in "$c/lib/node_modules/$pkg/"{bundle/cli.js,cli.js}; do
+      [ -e "$f" ] && candidates+=("$f")
+    done
   done
   # Homebrew formula: bin/pi is a wrapper script into libexec.
   for c in /opt/homebrew/Cellar/pi-coding-agent/*/bin/pi /usr/local/Cellar/pi-coding-agent/*/bin/pi; do
@@ -236,17 +237,19 @@ detect_pi() {
   done
   # volta / pnpm / bun / yarn globals.
   for c in \
-    "$HOME/.volta/tools/image/packages/@earendil-works/pi-coding-agent/dist/cli.js" \
-    "$HOME/Library/pnpm/global"/*/node_modules/@earendil-works/pi-coding-agent/dist/cli.js \
-    "$HOME/.bun/install/global/node_modules/@earendil-works/pi-coding-agent/dist/cli.js" \
-    "$HOME/.yarn/global/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"; do
+    "$HOME/.volta/tools/image/packages/$pkg/"{bundle/cli.js,cli.js} \
+    "$HOME/Library/pnpm/global"/*/node_modules/"$pkg/"{bundle/cli.js,cli.js} \
+    "$HOME/.bun/install/global/node_modules/$pkg/"{bundle/cli.js,cli.js} \
+    "$HOME/.yarn/global/node_modules/$pkg/"{bundle/cli.js,cli.js}; do
     [ -e "$c" ] && candidates+=("$c")
   done
   # npm's own answer, if npm is available and its prefix was not already covered.
   if command -v npm >/dev/null 2>&1; then
     local np; np="$(npm prefix -g 2>/dev/null || true)"
-    if [ -n "$np" ] && [ -e "$np/lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js" ]; then
-      candidates+=("$np/lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js")
+    if [ -n "$np" ]; then
+      for f in "$np/lib/node_modules/$pkg/"{bundle/cli.js,cli.js}; do
+        [ -e "$f" ] && candidates+=("$f")
+      done
     fi
   fi
   # Ambient PATH last, and never the shim dir.

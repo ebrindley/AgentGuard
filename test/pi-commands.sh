@@ -20,6 +20,8 @@ finish() { end_run }
 new_home "$run/home"
 home=$REPLY
 engine="$home/Library/Application Support/AgentGuard"
+entry_bin="$engine/bin"
+shown_bin='~/Library/Application Support/AgentGuard/bin'
 lb="$home/.local/bin"
 ext="$home/.pi/agent/extensions/pi-sandbox-guard"
 conf="$home/.config/pi-sandbox-guard/executables.conf"
@@ -63,8 +65,6 @@ print -r -- 0.2.0 > "$rel/VERSION"
 print -r -- dev > "$rel/COMMIT"
 /bin/ln -s "releases/$rid" "$engine/current"
 /bin/ln -s current/bin "$engine/bin"
-/bin/ln -s "$lb/pi" "$rel/bin/pi"
-/bin/ln -s "$lb/omp" "$rel/bin/omp"
 /bin/cp "$run/tree/profiles/opencode/templates/Guard List.txt" "$home/Agent Guard/"
 write_stamp() { /usr/bin/jq -cn --arg r $rid '{version: "0.2.0", tag: "v0.2.0", commit: "dev", release: $r, installed_at: 0,
   harnesses: $ARGS.positional, files: {}, links: {}}' --args "$@" > "$stamp" }
@@ -86,13 +86,16 @@ replace_once "$rel/profiles/pi/sandbox/pi-sandbox-preamble.zsh" 'PATH="/opt/home
 
 # What the installer puts in place.
 /bin/mkdir -p "$lb" "$ext/src"
-/bin/cp "$rel/profiles/pi/launchers/pi" "$lb/pi"
-/bin/cp "$rel/profiles/pi/launchers/pi" "$lb/omp"
-/bin/chmod 755 "$lb/pi" "$lb/omp"
-/bin/cp "$rel/profiles/pi/sandbox/"{pi-sandbox.sb,pi-sandbox-preamble.zsh} "$lb/"
+for bin in "$rel/bin" "$lb"; do
+  /bin/cp "$rel/profiles/pi/launchers/pi" "$bin/pi"
+  /bin/cp "$rel/profiles/pi/launchers/pi" "$bin/omp"
+  /bin/chmod 755 "$bin/pi" "$bin/omp"
+  /bin/cp "$rel/profiles/pi/sandbox/"{pi-sandbox.sb,pi-sandbox-preamble.zsh} "$bin/"
+done
 /bin/cp "$rel/profiles/pi/scripts/extension-entry.ts" "$ext/index.ts"
 /bin/cp "$rel/profiles/pi/src/index.mjs" "$ext/src/"
-print -r -- 'export PATH="$HOME/.local/bin:$PATH"' > "$home/.zprofile"
+entry_path='export PATH="$HOME/Library/Application Support/AgentGuard/bin:$HOME/.local/bin:$PATH"'
+print -r -- "$entry_path" > "$home/.zprofile"
 # A login shell reads /etc/zprofile, whose path_helper adds the host's PATH entries
 # (Homebrew's folder), so a host OpenCode, Pi or OMP would be found. .zshenv skips the
 # remaining system startup files and leaves the home's own .zprofile in charge.
@@ -195,7 +198,8 @@ runs 'check keeps a newline in a link target' 3 "invalid: omp is inside a sandbo
 runs 'recording a Node needs node on PATH' 2 'node is not on PATH; agent-guard bind runs it to name the Node it records' PATH=/usr/bin:/bin bind --pi "$fake_pi" --node "$node_bin" --yes
 
 # Detection, with the layouts in the disposable home.
-system_pi=(/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js(N) /usr/local/lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js(N)
+system_pi=(/opt/homebrew/lib/node_modules/@earendil-works/pi-coding-agent/dist/{cli.js,bundle/cli.js}(N)
+           /usr/local/lib/node_modules/@earendil-works/pi-coding-agent/dist/{cli.js,bundle/cli.js}(N)
            /opt/homebrew/Cellar/pi-coding-agent/*/bin/pi(N) /usr/local/Cellar/pi-coding-agent/*/bin/pi(N)
            /opt/homebrew/bin/omp(N) /usr/local/bin/omp(N) /opt/homebrew/Cellar/omp/*/bin/omp(N) /usr/local/Cellar/omp/*/bin/omp(N))
 if (( $#system_pi )); then
@@ -203,12 +207,13 @@ if (( $#system_pi )); then
 else
   runs 'detect names agent-guard bind when nothing is found' 2 'agent-guard bind --pi "$(command -v pi)"' bind --detect --yes
   [[ $out != *'npm run'* ]] && pass 'no message names npm run' || fail 'no message names npm run'
-  cli="$home/.npm-global/lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"
+  cli="$home/.npm-global/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"
   /bin/mkdir -p "${cli:h}"
   print -r -- '#!/usr/bin/env node' > "$cli"
   /bin/chmod 755 "$cli"
+  /bin/cp -p -- "$cli" "${cli:h:h}/cli.js"
   runtime "$home/.bun/bin/omp" ':'
-  runs 'detect records the npm layout, OMP and the Node for a Node script' 0 "recorded in $conf" bind --detect --yes
+  runs 'detect prefers bundled Pi and records OMP and Node' 0 "recorded in $conf" bind --detect --yes
   [[ $(/usr/bin/grep -v '^#' "$conf") == "pi=$cli"$'\n'"omp=$home/.bun/bin/omp"$'\n'"node=$want_node" ]] &&
     pass "pi=, omp= and node=$want_node" || { fail "pi=, omp= and node=$want_node"; /bin/cat "$conf" }
   /bin/rm -rf "$home/.npm-global" "$home/.bun"
@@ -442,14 +447,14 @@ doctor_fails 'all checks pass'
 [[ $(cc_tree) == "$cc_before" ]] && pass '~/.cc-safety-net, with an existing log, is unchanged by doctor' || fail '~/.cc-safety-net changed'
 for l in 'ok   protected write denied' 'ok   ~/.local/bin/pi matches the release' 'ok   ~/.local/bin/omp matches the release' \
     'ok   ~/.pi/agent/extensions/pi-sandbox-guard/src/index.mjs matches the release' \
-    'ok   ~/Library/Application Support/AgentGuard/bin/pi links to ~/.local/bin/pi' \
-    "ok   pi resolves to the guard in a login shell ($lb/pi)" "ok   omp resolves to the guard in a login shell ($lb/omp)" \
+    "ok   $shown_bin/pi matches the release" \
+    "ok   pi resolves to the guard in a login shell ($entry_bin/pi)" "ok   omp resolves to the guard in a login shell ($entry_bin/omp)" \
     "ok   bindings valid: pi=$fake_pi, omp=$fake_omp" \
     'ok   wrapper ~/.local/bin/good matches its recorded hash' "ok   good resolves to ~/.local/bin/good in a login shell ($lb/good)" \
-    'ok   profile self-test of ~/.local/bin/pi-sandbox.sb' \
+    "ok   profile self-test of $shown_bin/pi-sandbox.sb" \
     "ok   the checker's session copy is built from ~/.cc-safety-net" 'ok   the installed extension allows ls -la' \
     'ok   the installed extension blocks rm -rf /' "ok   the installed extension blocks git config core.hooksPath by Agent Guard's Git rules" \
-    'ok   pi --version through ~/.local/bin/pi: fake pi 1.0.0' 'ok   omp --version through ~/.local/bin/omp: fake omp 2.0.0' \
+    "ok   pi --version through $shown_bin/pi: fake pi 1.0.0" "ok   omp --version through $shown_bin/omp: fake omp 2.0.0" \
     'warn fd not found by guarded Pi, so its find tool and @ file suggestions will not work; install it from a terminal outside the guard: brew install fd' \
     'warn ripgrep not found by guarded Pi, so its grep tool will not work; install it from a terminal outside the guard: brew install ripgrep'; do
   outl=(${(f)out})
@@ -478,8 +483,10 @@ for l in 'ok   fd found for guarded Pi: ~/.pi/agent/bin/fd' "ok   ripgrep found 
 done
 [[ $out != *'warn fd not found'* && $out != *'warn ripgrep not found'* ]] && pass 'no warning when both are found' || fail 'no warning when both are found'
 
+print -r -- 'export PATH="$HOME/.local/bin:$PATH"' > "$home/.zprofile"
 print -r -- '# changed' >> "$lb/omp"
-doctor_fails 'a launcher copy that differs' "~/.local/bin/omp differs from the release's profiles/pi/launchers/pi"
+omp_resolution="omp resolves to $lb/omp in a login shell; could not verify the launcher at ~/.local/bin/omp and its profile and preamble"
+doctor_fails 'a launcher copy that differs' "~/.local/bin/omp differs from the release's profiles/pi/launchers/pi" "$omp_resolution"
 repair='note to repair, run the installer for the installed release again from a terminal outside the guard: /bin/zsh -c "$(/usr/bin/curl -fsSL https://github.com/ebrindley/AgentGuard/releases/download/v0.2.0/install.sh)"'
 move='note ~/.local/bin/omp has unverified ownership. Move it out of ~/.local/bin before reinstalling. If it is your OMP executable, record its new path with: agent-guard bind --omp PATH'
 [[ $out == *"$repair"* ]] && pass 'drift names the installer for the installed tag' || fail 'drift names the installer for the installed tag'
@@ -488,35 +495,61 @@ json_is '--json: a differing file is drift' '.drift == 1 and .ok == false and .r
 # A real executable at the launcher path: the installer refuses it, so the move comes first.
 /bin/cp "$lb/omp" "$run/omp.guard"
 runtime "$lb/omp" 'print -r -- "fake omp 2.0.0"'
-doctor_fails 'a real executable at the launcher path' "~/.local/bin/omp differs from the release's profiles/pi/launchers/pi"
+doctor_fails 'a real executable at the launcher path' "~/.local/bin/omp differs from the release's profiles/pi/launchers/pi" "$omp_resolution"
 [[ $out == *"$repair"* && $out == *"$move"* ]] && pass 'it names the move, bind and the installer' || fail 'it names the move, bind and the installer'
 /bin/mv "$run/omp.guard" "$lb/omp"
 /bin/cp "$rel/profiles/pi/launchers/pi" "$lb/omp"
-/bin/rm "$rel/bin/pi"
+print -r -- "$entry_path" > "$home/.zprofile"
+/bin/mv "$rel/bin/pi" "$run/engine-pi"
 /bin/ln -s "$rel/profiles/pi/launchers/pi" "$rel/bin/pi"
-doctor_fails "a bin/pi that does not link to ~/.local/bin/pi" '~/Library/Application Support/AgentGuard/bin/pi does not link to ~/.local/bin/pi'
-/bin/rm "$rel/bin/pi"
-/bin/ln -s "$lb/pi" "$rel/bin/pi"
+doctor_fails 'a link at the engine launcher path' "$shown_bin/pi is a link, not a copy of profiles/pi/launchers/pi" \
+  "pi resolves to $entry_bin/pi in a login shell; could not verify the launcher at $shown_bin/pi and its profile and preamble"
+/bin/mv -f "$run/engine-pi" "$rel/bin/pi"
+# npm puts a relative link at <prefix>/bin/pi when ~/.local is the prefix.
+pi_entry='lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js'
+/bin/mkdir -p "$home/.local/${pi_entry:h}"
+print -rl -- '#!/usr/bin/env node' 'console.log("fake npm Pi 1.0.0");' > "$home/.local/$pi_entry"
+/bin/chmod 755 "$home/.local/$pi_entry"
+/bin/mv "$lb/pi" "$run/pi.guard"
+/bin/ln -s "../$pi_entry" "$lb/pi"
+npm_drift='~/.local/bin/pi is a link, not a copy of profiles/pi/launchers/pi'
+wrapper_dep='could not verify its sibling ~/.local/bin/pi and its profile and preamble'
+doctor_fails 'an npm link replaces the legacy Pi launcher' "$npm_drift" \
+  "good resolves to $lb/good in a login shell; $wrapper_dep" \
+  "good2 resolves to $lb/good2 in a login shell; $wrapper_dep"
+[[ $out == *"ok   pi resolves to the guard in a login shell ($entry_bin/pi)"* &&
+   $out == *"ok   omp resolves to the guard in a login shell ($entry_bin/omp)"* &&
+   $out == *"ok   pi --version through $shown_bin/pi: fake pi 1.0.0"* &&
+   $out == *'ok   wrapper ~/.local/bin/good matches its recorded hash'* &&
+   $out != *'ok   good resolves'* ]] &&
+  pass 'engine launchers remain guarded and the wrapper hash still matches' || fail 'engine launchers and wrapper hash'
+print -r -- 'export PATH="$HOME/.local/bin:$PATH"' > "$home/.zprofile"
+doctor_fails 'the replaced legacy Pi launcher is first on PATH' "$npm_drift" \
+  "pi resolves to $lb/pi in a login shell; could not verify the launcher at ~/.local/bin/pi and its profile and preamble" \
+  "good resolves to $lb/good in a login shell; $wrapper_dep" \
+  "good2 resolves to $lb/good2 in a login shell; $wrapper_dep"
+[[ $out != *'ok   pi resolves to the guard'* ]] && pass 'the npm entry is reported as unverified' || fail 'the npm entry is reported as unverified'
+/bin/mv -f "$run/pi.guard" "$lb/pi"
+print -r -- "$entry_path" > "$home/.zprofile"
 runtime "$home/shadow/pi" 'print real'
 print -r -- 'alias omp=/usr/bin/true' > "$home/.zshrc"
 doctor_fails 'an interactive alias shadows the OMP launcher' 'omp resolves to a shell alias in a login shell*'
 /bin/rm -- "$home/.zshrc"
 print -r -- 'export PATH="$HOME/shadow:$HOME/.local/bin:$PATH"' > "$home/.zprofile"
-doctor_fails 'an entry point that resolves elsewhere' "pi resolves to $home/shadow/pi in a login shell, not to the guard*"
+doctor_fails 'an entry point that resolves elsewhere' "pi resolves to $home/shadow/pi in a login shell; put $shown_bin before the real binaries in PATH"
 # Startup files from another folder cannot hide it.
 /bin/mkdir -p "$run/zdot"
 print -r -- 'export PATH="$HOME/.local/bin:$PATH"' > "$run/zdot/.zprofile"
-doctor_fails 'ZDOTDIR cannot hide an entry point that resolves elsewhere' "pi resolves to $home/shadow/pi in a login shell, not to the guard*" -- \
+doctor_fails 'ZDOTDIR cannot hide an entry point that resolves elsewhere' "pi resolves to $home/shadow/pi in a login shell; put $shown_bin before the real binaries in PATH" -- \
   ZDOTDIR="$run/zdot"
 # A login shell that gives no answer proves nothing, so it is not checked and not ok.
 print -r -- 'exit 0' > "$home/.zprofile"
 doctor_fails 'a login shell that gives no answer'
 [[ $out == *'skip pi not checked'* && $out != *'ok   pi resolves'* && $out != *'ok   omp resolves'* ]] && pass 'the entry points are reported as not checked' || fail 'the entry points are reported as not checked'
-print -r -- 'export PATH="$HOME/.local/bin:$PATH"' > "$home/.zprofile"
 runtime "$home/shadow2/good" 'print real'
 print -r -- 'export PATH="$HOME/shadow2:$HOME/.local/bin:$PATH"' > "$home/.zprofile"
-doctor_fails 'a wrapper that resolves elsewhere' "good resolves to $home/shadow2/good in a login shell, not to ~/.local/bin/good*"
-print -r -- 'export PATH="$HOME/.local/bin:$PATH"' > "$home/.zprofile"
+doctor_fails 'a wrapper that resolves elsewhere' "good resolves to $home/shadow2/good in a login shell; put ~/.local/bin before $home/shadow2 in PATH"
+print -r -- "$entry_path" > "$home/.zprofile"
 /bin/chmod 644 "$lb/good"
 doctor_fails 'a wrapper that is not executable' 'wrapper ~/.local/bin/good is not executable' 'good is not on PATH in a login shell'
 json_is '--json: a wrapper that is not executable is drift' '.drift == 1'
@@ -608,15 +641,17 @@ runs 'wrapper list refuses it too' 1 "cannot read $wrec" wrapper list
 
 # OMP refuses a relocated PI_CODING_AGENT_DIR.
 doctor_fails 'relocation variables' 'PI_CODING_AGENT_DIR is set*' 'PI_PACKAGE_DIR is set*' \
-  'omp --version through ~/.local/bin/omp exited 1: protected OMP does not support relocating PI_CODING_AGENT_DIR.' -- \
+  "omp --version through $shown_bin/omp exited 1: protected OMP does not support relocating PI_CODING_AGENT_DIR." -- \
   PI_CODING_AGENT_DIR="$home/.pi/agent-work" PI_PACKAGE_DIR="$run/pkg"
 json_is '--json: relocation is drift' '.drift == 1' PI_PACKAGE_DIR="$run/pkg"
 
-/bin/cp "$lb/pi-sandbox.sb" "$run/profile"
-print -r -- '(allow file-write* (subpath (param "HOME")))' >> "$lb/pi-sandbox.sb"
-doctor_fails 'a profile that fails the self-test' "~/.local/bin/pi-sandbox.sb differs from the release's profiles/pi/sandbox/pi-sandbox.sb" \
-  'profile self-test of ~/.local/bin/pi-sandbox.sb: SECURITY: *'
-/bin/mv "$run/profile" "$lb/pi-sandbox.sb"
+/bin/cp "$entry_bin/pi-sandbox.sb" "$run/profile"
+print -r -- '(allow file-write* (subpath (param "HOME")))' >> "$entry_bin/pi-sandbox.sb"
+doctor_fails 'a profile that fails the self-test' "$shown_bin/pi-sandbox.sb differs from the release's profiles/pi/sandbox/pi-sandbox.sb" \
+  "pi resolves to $entry_bin/pi in a login shell; could not verify the launcher at $shown_bin/pi and its profile and preamble" \
+  "omp resolves to $entry_bin/omp in a login shell; could not verify the launcher at $shown_bin/omp and its profile and preamble" \
+  "profile self-test of $shown_bin/pi-sandbox.sb: SECURITY: *"
+/bin/mv "$run/profile" "$entry_bin/pi-sandbox.sb"
 
 /bin/mv "$ext/src/index.mjs" "$run/index.mjs"
 doctor_fails 'an extension without its entry file' '~/.pi/agent/extensions/pi-sandbox-guard/src/index.mjs is missing' \
@@ -625,8 +660,8 @@ doctor_fails 'an extension without its entry file' '~/.pi/agent/extensions/pi-sa
 
 runtime "$fake_pi" 'print -ru2 -- boom; exit 3'
 runtime "$fake_omp" '/bin/sleep 90'
-doctor_fails 'a runtime that fails and one that hangs' 'pi --version through ~/.local/bin/pi exited 3: boom' \
-  'omp --version through ~/.local/bin/omp did not finish within 20 seconds'
+doctor_fails 'a runtime that fails and one that hangs' "pi --version through $shown_bin/pi exited 3: boom" \
+  "omp --version through $shown_bin/omp did not finish within 20 seconds"
 runtime "$fake_pi" 'print -r -- "fake pi 1.0.0"'
 runtime "$fake_omp" 'print -r -- "fake omp 2.0.0"'
 

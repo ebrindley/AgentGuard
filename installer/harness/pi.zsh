@@ -89,21 +89,28 @@ ag_pi_guard_parts() {
 
 # The Pi and OMP CLIs bind-executable.sh's detection proposes, canonical, in reply.
 ag_pi_cli() {
-  local pkg=lib/node_modules/@earendil-works/pi-coding-agent/dist/cli.js c n
+  local pkg=@earendil-works/pi-coding-agent/dist c f n
   local -a found prefixes
   if (( ag_pi_cli_done )); then reply=("${ag_pi_cli_found[@]}"); return 0; fi
   prefixes=($pi_roots "$home/.npm-global" "$home/.local" "$home"/.nvm/versions/node/*(N/) "$home"/.asdf/installs/nodejs/*(N/)
             "$home"/.local/share/mise/installs/node/*(N/) "$home/Library/Application Support/fnm/node-versions"/*/installation(N/))
-  for c in $prefixes; do [[ -e $c/$pkg ]] && found+=("$c/$pkg"); done
+  for c in $prefixes; do
+    for f in "$c/lib/node_modules/$pkg/"{bundle/cli.js,cli.js}; do
+      [[ -e $f ]] && found+=("$f")
+    done
+  done
   for c in $pi_roots; do found+=("$c"/Cellar/pi-coding-agent/*/bin/pi(N*)); done
-  found+=("$home/.volta/tools/image/packages/@earendil-works/pi-coding-agent/dist/cli.js"(N)
-          "$home/Library/pnpm/global"/*/node_modules/@earendil-works/pi-coding-agent/dist/cli.js(N)
-          "$home/.bun/install/global/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"(N)
-          "$home/.yarn/global/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"(N)
+  found+=("$home/.volta/tools/image/packages/$pkg/"{bundle/cli.js,cli.js}(N)
+          "$home/Library/pnpm/global"/*/node_modules/"$pkg/"{bundle/cli.js,cli.js}(N)
+          "$home/.bun/install/global/node_modules/$pkg/"{bundle/cli.js,cli.js}(N)
+          "$home/.yarn/global/node_modules/$pkg/"{bundle/cli.js,cli.js}(N)
           "$home/.local/lib/omp/omp"(N*) ${^pi_roots}/bin/omp(N*) ${^pi_roots}/Cellar/omp/*/bin/omp(N*) "$home/.bun/bin/omp"(N*))
   if [[ -n $pi_path ]]; then
-    n=$(PATH=$pi_path; whence -p npm 2>/dev/null) && c=$(ag_pi_clean_env; PATH=$pi_path "$n" prefix -g 2>/dev/null) &&
-      [[ -e $c/$pkg ]] && found+=("$c/$pkg")
+    if n=$(PATH=$pi_path; whence -p npm 2>/dev/null) && c=$(ag_pi_clean_env; PATH=$pi_path "$n" prefix -g 2>/dev/null) && [[ -n $c ]]; then
+      for f in "$c/lib/node_modules/$pkg/"{bundle/cli.js,cli.js}; do
+        [[ -e $f ]] && found+=("$f")
+      done
+    fi
     for n in pi omp; do
       c=$(PATH=$pi_path; whence -p $n 2>/dev/null) && found+=("$c")
     done
@@ -255,10 +262,10 @@ ag_h_pi_prepare() { ag_pi_entries_check && { ! ag_pi_needs_node || ag_pi_node } 
 
 # --- The release and the staged copies.
 
-# P4: the release's Pi files and bin/pi and bin/omp, links to the launchers, which
-# reach the PATH block through current/bin.
+# P4: the release's Pi launchers and their siblings reach the PATH block through
+# current/bin. The copies in ~/.local/bin are installed by the switch actions.
 ag_h_pi_assemble() {  # RELEASE-FOLDER
-  local r=$1 f
+  local r=$1 f src mode
   for f in $pi_release_files; do
     /bin/mkdir -p -- "$r/profiles/pi/${f:h}" && /bin/cp -- "$ag_tree/profiles/pi/$f" "$r/profiles/pi/$f" || return 1
   done
@@ -267,7 +274,9 @@ ag_h_pi_assemble() {  # RELEASE-FOLDER
   for f in launchers/pi launchers/example-custom sandbox/pi-sandbox-preamble.zsh commands/{bind,doctor,wrapper}.zsh; do
     /bin/zsh -fn "$r/profiles/pi/$f" || { ag_err "profiles/pi/$f does not parse"; return 1 }
   done
-  /bin/ln -s "$pi_bin/pi" "$r/bin/pi" && /bin/ln -s "$pi_bin/omp" "$r/bin/omp"
+  for f src mode in $pi_copies; do
+    /bin/cp -- "$r/profiles/pi/$src" "$r/bin/${f:t}" && /bin/chmod $mode "$r/bin/${f:t}" || return 1
+  done
 }
 
 # The staged copies in stage/<txn>/pi, which the switch renames into place: the
@@ -571,12 +580,6 @@ ag_h_pi_files() {
   for f src mode in $pi_ext_files; do reply+=("$pi_ext/$f"); done
 }
 
-ag_h_pi_links() {
-  local rt
-  reply=()
-  for rt in pi omp; do reply+=("$engine/bin/$rt" "$(/usr/bin/readlink -- "$engine/bin/$rt")"); done
-}
-
 # After the stamp: each entry the launchers replaced moves from the transaction
 # backup to state/legacy/replaced, which outlives the cleanup and from which
 # uninstall puts it back. An earlier one there is kept under a suffix.
@@ -596,7 +599,7 @@ ag_h_pi_keep() {
 
 ag_h_pi_report() {
   local rt t rec n
-  ag_say "Pi: pi and omp in ${pi_bin/#$home/~} and in Agent Guard's bin start Pi and OMP inside pi-sandbox-guard's sandbox, with Agent Guard's protections"
+  ag_say "Pi: use pi and omp from Agent Guard's bin for guarded launches. Compatibility launchers for existing wrappers are in ${pi_bin/#$home/~}."
   for rt t rec in $ag_pi_entries; do
     if (( rec )); then
       ag_warnings+=("${pi_bin/#$home/~}/$rt was not the guard's launcher; it is replaced and kept in ${pi_replaced/#$home/~}/$rt, and $rt=$t is recorded in ${pi_conf/#$home/~}")

@@ -137,18 +137,20 @@ same() {  # NAME FILE FUNCTION: FUNCTION's output equals FILE
   fi
 }
 
-# pi_probe NAME CMD...: one start of an agent session in the project. Guarded: the
-# fake runtime ran with the guard's extension and could not write outside the
-# project. Refused: it exited non-zero without running.
+# pi_probe [--require-launch] NAME CMD...: one start of an agent session in the
+# project. A guarded start runs with the extension and cannot write outside the
+# project. A refusal is accepted unless --require-launch is set.
 pi_probe() {
+  integer rc require_launch=0
+  if [[ $1 == --require-launch ]]; then require_launch=1; shift; fi
   local name=$1
-  integer rc
   shift
   /bin/rm -f -- "$home/Documents/escaped" "$project/launched"
   ( cd "$project" && run_timeout 30 /usr/bin/env -i HOME="$home" PATH="$base" TMPDIR="$darwin_temp/" PI_PROJECT="$project" "$@" ) >/dev/null 2>"$run/probe.err"
   rc=$?
   if [[ -e $home/Documents/escaped ]]; then fail "$name: escaped the sandbox"
   elif (( rc == 124 )); then fail "$name: timed out"
+  elif (( require_launch && rc != 0 )); then fail "$name: refused (exit $rc)"; /bin/cat "$run/probe.err"
   elif [[ -f $project/launched ]]; then
     [[ $(<"$project/launched") == *"--extension $ext/index.ts"* ]] && pass "$name: guarded" ||
       fail "$name: ran without the guard's extension: $(<"$project/launched")"
@@ -283,19 +285,20 @@ rc=$?
 cur="$engine/current/profiles/pi"
 /usr/bin/jq -e '.harnesses == ["opencode", "pi"]' "$state/stamp.json" >/dev/null && pass 'the stamp lists opencode and pi' || fail "stamp harnesses: $(/usr/bin/jq -c .harnesses "$state/stamp.json")"
 bad=
-for f rel in pi launchers/pi omp launchers/pi pi-sandbox.sb sandbox/pi-sandbox.sb pi-sandbox-preamble.zsh sandbox/pi-sandbox-preamble.zsh; do
-  [[ -f $lb/$f && ! -L $lb/$f ]] && /usr/bin/cmp -s "$lb/$f" "$cur/$rel" || bad+=" $f"
+for dir in "$lb" "$engine/bin"; do
+  for f rel in pi launchers/pi omp launchers/pi pi-sandbox.sb sandbox/pi-sandbox.sb pi-sandbox-preamble.zsh sandbox/pi-sandbox-preamble.zsh; do
+    [[ -f $dir/$f && ! -L $dir/$f ]] && /usr/bin/cmp -s "$dir/$f" "$cur/$rel" || bad+=" $dir/$f"
+  done
 done
 for f rel in index.ts scripts/extension-entry.ts src/index.mjs src/index.mjs; do
   /usr/bin/cmp -s "$ext/$f" "$cur/$rel" || bad+=" $f"
 done
 [[ -z $bad ]] && pass "the launchers, profile, preamble and extension are the release's copies" || fail "not the release's:$bad"
-[[ $(/usr/bin/stat -f %Lp "$lb/pi") == 755 && $(/usr/bin/stat -f %Lp "$lb/pi-sandbox.sb") == 644 && $(/usr/bin/stat -f %Lp "$ext/src/index.mjs") == 644 ]] &&
+[[ -x $engine/bin/pi && -x $engine/bin/omp && $(/usr/bin/stat -f %Lp "$lb/pi") == 755 &&
+   $(/usr/bin/stat -f %Lp "$lb/pi-sandbox.sb") == 644 && $(/usr/bin/stat -f %Lp "$ext/src/index.mjs") == 644 ]] &&
   pass 'modes 755 for the launchers, 644 for the profile and the extension' || fail 'modes'
 [[ $(print -l "$ext"/**/*(DN.) | /usr/bin/sed "s|^$ext/||" | /usr/bin/sort) == $'index.ts\nsrc/index.mjs' ]] &&
   pass 'the extension folder holds only the files of the release: no analyzer, .guard-node or .deployed-version' || fail "extension folder: $(print -l "$ext"/**/*(DN.))"
-[[ $(/usr/bin/readlink "$engine/current/bin/pi") == "$lb/pi" && $(/usr/bin/readlink "$engine/current/bin/omp") == "$lb/omp" ]] &&
-  pass "bin/pi and bin/omp link to ~/.local/bin" || fail 'bin/pi and bin/omp'
 h=$(sha "$run/wrappers-2/pi-local")
 /usr/bin/jq -e --arg h "${h%% *}" '. == {wrappers: {"pi-local": {sha256: $h}}, historical: ["pi-old"]}' "$wrec" >/dev/null &&
   pass 'wrappers.json: pi-local with its hash, pi-old historical' || fail "wrappers.json: $(<"$wrec")"
@@ -694,6 +697,13 @@ point= ag uninstall
 rc=$?
 (( rc == 0 )) && [[ -L $lb/pi && $(/usr/bin/readlink "$lb/pi") == "../$pkg" && ! -e $lb/omp && ! -e $engine ]] &&
   pass "uninstall puts npm's link back and removes omp" || { fail "uninstall (exit $rc)"; show }
+
+label='npm replaces the legacy launch entry'
+restore npm-installed
+/bin/mv -- "$lb/pi" "$run/legacy-pi-before-npm"
+/bin/ln -s "../$pkg" "$lb/pi"
+pi_probe --require-launch 'new terminal with npm Pi link: pi' /bin/zsh -l -i -c pi
+
 # An entry uninstall does not put back, because ~/.local/bin/pi is no longer the
 # guard's launcher or because an earlier install replaced it, is copied to ~/Agent
 # Guard before the engine folder goes, links as links; a failed copy keeps the engine.
@@ -821,8 +831,9 @@ rc=$?
 # A Pi installed after Agent Guard is a newly found harness: update installs it.
 label='update at the same version, Pi found'
 restore opencode-only
-fake_pi "$home/.local/$pkg"
-/bin/ln -s "../$pkg" "$lb/pi"
+bundled_pkg="${pkg:h}/bundle/cli.js"
+fake_pi "$home/.local/$bundled_pkg"
+/bin/ln -s "../$bundled_pkg" "$lb/pi"
 point= ag update
 rc=$?
 (( rc == 0 )) && /usr/bin/grep -qF 'installing it again for Pi and OMP' "$out" && /usr/bin/jq -e '.harnesses == ["opencode", "pi"]' "$state/stamp.json" >/dev/null &&

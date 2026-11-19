@@ -158,11 +158,13 @@ Pi's project settings reader may create, update and remove the directory node
 The exception does not permit regular files, symlinks or writes inside the lock,
 and does not make settings or other configuration writable.
 
-The launcher, `~/.local/bin/pi` or `~/.local/bin/omp`, runs Pi or OMP under
-pi-sandbox-guard 7ad441f's Seatbelt profile, which Agent Guard installs at the
-paths pi-sandbox-guard uses. The profile is fixed; it does not read the Guard
-List. Under it the agent can write only to the project (`PI_PROJECT`, else the
-Git top level, else the launch folder), temp, Pi's state folder apart from its
+The launchers run Pi and OMP under a fixed Seatbelt profile derived from
+pi-sandbox-guard 7ad441f. In stable 2026.11.19.1, Agent Guard's `bin/pi` and
+`bin/omp` link to the launchers in `~/.local/bin`. The unreleased layout puts
+its own launchers in the active release and keeps the `~/.local/bin` copies
+for compatibility. The profile does not read the Guard List. The agent can
+write only to the project (`PI_PROJECT`, else the Git top level, else the
+launch folder), temp, Pi's state folder apart from its
 configuration, the OMP runtime folders the profile lists, `~/.npm`, `~/.cache`
 and `~/Library/Caches`. It cannot write Pi's or OMP's configuration, extensions,
 packages, downloaded tools, skills or system prompts, a project's `.pi` and `.omp` folders or the
@@ -172,9 +174,9 @@ read `~/.ssh`, `~/.aws/credentials`, `~/.aws/config`, `~/.docker/config.json`,
 `~/.kube/config`, `~/.gnupg`, `~/.config/gh`, `~/.config/gcloud`, Git's credential
 stores, `~/.netrc`, `~/.npmrc`, `~/.secrets`, `.env` files anywhere or the
 event log of the retired analyzer, `~/.pi/agent/security-events.log`, which nothing
-writes now. The launcher refuses a project
-that is too broad or sensitive, or that contains its own folder,
-`~/.local/bin`. The full 7ad441f policy is in pi-sandbox-guard's
+writes now. The launcher refuses a project that is too broad or sensitive,
+or that contains the launcher folder or `~/.local/bin`. The full 7ad441f
+policy is in pi-sandbox-guard's
 [SECURITY.md](https://github.com/ebrindley/pi-sandbox-guard/blob/7ad441f51c249eafe6f92d16e92d2fbf37622d67/SECURITY.md)
 and
 [ARCHITECTURE.md](https://github.com/ebrindley/pi-sandbox-guard/blob/7ad441f51c249eafe6f92d16e92d2fbf37622d67/docs/ARCHITECTURE.md).
@@ -446,12 +448,13 @@ cc-safety-net (difference 17), so:
   contain remote history changes. A check on a command is a pattern match and
   can miss quoted or wrapped forms, executable stdin programs and `eval`; these
   remain checker limitations.
-- **The launcher trusts its own folder.** It reads its profile and preamble from
-  `~/.local/bin`, beside itself, not from a release folder in the write-protected
-  engine folder. Pi sessions cannot write `~/.local/bin`, the launcher refuses a
-  project that contains it, and OpenCode sessions cannot write the guard's files
-  there. A route around those rules would leave a launcher, profile or wrapper
-  writable, and it runs outside the sandbox at the next start. Planned: step 10d.
+- **Compatibility launchers trust `~/.local/bin`.** They load the profile and
+  preamble beside them. The unreleased `bin/pi` and `bin/omp` load these files
+  from the active release in the write-protected engine folder. Pi sessions
+  cannot write `~/.local/bin`, the launcher refuses a project that contains it,
+  and OpenCode sessions cannot write the guard's files there. A route around
+  those rules would leave a launcher, profile or wrapper writable before the
+  next launch applies Seatbelt. Planned: step 10d.
 - **OMP's runtime folders were observed on OMP 17.2.10.** The profile's list of
   OMP folders a session may write comes from pi-sandbox-guard's observation of
   OMP 17.2.10 and was not rechecked against later OMP versions. Planned: rechecked
@@ -468,10 +471,15 @@ cc-safety-net (difference 17), so:
   The same parent-folder move can bring `.pi`, `.omp`,
   `.claude/{extensions,hooks,tools}`, `.codex/{extensions,hooks,tools}` or
   `.gemini/extensions` into the project. Their direct path writes remain denied.
-- **An npm update can put a real `pi` back in `~/.local/bin`.** With npm's
-  prefix at `~/.local`, an update of Pi can replace the launcher with npm's link;
-  `pi`, and Agent Guard's `bin/pi`, which links to it, then start Pi unguarded.
-  `agent-guard doctor` reports it. Not yet planned.
+- **npm can replace a compatibility launcher.** With npm's prefix at `~/.local`,
+  updating or reinstalling a runtime can put its vendor link in `~/.local/bin`.
+  Stable 2026.11.19.1 follows the replaced path even through Agent Guard's
+  `bin`. The unreleased layout keeps bare commands guarded when PATH finds
+  Agent Guard's `bin` first. An absolute call to the replaced path, a script
+  that finds it first on PATH, or a recorded wrapper that hands off to it can
+  still start the runtime without Seatbelt.
+  `agent-guard doctor` reports the replacement. See
+  [repairing a replaced launcher](docs/OPERATIONS.md#running-pi-or-omp-without-the-guard).
 - **OMP's `agent.db` is writable.** OMP keeps runtime data and logins in one
   file, which it needs to write, so file-level protection of OMP's logins is not
   claimed. Not planned.
@@ -566,8 +574,8 @@ For Pi and OMP:
   `executables.conf`;
 - run `open`, `osascript`, `osacompile`, `codesign`, `diskutil`, `launchctl` or
   `sudo`, or start a program through Launch Services or launchd;
-- start Pi or OMP without Seatbelt through an Agent Guard entry point: `pi`,
-  `omp`, Agent Guard's `bin/pi` or `bin/omp`, or a recorded wrapper.
+- start Pi or OMP without Seatbelt through a launcher installed by Agent Guard,
+  including one reached through a recorded wrapper.
 
 A direct start of the real Pi or OMP executable runs without Seatbelt by design
 until step 10d; that is a known limitation, not a vulnerability.

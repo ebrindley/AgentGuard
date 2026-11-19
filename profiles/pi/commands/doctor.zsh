@@ -4,7 +4,7 @@
 #
 # What pi-sandbox-guard's status.sh and check-path.sh checked, against the current
 # release's profiles/pi copies instead of a checkout, plus the profile self-test,
-# the command checker and a --version start of each runtime through ~/.local/bin.
+# the command checker and a --version start of each runtime through the engine's bin.
 
 # Loads the installed extension as Pi does and asks it about one allowed command and
 # two blocked ones. The extension blocks every call, with its reason, when the
@@ -40,47 +40,40 @@ pi_doctor() {
   emulate -L zsh
   setopt no_unset pipe_fail extended_glob
   local cur="$engine/current" bin="$home/.local/bin" ext="$home/.pi/agent/extensions/pi-sandbox-guard"
+  local entry_bin="$engine/bin" dir
   local conf="$home/.config/pi-sandbox-guard/executables.conf" wrec="$engine/state/wrappers.json"
   local scripts="$release/profiles/pi/scripts" jsnode= state=unbound pi_rec= omp_rec= node_rec=
-  local p rel rt label rec out err want sum sev work darwin_temp l rid= rg= rl= match=absent copy= sdir=
+  local p rel rt label rec out err want sum sev work darwin_temp rid= rg= rl= match=absent copy= sdir=
   local -a names lines wnames
-  local -A ag_resolved
+  local -A ag_resolved verified
   integer json=0 failed=0 drift=0 guard_present=0 launchers_present=0 pi_runs=0 rc
   typeset -ga pi_lines
   pi_lines=()
   [[ ${1:-} == --json ]] && json=1
 
-  # Installed files: the launcher copies, the profile and preamble beside them, and
-  # the extension.
+  # Installed files: both sets of launchers and their siblings, and the extension.
   [[ -d $ext ]] && guard_present=1
-  [[ -f $bin/pi-sandbox.sb || -f $bin/pi || -f $bin/omp ]] && launchers_present=1
-  for p rel in "$bin/pi" launchers/pi "$bin/omp" launchers/pi \
-      "$bin/pi-sandbox.sb" sandbox/pi-sandbox.sb "$bin/pi-sandbox-preamble.zsh" sandbox/pi-sandbox-preamble.zsh \
-      "$ext/index.ts" scripts/extension-entry.ts "$ext/src/index.mjs" src/index.mjs; do
-    if [[ ! -f $cur/profiles/pi/$rel ]]; then pi_doctor_say "FAIL the current release has no profiles/pi/$rel" drift
-    elif [[ -L $p ]]; then pi_doctor_say "FAIL ${p/#$home/~} is a link, not a copy of profiles/pi/$rel" drift
-    elif [[ ! -f $p ]]; then pi_doctor_say "FAIL ${p/#$home/~} is missing" drift
-    elif ! /usr/bin/cmp -s -- "$p" "$cur/profiles/pi/$rel"; then pi_doctor_say "FAIL ${p/#$home/~} differs from the release's profiles/pi/$rel" drift
-    elif [[ $rel == launchers/* && ! -x $p ]]; then pi_doctor_say "FAIL ${p/#$home/~} is not executable" drift
-    else pi_doctor_say "ok   ${p/#$home/~} matches the release"
+  for dir in "$entry_bin" "$bin"; do
+    [[ -f $dir/pi-sandbox.sb || -f $dir/pi || -f $dir/omp ]] && launchers_present=1
+    if [[ $dir == "$entry_bin" && ${dir:A} != "${cur:A}/bin" ]]; then
+      pi_doctor_say "FAIL ${dir/#$home/~} does not lead to the current release's bin" drift
+      continue
     fi
+    for p rel in pi launchers/pi omp launchers/pi pi-sandbox.sb sandbox/pi-sandbox.sb \
+        pi-sandbox-preamble.zsh sandbox/pi-sandbox-preamble.zsh; do
+      pi_doctor_file "$dir/$p" "$rel" && verified[$dir/$p]=1
+    done
   done
-  # Agent Guard's PATH block reaches the launchers through these links.
-  for rt in pi omp; do
-    p="$engine/bin/$rt"
-    if [[ -L $p && ${p:A} == ${bin:A}/$rt ]]; then pi_doctor_say "ok   ${p/#$home/~} links to ~/.local/bin/$rt"
-    else pi_doctor_say "FAIL ${p/#$home/~} does not link to ~/.local/bin/$rt" drift
-    fi
-  done
+  pi_doctor_file "$ext/index.ts" scripts/extension-entry.ts
+  pi_doctor_file "$ext/src/index.mjs" src/index.mjs
   (( drift )) && pi_doctor_remedy
-  # check-path.sh: each entry point and each recorded wrapper resolves to its copy
-  # in ~/.local/bin in a login shell, asked once for all names. This also catches an
-  # npm update that puts a real pi back in ~/.local/bin.
+  # Check the login shell once for all names. The engine's launchers have their
+  # own copies of the profile and preamble. Custom wrappers use the legacy Pi.
   [[ -f $wrec ]] && wnames=(${(f)"$(/usr/bin/jq -r '.wrappers | objects | keys[]' "$wrec" 2>/dev/null)"})
   wnames=(${(M)wnames:#[A-Za-z0-9._-]##})
   ag_shell_paths -l -i -- pi omp "${wnames[@]}" || ag_resolved=()
-  pi_doctor_resolves pi 'the guard'
-  pi_doctor_resolves omp 'the guard'
+  pi_doctor_resolves pi 'the guard' launcher
+  pi_doctor_resolves omp 'the guard' launcher
 
   # The recorded bindings, with status.sh's states: bind --check decides, and only
   # when a Pi or OMP binding is recorded. bind needs no Node for that. A Node found
@@ -146,11 +139,14 @@ pi_doctor() {
     pi_doctor_say "FAIL PI_PACKAGE_DIR is set: a Pi started without the launcher may take its agent folder from it and miss ~/.pi/agent/extensions" drift
   fi
 
-  # The profile self-test, strict, against the installed profile.
-  out=$(ag_bounded 120 /usr/bin/env PI_SANDBOX_PROFILE_STRICT=1 /bin/bash "$cur/profiles/pi/scripts/test-sandbox-profile.sh" "$bin/pi-sandbox.sb" 2>&1)
-  rc=$?
-  if (( rc == 0 )); then pi_doctor_say "ok   profile self-test of ~/.local/bin/pi-sandbox.sb"
-  else pi_doctor_say "FAIL profile self-test of ~/.local/bin/pi-sandbox.sb: $(pi_doctor_reason "$out" $rc 120)"
+  # The strict self-test reads the profile the engine launchers use.
+  if [[ ${entry_bin:A} == "${cur:A}/bin" ]]; then
+    p="$entry_bin/pi-sandbox.sb"
+    out=$(ag_bounded 120 /usr/bin/env PI_SANDBOX_PROFILE_STRICT=1 /bin/bash "$cur/profiles/pi/scripts/test-sandbox-profile.sh" "$p" 2>&1)
+    rc=$?
+    if (( rc == 0 )); then pi_doctor_say "ok   profile self-test of ${p/#$home/~}"
+    else pi_doctor_say "FAIL profile self-test of ${p/#$home/~}: $(pi_doctor_reason "$out" $rc 120)"
+    fi
   fi
 
   darwin_temp=${$(/usr/bin/getconf DARWIN_USER_TEMP_DIR):A}
@@ -211,17 +207,22 @@ pi_doctor() {
       fi
     fi
     [[ -n $sdir ]] && /bin/rm -rf -- "$sdir"
-    # Each runtime through ~/.local/bin, from a scratch project: Pi refuses the home
+    # Each runtime through the engine's bin, from a scratch project: Pi refuses the home
     # folder as a project. No binding and no CLI is a runtime that is not there.
     for rt label rec in pi Pi "$pi_rec" omp OMP "$omp_rec"; do
-      out=$(cd "$work/project" && ag_bounded 20 /usr/bin/env "PI_PROJECT=$work/project" "$bin/$rt" --version 2>"$work/$rt.err")
+      p="$entry_bin/$rt"
+      if ! pi_doctor_launcher_ok "$entry_bin" "$rt"; then
+        pi_doctor_say "skip $rt --version: could not verify ${p/#$home/~} and its profile and preamble"
+        continue
+      fi
+      out=$(cd "$work/project" && ag_bounded 20 /usr/bin/env "PI_PROJECT=$work/project" "$p" --version 2>"$work/$rt.err")
       rc=$?
       err=$(<"$work/$rt.err")
       if (( rc == 124 )); then
-        pi_doctor_say "FAIL $rt --version through ~/.local/bin/$rt did not finish within 20 seconds"
+        pi_doctor_say "FAIL $rt --version through ${p/#$home/~} did not finish within 20 seconds"
       elif (( rc == 0 )); then
         lines=(${(f)out})
-        pi_doctor_say "ok   $rt --version through ~/.local/bin/$rt: ${lines[1]:-no output}"
+        pi_doctor_say "ok   $rt --version through ${p/#$home/~}: ${lines[1]:-no output}"
         [[ $rt == pi ]] && pi_runs=1
       elif [[ -z $rec && $err == *"cannot auto-resolve the real $label executable"* ]]; then
         pi_doctor_say "skip $rt --version: no $label binding and no $label CLI found"
@@ -230,7 +231,7 @@ pi_doctor() {
         err=$lines[1]
         pi_doctor_say "FAIL $rt --version: ${err#Agent Guard: }; re-record it with agent-guard bind"
       else
-        pi_doctor_say "FAIL $rt --version through ~/.local/bin/$rt exited $rc: $(pi_doctor_reason "$err" $rc 20)"
+        pi_doctor_say "FAIL $rt --version through ${p/#$home/~} exited $rc: $(pi_doctor_reason "$err" $rc 20)"
       fi
     done
     (( pi_runs )) && pi_doctor_helpers
@@ -280,19 +281,50 @@ pi_doctor_remedy() {
   pi_doctor_say "note to repair, run the installer for the installed release again from a terminal outside the guard$cmd"
 }
 
-# pi_doctor_resolves NAME WHAT: NAME resolved to ~/.local/bin/NAME in the login
-# shell; WHAT names that in the line.
+# Record whether an installed file matches its release source.
+pi_doctor_file() {
+  local p=$1 rel=$2 shown="${1/#$home/~}"
+  if [[ ! -f $cur/profiles/pi/$rel ]]; then pi_doctor_say "FAIL the current release has no profiles/pi/$rel" drift
+  elif [[ -L $p ]]; then pi_doctor_say "FAIL $shown is a link, not a copy of profiles/pi/$rel" drift
+  elif [[ ! -f $p ]]; then pi_doctor_say "FAIL $shown is missing" drift
+  elif ! /usr/bin/cmp -s -- "$p" "$cur/profiles/pi/$rel"; then pi_doctor_say "FAIL $shown differs from the release's profiles/pi/$rel" drift
+  elif [[ $rel == launchers/* && ! -x $p ]]; then pi_doctor_say "FAIL $shown is not executable" drift
+  else pi_doctor_say "ok   $shown matches the release"; return 0
+  fi
+  return 1
+}
+
+pi_doctor_launcher_ok() {
+  (( ${+verified[$1/$2]} && ${+verified[$1/pi-sandbox.sb]} && ${+verified[$1/pi-sandbox-preamble.zsh]} ))
+}
+
+# pi_doctor_resolves NAME WHAT [launcher]: checks the login shell's command path
+# and the installed files it depends on. Recorded wrappers use the Pi beside them.
 pi_doctor_resolves() {
-  local r=${ag_resolved[$1]:-} p="$bin/$1"
-  # The caller's PATH is not what a guarded launch uses, so it is no evidence.
+  local r=${ag_resolved[$1]:-} p="$bin/$1" candidate
   if (( ! ${+ag_resolved[$1]} )); then pi_doctor_say "skip $1 not checked: the interactive login shell gave no answer"
   elif [[ -z $r ]]; then pi_doctor_say "FAIL $1 is not on PATH in a login shell"
-  elif [[ $r == /* && ${r:A} == ${p:A} ]]; then pi_doctor_say "ok   $1 resolves to $2 in a login shell ($r)"
   elif [[ $r != /* ]]; then
     local level=FAIL
     [[ ${AGENT_GUARD_GATE:-} == 1 ]] && level=warn
     pi_doctor_say "$level $1 resolves to $r in a login shell; check your shell startup files"
-  else pi_doctor_say "FAIL $1 resolves to $r in a login shell, not to $2; put ~/.local/bin before the real binaries in PATH"
+  elif [[ ${3:-} == launcher ]]; then
+    for candidate in "$entry_bin" "$bin"; do
+      p="$candidate/$1"
+      if [[ ${r:A} == ${p:A} ]] && pi_doctor_launcher_ok "$candidate" "$1"; then
+        pi_doctor_say "ok   $1 resolves to $2 in a login shell ($r)"
+        return
+      elif [[ ${r:h:A}/${r:t} == ${candidate:A}/$1 ]]; then
+        pi_doctor_say "FAIL $1 resolves to $r in a login shell; could not verify the launcher at ${p/#$home/~} and its profile and preamble"
+        return
+      fi
+    done
+    pi_doctor_say "FAIL $1 resolves to $r in a login shell; put ${entry_bin/#$home/~} before the real binaries in PATH"
+  elif [[ ${r:A} != ${p:A} ]]; then
+    pi_doctor_say "FAIL $1 resolves to $r in a login shell; put ~/.local/bin before ${r:h} in PATH"
+  elif ! pi_doctor_launcher_ok "$bin" pi; then
+    pi_doctor_say "FAIL $1 resolves to $r in a login shell; could not verify its sibling ~/.local/bin/pi and its profile and preamble"
+  else pi_doctor_say "ok   $1 resolves to $2 in a login shell ($r)"
   fi
 }
 
@@ -304,7 +336,7 @@ pi_doctor_resolves() {
 # default agent folder, since a relocated PI_CODING_AGENT_DIR is set only in Pi's
 # environment.
 pi_doctor_helpers() {
-  local pre="$bin/pi-sandbox-preamble.zsh" l
+  local pre="$entry_bin/pi-sandbox-preamble.zsh" l
   local -a dirs match mbegin mend
   [[ -f $pre ]] && for l in "${(@f)$(<$pre)}"; do
     [[ $l == (#b)'PATH="'(/[^\"\$]##)'"' ]] && { dirs=(${(s/:/)match[1]}); break }

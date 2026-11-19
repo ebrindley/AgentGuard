@@ -587,11 +587,17 @@ Pi can read project settings that require a `settings.json.lock` directory.
 Only that directory node is writable; its contents and project configuration
 remain protected.
 
-Run `pi` or `omp` from a project folder. The launcher prints `OS sandbox ON`
-and runs the agent and its child processes under the operating system sandbox
-(Seatbelt). The project is `PI_PROJECT` when set, otherwise the Git top level,
-otherwise the current folder. Home, sensitive folders such as `~/Documents`
-and `~/.config`, and projects that contain the launcher's own folder are refused.
+Open a new terminal and run `pi` or `omp` from a project folder. Agent Guard's
+PATH block puts its entry points first. For a script or editor that supplies its
+own PATH, use `~/Library/Application Support/AgentGuard/bin/pi` or
+`~/Library/Application Support/AgentGuard/bin/omp`, with `~` expanded to your
+home folder.
+
+The launcher prints `OS sandbox ON` and runs the agent and its child processes
+under the operating system sandbox (Seatbelt). The project is `PI_PROJECT` when
+set, otherwise the Git top level, otherwise the current folder. Home, sensitive
+folders such as `~/Documents` and `~/.config`, and projects that contain
+`~/.local/bin` or the launcher's own folder are refused.
 
 The Guard List does not apply. The fixed profile permits writes in the project,
 temporary folders and selected runtime/cache locations. It protects agent
@@ -658,9 +664,16 @@ Since stable 0.2.1, the launcher creates and pins active state-root directory
 nodes before confinement, including OMP's `profiles` directory. Runtime files
 below them remain writable.
 
-After updating Pi or OMP, run `agent-guard doctor` from Terminal. An npm update
-with its prefix at `~/.local` can replace the Pi launcher and make `pi` start
-unguarded. See [bindings](OPERATIONS.md#commands) for stale executable paths and
+After updating Pi or OMP, run `agent-guard doctor` from Terminal. With npm's
+prefix at `~/.local`, updating or reinstalling Pi can replace
+`~/.local/bin/pi` with the vendor's command. In stable
+2026.11.19.1, Agent Guard's `bin` links to those paths. In the unreleased
+layout, Agent Guard's `bin` holds its own launchers, so bare `pi` and `omp`
+stay guarded in shells that find its `bin` first. An absolute call to the
+replaced path, a script that finds it first on PATH, or a custom wrapper
+that hands off to it can still start the runtime without Seatbelt.
+See [repairing a replaced launcher](OPERATIONS.md#running-pi-or-omp-without-the-guard),
+[bindings](OPERATIONS.md#commands) for stale executable paths and
 [updates and sessions](OPERATIONS.md#updates-and-sessions) for running sessions.
 
 ## Custom wrappers
@@ -668,8 +681,9 @@ unguarded. See [bindings](OPERATIONS.md#commands) for stale executable paths and
 A custom wrapper is a script in `~/.local/bin` that hands off to the `pi` next to
 it, `PI_SHIM="${0:A:h}/pi"` and then `exec "$PI_SHIM" "$@"`;
 `profiles/pi/launchers/example-custom` is the template. Its arguments reach the
-launcher unchanged, and Pi runs under the guard because the `pi` beside it is the
-launcher.
+launcher unchanged. The wrapper depends on `~/.local/bin/pi` even if Agent
+Guard's `bin` comes first on PATH. If `agent-guard doctor` reports that the
+launcher was replaced, repair it before using the wrapper.
 
 `agent-guard wrapper add` checks every file before it installs any, as
 pi-sandbox-guard's `--extra-launchers` did: a regular file, not a link; a name of

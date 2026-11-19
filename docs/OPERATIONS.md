@@ -313,10 +313,9 @@ transaction) is outside the release folders.
 `current/profiles/opencode/plugin.js`. Each launch sets `AGENT_GUARD_RELEASE` to
 its release ID; the plugin, loaded through `current`, then uses that release's
 plugin; when that release is gone, it refuses every guarded tool with a message
-to reopen OpenCode. With Pi's guard installed, `bin` also holds `pi` and `omp`,
-links to the launchers in `~/.local/bin`, and `state/` holds the custom wrapper
-records and what a pi-sandbox-guard migration retired; Pi's own files are listed
-under [Pi's files](#pis-files).
+to reopen OpenCode. With Pi's guard installed, `bin` also holds the `pi` and
+`omp` entry points, and `state/` holds the custom wrapper records and what a
+pi-sandbox-guard migration retired. See [Pi's files](#pis-files).
 
 Each OpenCode launch keeps its checker snapshot and session files in
 `state/opencode/<release>.<random>`. OpenCode and its detached descendants can
@@ -448,15 +447,12 @@ same paths. It does not run pi-sandbox-guard's npm scripts:
    place as the live bindings, and pi-sandbox-guard's event log stays at
    `~/.pi/agent/security-events.log`.
 
-Afterwards, run Pi and OMP as before. `pi`, `omp` and your wrappers keep their
-paths and pass their arguments through unchanged, and the launcher still prints
-`OS sandbox ON` before Pi starts. Terminals opened before the switch reach the
-new launcher at the same path. New terminals also find `pi` and `omp` in Agent
-Guard's `bin`, which Agent Guard's PATH block puts first, so for `pi` and `omp`
-`~/.local/bin` no longer has to come before the real executables on PATH.
-Wrappers are found by name only through `~/.local/bin`. The PATH block is new on
-a Mac that had only pi-sandbox-guard, and so is the OpenCode part of Agent
-Guard, which is installed on every Mac.
+Afterwards, open a new terminal. Agent Guard's PATH block puts its own `bin`
+first, so `pi` and `omp` reach Agent Guard's entry points. Existing
+terminals can still reach the compatibility launchers in `~/.local/bin`.
+Custom wrappers are found by name through `~/.local/bin` and still use the
+launcher beside them. Launchers pass arguments through unchanged and print
+`OS sandbox ON` before starting a session.
 
 Agent Guard's commands replace pi-sandbox-guard's:
 
@@ -482,11 +478,16 @@ pi-sandbox-guard checkout. It does not reinstate pi-sandbox-guard itself.
 
 ## Pi's files
 
-Pi's guard stays where pi-sandbox-guard puts it:
+In stable 2026.11.19.1, Agent Guard's `bin/pi` and `bin/omp` link to the
+launchers in `~/.local/bin`. In the unreleased layout, the active release
+holds its own executable launchers at `bin/pi` and `bin/omp`. They load
+`pi-sandbox.sb` and `pi-sandbox-preamble.zsh` from the same folder.
 
-- `~/.local/bin/pi` and `~/.local/bin/omp`: identical copies of the launcher,
-  which takes its runtime from its own file name, with `pi-sandbox.sb` and
-  `pi-sandbox-preamble.zsh` beside them, and your custom wrappers;
+Both layouts keep these files at the original paths:
+
+- `~/.local/bin/pi` and `~/.local/bin/omp`: copies of the launcher that take
+  their runtime from their file name and load the `pi-sandbox.sb` and
+  `pi-sandbox-preamble.zsh` beside them. Your custom wrappers live here too;
 - `~/.pi/agent/extensions/pi-sandbox-guard/`: the extension, `index.ts` and
   `src/index.mjs`, which runs cc-safety-net from the release. Releases before
   this one also placed the analyzer (`src/guard-core.mjs`,
@@ -500,14 +501,14 @@ Pi's guard stays where pi-sandbox-guard puts it:
 
 Agent Guard's version stamp records the hashes of the launchers, the profile,
 the preamble and the extension's code; pi-sandbox-guard's own stamps, `.pi-sandbox-launchers-version` and
-`.deployed-version`, are not written. In the engine folder, `bin/pi` and
-`bin/omp` link to the launchers, `state/wrappers.json` holds the wrapper records
-and `state/legacy/` holds what a pi-sandbox-guard migration retired and what a
-fresh install replaced in `~/.local/bin`. Pi sessions cannot write any of these
-files except the log. With Pi's guard installed, OpenCode sessions cannot write
-the launchers, profile, preamble, recorded wrappers, extension folder or
-`executables.conf`, even under an ALLOW entry that covers them, because they run
-outside the sandbox at the next Pi start. Nor can they create or change
+`.deployed-version`, are not written. In the engine folder, `state/wrappers.json`
+holds the wrapper records and `state/legacy/` holds what a pi-sandbox-guard
+migration retired and what a fresh install replaced in `~/.local/bin`. Pi
+sessions cannot write any of these files except the log. With Pi's guard
+installed, OpenCode sessions cannot write the launchers, profile, preamble,
+recorded wrappers, extension folder or `executables.conf`, even under an ALLOW
+entry that covers them, because they run outside the sandbox at the next Pi
+start. Nor can they create or change
 `~/.local/bin/pi-sandbox-guard-extension`: the launcher loads the `index.ts` in
 that folder in place of the installed extension whenever it exists. Two link
 cases are not covered; see [SECURITY.md](../SECURITY.md#opencode). OpenCode
@@ -544,10 +545,11 @@ installer checks do not check for updates.
 
 Accepting installs the offered tag through the existing updater, then restarts
 the launcher once with the original working directory and arguments. The handoff
-skips the repeated check. Desktop upgrades show a small progress window
-(“Downloading update…”, “Preparing update…”, “Installing update…”) and record
-output in `~/Agent Guard/last-update.log`; the window follows the stage lines the
-installer prints and has no effect on the update. An accepted upgrade that fails stops that launch;
+skips the repeated check. In the unreleased layout, Pi and OMP restart through
+Agent Guard's `bin`, which points to the active release. Desktop upgrades show
+“Downloading update…”, “Preparing update…” and “Installing update…” in a small
+progress window and record output in `~/Agent Guard/last-update.log`. The window
+follows the stage lines the installer prints. An accepted upgrade that fails stops that launch;
 run `agent-guard update` from Terminal to finish recovery before reopening.
 
 `opencode upgrade` (and `opencode update` on OpenCode 2) is separate from these
@@ -671,9 +673,10 @@ loaded; `/reload` loads the extension now on disk.
     installed extension, which proves cc-safety-net loads and Agent Guard's Git
     rules are in force. This check runs on the recorded Node or the `node` on
     PATH and is skipped, and named, when there is none. Its audit entries go to a scratch folder, so `~/.cc-safety-net` is not changed;
-  - that `pi`, `omp` and each recorded wrapper resolve, in a login shell, to the
-    installed files, which also catches an npm update that put a real `pi` back
-    in `~/.local/bin`;
+  - where `pi`, `omp` and each recorded wrapper resolve in a login shell. In
+    the unreleased layout, the PATH check can pass for `pi` or `omp` even when
+    the copy in `~/.local/bin` has drifted. A wrapper that finds the wrong
+    sibling `pi` fails its check even if the wrapper's hash matches;
   - that the bindings in `executables.conf` are still usable; a stale binding
     fails;
   - each recorded wrapper's hash, and earlier wrapper names that are still
@@ -681,8 +684,9 @@ loaded; `/reload` loads the extension now on disk.
   - `PI_CODING_AGENT_DIR` and `PI_PACKAGE_DIR`, which move Pi's folders,
     reported when set;
   - `pi --version` and `omp --version`, run from a scratch project in the temp
-    folder, because Pi refuses home as a project. A runtime that is not
-    installed is skipped and named.
+    folder, because Pi refuses home as a project. The unreleased layout runs
+    these checks through Agent Guard's `bin`. A runtime that is not installed
+    is skipped and named.
   - with `pi --version` working, whether guarded Pi finds `fd` and `rg`: in
     `~/.pi/agent/bin`, then in the directories of the launcher's pinned PATH
     (`/opt/homebrew/bin`, `/usr/local/bin` and the system directories), not the
@@ -994,9 +998,18 @@ not see that copy, and nothing is downloaded when `PI_OFFLINE` is set.
 `agent-guard doctor` prints a `warn` line for each of the two that guarded Pi
 would not find.
 
-An update of a Pi installed with npm's prefix at `~/.local` can put npm's `pi`
-back in `~/.local/bin` in place of the launcher; `pi` then starts Pi unguarded.
-`agent-guard doctor` reports it.
+An npm update or reinstall with its prefix at `~/.local` can replace the Pi
+launcher at `~/.local/bin/pi`. In stable 2026.11.19.1,
+Agent Guard's `bin` links to those paths, so even bare commands that find its
+`bin` first can start the runtime without Seatbelt. In the unreleased layout,
+those commands reach the release's own launchers and stay guarded. Absolute
+calls to the replaced path, wrappers that hand off to it and bare commands
+that find the vendor's command first can still start without Seatbelt.
+
+`agent-guard doctor` reports the changed launcher. If it reports a stale
+runtime binding too, repair that with `agent-guard bind`. Rerun the installer
+for the installed Agent Guard release to restore the launcher in `~/.local/bin`.
+See [Commands](#commands).
 
 ## Maintenance outside the guard
 
