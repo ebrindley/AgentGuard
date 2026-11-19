@@ -733,8 +733,10 @@ the path the installer and the refusal message name when Grok was a regular file
 at `~/.local/bin/grok`);
 Agent Guard's `grok` refuses them from any terminal and says so: `grok login`,
 `grok logout`, `grok update` and `grok workspace start|restart|resume`. After
-`grok update`, run `agent-guard doctor`: the update can put Grok's own link back at
-`~/.local/bin/grok`, and doctor then fails until you run the installer again.
+`grok update`, run `agent-guard doctor`. The update can put Grok's own link back
+at `~/.local/bin/grok` while a new terminal still finds Agent Guard's launcher.
+`agent-guard version` reports the changed link, and the unreleased
+`agent-guard doctor` reports it too. Run the installer again to restore the link.
 Grok's updater is off in a guarded session. The launcher also refuses an explicit `--sandbox` profile other
 than `off` (and `GROK_SANDBOX`), `--leader`, `use_leader = true` in the
 configuration, a `GROK_HOME` other than `~/.grok`, and resuming a session that

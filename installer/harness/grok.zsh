@@ -28,6 +28,11 @@ ag_h_grok_detect() {
 
 ag_h_grok_volume() { reply=("${grok_shim:h}") }
 
+# Ownership uses the target text the installer writes.
+ag_grok_shim_owned() {
+  [[ -L $grok_shim && $(/usr/bin/readlink -- "$grok_shim") == "$engine/bin/grok" ]]
+}
+
 # The executable the launcher runs: the recorded one while it still works, else
 # the target of a link that is not ours, else Grok's own install folder, else a
 # regular executable at the link's place, which the link replaces and so which
@@ -40,7 +45,7 @@ ag_grok_resolve() {
     t=$(<"$grok_record")
     [[ $t == /* && -x $t && ! -d $t ]] && [[ ${t:A} != "$engine"/* || ${t:A} == ${grok_kept:A}/grok ]] && { ag_grok_exec=$t; return 0 }
   fi
-  if [[ -L $grok_shim && $(/usr/bin/readlink -- "$grok_shim") != "$engine/bin/grok" ]]; then
+  if [[ -L $grok_shim ]] && ! ag_grok_shim_owned; then
     t=$(/usr/bin/readlink -- "$grok_shim")
     [[ $t == /* ]] || t="${grok_shim:h}/$t"
     [[ -x $t && ! -d $t && ${t:A} != "$engine"/* ]] && { ag_grok_exec=$t; return 0 }
@@ -55,7 +60,7 @@ ag_grok_resolve() {
 # path for uninstall; a damaged kept copy or a non-executable file still fails.
 ag_grok_runtime_removed() {
   local t
-  [[ -r $grok_record && -L $grok_shim && $(/usr/bin/readlink -- "$grok_shim") == "$engine/bin/grok" ]] || return 1
+  [[ -r $grok_record ]] && ag_grok_shim_owned || return 1
   t=$(<"$grok_record")
   [[ $t == /* && ${t:A} != "$engine"/* && ! -e $t && ! -x $grok_default ]] || return 1
   ag_stamp_harnesses
@@ -132,13 +137,13 @@ do_grok_shim() {
   ag_jlast grok-shim
   [[ $REPLY == done ]] && return 0
   if [[ -z $REPLY ]]; then
-    if [[ -L $grok_shim && $(/usr/bin/readlink -- "$grok_shim") == "$want" ]]; then test_point grok-shim; return; fi
+    if ag_grok_shim_owned; then test_point grok-shim; return; fi
     ag_pi_missing "$grok_shim"
     ag_pi_backup grok-shim "$grok_shim" && ag_jnl grok-shim begun "mk=$REPLY" || return 1
   fi
   test_point grok-shim || return 1
   /bin/mkdir -p -- "${grok_shim:h}" && /bin/rm -f -- "$tmp" && /bin/ln -s "$want" "$tmp" && /bin/mv -fh -- "$tmp" "$grok_shim" || return 1
-  [[ -L $grok_shim && $(/usr/bin/readlink -- "$grok_shim") == "$want" ]] || return 1
+  ag_grok_shim_owned || return 1
   ag_jnl grok-shim done
 }
 undo_grok_shim() { ag_pi_put_undo grok-shim "$grok_shim" }
@@ -199,14 +204,20 @@ ag_h_grok_report() {
   return 0
 }
 
-# Grok's part of agent-guard doctor: the release's launch check, then which grok
-# each kind of shell finds first (ag_shell_lookup).
+# Grok's part of agent-guard doctor: the release's launch check, the installed
+# link, and which grok each kind of shell finds first (ag_shell_lookup).
 ag_h_grok_doctor() {  # RELEASE [--json]
-  local out remedy='run the installer again to put the link back'
+  local out shim="${grok_shim/#$home/~}" remedy='run the installer again to put the link back'
   local -a lines
   integer rc=0
   out=$(ag_grok_check_release "$1" 2>&1) || rc=1
   lines=("${(@f)out}")
+  if ag_grok_shim_owned; then
+    lines+=("ok   $shim links to Agent Guard's launcher")
+  else
+    lines+=("FAIL $shim is missing or has changed. To restore Agent Guard's launcher, run the installer again.")
+    rc=1
+  fi
   out=$(ag_shell_lookup grok 'a new terminal window' "$remedy" -l -i) || rc=1
   lines+=("${(@f)out}")
   out=$(ag_shell_lookup grok 'zsh -c' "$remedy") || rc=1
@@ -225,7 +236,7 @@ ag_h_grok_doctor() {  # RELEASE [--json]
 ag_h_grok_uninstall_remove() {
   local f=$grok_shim
   /bin/rm -f -- "${f:h}/.grok.partial"
-  if [[ -L $f && $(/usr/bin/readlink -- "$f") == "$engine/bin/grok" ]]; then
+  if ag_grok_shim_owned; then
     if [[ -e $grok_replaced/grok || -L $grok_replaced/grok ]]; then
       /bin/mv -fh -- "$grok_replaced/grok" "$f" ||
         { ag_err "cannot put back ${f/#$home/~}; $engine is kept, so agent-guard uninstall can run again"; return 1 }

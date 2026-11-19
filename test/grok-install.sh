@@ -11,9 +11,10 @@ setopt no_unset pipe_fail extended_glob
 unset AGENT_GUARD_RELEASE AGENT_GUARD_SANDBOXED OPENCODE_SANDBOXED
 command -v node >/dev/null || { print -ru2 'Node is required for the release server and the fake OpenCode'; exit 1 }
 
-case ${1:-all} in
-  all|removed) ;;
-  *) print -ru2 'usage: test/grok-install.sh [removed]'; exit 2 ;;
+mode=${1:-all}
+case $mode in
+  all|drift|removed) ;;
+  *) print -ru2 'usage: test/grok-install.sh [drift|removed]'; exit 2 ;;
 esac
 
 source_root=${0:A:h:h}
@@ -45,7 +46,9 @@ nodebin="$run/nodebin"
 base="$fakebin:$nodebin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 build "$source_root" 0.0.1 || { print -ru2 'cannot build v0.0.1'; finish }
-build "$source_root" 0.0.2 || { print -ru2 'cannot build v0.0.2'; finish }
+if [[ $mode != drift ]]; then
+  build "$source_root" 0.0.2 || { print -ru2 'cannot build v0.0.2'; finish }
+fi
 print -r -- v0.0.1 > "$served/latest.txt"
 
 point=
@@ -88,6 +91,26 @@ grok_state() {
   [[ -L $state/grok-replaced/grok ]] && print -r -- "replaced -> $(/usr/bin/readlink "$state/grok-replaced/grok")" || print -r -- "replaced absent"
 }
 
+launcher_drift() {
+  local rc
+  label=drift
+  /bin/rm "$lb/grok"
+  /bin/ln -s "$original" "$lb/grok"
+  # The login shell still finds the engine's bin via the installed PATH block.
+  /bin/mv -- "$home/.zshenv" "$run/zshenv"
+  ag doctor
+  rc=$?
+  /bin/mv -- "$run/zshenv" "$home/.zshenv"
+  if (( rc == 1 )) &&
+     /usr/bin/grep -qF 'ok   grok in a new terminal window resolves to' "$run/out" &&
+     /usr/bin/grep -qF 'skip grok in zsh -c: not found' "$run/out" &&
+     /usr/bin/grep -qF 'FAIL ~/.local/bin/grok is missing or has changed.' "$run/out"; then
+    pass 'doctor reports the replaced link while a new terminal still finds the guard'
+  else
+    fail "doctor after the link was replaced (exit $rc)"; show
+  fi
+}
+
 removed_runtime() {
   label='removed Grok runtime'
   /bin/rm -- "$grok/bin/grok"
@@ -106,8 +129,11 @@ label=install
 boot
 rc=$?
 (( rc == 0 )) && pass 'installed (exit 0)' || { fail "install (exit $rc)"; show; finish }
-if [[ ${1:-all} == removed ]]; then
-  removed_runtime
+if [[ $mode != all ]]; then
+  case $mode in
+    drift) launcher_drift ;;
+    removed) removed_runtime ;;
+  esac
   stop_release_server
   end_run
 fi
@@ -123,7 +149,7 @@ rid=$(<"$engine/current/RELEASE")
 ag doctor
 rc=$?
 (( rc == 0 )) && pass 'doctor passes' || { fail "doctor (exit $rc)"; show }
-for l in 'ok   grok in a new terminal window resolves to' 'ok   grok in zsh -c resolves to' 'ok   Grok executable' 'ok   Grok settings write denied' 'ok   Grok runs locally'; do
+for l in "ok   ~/.local/bin/grok links to Agent Guard's launcher" 'ok   grok in a new terminal window resolves to' 'ok   grok in zsh -c resolves to' 'ok   Grok executable' 'ok   Grok settings write denied' 'ok   Grok runs locally'; do
   /usr/bin/grep -qF -- "$l" "$run/out" && pass "doctor: $l" || { fail "doctor lacks: $l"; show }
 done
 ag version
@@ -144,12 +170,7 @@ rc=$?
   pass 'standalone doctor fails on the shell alias' || { fail "doctor with a shell alias (exit $rc)"; show }
 /bin/rm -- "$home/.zlogin"
 
-label=drift
-/bin/rm "$lb/grok"
-/bin/ln -s "$grok/bin/grok" "$lb/grok"
-ag doctor
-rc=$?
-(( rc != 0 )) && /usr/bin/grep -qF 'FAIL grok in zsh -c resolves to' "$run/out" && pass 'doctor fails when the link is put back' || { fail "doctor after the link was replaced (exit $rc)"; show }
+launcher_drift
 
 label=uninstall
 ag uninstall
