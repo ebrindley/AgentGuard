@@ -114,6 +114,34 @@ exit 0
   const ALLOW = (...entries) => `ALLOW\n${entries.join('\n')}\nREAD ONLY\nDENY\n`;
   const P = (...p) => join(home, ...p);
 
+  // The installer's literal path has to survive the launcher's Guard List parser.
+  {
+    const selected = P('Projects', 'work\\notes ');
+    const sibling = P('Projects/worknotes');
+    const unsupported = P('Projects', 'cannot\tlist');
+    for (const folder of [selected, sibling, unsupported]) mkdirSync(folder);
+    writeFileSync(list, ALLOW());
+    const addProject = folder => spawnSync('/bin/zsh', ['-fc', `
+      setopt extended_glob
+      source "$1/installer/lib.zsh"
+      home=$2 list_dir="$2/Agent Guard" list="$2/Agent Guard/Guard List.txt"
+      ag_projects=$3 ag_gui=0 ag_update=1
+      ag_projects_check && ag_list_step
+    `, 'guard-list', root, home, folder], { encoding: 'utf8' });
+    const first = addProject(selected);
+    assert.equal(first.status, 0, first.stdout + first.stderr);
+    const written = readFileSync(list, 'utf8');
+    assert.equal(addProject(selected).status, 0);
+    assert.equal(readFileSync(list, 'utf8'), written);
+    profile([]);
+    assert.deepEqual(rules().allow, [selected]);
+    const rejected = addProject(unsupported);
+    assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
+    assert.match(rejected.stderr, /cannot represent project paths/);
+    assert.equal(readFileSync(list, 'utf8'), written);
+    console.log('ok   --projects preserves literal paths and rejects unrepresentable names');
+  }
+
   // Off by default: a commented @project, or no entry, gives the same profile.
   const plain = profile([], { text: ALLOW(P('Projects/other')) }).stdout;
   assert.equal(profile([], { text: ALLOW('# @project', P('Projects/other')) }).stdout, plain);

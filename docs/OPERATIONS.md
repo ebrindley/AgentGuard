@@ -44,6 +44,10 @@ To allow an existing projects folder without the prompt, append
 `install.sh --projects ~/Projects` after the closing quote. This grants OpenCode
 write access to that folder; Pi and OMP ignore the Guard List. From a checkout
 or unpacked archive, `zsh install.sh [--projects DIR] [--gui]` installs that tree.
+If an earlier installer added a project path containing a backslash or trailing
+whitespace, correct its existing Guard List entry. Put the whole path in quotes
+to make it literal.
+
 An existing Guard List is kept. Quit running agents before migrating either
 older guard.
 
