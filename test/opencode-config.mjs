@@ -103,6 +103,7 @@ for (const [name, permission, expected] of [
   ["scalar-allow", "allow", "allow"],
   ["array-permissions", ["deny"], ["deny"]],
   ["catchall-deny", { "*": "deny" }, { "*": "deny" }],
+  ["catchall-map-deny", { "*": { "*": "deny" } }, { "*": { "*": "deny" } }],
   ["specific-deny", { bash: "deny", external_directory: "deny" }, { bash: "deny", external_directory: "deny" }],
   ["pattern-deny", { bash: { "rm *": "deny", "*": "ask" } }, { bash: { "rm *": "deny", "*": "ask" }, external_directory: "allow" }],
   ["pattern-order", { bash: { "*": "ask", "ls *": "allow" } }, { bash: { "*": "allow", "ls *": "allow" }, external_directory: "allow" }],
@@ -115,6 +116,26 @@ for (const [name, permission, expected] of [
   assert.deepEqual(JSON.parse(readFileSync(p.config)).permission, expected)
   assert.deepEqual(Object.keys(JSON.parse(readFileSync(p.config)).permission.bash ?? {}), Object.keys(expected.bash ?? {}))
 }
+
+for (const [name, lower, higher, expected] of [
+  ["split-deny", { bash: "deny" }, {}, { external_directory: "allow" }],
+  ["split-scalar-deny", "deny", {}, {}],
+  ["split-pattern-deny", {}, { external_directory: { "*.txt": "deny" } }, { bash: "allow" }],
+]) {
+  const f = fixture(name)
+  const second = join(dirname(f.config), "opencode.json")
+  writeFileSync(f.config, JSON.stringify({ permission: lower }))
+  writeFileSync(second, JSON.stringify({ permission: higher }))
+  shell(f, 'ag_classify_configs; do_permissions')
+  assert.deepEqual(JSON.parse(readFileSync(f.config)).permission, typeof lower === "string" ? lower : { ...lower, ...expected })
+  assert.deepEqual(JSON.parse(readFileSync(second)).permission, { ...higher, ...expected })
+}
+
+const commented = fixture("split-jsonc-deny")
+writeFileSync(commented.config, original)
+writeFileSync(join(dirname(commented.config), "opencode.jsonc"), '// Keep native defaults\n{"permission":{"*":"deny"}}\n')
+shell(commented, 'ag_classify_configs; do_permissions')
+assert.equal(readFileSync(commented.config, "utf8"), original)
 
 function legacy(name, orig, current = "allow") {
   const f = fixture(name)

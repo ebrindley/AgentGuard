@@ -259,13 +259,39 @@ undo_plugin() {
 # Permission values (design section 3.3). The record gets orig and wrote before
 # the config is written, so an interrupted run never leaves an allow value that
 # uninstall cannot restore.
-ag_perm_new() {  # CUR OUT
-  /usr/bin/jq '(.permission // {}) as $p
-    | if ($p | type) != "object" or $p["*"] == "deny" then . else
-      .permission = (reduce ("bash", "external_directory") as $k ($p;
+# OpenCode merges global files before resolving permissions. A default in any
+# one of them can mask an explicit deny elsewhere in that set.
+ag_perm_defaults() {
+  local f defaults
+  local -a configs
+  REPLY='[]'
+  for f in "$conf/config.json" "$conf/opencode.json" "$conf/opencode.jsonc"; do
+    [[ -e $f || -L $f ]] || continue
+    ag_opencode_config_writable "$f" || return 0
+    configs+=("$f")
+  done
+  if defaults=$(/usr/bin/jq -ces --argjson count "$#configs" '
+      def deny: . == "deny" or (type == "object" and any(.[]; . == "deny"));
+      if length != $count or any(.[]; type != "object" or
+          ((.permission | type) | IN("null", "string", "object") | not))
+      then error("unrecognized global permissions")
+      else map(.permission) as $permissions
+        | ["bash", "external_directory"] | map(. as $key |
+          select(all($permissions[]; . != "deny" and
+            (type != "object" or ((.["*"] | deny | not) and (.[$key] | deny | not))))))
+      end' "${configs[@]}" < /dev/null 2>/dev/null); then
+    REPLY=$defaults
+  else
+    ag_warnings+=("OpenCode permission defaults skipped: review denies in the global config files")
+  fi
+}
+
+ag_perm_new() {  # CUR OUT KEYS
+  /usr/bin/jq --argjson keys "$3" '(.permission // {}) as $p
+    | if ($p | type) != "object" or ($keys | length) == 0 then . else
+      .permission = (reduce $keys[] as $k ($p;
         if .[$k] == null or .[$k] == "ask" then .[$k] = "allow"
-        elif (.[$k] | type) == "object" and .[$k]["*"] == "ask"
-          and (all(.[$k][]; . != "deny")) then .[$k]["*"] = "allow"
+        elif (.[$k] | type) == "object" and .[$k]["*"] == "ask" then .[$k]["*"] = "allow"
         else . end)) end' "$1" > "$2"
 }
 
@@ -471,9 +497,12 @@ ag_retired_edit_files() {
 # S6 maintains only previously unrecorded permissions; imported entries keep
 # their first-install originals. Edit retirement is a separate journaled action.
 do_permissions() {
-  local f n st cur new entry created
+  local f n st cur new entry created defaults
   local -a changed_keys
   integer i
+  (( $#ag_configs )) || return 0
+  ag_perm_defaults
+  defaults=$REPLY
   for (( i = 1; i <= $#ag_configs; i++ )); do
     f=$ag_configs[i] n=$i
     ag_opencode_config_writable "$f" || continue
@@ -491,7 +520,7 @@ do_permissions() {
       ag_perm_report "$f" "$cur" "$entry"
       continue
     fi
-    ag_perm_new "$cur" "$new" || return 1
+    ag_perm_new "$cur" "$new" "$defaults" || return 1
     if [[ $st == begun && -n $entry ]]; then
       # The record was written; the config may or may not have been.
       if ag_perm_is "$cur" "$entry" wrote; then
@@ -502,6 +531,12 @@ do_permissions() {
         ag_perm_report "$f" "$cur" "$entry"
         ag_jnl permissions done "$n -" || return 1
         continue
+      fi
+      if ! ag_perm_is "$new" "$entry" wrote; then
+        # No value was written, and the current global settings veto the write.
+        # Leave the action pending for ordinary rollback, which sees the backup.
+        ag_warnings+=("OpenCode permission defaults skipped for $f: global permissions changed during installation")
+        return 1
       fi
     else
       ag_perm_entry "$cur" "$new" || return 1
