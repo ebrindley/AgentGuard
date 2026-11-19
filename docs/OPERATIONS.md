@@ -60,10 +60,14 @@ Pi/OMP policy is unchanged.
 New installations manage two global OpenCode permission keys, `bash` and
 `external_directory`, instead of the previous three. They no longer write
 `edit: allow`, which could override Plan and Explore's native edit restrictions.
-Maintenance changes absent or ASK settings, preserves scalar and catchall DENYs,
-and leaves pattern order intact. A pattern map containing a DENY is left intact;
-specific ASK patterns are not broadly replaced. Explicit DENY conversions
-decrease to zero. The existing command/path checks and Seatbelt filesystem
+Maintenance changes absent or ASK settings. A DENY for either managed key
+in any of the default global config files keeps that key out of the defaults.
+A wildcard DENY keeps both out. If those files cannot all be checked, for
+example because one uses JSONC comments, set OpenCode permissions manually.
+Pattern order and specific ASK patterns are preserved. Previously recorded
+settings retain their ownership. If an earlier release inserted an allow that
+masks your deny, remove that allow or restore your intended value in OpenCode's
+global config. The existing command/path checks and Seatbelt filesystem
 boundaries remain, and the required CI gate count remains one.
 
 Every install checks settings. Every update runs installation checks even when
