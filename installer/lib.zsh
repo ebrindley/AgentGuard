@@ -776,11 +776,17 @@ ag_projects_check() {
     print -n "Drag your projects folder here and press Return (Return alone skips): "
     read -r ag_projects
   fi
-  ag_projects=${${ag_projects##[[:space:]]##}%%[[:space:]]##}
-  [[ -n $ag_projects ]] || return 0
-  [[ -e $ag_projects ]] || ag_projects=${(Q)ag_projects}
+  if [[ ! -d $ag_projects ]]; then
+    ag_projects=${${ag_projects##[[:space:]]##}%%[[:space:]]##}
+    [[ -n $ag_projects ]] || return 0
+    [[ -e $ag_projects ]] || ag_projects=${(Q)ag_projects}
+  fi
   [[ -d $ag_projects ]] || { ag_err "not a folder: $ag_projects"; return 1 }
   ag_projects=${ag_projects:A}
+  if [[ $ag_projects == *[$'\t\r\n']* ]]; then
+    ag_err 'the Guard List cannot represent project paths containing a tab or line break'
+    return 1
+  fi
   for s in "$home/Library/Application Support" "$home/.config" "$home/.local"; do
     if [[ $ag_projects == / || $s == "$ag_projects" || $s == "$ag_projects"/* ]]; then
       ag_err "$ag_projects is too broad to allow; choose the folder that holds your projects"
@@ -968,21 +974,31 @@ ag_build() {
 # through a temporary file and a rename; a symlinked list goes through replace_file
 # so it stays a link.
 ag_list_step() {
-  local listed partial="$list_dir/.Guard List.txt.partial"
+  local listed entry partial="$list_dir/.Guard List.txt.partial"
   /bin/mkdir -p -- "$list_dir" || return 1
   if [[ ! -e $list ]]; then
     /bin/cp -- "$ag_tree/profiles/opencode/templates/Guard List.txt" "$partial" && /bin/mv -n -- "$partial" "$list" || return 1
     /bin/rm -f -- "$partial"
   fi
   if [[ -n $ag_projects ]]; then
-    listed=$(P=$ag_projects O=$list.tmp H=$home /usr/bin/awk '
-      { print > ENVIRON["O"]; t = $0; sub(/\r$/, "", t); gsub(/^[[:space:]]+|[[:space:]]+$/, "", t); u = toupper(t)
-        if (t ~ /^~(\/|$)/) t = ENVIRON["H"] substr(t, 2); if (t ~ /.\/+$/) sub(/\/+$/, "", t) }
+    entry=$ag_projects
+    # The launcher takes a quoted Guard List path literally.
+    [[ $entry != (*\\*|*[[:space:]]) ]] || entry="\"$entry\""
+    listed=$(P=$ag_projects E=$entry O=$list.tmp H=$home S="'" /usr/bin/awk '
+      { print > ENVIRON["O"]; t = $0; sub(/\r$/, "", t); gsub(/^[[:space:]]+|[[:space:]]+$/, "", t); u = toupper(t) }
       u ~ /^#/ { next }
-      u ~ /^ALLOW([[:space:]]*[-:#].*)?$/ { s = "ALLOW"; if (!done) print ENVIRON["P"] > ENVIRON["O"]; done = 1; next }
+      u ~ /^ALLOW([[:space:]]*[-:#].*)?$/ { s = "ALLOW"; if (!done) print ENVIRON["E"] > ENVIRON["O"]; done = 1; next }
       u ~ /^READ([[:space:]]+|-)ONLY([[:space:]]*[-:#].*)?$/ { s = "READ ONLY"; next }
       u ~ /^DENY([[:space:]]*[-:#].*)?$/ { s = "DENY"; next }
-      s != "" && t == ENVIRON["P"] { f[s] = 1 }
+      {
+        q = substr(t, 1, 1)
+        if (length(t) >= 2 && (q == "\"" || q == ENVIRON["S"]) && substr(t, length(t), 1) == q) {
+          t = substr(t, 2, length(t) - 2)
+        } else if (index(t, "\\") != 0) { next }
+        if (t ~ /^~(\/|$)/) t = ENVIRON["H"] substr(t, 2)
+        if (t ~ /.\/+$/) sub(/\/+$/, "", t)
+        if (s != "" && t == ENVIRON["P"]) f[s] = 1
+      }
       END { print f["DENY"] ? "DENY" : f["READ ONLY"] ? "READ ONLY" : f["ALLOW"] ? "ALLOW" : done ? "added" : "" }' "$list") ||
       { /bin/rm -f -- "$list.tmp"; return 1 }
     if [[ $listed == added ]]; then
