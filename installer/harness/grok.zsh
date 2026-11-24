@@ -11,7 +11,7 @@ ag_h_grok_init() {
   grok_record="$state/grok-executable"
   grok_kept="$state/grok-kept"
   grok_replaced="$state/grok-replaced"
-  grok_release_files=(args.zsh credentials.sb grok harness.zsh hooks.zsh)
+  grok_release_files=(args.zsh credentials.sb harness.zsh hooks.zsh)
   ag_grok_exec=
 }
 
@@ -86,8 +86,8 @@ ag_h_grok_assemble() {  # RELEASE-FOLDER
     /bin/cp -- "$ag_tree/profiles/grok/$f" "$r/profiles/grok/$f" || return 1
   done
   /bin/cp -- "$ag_tree/profiles/grok/grok" "$r/bin/grok" && /bin/chmod 755 "$r/bin/grok" || return 1
-  for f in args.zsh harness.zsh hooks.zsh grok; do
-    /bin/zsh -fn "$r/profiles/grok/$f" || { ag_err "profiles/grok/$f does not parse"; return 1 }
+  for f in profiles/grok/{args,harness,hooks}.zsh bin/grok; do
+    /bin/zsh -fn "$r/$f" || { ag_err "$f does not parse"; return 1 }
   done
 }
 
