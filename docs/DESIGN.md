@@ -1339,7 +1339,7 @@ Alongside steps 7 to 7d, not gating them: the OMP 18.4.9 observation, which need
 
 **End state for the existing OpenCode Guard and pi-sandbox-guard installs.** Done at step 11: a migrated install has no OpenCode Guard engine, shims, forwarders, plugin, app, rulebook entry or PATH blocks, and no launcher accepts OpenCode Guard's marker. `~/OpenCode Guard`, the permission copy and the legacy bundle stay until the owner deletes them. Later releases reach these installs through `update`.
 
-**End state for open source and more harnesses.** Public from step 6. A harness is profile data, zsh hooks, a plugin adapter and its checkers (section 14). Pi is the first new harness, guarded by the adopted profile from 0.2.0 (step 7d), with pi-sandbox-guard retired and archived (step 11); Grok followed (section 3, Grok). Later candidates are in section 14.
+**End state for open source and more harnesses.** Public from step 6. Section 14 describes how to add an engine profile, installer module, release inputs and tests for a harness. Pi is the first new harness, guarded by the adopted profile from 0.2.0 (step 7d), with pi-sandbox-guard retired and archived (step 11); Grok followed (section 3, Grok). Later candidates are in section 14.
 
 ## 13. Open source
 
@@ -1361,19 +1361,12 @@ The repository was private until step 6 and is open source from the first public
 
 ## 14. Adding a harness
 
-A harness is five parts:
+OpenCode and Grok run through the zsh engine. Grok is the smallest complete example. Pi and OMP use the adopted Pi launcher described in section 11. The proposed Rust launcher, shared plugin core and cross-harness composition are historical designs (decisions D12 and D17).
 
-| Part | What it is |
-|---|---|
-| Profile data | The fields in section 3. zsh assignments now; TOML embedded in the binary from step 8. |
-| Hooks | Named functions for what data cannot express, such as OpenCode's `prepare_hook` or Pi's `args_hook` and `state_hook`. zsh in `hooks.zsh` now; Rust from step 8. Install steps such as OpenCode's permission merge go in the installer's harness module (section 6). |
-| Plugin adapter | A thin layer between the harness's hook API and the plugin core (section 5). |
-| Command checker | cc-safety-net, through a wrapper for its entry for the harness when it ships one, and the adapter's ask list (section 5, Command checker). |
-| Conformance pass | The suite in section 8, run against the new profile under the real `sandbox-exec`. |
-
-A new harness's protected paths and names apply to every launch of every installed harness (section 3), so adding one also changes what the others can write. Its runtime folders are granted to every session where it is listed under NESTED and present (section 3, Composition), so anything in them that the harness runs as code, or trusts as config, must be protected, checked at launch or accepted in writing (section 9).
-
-Pi is the first case (section 11). What it needs beyond OpenCode is built as engine capabilities at step 10c, with OpenCode switched off (sections 3 and 7). The credential set, Git hooks protection, the executable checks and the `same-boundary` rule apply to every profile, and reach OpenCode through its own releases (section 11, OpenCode's releases). `on_link = "refuse"`, `rlimits`, a pinned `path` and `refuse_env` stay profile choices. The "adding a harness" guide is written after Pi works (step 10), from what Pi actually needed. Until then this section is the outline.
+1. Define the engine profile in `profiles/<name>/harness.zsh`. Grok supplies its executable search paths, writable and protected paths, and the names of its argument, protection and check hooks. Its `grok` shim runs `launch --harness grok cli`. Grok relies on Seatbelt alone. OpenCode also loads an advisory plugin (section 5). [Grok profile](../profiles/grok/harness.zsh) and [shim](../profiles/grok/grok)
+2. Implement the installer hooks in `installer/harness/<name>.zsh`. Grok detects the executable, assembles its release files, checks the staged and active release, reports installation drift through doctor and restores the original entry on uninstall. Register the harness in `ag_modules` and its journaled switch actions in `ag_registry`. Recovery uses the transaction's frozen modules. [Grok installer](../installer/harness/grok.zsh) and [hook and action contracts](../installer/actions.zsh)
+3. List the archive inputs in the release builder and the expected archive contents in the release test. The installer assembles the installed layout from those inputs. For example, the archive carries Grok's shim as `profiles/grok/grok`, and the installed command runs from `bin/grok`. [Release builder](../scripts/release.sh) and [archive test](../test/release.sh)
+4. Exercise the public command under the real sandbox and the installer against disposable executables. Grok's fixtures cover launch arguments and filesystem access, then installation, recovery after interruption and uninstall. [Launch tests](../test/grok.mjs) and [installer tests](../test/grok-install.sh)
 
 Candidates, ranked. None has an OS sandbox of its own. The reasons and caveats come from the 2026-09-28 draft and were not rechecked for this revision.
 
