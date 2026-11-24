@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { tmpdir } from "node:os"
 import { fileURLToPath } from "node:url"
@@ -34,8 +34,7 @@ for (const mode of selected) {
   const git = spawnSync("git", ["-C", project, "init", "--quiet"], { encoding: "utf8" })
   assert.equal(git.status, 0, git.stderr)
   adapter.stage(root, tree, home)
-  const release = adapter.layout(tree, engine)
-  cpSync(join(tree, "engine/vendor"), join(release, "vendor"), { recursive: true })
+  const release = adapter.layoutWithChecker(tree, engine)
   symlinkSync(join(release, "profiles/opencode/plugin.js"), join(config, "plugins/agent-guard.js"))
   writeFileSync(join(config, ".gitignore"), "node_modules\npackage.json\npackage-lock.json\nbun.lock\n.gitignore\n")
   writeFileSync(join(home, "fakebin/opencode"), `#!/bin/sh\nexec ${quote(realpathSync(realCLI))} "$@"\n`, { mode: 0o755 })

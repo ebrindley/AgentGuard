@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs"
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import { spawnSync } from "node:child_process"
@@ -9,8 +9,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), ".."), run = mkdte
 const home = join(run, "home"), tree = join(run, "source"), project = join(home, "Projects/app"), engine = join(home, "Library/Application Support/AgentGuard")
 for (const p of [tree, project, join(home, "Projects/rules"), join(home, "Agent Guard"), join(home, ".cc-safety-net/rules/agent-guard")]) mkdirSync(p, { recursive: true })
 adapter.stage(root, tree, home)
-const release = adapter.layout(tree, engine)
-cpSync(join(tree, "engine/vendor"), join(release, "vendor"), { recursive: true })
+const release = adapter.layoutWithChecker(tree, engine)
 const source = join(home, ".cc-safety-net"), rules = join(source, "rules")
 const factory = JSON.parse(readFileSync(join(root, "profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json"), "utf8"))
 const factoryText = readFileSync(join(root, "profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json"), "utf8")

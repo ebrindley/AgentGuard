@@ -11,7 +11,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { userInfo } from 'node:os';
 import { check, report } from './check.mjs';
-import { layout, stage } from './engines/zsh.mjs';
+import { layout, layoutWithChecker, stage } from './engines/zsh.mjs';
 import { quote } from './fixture-home.mjs';
 import { checkSettingsLocks } from './pi-settings-lock.mjs';
 
@@ -574,8 +574,7 @@ try {
     const source = join(run, 'checker-source');
     mkdirSync(source);
     stage(root, source, a.home);
-    const release = layout(source, engine);
-    cpSync(join(source, 'engine/vendor'), join(release, 'vendor'), { recursive: true });
+    const release = layoutWithChecker(source, engine);
     cpSync(join(root, 'profiles/opencode/templates/cc-safety-net'), join(a.home, '.cc-safety-net'), { recursive: true });
     const userPolicy = '{"version":1,"safety":{"level":"strict"}}\n';
     writeFileSync(join(a.home, '.cc-safety-net/policy.json'), userPolicy);

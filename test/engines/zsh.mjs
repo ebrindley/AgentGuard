@@ -50,6 +50,12 @@ export function layout(tree, engine, rid = '0.0.0-20260101T000000Z') {
   return release;
 }
 
+export function layoutWithChecker(tree, engine, rid) {
+  const release = layout(tree, engine, rid);
+  cpSync(join(tree, 'engine/vendor'), join(release, 'vendor'), { recursive: true });
+  return release;
+}
+
 // Points the lookup addresses in file (profiles/opencode/update.zsh) at the server
 // at url: the CLI feeds (npm, Homebrew tap and formula index), the desktop feed and the address its archives must start with.
 // Homebrew is looked for under $home/homebrew only, so a Homebrew on the test Mac

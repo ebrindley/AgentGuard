@@ -17,8 +17,7 @@ if (process.argv[2] === "linked") {
   symlinkSync(join(home, "dotfiles/opencode"), join(home, ".config/opencode"))
 }
 adapter.stage(root, tree, home)
-const release = adapter.layout(tree, engine)
-cpSync(join(tree, "engine/vendor"), join(release, "vendor"), { recursive: true })
+const release = adapter.layoutWithChecker(tree, engine)
 mkdirSync(join(home, ".cc-safety-net/rules/agent-guard"), { recursive: true })
 cpSync(join(root, "profiles/opencode/templates/cc-safety-net/rules/agent-guard/rulebook.json"), join(home, ".cc-safety-net/rules/agent-guard/rulebook.json"))
 writeFileSync(join(home, ".cc-safety-net/rules/rule.json"), '{"version":1,"rules":["agent-guard"],"overrides":{},"transparent_wrappers":["env","timeout"]}')
