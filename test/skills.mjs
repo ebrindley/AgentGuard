@@ -35,9 +35,6 @@ function client(mode, extra = {}) {
   writeFileSync(join(run, mode + ".out"), r.stdout ?? "")
   writeFileSync(join(run, mode + ".err"), r.stderr ?? "")
   assert.equal(r.status, 0, `${mode}: ${r.error ?? ""}\n${r.stdout}\n${r.stderr}\nfixture: ${run}`)
-  const context = JSON.parse(readFileSync(join(engine, "state/rules.json"), "utf8"))
-  assert.equal(existsSync(context.preparation), false, "preparation channel is removed when the launch ends")
-  assert.equal(existsSync(context.preparationReplies), false, "preparation replies are removed when the launch ends")
   process.stdout.write(r.stdout)
 }
 // A staged check removes its own snapshot however it ends, and leaves other sessions' snapshots.

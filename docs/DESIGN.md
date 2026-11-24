@@ -1450,8 +1450,9 @@ To verify, before or during implementation:
 
 0.2.2 adds the [skill policy](SKILLS.md) ahead of the shared-engine
 roadmap. It narrows the current Seatbelt and plugin configuration denies without
-opening permission-bearing configuration. A fixed-operation, launch-scoped worker
-prepares missing containers for projects selected after startup. Protected policy
+opening permission-bearing configuration. Release 0.2.2 used a launch-scoped worker
+to prepare missing containers for projects selected after startup. The worker
+and its request channel were subsequently removed (section 1). Protected policy
 snapshots use cc-safety-net 2.6.0 with original-directory analysis and project-only
 tightenings. Existing shared rulebooks remain for older releases; only the known
 managed recursive rule is omitted from new snapshots. This supersedes the earlier

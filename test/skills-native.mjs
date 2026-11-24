@@ -113,8 +113,6 @@ if (guardedServer) {
   await Promise.race([ended, new Promise((_, reject) => setTimeout(() => reject(new Error("guarded server did not stop")), 5000))])
 }
 writeFileSync(join(run, "opencode.out"), output); writeFileSync(join(run, "opencode.err"), error)
-const context = JSON.parse(readFileSync(join(engine, "state/rules.json"), "utf8"))
-assert.equal(existsSync(context.preparation), false, "preparation channel is removed after process exit")
 assert.equal(code, 0, `${error}\n${output}\nfixture: ${run}`)
 assert.equal(requests, calls.length + 1, output)
 assert.equal(existsSync(localSkill), false)

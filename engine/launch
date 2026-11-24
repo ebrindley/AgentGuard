@@ -905,7 +905,6 @@ if [[ $harness == opencode ]]; then
   if (( staged )); then
     trap '/bin/rm -rf -- "$session"; /bin/rmdir -- "$engine/state/opencode" 2>/dev/null || true' EXIT
   fi
-  channel= replies=
   failure_stage=checker-preparation preparation_status=ready
   opencode_checker_snapshot "$session" || fail "cannot preserve the checker policy in $session"
   context="$session/permissions.json"
@@ -915,8 +914,8 @@ if [[ $harness == opencode ]]; then
     --argjson writable "$(jarr $writable $darwin_cache $config_roots)" \
     --argjson pins "$(jarr $pinned $state_pins $skill_pins)" --argjson projects "$(jarr $projects)" \
     --argjson credentials "$(jarr $credential_targets)" \
-    --arg checker "$session/checker" --arg preparation "$channel" --arg preparationReplies "$replies" --arg preparationStatus "$preparation_status" \
-    '{allow:$allow,readonly:$readonly,deny:$deny,protected:$protected,skills:$skills,configs:$configs,writable:$writable,pins:$pins,projects:$projects,credentials:$credentials,checker:$checker,preparation:$preparation,preparationReplies:$preparationReplies,preparationStatus:$preparationStatus}' > "$context"
+    --arg checker "$session/checker" --arg preparationStatus "$preparation_status" \
+    '{allow:$allow,readonly:$readonly,deny:$deny,protected:$protected,skills:$skills,configs:$configs,writable:$writable,pins:$pins,projects:$projects,credentials:$credentials,checker:$checker,preparationStatus:$preparationStatus}' > "$context"
   export AGENT_GUARD_CONTEXT="$context"
   if [[ $mode == cli ]]; then
     # Check the host before publishing a V2-only command's working-directory grant.
