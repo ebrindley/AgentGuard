@@ -61,10 +61,7 @@ old_path="$ocg/bin:$base"
 # Releases: A (v0.0.1) from this checkout, and A whose profile lets the guard write
 # the engine's state folder (design A14), which fails the staged check.
 build "$source_root" 0.0.1 || { print -ru2 'cannot build v0.0.1'; finish }
-/bin/mkdir -p "$run/src-broken"
-/bin/cp -R "$source_root"/{engine,profiles,installer,scripts,install.sh,LICENSE} "$run/src-broken/"
-/usr/bin/sed -i '' '/^  (subpath (h "\/Library\/Application Support\/AgentGuard"))$/d' "$run/src-broken/engine/profile.sb"
-/usr/bin/sed -i '' 's|^writable=(|writable=("$engine/state" |' "$run/src-broken/profiles/opencode/harness.zsh"
+make_broken_source "$source_root" "$run/src-broken" || { fail 'cannot make the broken release'; finish }
 build "$run/src-broken" 0.0.3-broken || { print -ru2 'cannot build v0.0.3-broken'; finish }
 print -r -- v0.0.1 > "$served/latest.txt"
 

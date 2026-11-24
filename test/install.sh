@@ -41,19 +41,11 @@ tpath=$base
 # Releases: A (v0.0.1) from this checkout; B (v0.0.2) with another app icon, so an
 # update rebuilds the app; v0.0.3-broken, B whose profile lets the guard write the
 # engine's state folder (design A14).
-copy_source() { /bin/mkdir -p "$2" && /bin/cp -R "$1"/{engine,profiles,installer,scripts,install.sh,LICENSE} "$2/" }
 build "$source_root" 0.0.1 || { print -ru2 'cannot build v0.0.1'; finish }
 copy_source "$source_root" "$run/src-b"
 print -n x >> "$run/src-b/profiles/opencode/assets/AgentGuard.icns"
 build "$run/src-b" 0.0.2 || { print -ru2 'cannot build v0.0.2'; finish }
-copy_source "$run/src-b" "$run/src-broken"
-/usr/bin/sed -i '' '/^  (subpath (h "\/Library\/Application Support\/AgentGuard"))$/d' "$run/src-broken/engine/profile.sb"
-/usr/bin/sed -i '' 's|^writable=(|writable=("$engine/state" |' "$run/src-broken/profiles/opencode/harness.zsh"
-if /usr/bin/grep -qF '(subpath (h "/Library/Application Support/AgentGuard"))' "$run/src-broken/engine/profile.sb" ||
-   ! /usr/bin/grep -q '^writable=("$engine/state" ' "$run/src-broken/profiles/opencode/harness.zsh"; then
-  print -ru2 'cannot make the broken release'
-  finish
-fi
+make_broken_source "$run/src-b" "$run/src-broken" || { fail 'cannot make the broken release'; finish }
 build "$run/src-broken" 0.0.3-broken || { print -ru2 'cannot build v0.0.3-broken'; finish }
 latest() { print -r -- "$1" > "$served/latest.txt" }
 
