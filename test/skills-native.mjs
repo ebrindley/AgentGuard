@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { spawn } from "node:child_process"
@@ -15,8 +15,7 @@ const realCLI = [process.env.AG_TEST_OPENCODE, "/opt/homebrew/bin/opencode", "/u
 assert.ok(realCLI, "OpenCode CLI is required")
 for (const p of [home, tree, start, project, join(home, "Agent Guard"), join(home, ".config/opencode/plugins"), join(home, "fakebin")]) mkdirSync(p, { recursive: true })
 adapter.stage(root, tree, home)
-const release = adapter.layout(tree, engine)
-cpSync(join(tree, "engine/vendor"), join(release, "vendor"), { recursive: true })
+const release = adapter.layoutWithChecker(tree, engine)
 symlinkSync(join(release, "profiles/opencode/plugin.js"), join(home, ".config/opencode/plugins/agent-guard.js"))
 writeFileSync(join(home, ".config/opencode/.gitignore"), "node_modules\npackage.json\npackage-lock.json\nbun.lock\n.gitignore\n")
 writeFileSync(join(home, "Agent Guard/Guard List.txt"), `ALLOW\n${home}/Projects\nREAD ONLY\nDENY\n`)

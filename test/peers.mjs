@@ -3,7 +3,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, w
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { stage, layout } from './engines/zsh.mjs';
+import { stage, layoutWithChecker } from './engines/zsh.mjs';
 import { quote } from './fixture-home.mjs';
 import './peer-discovery.mjs';
 
@@ -17,8 +17,7 @@ for (const p of [home, tree, project, bin, join(home, 'Agent Guard'),
                  join(home, '.codex'), join(home, '.claude'), join(home, '.cursor'), join(home, '.grok')])
   mkdirSync(p, { recursive: true });
 stage(root, tree, home);
-const release = layout(tree, engine);
-cpSync(join(tree, 'engine/vendor'), join(release, 'vendor'), { recursive: true });
+const release = layoutWithChecker(tree, engine);
 writeFileSync(join(home, 'Agent Guard/Guard List.txt'), `ALLOW\n${project}\nREAD ONLY\nDENY\n`);
 const peers = ['codex', 'claude', 'cursor-agent', 'grok', 'opencode'];
 for (const name of peers) {

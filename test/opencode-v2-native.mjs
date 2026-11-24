@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { spawn, spawnSync } from "node:child_process"
@@ -31,10 +31,9 @@ for (const mode of selected) {
   const git = spawnSync("git", ["init", "--quiet", "--template=", project], { encoding: "utf8" })
   assert.equal(git.status, 0, git.stderr)
   adapter.stage(root, tree, home)
-  const release = adapter.layout(tree, engine)
+  const release = adapter.layoutWithChecker(tree, engine)
   const launch = join(release, "launch")
   writeFileSync(launch, readFileSync(launch, "utf8").replace('if [[ $mode == gui ]]; then', 'if false; then'))
-  cpSync(join(tree, "engine/vendor"), join(release, "vendor"), { recursive: true })
   symlinkSync(join(release, "profiles/opencode/plugin.js"), join(config, "plugins/agent-guard.js"))
   writeFileSync(join(home, "fakebin/opencode"), `#!/bin/sh\nexec ${quote(cli)} "$@"\n`, { mode: 0o755 })
   writeFileSync(join(home, "Agent Guard/Guard List.txt"), `ALLOW\n${home}/Projects\nREAD ONLY\n${readonly}\nDENY\n${denied}\n`)

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict"
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, symlinkSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, symlinkSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { spawnSync } from "node:child_process"
-import { stage, layout, isolateHarness } from "./engines/zsh.mjs"
+import { stage, layoutWithChecker, isolateHarness } from "./engines/zsh.mjs"
 
 assert.equal(process.versions.node.split(".")[0], "24")
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..")
@@ -14,8 +14,7 @@ for (const mode of ["default", "allow", "readonly", "deny", "linked-cache", "lin
   for (const path of [tree, project, join(home, "Agent Guard"), join(home, ".aws")]) mkdirSync(path, { recursive: true })
   stage(root, tree, home)
   isolateHarness(tree)
-  const release = layout(tree, join(home, "Library/Application Support/AgentGuard"))
-  cpSync(join(tree, "engine/vendor"), join(release, "vendor"), { recursive: true })
+  const release = layoutWithChecker(tree, join(home, "Library/Application Support/AgentGuard"))
   const profilePath = join(release, "profile.sb")
   writeFileSync(profilePath, readFileSync(profilePath, "utf8").replace('(subpath "/private/tmp")', '(require-all (subpath "/private/tmp") (require-not (subpath (param "HOME"))))'))
   writeFileSync(join(home, "Agent Guard/Guard List.txt"), `ALLOW\n${project}\nREAD ONLY\n${mode === "readonly" ? home + "/.aws" : ""}\nDENY\n${mode === "deny" ? home + "/.aws" : ""}\n`)

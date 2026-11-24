@@ -5,7 +5,7 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { userInfo } from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { stage, layout } from './engines/zsh.mjs';
+import { stage, layoutWithChecker } from './engines/zsh.mjs';
 
 // Compare pre-execution decisions only. None of the command strings or file
 // tool payloads below is ever executed by a shell or a native file tool.
@@ -45,8 +45,7 @@ writeFileSync(join(home, '.ssh/id_fixture'), 'SYNTHETIC-FIXTURE\n');
 symlinkSync('/etc', join(project, 'packages/web/critical-link'));
 cpSync(join(root, 'profiles/opencode/templates/cc-safety-net'), join(home, '.cc-safety-net'), { recursive: true });
 stage(root, tree, home);
-const release = layout(tree, engine);
-cpSync(join(tree, 'engine/vendor'), join(release, 'vendor'), { recursive: true });
+const release = layoutWithChecker(tree, engine);
 // The session copy as the Pi launcher builds it (profiles/pi/sandbox/pi-sandbox-preamble.zsh),
 // with the release's builder, in the write-protected state the extension requires.
 const snapshot = { checker: join(engine, 'state/pi', `${basename(release)}.comparison`, 'checker') };

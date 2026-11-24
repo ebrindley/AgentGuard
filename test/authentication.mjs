@@ -1,9 +1,9 @@
 import assert from "node:assert/strict"
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { spawnSync } from "node:child_process"
-import { stage, layout, isolateHarness } from "./engines/zsh.mjs"
+import { stage, layoutWithChecker, isolateHarness } from "./engines/zsh.mjs"
 import { quote } from "./fixture-home.mjs"
 
 assert.equal(process.versions.node.split(".")[0], "24", "Node 24 is required")
@@ -15,8 +15,7 @@ const engine = join(home, "Library/Application Support/AgentGuard")
 for (const path of [tree, project, join(home, "Agent Guard"), join(home, ".local/bin"), join(home, ".aws"), join(home, ".azure"), join(home, ".codex"), join(home, ".claude")]) mkdirSync(path, { recursive: true })
 stage(root, tree, home)
 isolateHarness(tree)
-const release = layout(tree, engine)
-cpSync(join(tree, "engine/vendor"), join(release, "vendor"), { recursive: true })
+const release = layoutWithChecker(tree, engine)
 // A real account home is outside the temporary grant. Preserve that relationship
 // for this disposable home so write-denial assertions cannot pass accidentally.
 const profilePath = join(release, "profile.sb")
