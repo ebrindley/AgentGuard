@@ -157,8 +157,7 @@ for (const mode of selected) {
     continue
   }
   if (mode === "plugins" || mode === "mixed-plugins") {
-    const harness = join(release, "profiles/opencode/harness.zsh")
-    writeFileSync(harness, readFileSync(harness, "utf8").replace('app_paths=(/Applications/OpenCode.app "$home/Applications/OpenCode.app")', 'app_paths=("$home/Applications/OpenCode.app")').replace('app_bundle_id=ai.opencode.desktop', 'app_bundle_id=invalid.test'))
+    adapter.isolateApp(release)
     if (mode === "mixed-plugins") {
       assert.ok(process.env.AG_TEST_OPENCODE_V1, "mixed-plugins requires the pinned V1 CLI in AG_TEST_OPENCODE_V1")
       const v1 = realpathSync(process.env.AG_TEST_OPENCODE_V1)
@@ -318,8 +317,7 @@ for (const mode of selected) {
     const target = mode === "gui-server-stop" ? "" : ' --server "$server"'
     const command = mode === "gui-signal" ? `touch ${quote(join(project, "client-ready"))}\nexec /bin/sleep 60` : `${reconnect}${connect}exec ${quote(cli)} run${target} --auto --model guardfixture/test --format json 'Perform the fixture calls'`
     writeFileSync(join(app, "MacOS/GuardV2Fixture"), `#!/bin/sh\n${command}\n`, { mode: 0o755 })
-    const harness = join(release, "profiles/opencode/harness.zsh")
-    writeFileSync(harness, readFileSync(harness, "utf8").replace('app_paths=(/Applications/OpenCode.app "$home/Applications/OpenCode.app")', 'app_paths=("$home/Applications/OpenCode.app")').replace('app_bundle_id=ai.opencode.desktop', 'app_bundle_id=invalid.test'))
+    adapter.isolateApp(release)
     route = "gui"; args = []
   } else if (mode === "doctor") {
     route = "check"; args = []

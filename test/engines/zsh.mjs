@@ -22,8 +22,15 @@ export function stage(source, dest, home) {
   piSeams(dest, home);
 }
 
+export function isolateApp(tree) {
+  const file = join(tree, 'profiles/opencode/harness.zsh');
+  replaceOnce(file, seams.appPaths, harness.appPaths);
+  replaceOnce(file, seams.appBundleId, harness.appBundleId);
+}
+
 export function isolateHarness(tree) {
-  for (const key of Object.keys(harness)) replaceOnce(join(tree, 'profiles/opencode/harness.zsh'), seams[key], harness[key]);
+  replaceOnce(join(tree, 'profiles/opencode/harness.zsh'), seams.cliSearch, harness.cliSearch);
+  isolateApp(tree);
 }
 
 // Lays out a staged tree as the release folder releases/<rid> in engine, with

@@ -88,8 +88,7 @@ if (mode === "cli") {
     mkdirSync(dirname(executable), { recursive: true })
     writeFileSync(join(app, "Info.plist"), '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>CFBundleExecutable</key><string>SkillFixture</string><key>CFBundleIdentifier</key><string>invalid.test</string></dict></plist>')
     writeFileSync(executable, `#!/bin/sh\n[ "$1" = --no-sandbox ] && shift\nexec ${quote(realpathSync(realCLI))} serve --hostname 127.0.0.1 --port ${port}\n`, { mode: 0o755 })
-    const harness = join(release, "profiles/opencode/harness.zsh")
-    writeFileSync(harness, readFileSync(harness, "utf8").replace('app_paths=(/Applications/OpenCode.app "$home/Applications/OpenCode.app")', 'app_paths=("$home/Applications/OpenCode.app")').replace('app_bundle_id=ai.opencode.desktop', 'app_bundle_id=invalid.test'))
+    adapter.isolateApp(release)
     route = "gui"; args = []
   }
   guardedServer = spawn("/bin/zsh", [join(release, "launch"), route, ...args], { cwd: start, env, stdio: ["ignore", "pipe", "pipe"] })
