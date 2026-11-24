@@ -3,7 +3,7 @@
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { spawnSync } from "node:child_process"
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, lstatSync, readlinkSync, symlinkSync, writeFileSync, realpathSync } from "node:fs"
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, lstatSync, readlinkSync, symlinkSync, unlinkSync, writeFileSync, realpathSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -104,9 +104,16 @@ test("hash, missing-file and link drift are aggregate failures", () => {
   const f = fixture("drift")
   put(join(f.release, "VERSION"), "0.3.1")
   const stamp = JSON.parse(readFileSync(f.stamp))
-  stamp.files[join(f.release, "missing")] = "a".repeat(64)
+  const updater = join(f.release, "updates.zsh")
+  unlinkSync(updater)
   stamp.links[join(f.engine, "bin")] = marker
   json(f.stamp, stamp)
+  const version = spawnSync("/bin/zsh", ["-f", f.command, "version"], { encoding: "utf8" })
+  assert.equal(version.status, 1)
+  assert.ok(version.stdout.split("\n").includes("missing: " + updater))
+  const update = spawnSync("/bin/zsh", ["-f", f.command, "update", "--check"], { encoding: "utf8" })
+  assert.equal(update.status, 1)
+  assert.match(update.stderr, /cannot load updates\.zsh/)
   const { status, report } = collect(f, "drift")
   assert.equal(status, 1)
   assert.equal(report.installation.drift.find(x => x.class === "release").changed, 1)
