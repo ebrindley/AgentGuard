@@ -58,6 +58,19 @@ end_run() {
   exit
 }
 
+copy_source() { /bin/mkdir -p "$2" && /bin/cp -R "$1"/{engine,profiles,installer,scripts,install.sh,LICENSE} "$2/" }
+
+# The A14 fixture must grant writes to engine state so the staged check refuses it.
+make_broken_source() {  # SOURCE DEST
+  local profile="$2/engine/profile.sb" harness="$2/profiles/opencode/harness.zsh"
+  copy_source "$1" "$2" || return 1
+  /usr/bin/grep -qFx '  (subpath (h "/Library/Application Support/AgentGuard"))' "$profile" || return 1
+  /usr/bin/sed -i '' '/^  (subpath (h "\/Library\/Application Support\/AgentGuard"))$/d' "$profile" || return 1
+  /usr/bin/sed -i '' 's|^writable=(|writable=("$engine/state" |' "$harness" || return 1
+  ! /usr/bin/grep -qF '(subpath (h "/Library/Application Support/AgentGuard"))' "$profile" &&
+    /usr/bin/grep -q '^writable=("$engine/state" ' "$harness"
+}
+
 # fake_opencode: $run/fakebin/opencode runs test/fake-opencode.mjs with this
 # Node. Sets node_bin and fakebin.
 fake_opencode() {
