@@ -132,12 +132,11 @@ version() {
   exit $drift
 }
 
-source "$release/updates.zsh" || die "cannot load updates.zsh"
-
 # Runs the latest release's bootstrap, with the same verification, staging, gate
 # and rollback as a fresh install. Downloads use this compiled base, never the
 # environment.
 update() {
+  source "$release/updates.zsh" || die "cannot load updates.zsh"
   local repo='https://github.com/ebrindley/AgentGuard'; local -a curl_proto=(--proto '=https' --proto-redir '=https')
   local url="$repo/releases/latest/download/install.sh" text tag cur= target=
   local -a lines tags bootstrap_args=(--update)
