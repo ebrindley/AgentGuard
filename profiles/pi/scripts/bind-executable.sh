@@ -315,7 +315,8 @@ read_key() {
     /^[[:space:]]*($|#)/ { next }
     { n=$1; gsub(/^[[:space:]]+|[[:space:]]+$/,"",n)
       if (n==k) { sub(/^[^=]*=/,"",$0); gsub(/^[[:space:]]+|[[:space:]]+$/,"",$0)
-                  gsub(/^["\047]|["\047]$/,"",$0); print; found=1; exit } }
+                  if ($0 ~ /^".*"$/ || $0 ~ /^\047.*\047$/) $0=substr($0,2,length($0)-2)
+                  print; found=1; exit } }
     END { if (!found) exit 1 }' "$CONFIG" 2>/dev/null
 }
 
