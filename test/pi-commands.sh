@@ -175,6 +175,15 @@ runtime "$home/.cache/x/pi" ':'
 runs 'refuses a runtime in a sandbox-writable root' 2 "pi is inside a sandbox-writable root ($home/.cache/x/pi)" bind --pi "$home/.cache/x/pi" --yes
 runs 'refuses an unknown argument' 2 'unknown argument: --bogus' bind --bogus
 runs 'show works without node on PATH' 0 "pi   = $fake_pi" PATH=/usr/bin:/bin bind --show
+for quote in "'" '"'; do
+  quoted_pi="$fake_pi$quote"
+  runtime "$quoted_pi" ':'
+  runs 'records a name ending in a quote' 0 "recorded in $conf" bind --pi "$quoted_pi" --yes
+  runs 're-binding OMP preserves the quoted Pi name' 0 "recorded in $conf" bind --omp "$fake_omp" --yes
+  runs 'show preserves the trailing quote' 0 "pi   = $quoted_pi" bind --show
+  runs 'check finds the executable with a trailing quote' 0 "binding ok: $quoted_pi" bind --check
+done
+runs 'restores the native Pi binding' 0 "recorded in $conf" bind --pi "$fake_pi" --yes
 # A native binding is checked without Node, and every rule still applies.
 runs 'check passes without node on PATH' 0 "binding ok: $fake_pi"$'\n'"omp: $fake_omp" PATH=/usr/bin:/bin bind --check
 /bin/cp "$conf" "$run/conf.keep"

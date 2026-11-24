@@ -112,6 +112,11 @@
       "id": 21,
       "change": "Comments in the preamble name the block of engine/launch that implements the same launch policy (account home, Git selectors and checkout check, project refusals, active hooks folder, protected link targets and pins, peer runtime, checker level, SSH agent switch), so a fix to one is made to both; engine/launch carries the matching comments. No behavior change.",
       "files": ["sandbox/pi-sandbox-preamble.zsh"]
+    },
+    {
+      "id": 22,
+      "change": "The bind command removes only matching outer quotes when reading executable paths. A literal trailing quote survives display, validation and re-binding.",
+      "files": ["scripts/bind-executable.sh"]
     }
   ],
   "test_notes": [
