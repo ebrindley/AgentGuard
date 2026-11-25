@@ -755,7 +755,7 @@ exit 7
       const dialog = join(scratch, "dialog")
       const answerFile = join(scratch, "answer")
       const shown = join(scratch, "dialog-args")
-      writeFileSync(dialog, `#!/bin/zsh -f\n[[ $1 == -l ]] && exec /bin/sleep 30\n[[ "$*" == *'display dialog'* ]] && print -rl -- "$@" > ${quote(shown)}\ncat ${quote(answerFile)}\n`, { mode: 0o755 })
+      writeFileSync(dialog, `#!/bin/zsh -f\n[[ $1 == -l ]] && exec /bin/sleep 30\n[[ "$*" == *'display dialog'* || "$*" == *'display alert'* ]] && print -rl -- "$@" > ${quote(shown)}\ncat ${quote(answerFile)}\n`, { mode: 0o755 })
       const profileUpdate = join(engine, "current/profiles/opencode/update.zsh")
       writeFileSync(profileUpdate, desktopSeams(readFileSync(profileUpdate, "utf8"), stand, true))
       for (const file of [updates, join(engine, "current/launch")]) writeFileSync(file, readFileSync(file, "utf8").replaceAll("/usr/bin/osascript", quote(dialog)))
@@ -800,6 +800,22 @@ app=\${0%/*/*/*}
       const desktopRequests = () => requests().filter(u => u.startsWith("/opencode-desktop") || u.startsWith("/files/"))
       const built = () => existsSync(probes) ? readFileSync(probes, "utf8").trimEnd().split("\n") : []
       try {
+        for (const [damage, message] of [
+          [() => writeFileSync(join(app, "Contents/Info.plist"), "invalid plist"), `Cannot read the executable name in ${app}/Contents/Info.plist. Reinstall OpenCode.`],
+          [() => rmSync(join(app, "Contents/MacOS", "AgFakeApp")), `OpenCode.app at ${app} has no executable to start. Reinstall OpenCode.`],
+        ]) {
+          install()
+          damage()
+          arrange("Later")
+          r = launch(null, ["gui"])
+          assert.equal(r.status, 1, r.stderr)
+          assert.equal(recorded(), null)
+          assert.deepEqual(desktopRequests(), [])
+          assert.ok(readFileSync(shown, "utf8").endsWith(message + "\n"))
+          assert.ok(readFileSync(log, "utf8").endsWith(`failed: ${message}\nagent-guard-stage:host-launch\n`))
+        }
+        console.log("ok launch gui alerts and records the failure for an incomplete OpenCode app")
+
         let before = install(); publish("2.4.0")
         arrange("Update")
         r = launch(null, ["gui"])
