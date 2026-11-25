@@ -132,6 +132,10 @@ do_grok_binding() {
 }
 undo_grok_binding() { ag_pi_put_undo grok-binding "$grok_record" }
 
+ag_grok_shim_unchanged() {
+  ag_grok_shim_owned || ag_pi_launcher_unchanged "$grok_shim" "$txn_dir/backup/grok-shim/file"
+}
+
 do_grok_shim() {
   local tmp="${grok_shim:h}/.grok.partial" want="$engine/bin/grok"
   ag_jlast grok-shim
@@ -140,13 +144,19 @@ do_grok_shim() {
     if ag_grok_shim_owned; then test_point grok-shim; return; fi
     ag_pi_missing "$grok_shim"
     ag_pi_backup grok-shim "$grok_shim" && ag_jnl grok-shim begun "mk=$REPLY" || return 1
+  else
+    ag_grok_shim_unchanged || return 1
   fi
   test_point grok-shim || return 1
   /bin/mkdir -p -- "${grok_shim:h}" && /bin/rm -f -- "$tmp" && /bin/ln -s "$want" "$tmp" && /bin/mv -fh -- "$tmp" "$grok_shim" || return 1
   ag_grok_shim_owned || return 1
   ag_jnl grok-shim done
 }
-undo_grok_shim() { ag_pi_put_undo grok-shim "$grok_shim" }
+undo_grok_shim() {
+  ag_jlast grok-shim
+  [[ $REPLY == (begun|done) ]] || return 0
+  ag_grok_shim_unchanged && ag_pi_put_undo grok-shim "$grok_shim"
+}
 
 # --- After the switch.
 
