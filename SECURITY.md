@@ -21,7 +21,8 @@ best-effort basis. There is no bug bounty.
 ## Supported versions
 
 Fixes go into the latest release only; older releases do not receive backports.
-The latest stable release is 2026.11.19.2 (OpenCode, Pi, OMP and Grok).
+See the [latest stable release](https://github.com/ebrindley/AgentGuard/releases/latest)
+for downloads and release notes.
 `agent-guard update` follows stable releases and leaves a newer installed version
 unchanged. See [release channels](docs/OPERATIONS.md#release-channels) for tagged
 installers; they do not include later commits. The policy below includes current
