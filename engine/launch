@@ -294,13 +294,16 @@ if [[ $mode == gui && $harness == opencode ]]; then
   failure_stage=host-launch
   find_app || fail "OpenCode.app not found"
   app=$REPLY
-  main=$(/usr/bin/plutil -extract CFBundleExecutable raw "$app/Contents/Info.plist")
+  main=$(/usr/bin/plutil -extract CFBundleExecutable raw "$app/Contents/Info.plist" 2>/dev/null) && [[ -n $main ]] ||
+    fail "Cannot read the executable name in $app/Contents/Info.plist. Reinstall OpenCode."
   if /usr/bin/pgrep -u "$my_uid" -x "$main" >/dev/null; then
     if (( $#app_given )); then
       fail "OpenCode is already open, so no dropped folder was added. Quit OpenCode, open Agent Guard, then drop the folder again."
     fi
     fail "OpenCode is already open. If you opened it from Agent Guard, click OpenCode in the Dock to show its window. Otherwise quit OpenCode, then open Agent Guard."
   fi
+  [[ -f $app/Contents/MacOS/$main && -x $app/Contents/MacOS/$main ]] ||
+    fail "OpenCode.app at $app has no executable to start. Reinstall OpenCode."
   failure_stage=configuration
 fi
 if [[ $mode == (cli|gui) ]]; then
