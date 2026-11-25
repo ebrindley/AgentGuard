@@ -232,6 +232,34 @@ for p in grok-binding grok-shim grok-keep; do
   (( $? == 0 )) && pass 'doctor passes after recovery' || { fail 'doctor after recovery'; show }
 done
 
+# Preserve operator changes made before either resume or rollback.
+replacement="$run/replacement-grok"
+/bin/cp -p /usr/bin/true "$replacement"
+for caller in install uninstall; do
+  label="recovery preserves replacement:$caller"
+  restore fresh
+  if [[ $caller == install ]]; then
+    point=kill:grok-shim boot
+  else
+    point=kill:rc boot
+  fi
+  rc=$?
+  (( rc == 137 )) && [[ -d $state/txn ]] || { fail "interrupted switch (exit $rc)"; show; continue }
+  /bin/cp -p "$replacement" "$lb/grok.next" && /bin/mv -fh "$lb/grok.next" "$lb/grok" ||
+    { fail 'cannot replace the Grok launcher'; continue }
+  if [[ $caller == install ]]; then boot; else ag uninstall; fi
+  rc=$?
+  (( rc != 0 )) && [[ -d $state/txn && ! -L $lb/grok ]] && /usr/bin/cmp -s "$replacement" "$lb/grok" &&
+    /usr/bin/grep -qF '~/.local/bin/grok changed during the launcher switch' "$run/out" &&
+    pass 'recovery keeps the replacement and its journal' || { fail "recovery (exit $rc)"; show; continue }
+  /bin/mv -- "$lb/grok" "$lb/grok.saved"
+  boot
+  rc=$?
+  (( rc == 0 )) && [[ ! -e $state/txn && $(/usr/bin/readlink "$lb/grok") == "$engine/bin/grok" ]] &&
+    /usr/bin/cmp -s "$replacement" "$lb/grok.saved" && pass 'installer finishes after the replacement is moved aside' ||
+    { fail "retry (exit $rc)"; show }
+done
+
 # A regular executable of the user's at ~/.local/bin/grok, with no Grok install folder, is
 # copied into the engine's state folder, which the record names, then replaced by the link
 # and put back by uninstall. A failure or a kill at the copy leaves the file or a finished install.

@@ -894,8 +894,9 @@ begun); one stopped after the stamp has its cleanup finished. `agent-guard
 doctor` does not recover. "another Agent Guard install is running" means a live
 run holds the lock; a lock left by a process that is gone is taken over.
 
-If a Pi or OMP launcher changed during an interrupted switch, recovery keeps
-the file and transaction. Move the named launcher aside, then rerun the command.
+If a Pi, OMP or Grok launcher changed during an interrupted switch, recovery keeps
+the file and transaction. Move the named launcher aside, then rerun the command
+that started recovery. If `agent-guard` is no longer available, rerun the installer.
 
 OpenCode does not start, from the terminal or the app, when one of the records
 it reads in `~/Library/Application Support/AgentGuard` exists but cannot be
