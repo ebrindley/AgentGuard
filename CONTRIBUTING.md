@@ -5,13 +5,15 @@
 Report bugs and request features through [GitHub Issues](https://github.com/ebrindley/AgentGuard/issues).
 A bug report needs:
 
-- the steps that reproduce it;
-- what you expected and what happened instead, with the exact message;
-- the macOS version and chip (`sw_vers -productVersion` and `uname -m`);
-- the harness and its version (`opencode --version`, `pi --version` or `omp --version`);
-- the Agent Guard version (`agent-guard version`);
-- the launch route: `opencode` in a terminal, the Agent Guard app, `pi`, `omp` or a custom wrapper;
-- the output of `agent-guard doctor`.
+- the steps that reproduce it
+- what you expected and what happened instead, with the exact message
+- the macOS version and chip (`sw_vers -productVersion` and `uname -m`)
+- the harness and its version, if known
+- the Agent Guard version (`agent-guard version`) or the release you tried to install
+- where it happened, such as during setup, in the Agent Guard app, or in the terminal
+
+For an installed release, save the output of `agent-guard diagnose` before running
+`agent-guard doctor`. For a failed install, include the relevant installer error.
 
 Remove credentials, tokens and private paths before you post.
 

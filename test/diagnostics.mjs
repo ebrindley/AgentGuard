@@ -238,5 +238,12 @@ test("text report labels the rulebook and points to doctor", () => {
   assert.ok(stdout.includes("Rulebook file:"))
   assert.ok(stdout.includes("agent-guard doctor"))
 })
+test("text report shows the sanitized cached launcher stage", () => {
+  const f = fixture("launcher-stage")
+  put(join(f.home, "Agent Guard/last-launch-opencode.log"), `failed: ${marker}\nagent-guard-stage:host-launch\n`)
+  const { status, stdout } = collect(f, "launcher-stage", ["diagnose"])
+  assert.equal(status, 0)
+  assert.match(stdout, /^Launcher failure stage: host-launch \(cached\)$/m)
+})
 console.log(`diagnostics fixtures: ${run}`)
 process.exitCode = failures ? 1 : 0

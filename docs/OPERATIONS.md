@@ -157,7 +157,8 @@ drift counts, global configuration classification, safe permission ownership,
 requested approval preference and bounded recent failure observations. It does
 not launch OpenCode, perform write probes, change settings, repair files or
 recover transactions. Its rulebook line classifies the file as written and
-does not probe readiness. Use `doctor` separately for active checks.
+does not probe readiness. Save the diagnostic report before running `doctor`
+for active checks, which can replace the last launch log.
 
 The report uses logical path classes, fixed codes and safe rule identifiers.
 It excludes full commands, arguments, credentials, environment dumps, exception
