@@ -44,14 +44,17 @@ body:
     id: harness
     attributes:
       label: Harness and version
-      description: "For OpenCode, the output of `opencode --version`"
+      description: Name the harness you used or tried to set up and its version if known.
     validations:
       required: true
   - type: textarea
     id: version
     attributes:
-      label: Agent Guard version
-      description: "Output of `agent-guard version`"
+      label: Agent Guard release
+      description: |
+        If installed, paste the output of `agent-guard version`. After a failed
+        install, give the attempted tag or say "latest" if you used the latest
+        release link.
       render: text
     validations:
       required: true
@@ -62,14 +65,19 @@ body:
       options:
         - opencode in a terminal
         - Agent Guard app
+        - Pi in a terminal
+        - Oh My Pi in a terminal
+        - Grok in a terminal
+        - Installation, update, or uninstall
         - Other or not sure
     validations:
       required: true
   - type: textarea
-    id: doctor
+    id: diagnostics
     attributes:
-      label: agent-guard doctor output
-      description: "Output of `agent-guard doctor`"
+      label: Diagnostic or installer output
+      description: |
+        If installed, collect `agent-guard diagnose` before running
+        `agent-guard doctor` and paste the report here. For a failed install,
+        paste the relevant installer error. Redact credentials and private paths.
       render: text
-    validations:
-      required: true
