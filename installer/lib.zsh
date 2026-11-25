@@ -301,7 +301,7 @@ ag_export_replaced() {
       /bin/cp -Rp -- $kept "$partial/" &&
       /bin/mv -hn -- "$partial" "$dest" && [[ ! -e $partial ]]; }; then
     [[ -z $partial ]] || /bin/rm -rf -- "$partial"
-    ag_err "could not copy the entries Agent Guard replaced in ${2/#$home/~} from $3 to $dest, so $engine is kept. Run agent-guard uninstall again."
+    ag_err "could not copy the entries Agent Guard replaced in ${2/#$home/~} from $3 to $dest, so $engine is kept. To resume uninstall, run ${(q)engine}/bin/agent-guard uninstall"
     return 1
   fi
   # Copied: a rerun after a later failure does not copy them again.

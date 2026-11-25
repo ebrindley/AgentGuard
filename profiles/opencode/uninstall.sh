@@ -106,6 +106,7 @@ main() {
     else
       /bin/rm -f -- "$partial"
       ag_err "could not save $record, so $engine is kept. Not restored: ${(j:, :)ag_unrestored:-the record is unreadable}"
+      ag_err "To resume uninstall, run ${(q)engine}/bin/agent-guard uninstall"
       /bin/rm -rf -- "$scratch"
       ag_unlock
       exit 1
@@ -126,7 +127,12 @@ main() {
   test_point uninstall-engine || stop uninstall-engine
   /bin/rm -rf -- "$scratch"
   if [[ -e $engine ]]; then
-    /bin/mv -- "$engine" "$removing" && /bin/rm -rf -- "$removing" || { ag_err "cannot remove $engine"; exit 1 }
+    if ! /bin/mv -- "$engine" "$removing"; then
+      ag_err "cannot rename $engine to $removing"
+      [[ ! -x $engine/bin/agent-guard ]] || ag_err "To resume uninstall, run ${(q)engine}/bin/agent-guard uninstall"
+      exit 1
+    fi
+    /bin/rm -rf -- "$removing" || { ag_err "cannot remove $removing"; exit 1 }
   fi
 
   if (( $#unfinished || $#ag_unrestored || ag_unreadable || $#kept )); then

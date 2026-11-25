@@ -720,7 +720,7 @@ ag_h_opencode_uninstall_restore() {  # SCRATCH
 # not Agent Guard's and stays. This ends guarding.
 ag_h_opencode_uninstall_remove() {
   if [[ -L $plugin && $(/usr/bin/readlink -- "$plugin") == "$engine"/* ]]; then
-    /bin/rm -f -- "$plugin" || { ag_err "cannot remove $plugin; $engine is kept, so agent-guard uninstall can run again"; return 1 }
+    /bin/rm -f -- "$plugin" || { ag_err "cannot remove $plugin; $engine is kept. To resume uninstall, run ${(q)engine}/bin/agent-guard uninstall"; return 1 }
   elif [[ -e $plugin || -L $plugin ]]; then
     ag_warn "$plugin is not an Agent Guard link and was kept"
   fi

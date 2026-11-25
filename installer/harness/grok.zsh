@@ -239,10 +239,10 @@ ag_h_grok_uninstall_remove() {
   if ag_grok_shim_owned; then
     if [[ -e $grok_replaced/grok || -L $grok_replaced/grok ]]; then
       /bin/mv -fh -- "$grok_replaced/grok" "$f" ||
-        { ag_err "cannot put back ${f/#$home/~}; $engine is kept, so agent-guard uninstall can run again"; return 1 }
+        { ag_err "cannot put back ${f/#$home/~}; $engine is kept. To resume uninstall, run ${(q)engine}/bin/agent-guard uninstall"; return 1 }
       ag_say "put back ${f/#$home/~} as it was before Agent Guard"
     else
-      /bin/rm -f -- "$f" || { ag_err "cannot remove ${f/#$home/~}; $engine is kept, so agent-guard uninstall can run again"; return 1 }
+      /bin/rm -f -- "$f" || { ag_err "cannot remove ${f/#$home/~}; $engine is kept. To resume uninstall, run ${(q)engine}/bin/agent-guard uninstall"; return 1 }
     fi
   elif [[ -e $f || -L $f ]]; then
     ag_warn "${f/#$home/~} is not Agent Guard's link; left as it is"

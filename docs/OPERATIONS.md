@@ -811,12 +811,14 @@ loaded; `/reload` loads the extension now on disk.
   there is none. What it leaves on purpose, the wrappers, a `pi` or `omp` that is
   not the guard's and the copied entries, is reported as a warning and does not
   change the exit status. It exits 1 when a step fails, a PATH block or file
-  cannot be removed or a permission value cannot be restored, and names it. A
-  step that fails before the engine folder is removed keeps it, so `agent-guard
-  uninstall` can run again. Uninstall removes the engine folder by renaming it
-  to `~/Library/Application Support/.AgentGuard.removing` and then deleting
-  that. If the rename fails, the engine folder stays and `agent-guard uninstall`
-  can run again; if the deletion fails, delete `.AgentGuard.removing` by hand.
+  cannot be removed or a permission value cannot be restored, and names it. If
+  the engine folder stays after a failure, retry with
+  `"$HOME/Library/Application Support/AgentGuard/bin/agent-guard" uninstall`.
+  The full path works in a new terminal after uninstall removes the PATH blocks.
+  Uninstall removes the engine folder by renaming it to
+  `~/Library/Application Support/.AgentGuard.removing` and then deleting it.
+  If the rename fails, use the same retry command. If deletion fails, remove
+  `.AgentGuard.removing` by hand.
   The other three are reported after the engine folder is removed, so
   finish them by hand: remove the named PATH blocks and files, and restore the
   named permission values from `~/Agent Guard/permissions-backup.json`, where
