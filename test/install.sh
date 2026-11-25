@@ -655,6 +655,8 @@ point= ag uninstall
 rc=$?
 /bin/chmod 755 "$plugins"
 (( rc == 1 )) && [[ -d $engine && -L $plugin ]] && pass 'exit 1; engine and plugin kept' || { fail "uninstall (exit $rc)"; show }
+/usr/bin/grep -qFx "Agent Guard: cannot remove $plugin; $engine is kept. To resume uninstall, run ${(q)engine}/bin/agent-guard uninstall" "$out" &&
+  pass 'uninstall gives the absolute retry command' || { fail 'missing absolute retry command'; show }
 point= ag uninstall
 rc=$?
 (( rc == 0 )) && pass 'rerun exits 0' || { fail "rerun (exit $rc)"; show }

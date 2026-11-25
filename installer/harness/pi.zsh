@@ -655,17 +655,17 @@ ag_h_pi_uninstall_remove() {
     fi
     if [[ -e $pi_replaced/$rt || -L $pi_replaced/$rt ]]; then
       /bin/mv -fh -- "$pi_replaced/$rt" "$f" ||
-        { ag_err "cannot put back ${f/#$home/~} from $pi_replaced/$rt; $engine is kept, so agent-guard uninstall can run again"; return 1 }
+        { ag_err "cannot put back ${f/#$home/~} from $pi_replaced/$rt; $engine is kept. To resume uninstall, run ${(q)engine}/bin/agent-guard uninstall"; return 1 }
       ag_say "put back ${f/#$home/~} as it was before Agent Guard"
     elif [[ -e $f ]]; then
-      /bin/rm -f -- "$f" || { ag_err "cannot remove ${f/#$home/~}; $engine is kept, so agent-guard uninstall can run again"; return 1 }
+      /bin/rm -f -- "$f" || { ag_err "cannot remove ${f/#$home/~}; $engine is kept. To resume uninstall, run ${(q)engine}/bin/agent-guard uninstall"; return 1 }
     fi
   done
   ag_export_replaced pi-replaced "$pi_bin" "$pi_replaced" || return 1
   ag_export_replaced pi-wrapper-backups "$pi_bin" "$state/wrapper-backups" || return 1
-  /bin/rm -rf -- "$pi_ext" || { ag_err "cannot remove ${pi_ext/#$home/~}; $engine is kept, so agent-guard uninstall can run again"; return 1 }
+  /bin/rm -rf -- "$pi_ext" || { ag_err "cannot remove ${pi_ext/#$home/~}; $engine is kept. To resume uninstall, run ${(q)engine}/bin/agent-guard uninstall"; return 1 }
   /bin/rm -f -- "$pi_bin/pi-sandbox.sb" "$pi_bin/pi-sandbox-preamble.zsh" "$pi_bin/.pi-sandbox.sb.partial" "$pi_bin/.pi-sandbox-preamble.zsh.partial" ||
-    { ag_err "cannot remove the profile and preamble in ${pi_bin/#$home/~}; $engine is kept, so agent-guard uninstall can run again"; return 1 }
+    { ag_err "cannot remove the profile and preamble in ${pi_bin/#$home/~}; $engine is kept. To resume uninstall, run ${(q)engine}/bin/agent-guard uninstall"; return 1 }
   if [[ -f $pi_wrappers ]]; then
     for f in ${(f)"$(/usr/bin/jq -r '.wrappers // {} | keys[]' "$pi_wrappers" 2>/dev/null)"}; do
       [[ -e $pi_bin/$f ]] && left+=("$f")

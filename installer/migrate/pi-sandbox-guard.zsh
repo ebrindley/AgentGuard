@@ -316,7 +316,7 @@ ag_m_pi_sandbox_guard_uninstall() {
     /bin/rm -rf -- "$partial"
     if ! { /bin/mkdir -p -- "$list_dir" && /bin/cp -Rp -- "$psg_legacy" "$partial" && /bin/mv -- "$partial" "$dest" }; then
       /bin/rm -rf -- "$partial"
-      ag_err "could not copy pi-sandbox-guard's files from $psg_legacy to $dest, so $engine is kept. Run agent-guard uninstall again."
+      ag_err "could not copy pi-sandbox-guard's files from $psg_legacy to $dest, so $engine is kept. To resume uninstall, run ${(q)engine}/bin/agent-guard uninstall"
       return 1
     fi
   fi
